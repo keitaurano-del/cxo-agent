@@ -736,7 +736,7 @@ HTML_CONTENT = r"""<!DOCTYPE html>
   </div>
   <div class="header-links">
     <a class="header-link logic" href="http://localhost:5173" target="_blank">Logic</a>
-    <a class="header-link sengoku" href="http://localhost:3000" target="_blank">千石茶道</a>
+    <a class="header-link sengoku" href="http://localhost:3002" target="_blank">千石茶道</a>
     <button class="reset-btn" onclick="resetAll()">リセット</button>
   </div>
 </div>
