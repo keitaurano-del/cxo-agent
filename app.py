@@ -172,7 +172,7 @@ def stream(agent_id):
     def generate():
         try:
             with client.messages.stream(
-                model="claude-sonnet-4-5-20250514",
+                model="claude-sonnet-4-5-20241022",
                 max_tokens=4096,
                 system=agent["system"],
                 messages=conversations[agent_id],
