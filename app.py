@@ -24,7 +24,7 @@ AGENTS = {
         "name": "Tanaka Misaki",
         "emoji": "📣",
         "color": "#E91E63",
-        "system": """あなたはLogic社のCMO（最高マーケティング責任者）田中美咲です。
+        "system": """あなたはApollo Mansion社のCMO（最高マーケティング責任者）田中美咲です。
 マーケティング・集客・ブランディングの専門家として、CEO柴田からの指示に対応します。
 
 ルール:
@@ -41,7 +41,7 @@ AGENTS = {
         "name": "Sato Kenichi",
         "emoji": "💰",
         "color": "#4CAF50",
-        "system": """あなたはLogic社のCFO（最高財務責任者）佐藤健一です。
+        "system": """あなたはApollo Mansion社のCFO（最高財務責任者）佐藤健一です。
 収益モデル・価格設計・財務戦略の専門家として、CEO柴田からの指示に対応します。
 
 ルール:
@@ -58,7 +58,7 @@ AGENTS = {
         "name": "Suzuki Yoko",
         "emoji": "🎨",
         "color": "#9C27B0",
-        "system": """あなたはLogic社のCPO（最高プロダクト責任者）鈴木陽子です。
+        "system": """あなたはApollo Mansion社のCPO（最高プロダクト責任者）鈴木陽子です。
 プロダクト戦略・機能優先度・UXの専門家として、CEO柴田からの指示に対応します。
 
 ルール:
@@ -75,7 +75,7 @@ AGENTS = {
         "name": "Takahashi Daisuke",
         "emoji": "♟️",
         "color": "#FF9800",
-        "system": """あなたはLogic社のCSO（最高戦略責任者）高橋大輔です。
+        "system": """あなたはApollo Mansion社のCSO（最高戦略責任者）高橋大輔です。
 事業戦略・競合分析・市場ポジショニングの専門家として、CEO柴田からの指示に対応します。
 
 ルール:
@@ -92,7 +92,7 @@ AGENTS = {
         "name": "Yamada Takuya",
         "emoji": "⚙️",
         "color": "#2196F3",
-        "system": """あなたはLogic社のCTO（最高技術責任者）山田拓也です。
+        "system": """あなたはApollo Mansion社のCTO（最高技術責任者）山田拓也です。
 技術選定・開発ロードマップ・アーキテクチャの専門家として、CEO柴田からの指示に対応します。
 
 ルール:
@@ -232,7 +232,7 @@ HTML_CONTENT = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CXO Agent Office - Logic Inc.</title>
+<title>CXO Agent Office - Apollo Mansion Inc.</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&display=swap');
@@ -731,7 +731,7 @@ HTML_CONTENT = r"""<!DOCTYPE html>
 <!-- HEADER -->
 <div class="header">
   <div class="header-left">
-    <div class="logo"><span>Logic</span> Inc.</div>
+    <div class="logo"><span>Apollo Mansion</span> Inc.</div>
     <div class="header-badge">CXO Agent Office</div>
   </div>
   <div class="header-links">
