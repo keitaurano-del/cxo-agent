@@ -735,7 +735,7 @@ HTML_CONTENT = r"""<!DOCTYPE html>
     <div class="header-badge">CXO Agent Office</div>
   </div>
   <div class="header-links">
-    <a class="header-link logic" href="https://logic.onrender.com" target="_blank">Logic</a>
+    <a class="header-link logic" href="https://logic-u5wn.onrender.com" target="_blank">Logic</a>
     <a class="header-link sengoku" href="https://sengoku-chakai.onrender.com" target="_blank">千石茶道</a>
     <button class="reset-btn" onclick="resetAll()">リセット</button>
   </div>
