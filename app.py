@@ -418,6 +418,12 @@ HTML_CONTENT = r"""<!DOCTYPE html>
   .target-chip.active { border-color:var(--c); color:var(--c); background:rgba(var(--cr),0.15); }
   .target-chip-all { padding:4px 10px; border-radius:14px; font-size:11px; cursor:pointer; border:1px solid #FFD700; color:#FFD700; background:rgba(255,215,0,0.1); font-family:inherit; user-select:none; }
 
+  .project-select { display:flex; gap:6px; margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.08); }
+  .project-select-label { font-size:10px; color:rgba(255,255,255,0.3); align-self:center; margin-right:2px; }
+  .project-chip { padding:4px 12px; border-radius:14px; font-size:11px; cursor:pointer; border:1px solid rgba(255,255,255,0.15); color:rgba(255,255,255,0.4); background:transparent; font-family:inherit; transition:all 0.2s; user-select:none; }
+  .project-chip.active.logic { border-color:#4facfe; color:#4facfe; background:rgba(79,172,254,0.12); }
+  .project-chip.active.sengoku { border-color:#81c784; color:#81c784; background:rgba(129,199,132,0.12); }
+
   .ceo-input-area { padding:16px 20px; border-bottom:1px solid rgba(255,255,255,0.1); }
   .ceo-textarea { width:100%; min-height:90px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:10px; color:#fff; padding:12px; font-size:13px; font-family:inherit; resize:vertical; line-height:1.6; }
   .ceo-textarea:focus { outline:none; border-color:#FFD700; }
@@ -609,6 +615,11 @@ HTML_CONTENT = r"""<!DOCTYPE html>
         <button class="target-chip active" data-id="cto" style="--c:#0096D6;--cr:0,150,214" onclick="toggleTarget(this)">Doraemon</button>
         <button class="target-chip active" data-id="cpo" style="--c:#FFD700;--cr:255,215,0" onclick="toggleTarget(this)">Dorami</button>
       </div>
+      <div class="project-select">
+        <span class="project-select-label">&#23550;&#35937;:</span>
+        <button class="project-chip logic" onclick="toggleProject(this)">Logic</button>
+        <button class="project-chip sengoku" onclick="toggleProject(this)">&#21315;&#30707;&#33590;&#36947;</button>
+      </div>
     </div>
     <div class="ceo-input-area">
       <textarea class="ceo-textarea" id="ceoInput" placeholder="CXO&#12408;&#12398;&#25351;&#31034;&#12434;&#20837;&#21147;..."></textarea>
@@ -709,6 +720,8 @@ function createFloors(){
 function getSelectedTargets(){return[...document.querySelectorAll('.target-chip.active')].map(c=>c.dataset.id);}
 function toggleTarget(el){el.classList.toggle('active');}
 function toggleAll(){const c=document.querySelectorAll('.target-chip');const all=[...c].every(x=>x.classList.contains('active'));c.forEach(x=>all?x.classList.remove('active'):x.classList.add('active'));}
+function toggleProject(el){el.classList.toggle('active');}
+function getSelectedProjects(){return[...document.querySelectorAll('.project-chip.active')].map(c=>c.textContent.trim());}
 
 async function sendInstruction(){
   const input=document.getElementById('ceoInput');
@@ -717,10 +730,13 @@ async function sendInstruction(){
   const targets=getSelectedTargets();
   if(!targets.length){alert('Select CXO targets');return;}
   document.getElementById('sendBtn').disabled=true;
-  await fetch('/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instruction:text,targets})});
+  const projects=getSelectedProjects();
+  const projectLabel=projects.length?` [${projects.join(', ')}]`:'';
+  const fullInstruction=projects.length?`[対象プロジェクト: ${projects.join(', ')}]\n\n${text}`:text;
+  await fetch('/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instruction:fullInstruction,targets})});
   for(const id of targets){
     const body=document.getElementById(`body-${id}`);
-    agentFullContent[id]+=`<div class="ceo-instruction"><strong>CEO Keita:</strong> ${escapeHtml(text)}</div>`;
+    agentFullContent[id]+=`<div class="ceo-instruction"><strong>CEO Keita${escapeHtml(projectLabel)}:</strong> ${escapeHtml(text)}</div>`;
     body.innerHTML=agentFullContent[id]+'<span class="typing-cursor"></span>';
     body.scrollTop=body.scrollHeight;
   }
