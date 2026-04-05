@@ -65,6 +65,21 @@ def get_knowledge_prompt(agent_id):
     items = "\n".join(f"- {l}" for l in knowledge["learnings"])
     return f"\n\n## これまでの蓄積ナレッジ\n以下はこれまでの議論で得られた知見です。これらを踏まえて回答してください:\n{items}"
 
+TASKS_FILE = os.path.join(PROJECT_DIR, "tasks.json")
+
+
+def load_tasks():
+    if os.path.exists(TASKS_FILE):
+        with open(TASKS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+
+def save_tasks(tasks):
+    with open(TASKS_FILE, "w", encoding="utf-8") as f:
+        json.dump(tasks, f, ensure_ascii=False, indent=2)
+
+
 AGENTS = {
     "cso": {
         "title": "CSO",
@@ -262,6 +277,90 @@ def reset():
     return jsonify({"ok": True})
 
 
+@app.route("/secretary/summarize", methods=["POST"])
+def secretary_summarize():
+    """Shizuka summarizes all CXO discussions."""
+    all_responses = {}
+    for agent_id, agent in AGENTS.items():
+        if conversations[agent_id]:
+            last_msgs = [m for m in conversations[agent_id] if m["role"] == "assistant"]
+            if last_msgs:
+                all_responses[agent["name"]] = last_msgs[-1]["content"][:1500]
+
+    if not all_responses:
+        return jsonify({"summary": "まだCXOからの回答がありません。"})
+
+    context = "\n\n".join(f"### {name}\n{text}" for name, text in all_responses.items())
+
+    def generate():
+        try:
+            with client.messages.stream(
+                model="claude-sonnet-4-5-20241022",
+                max_tokens=2048,
+                system="""あなたはApollo Mansion社の秘書Shizukaです。
+優秀で気配りができ、要点を的確にまとめる能力がある。
+CEO Keitaのために、全CXOの議論を分かりやすく整理してください。
+
+フォーマット:
+1. 全体サマリー（3行以内）
+2. 各CXOの要点（箇条書き）
+3. CXO間で一致している点
+4. CXO間で意見が分かれている点
+5. CEOが判断すべき事項
+
+Markdown形式・日本語で回答してください。""",
+                messages=[{"role": "user", "content": f"以下の各CXOの回答を要約・整理してください:\n\n{context}"}],
+            ) as s:
+                for text in s.text_stream:
+                    yield f"data: {json.dumps({'type': 'text', 'content': text}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
+
+    return Response(generate(), mimetype="text/event-stream")
+
+
+@app.route("/tasks", methods=["GET"])
+def get_tasks():
+    return jsonify(load_tasks())
+
+
+@app.route("/tasks", methods=["POST"])
+def add_task():
+    data = request.json
+    tasks = load_tasks()
+    task = {
+        "id": int(time.time() * 1000),
+        "text": data.get("text", ""),
+        "assignee": data.get("assignee", ""),
+        "status": "todo",
+        "created": time.strftime("%Y-%m-%d %H:%M"),
+    }
+    tasks.append(task)
+    save_tasks(tasks)
+    return jsonify(task)
+
+
+@app.route("/tasks/<int:task_id>", methods=["PATCH"])
+def update_task(task_id):
+    data = request.json
+    tasks = load_tasks()
+    for t in tasks:
+        if t["id"] == task_id:
+            t.update({k: v for k, v in data.items() if k in ("status", "text", "assignee")})
+            break
+    save_tasks(tasks)
+    return jsonify({"ok": True})
+
+
+@app.route("/tasks/<int:task_id>", methods=["DELETE"])
+def delete_task(task_id):
+    tasks = load_tasks()
+    tasks = [t for t in tasks if t["id"] != task_id]
+    save_tasks(tasks)
+    return jsonify({"ok": True})
+
+
 @app.route("/knowledge/<agent_id>")
 def get_knowledge(agent_id):
     if agent_id not in AGENTS:
@@ -350,6 +449,47 @@ HTML_CONTENT = r"""<!DOCTYPE html>
   .inbox-btn.comment:hover { background:rgba(0,150,214,0.4); }
   .inbox-reply-input { width:100%; margin-top:8px; padding:8px 10px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:6px; color:#fff; font-size:12px; font-family:inherit; display:none; }
   .inbox-reply-input:focus { outline:none; border-color:#FFD700; }
+
+  /* === SHIZUKA === */
+  .shizuka-panel { border-bottom:1px solid rgba(255,255,255,0.1); }
+  .shizuka-header { padding:12px 20px; display:flex; align-items:center; gap:10px; border-bottom:1px solid rgba(255,255,255,0.05); }
+  .shizuka-avatar { width:36px; height:36px; border-radius:50%; background:#FFE0F0; border:2px solid #FF69B4; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+  .shizuka-name { font-size:14px; font-weight:700; color:#FF69B4; }
+  .shizuka-role { font-size:10px; color:rgba(255,255,255,0.4); }
+  .shizuka-btn { margin-left:auto; background:rgba(255,105,180,0.15); border:1px solid rgba(255,105,180,0.3); color:#FF69B4; padding:4px 12px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:all 0.2s; }
+  .shizuka-btn:hover { background:rgba(255,105,180,0.3); }
+  .shizuka-body { padding:10px 20px; max-height:200px; overflow-y:auto; font-size:12px; line-height:1.7; color:rgba(255,255,255,0.8); scrollbar-width:thin; }
+  .shizuka-body::-webkit-scrollbar { width:4px; }
+  .shizuka-body::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:2px; }
+  .shizuka-body .placeholder { color:rgba(255,255,255,0.25); font-size:11px; }
+  .shizuka-body h1,.shizuka-body h2,.shizuka-body h3 { color:#FF69B4; margin:8px 0 4px; font-weight:700; }
+  .shizuka-body h1 { font-size:14px; } .shizuka-body h2 { font-size:12px; } .shizuka-body h3 { font-size:11px; }
+  .shizuka-body p { margin:3px 0; } .shizuka-body ul,.shizuka-body ol { padding-left:16px; margin:3px 0; }
+  .shizuka-body strong { color:#fff; }
+  .shizuka-body table { border-collapse:collapse; width:100%; font-size:10px; margin:4px 0; }
+  .shizuka-body th { background:rgba(0,0,0,0.2); color:#FF69B4; padding:3px 6px; border:1px solid rgba(255,255,255,0.1); text-align:left; }
+  .shizuka-body td { padding:3px 6px; border:1px solid rgba(255,255,255,0.1); }
+  .shizuka-body hr { border:none; border-top:1px solid rgba(255,255,255,0.1); margin:6px 0; }
+
+  .shizuka-tasks { padding:8px 20px 12px; border-top:1px solid rgba(255,255,255,0.05); }
+  .tasks-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .tasks-title { font-size:11px; font-weight:700; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:1px; }
+  .task-add-btn { background:rgba(255,105,180,0.15); border:1px solid rgba(255,105,180,0.3); color:#FF69B4; width:22px; height:22px; border-radius:50%; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-family:inherit; }
+  .task-input-row { display:flex; gap:6px; margin-bottom:6px; }
+  .task-input { flex:1; padding:5px 8px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:4px; color:#fff; font-size:11px; font-family:inherit; }
+  .task-input:focus { outline:none; border-color:#FF69B4; }
+  .task-assignee { padding:5px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:4px; color:#fff; font-size:10px; font-family:inherit; }
+  .task-list { max-height:150px; overflow-y:auto; scrollbar-width:thin; }
+  .task-list::-webkit-scrollbar { width:4px; }
+  .task-list::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:2px; }
+  .task-item { display:flex; align-items:center; gap:6px; padding:4px 0; font-size:11px; color:rgba(255,255,255,0.7); border-bottom:1px solid rgba(255,255,255,0.03); }
+  .task-check { width:14px; height:14px; border-radius:3px; border:1px solid rgba(255,255,255,0.3); background:transparent; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:9px; color:#4CAF50; }
+  .task-check.done { background:rgba(76,175,80,0.2); border-color:#4CAF50; }
+  .task-text { flex:1; }
+  .task-text.done { text-decoration:line-through; opacity:0.4; }
+  .task-assignee-badge { font-size:9px; padding:1px 6px; border-radius:8px; background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.5); }
+  .task-del { background:none; border:none; color:rgba(255,255,255,0.2); cursor:pointer; font-size:10px; padding:0 2px; }
+  .task-del:hover { color:#f44336; }
 
   /* === MANSION === */
   .mansion-area { flex:1; overflow-y:auto; display:flex; justify-content:center; padding:20px; background:linear-gradient(180deg,#87CEEB 0%,#B0E0E6 60%,#90EE90 95%,#228B22 100%); }
@@ -477,6 +617,39 @@ HTML_CONTENT = r"""<!DOCTYPE html>
         <button class="send-btn" id="sendBtn" onclick="sendInstruction()">&#25351;&#31034;&#12434;&#20986;&#12377;</button>
       </div>
     </div>
+    <!-- Shizuka Secretary Panel -->
+    <div class="shizuka-panel">
+      <div class="shizuka-header">
+        <div class="shizuka-avatar">&#127804;</div>
+        <div>
+          <div class="shizuka-name">Shizuka</div>
+          <div class="shizuka-role">Secretary</div>
+        </div>
+        <button class="shizuka-btn" onclick="askShizukaSummary()">&#35201;&#32004;</button>
+      </div>
+      <div class="shizuka-body" id="shizukaBody">
+        <span class="placeholder">&#9749; &#12362;&#25163;&#20253;&#12356;&#12391;&#12365;&#12427;&#12371;&#12392;&#12364;&#12354;&#12428;&#12400;&#12362;&#30003;&#12375;&#20184;&#12369;&#12367;&#12384;&#12373;&#12356;</span>
+      </div>
+      <div class="shizuka-tasks">
+        <div class="tasks-header">
+          <span class="tasks-title">Tasks</span>
+          <button class="task-add-btn" onclick="showTaskInput()">+</button>
+        </div>
+        <div class="task-input-row" id="taskInputRow" style="display:none">
+          <input class="task-input" id="taskInput" placeholder="&#12479;&#12473;&#12463;&#12434;&#20837;&#21147;..." onkeydown="if(event.key==='Enter')addTask()">
+          <select class="task-assignee" id="taskAssignee">
+            <option value="">&#25285;&#24403;</option>
+            <option value="Nobita">Nobita</option>
+            <option value="Suneo">Suneo</option>
+            <option value="Dekisugi">Dekisugi</option>
+            <option value="Doraemon">Doraemon</option>
+            <option value="Dorami">Dorami</option>
+          </select>
+        </div>
+        <div class="task-list" id="taskList"></div>
+      </div>
+    </div>
+
     <div class="ceo-inbox" id="ceoInbox">
       <div class="inbox-title">Inbox</div>
     </div>
@@ -651,6 +824,79 @@ async function resetAll(){
 
 function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 document.addEventListener('keydown',(e)=>{if(e.ctrlKey&&e.key==='Enter'){e.preventDefault();sendInstruction();}});
+// === SHIZUKA ===
+function askShizukaSummary(){
+  const body=document.getElementById('shizukaBody');
+  body.innerHTML='<span style="color:#FF69B4">&#10024; &#12414;&#12392;&#12417;&#12390;&#12356;&#12414;&#12377;...</span>';
+  fetch('/secretary/summarize',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+    .then(r=>{
+      const reader=r.body.getReader();
+      const decoder=new TextDecoder();
+      let raw='';
+      function read(){
+        reader.read().then(({done,value})=>{
+          if(done)return;
+          const chunk=decoder.decode(value);
+          for(const line of chunk.split('\n')){
+            if(!line.startsWith('data: '))continue;
+            try{
+              const d=JSON.parse(line.slice(6));
+              if(d.type==='text'){raw+=d.content;body.innerHTML=marked.parse(raw);}
+              if(d.type==='done'){body.innerHTML=marked.parse(raw);}
+              if(d.type==='error'){body.innerHTML=`<span style="color:#f44336">Error: ${d.content}</span>`;}
+            }catch(e){}
+          }
+          body.scrollTop=body.scrollHeight;
+          read();
+        });
+      }
+      read();
+    });
+}
+
+// === TASKS ===
+function showTaskInput(){
+  const row=document.getElementById('taskInputRow');
+  row.style.display=row.style.display==='none'?'flex':'none';
+  if(row.style.display==='flex')document.getElementById('taskInput').focus();
+}
+
+async function addTask(){
+  const input=document.getElementById('taskInput');
+  const assignee=document.getElementById('taskAssignee');
+  const text=input.value.trim();
+  if(!text)return;
+  await fetch('/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,assignee:assignee.value})});
+  input.value='';
+  assignee.value='';
+  loadTasks();
+}
+
+async function toggleTask(id,currentStatus){
+  const newStatus=currentStatus==='todo'?'done':'todo';
+  await fetch(`/tasks/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:newStatus})});
+  loadTasks();
+}
+
+async function deleteTask(id){
+  await fetch(`/tasks/${id}`,{method:'DELETE'});
+  loadTasks();
+}
+
+async function loadTasks(){
+  const res=await fetch('/tasks');
+  const tasks=await res.json();
+  const list=document.getElementById('taskList');
+  list.innerHTML=tasks.map(t=>`
+    <div class="task-item">
+      <div class="task-check ${t.status}" onclick="toggleTask(${t.id},'${t.status}')">${t.status==='done'?'\u2713':''}</div>
+      <span class="task-text ${t.status}">${escapeHtml(t.text)}</span>
+      ${t.assignee?`<span class="task-assignee-badge">${escapeHtml(t.assignee)}</span>`:''}
+      <button class="task-del" onclick="deleteTask(${t.id})">\u00d7</button>
+    </div>`).join('');
+}
+
+loadTasks();
 createFloors();
 </script>
 </body>
