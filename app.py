@@ -15,6 +15,56 @@ conversations = {}
 ceo_inbox = queue.Queue()
 ceo_clients = []
 
+KNOWLEDGE_DIR = os.path.join(PROJECT_DIR, "knowledge")
+os.makedirs(KNOWLEDGE_DIR, exist_ok=True)
+
+
+def load_knowledge(agent_id):
+    """Load accumulated knowledge for an agent."""
+    path = os.path.join(KNOWLEDGE_DIR, f"{agent_id}.json")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"learnings": [], "decisions": [], "history_summary": ""}
+
+
+def save_knowledge(agent_id, knowledge):
+    """Save knowledge to disk."""
+    path = os.path.join(KNOWLEDGE_DIR, f"{agent_id}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(knowledge, f, ensure_ascii=False, indent=2)
+
+
+def summarize_and_learn(agent_id, full_text):
+    """Extract key learnings from agent response and accumulate."""
+    knowledge = load_knowledge(agent_id)
+    try:
+        result = client.messages.create(
+            model="claude-sonnet-4-5-20241022",
+            max_tokens=500,
+            system="あなたはナレッジ抽出AIです。CXOの回答から重要な学び・決定事項・知見を3つ以内で簡潔に抽出してください。JSON配列で返してください。例: [\"フリーミアムモデルを推奨\", \"ロールプレイ機能が差別化の核\"]",
+            messages=[{"role": "user", "content": full_text}],
+        )
+        text = result.content[0].text
+        match = json.loads(text) if text.strip().startswith("[") else []
+        for item in match:
+            if item not in knowledge["learnings"]:
+                knowledge["learnings"].append(item)
+        # Keep last 30 learnings
+        knowledge["learnings"] = knowledge["learnings"][-30:]
+        save_knowledge(agent_id, knowledge)
+    except Exception:
+        pass
+
+
+def get_knowledge_prompt(agent_id):
+    """Build knowledge context for system prompt."""
+    knowledge = load_knowledge(agent_id)
+    if not knowledge["learnings"]:
+        return ""
+    items = "\n".join(f"- {l}" for l in knowledge["learnings"])
+    return f"\n\n## これまでの蓄積ナレッジ\n以下はこれまでの議論で得られた知見です。これらを踏まえて回答してください:\n{items}"
+
 AGENTS = {
     "cso": {
         "title": "CSO",
@@ -163,10 +213,11 @@ def stream(agent_id):
     agent = AGENTS[agent_id]
     def generate():
         try:
+            system_with_knowledge = agent["system"] + get_knowledge_prompt(agent_id)
             with client.messages.stream(
                 model="claude-sonnet-4-5-20241022",
                 max_tokens=4096,
-                system=agent["system"],
+                system=system_with_knowledge,
                 messages=conversations[agent_id],
             ) as s:
                 full_text = ""
@@ -175,6 +226,8 @@ def stream(agent_id):
                     yield f"data: {json.dumps({'type': 'text', 'content': text}, ensure_ascii=False)}\n\n"
                 conversations[agent_id].append({"role": "assistant", "content": full_text})
                 filename = save_to_file(agent_id, "", full_text)
+                # Learn from this response in background
+                threading.Thread(target=summarize_and_learn, args=(agent_id, full_text), daemon=True).start()
                 items = extract_ceo_items(agent_id, full_text)
                 if items:
                     yield f"data: {json.dumps({'type': 'ceo_items', 'items': items}, ensure_ascii=False)}\n\n"
@@ -205,6 +258,22 @@ def get_history(agent_id):
 def reset():
     for agent_id in AGENTS:
         conversations[agent_id] = []
+    # Note: knowledge is NOT reset - it accumulates forever
+    return jsonify({"ok": True})
+
+
+@app.route("/knowledge/<agent_id>")
+def get_knowledge(agent_id):
+    if agent_id not in AGENTS:
+        return "Not found", 404
+    return jsonify(load_knowledge(agent_id))
+
+
+@app.route("/knowledge_reset/<agent_id>", methods=["POST"])
+def reset_knowledge(agent_id):
+    if agent_id not in AGENTS:
+        return "Not found", 404
+    save_knowledge(agent_id, {"learnings": [], "decisions": [], "history_summary": ""})
     return jsonify({"ok": True})
 
 
