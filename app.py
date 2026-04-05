@@ -280,6 +280,31 @@ HTML_CONTENT = r"""<!DOCTYPE html>
     font-weight: 500;
   }
 
+  .header-links {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .header-link {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: none;
+    border: 1px solid #333;
+    transition: all 0.2s;
+  }
+
+  .header-link:hover { transform: translateY(-1px); }
+  .header-link.logic { color: #4facfe; border-color: rgba(79,172,254,0.3); }
+  .header-link.logic:hover { background: rgba(79,172,254,0.1); }
+  .header-link.sengoku { color: #81c784; border-color: rgba(129,199,132,0.3); }
+  .header-link.sengoku:hover { background: rgba(129,199,132,0.1); }
+
   .reset-btn {
     background: transparent;
     border: 1px solid #333;
@@ -709,7 +734,11 @@ HTML_CONTENT = r"""<!DOCTYPE html>
     <div class="logo"><span>Logic</span> Inc.</div>
     <div class="header-badge">CXO Agent Office</div>
   </div>
-  <button class="reset-btn" onclick="resetAll()">リセット</button>
+  <div class="header-links">
+    <a class="header-link logic" href="http://localhost:5173" target="_blank">Logic</a>
+    <a class="header-link sengoku" href="http://localhost:3000" target="_blank">千石茶道</a>
+    <button class="reset-btn" onclick="resetAll()">リセット</button>
+  </div>
 </div>
 
 <!-- MAIN -->
