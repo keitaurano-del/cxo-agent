@@ -40,7 +40,7 @@ def summarize_and_learn(agent_id, full_text):
     knowledge = load_knowledge(agent_id)
     try:
         result = client.messages.create(
-            model="claude-sonnet-4-5-20241022",
+            model="claude-sonnet-4-5-20250514",
             max_tokens=500,
             system="あなたはナレッジ抽出AIです。CXOの回答から重要な学び・決定事項・知見を3つ以内で簡潔に抽出してください。JSON配列で返してください。例: [\"フリーミアムモデルを推奨\", \"ロールプレイ機能が差別化の核\"]",
             messages=[{"role": "user", "content": full_text}],
@@ -230,7 +230,7 @@ def stream(agent_id):
         try:
             system_with_knowledge = agent["system"] + get_knowledge_prompt(agent_id)
             with client.messages.stream(
-                model="claude-sonnet-4-5-20241022",
+                model="claude-sonnet-4-5-20250514",
                 max_tokens=4096,
                 system=system_with_knowledge,
                 messages=conversations[agent_id],
@@ -295,7 +295,7 @@ def secretary_summarize():
     def generate():
         try:
             with client.messages.stream(
-                model="claude-sonnet-4-5-20241022",
+                model="claude-sonnet-4-5-20250514",
                 max_tokens=2048,
                 system="""あなたはApollo Mansion社の秘書Shizukaです。
 優秀で気配りができ、要点を的確にまとめる能力がある。
