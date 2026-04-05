@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: cxo-agent-office
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --threads 8 --timeout 300
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: PYTHONIOENCODING
+        value: utf-8
