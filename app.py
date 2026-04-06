@@ -824,7 +824,8 @@ const AGENTS={
   cpo:{title:"CPO",name:"Dorami",floor:"1F",color:"#FFD700",icon:"\uD83D\uDC67"}
 };
 const ORDER=["cso","cfo","cmo","cto","cpo"];
-const rawTxt={};
+const rawTxt=JSON.parse(sessionStorage.getItem('apollo-rawTxt')||'{}');
+function saveRawTxt(){sessionStorage.setItem('apollo-rawTxt',JSON.stringify(rawTxt));}
 let currentTopic=sessionStorage.getItem('apollo-topic')||'';
 let roundNum=parseInt(sessionStorage.getItem('apollo-round')||'0');
 let outputRaw='';
@@ -836,7 +837,7 @@ function esc(s){const d=document.createElement('div');d.textContent=s;return d.i
 function createFloors(){
   const el=document.getElementById('floors');
   for(const id of ORDER){
-    const a=AGENTS[id];rawTxt[id]='';
+    const a=AGENTS[id];if(!rawTxt[id])rawTxt[id]='';
     el.innerHTML+=`
       <div class="card" id="card-${id}">
         <div class="card-h">
@@ -911,6 +912,7 @@ function startRoundtable(feedback){
         document.getElementById(`body-${id}`).innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum}</span>`+marked.parse(rawTxt[id]);
         document.getElementById(`dot-${id}`).className='dot done';
         document.getElementById(`st-${id}`).textContent='\u767A\u8A00\u6E08';
+        saveRawTxt();
       }
       if(d.type==='done'){
         // Save this round's discussions to history
@@ -1017,7 +1019,7 @@ async function resetAll(){
     document.getElementById(`ch-${id}`).textContent='0\u6587\u5B57';
   }
   document.getElementById('actionPanel').classList.add('hidden');
-  currentTopic='';roundNum=0;roundHistory=[];saveRoundHistory();sessionStorage.removeItem('apollo-topic');sessionStorage.removeItem('apollo-round');
+  currentTopic='';roundNum=0;roundHistory=[];saveRoundHistory();saveRawTxt();sessionStorage.removeItem('apollo-topic');sessionStorage.removeItem('apollo-round');
 }
 
 document.addEventListener('keydown',(e)=>{if(e.ctrlKey&&e.key==='Enter'){e.preventDefault();startRoundtable();}});
@@ -1062,6 +1064,22 @@ async function delK(agentId, itemId){
 document.addEventListener('click',(e)=>{if(!e.target.closest('.card-foot'))document.querySelectorAll('.kpop').forEach(p=>p.style.display='none');});
 
 createFloors();
+// Restore card content from sessionStorage on page load
+(function restoreCards(){
+  for(const id of ORDER){
+    if(rawTxt[id]){
+      document.getElementById(`body-${id}`).innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum}</span>`+marked.parse(rawTxt[id]);
+      document.getElementById(`dot-${id}`).className='dot done';
+      document.getElementById(`st-${id}`).textContent='\u5B8C\u4E86';
+      document.getElementById(`ch-${id}`).textContent=`${rawTxt[id].length}\u6587\u5B57`;
+    }
+  }
+  if(roundHistory.length){
+    document.getElementById('actionPanel').classList.remove('hidden');
+    document.getElementById('roundBadge').textContent=`Round ${roundNum} \u5B8C\u4E86`;
+    document.getElementById('outputGenBtn').disabled=false;
+  }
+})();
 </script>
 </body>
 </html>"""
