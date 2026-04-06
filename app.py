@@ -655,6 +655,13 @@ textarea::placeholder{color:rgba(255,255,255,0.3)}
 
 .round-badge{display:inline-block;background:rgba(255,75,75,0.15);color:#FF6B6B;border:1px solid rgba(255,75,75,0.3);border-radius:20px;font-size:10px;padding:2px 8px;font-weight:bold;margin-bottom:6px}
 
+.ceo-log{max-height:140px;overflow-y:auto;margin-bottom:10px;scrollbar-width:thin}
+.ceo-log:empty{display:none}
+.ceo-log-item{padding:6px 8px;border-radius:8px;margin-bottom:4px;font-size:11px;line-height:1.5}
+.ceo-log-item.topic{background:rgba(255,215,0,0.1);border-left:3px solid #FFD700;color:rgba(255,255,255,0.85)}
+.ceo-log-item.feedback{background:rgba(79,195,247,0.08);border-left:3px solid #4FC3F7;color:rgba(255,255,255,0.75)}
+.ceo-log-round{font-size:9px;color:rgba(255,255,255,0.35);font-weight:600;margin-bottom:1px}
+
 .mansion{flex:1;overflow-y:auto;padding:20px 24px;background:#F8F7F5}
 .mansion-h{font-size:20px;font-weight:700;color:#1a237e;margin-bottom:20px;padding-bottom:10px;border-bottom:2px solid #1a237e;letter-spacing:-0.02em}
 
@@ -790,6 +797,7 @@ textarea::placeholder{color:rgba(255,255,255,0.3)}
     </div>
     <div class="section hidden" id="actionPanel">
       <div class="round-badge" id="roundBadge">Round 1</div>
+      <div class="ceo-log" id="ceoLog"></div>
       <button class="btn-out" id="outputGenBtn" onclick="generateOutput()">&#128203; &#12467;&#12500;&#12506;&#29992;&#20986;&#21147;&#12434;&#29983;&#25104;</button>
       <div style="margin-top:10px">
         <textarea id="feedbackInput" placeholder="&#12501;&#12451;&#12540;&#12489;&#12496;&#12483;&#12463;&#12434;&#20837;&#21147;... &#20363;: &#12467;&#12473;&#12488;&#38754;&#12434;&#12418;&#12387;&#12392;&#28145;&#25496;&#12426;&#12375;&#12390;&#12289;&#31478;&#21512;&#12392;&#12398;&#27604;&#36611;&#12434;&#36861;&#21152;&#12375;&#12390;" style="min-height:60px"></textarea>
@@ -831,6 +839,14 @@ let roundNum=parseInt(localStorage.getItem('apollo-round')||'0');
 let outputRaw='';
 let roundHistory=JSON.parse(localStorage.getItem('apollo-rounds')||'[]');
 function saveRoundHistory(){localStorage.setItem('apollo-rounds',JSON.stringify(roundHistory));}
+let ceoLog=JSON.parse(localStorage.getItem('apollo-ceolog')||'[]');
+function saveCeoLog(){localStorage.setItem('apollo-ceolog',JSON.stringify(ceoLog));}
+function renderCeoLog(){
+  const el=document.getElementById('ceoLog');
+  if(!el)return;
+  el.innerHTML=ceoLog.map(e=>`<div class="ceo-log-item ${e.type}"><div class="ceo-log-round">Round ${e.round}</div>${esc(e.text)}</div>`).join('');
+  el.scrollTop=el.scrollHeight;
+}
 
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 
@@ -874,6 +890,13 @@ function startRoundtable(feedback){
 
   currentTopic=topic;localStorage.setItem('apollo-topic',topic);
   roundNum++;localStorage.setItem('apollo-round',String(roundNum));
+  // Log CEO instruction
+  if(!feedback){
+    ceoLog.push({round:roundNum,type:'topic',text:topic});
+  } else {
+    ceoLog.push({round:roundNum,type:'feedback',text:feedback});
+  }
+  saveCeoLog();renderCeoLog();
   document.getElementById('startBtn').disabled=true;
   document.getElementById('actionPanel').classList.add('hidden');
 
@@ -1019,7 +1042,7 @@ async function resetAll(){
     document.getElementById(`ch-${id}`).textContent='0\u6587\u5B57';
   }
   document.getElementById('actionPanel').classList.add('hidden');
-  currentTopic='';roundNum=0;roundHistory=[];saveRoundHistory();saveRawTxt();localStorage.removeItem('apollo-topic');localStorage.removeItem('apollo-round');
+  currentTopic='';roundNum=0;roundHistory=[];saveRoundHistory();saveRawTxt();ceoLog=[];saveCeoLog();renderCeoLog();localStorage.removeItem('apollo-topic');localStorage.removeItem('apollo-round');
 }
 
 document.addEventListener('keydown',(e)=>{if(e.ctrlKey&&e.key==='Enter'){e.preventDefault();startRoundtable();}});
@@ -1078,6 +1101,7 @@ createFloors();
     document.getElementById('actionPanel').classList.remove('hidden');
     document.getElementById('roundBadge').textContent=`Round ${roundNum} \u5B8C\u4E86`;
     document.getElementById('outputGenBtn').disabled=false;
+    renderCeoLog();
   }
 })();
 </script>
