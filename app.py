@@ -382,28 +382,51 @@ AGENTS = {
 PROJECTS = {
     "Logic": {
         "url_prod": "https://logic-u5wn.onrender.com",
+        "category": "B2C SaaS",
+        "status": "MVP公開中・有料化準備",
+        "tech": "React 19 + Vite + TypeScript + localStorage + Express + Anthropic SDK + Stripe",
+        "monetization": "¥500/月 or ¥3,500/年 (7日無料トライアル)",
+        "monthly_cost": 1000,
+        "monthly_revenue": 0,
+        "mau": 0,
         "description": """## プロジェクト: Logic
-ビジネスパーソン向けスキルアップ学習アプリ。
-- 技術: React + TypeScript + Vite（フロント）、Node.js（バック）
-- 機能: 簿記3級・2級（商業・工業）レッスン/ドリル/模擬試験、ロールプレイ（職場シナリオ）、フラッシュカード、ジャーナル、XP（5段階レベル）・ストリーク、プロフィール・タスク管理
-- 対象: 資格取得・スキルアップを目指すビジネスパーソン
+ビジネスパーソン向けロジカルシンキング学習アプリ。
+- 技術: React 19 + Vite + TypeScript + localStorage + Express + Anthropic SDK
+- 機能: ロジカルシンキングレッスン(MECE/ロジックツリー/So What・Why So/ピラミッド原則)、フラッシュカード、AI問題生成(無料1日10問/プレミアム月300問)、デイリー問題、偏差値スコア
+- BETA(管理者モードのみ): 簿記3級/2級、PMBOK、模擬試験
+- 課金: 7日無料トライアル → ¥500/月 or ¥3,500/年
+- 対象: ロジカルシンキング・論理的思考力を鍛えたいビジネスパーソン
 - リポジトリ: keitaurano-del/logic""",
     },
     "千石茶道": {
         "url_prod": "https://sengoku-chakai.onrender.com/ja",
+        "category": "B2C 予約サイト",
+        "status": "本番稼働中",
+        "tech": "Next.js 16 + TypeScript + Prisma + PostgreSQL + Stripe + i18n",
+        "monetization": "予約決済 (1回 ¥9,000〜¥25,000)",
+        "monthly_cost": 2000,
+        "monthly_revenue": 0,
+        "mau": 0,
         "description": """## プロジェクト: 千石茶道
-茶道体験の予約・決済サイト。
-- 技術: Next.js（App Router）+ TypeScript + Prisma + PostgreSQL + Stripe
-- 機能: 多言語対応（日/英）、プラン選択・日時・人数予約、Stripe決済、予約確認・キャンセル、管理画面
-- 対象: 茶道体験を予約したいお客様（インバウンド観光客含む）
+インバウンド外国人向け本格茶道体験の予約・決済サイト。
+- 技術: Next.js 16 (App Router) + TypeScript + Prisma + PostgreSQL + Stripe
+- 機能: 多言語対応(日/英/中)、松竹梅プラン(¥9,000/¥15,000/¥25,000)、Stripe決済、管理画面
+- 対象: インバウンド観光客 (Viator/GetYourGuide流入想定)
 - リポジトリ: keitaurano-del/sengoku-chakai""",
     },
     "Apollo Mansion": {
         "url_prod": "https://symmetrical-broccoli-97pw5gv6jp94h7jjg-5000.app.github.dev/",
+        "category": "内部ツール",
+        "status": "Keita専用稼働中",
+        "tech": "Python + Flask + Anthropic SDK + JSON永続化",
+        "monetization": "(内部ツール)",
+        "monthly_cost": 500,
+        "monthly_revenue": 0,
+        "mau": 1,
         "description": """## プロジェクト: Apollo Mansion
-CXOエージェント管理システム（本システム）。
-- 技術: Python + Flask + Server-Sent Events + Anthropic Claude API
-- 機能: CXO5名（CSO/CFO/CMO/CTO/CPO）へのAI指示、円卓会議、議論結果のコピペ出力（Claude Code想定コスト付き）、ナレッジ蓄積
+CXOエージェント管理システム(本システム)。
+- 技術: Python + Flask 単一ファイル + SSE + Anthropic Claude API
+- 機能: CXO5名(CSO/CFO/CMO/CTO/CPO)円卓会議、フィードバックループ、コピペ出力生成、デザインプレビュー、ナレッジ蓄積
 - 対象: CEO Keita による経営意思決定支援
 - リポジトリ: keitaurano-del/cxo-agent""",
     },
@@ -706,6 +729,95 @@ def api_health():
     return jsonify({"ok": True, "ts": time.time()})
 
 
+@app.route("/api/projects")
+def api_projects():
+    """Return all project metadata for the business plan tab."""
+    return jsonify([
+        {
+            "name": name,
+            "url": p.get("url_prod", ""),
+            "category": p.get("category", ""),
+            "status": p.get("status", ""),
+            "tech": p.get("tech", ""),
+            "monetization": p.get("monetization", ""),
+            "monthly_cost": p.get("monthly_cost", 0),
+            "monthly_revenue": p.get("monthly_revenue", 0),
+            "mau": p.get("mau", 0),
+        }
+        for name, p in PROJECTS.items()
+    ])
+
+
+@app.route("/api/business-summary", methods=["POST"])
+def api_business_summary():
+    """Generate AI business summary based on financial inputs.
+    Note: Keita builds everything alone — NO labor costs."""
+    data = request.json or {}
+    mau = data.get("mau", 100)
+    conv_rate = data.get("convRate", 20)
+    monthly_price = data.get("monthlyPrice", 500)
+    yearly_price = data.get("yearlyPrice", 3500)
+    monthly_ratio = data.get("monthlyRatio", 70)
+    api_cost = data.get("apiCostPerProblem", 1.5)
+    problems_per_user = data.get("problemsPerUser", 50)
+    hosting = data.get("hosting", 0)
+
+    # Calculate metrics (no labor cost)
+    paid_users = mau * conv_rate / 100
+    monthly_users = paid_users * monthly_ratio / 100
+    yearly_users = paid_users * (100 - monthly_ratio) / 100
+    revenue = (monthly_users * monthly_price) + (yearly_users * yearly_price / 12)
+    ai_cost = paid_users * problems_per_user * api_cost
+    stripe_fee = revenue * 0.036
+    var_cost = ai_cost + stripe_fee + hosting
+    profit = revenue - var_cost
+
+    metrics_text = f"""【現在の財務指標】
+- MAU: {int(mau)}人
+- トライアル→有料転換率: {conv_rate}%
+- 有料ユーザー: {int(paid_users)}人 (月額{int(monthly_users)} / 年額{int(yearly_users)})
+- 月次売上: ¥{int(revenue):,}
+- 月次AIコスト: ¥{int(ai_cost):,}
+- 月次Stripe手数料: ¥{int(stripe_fee):,}
+- 月次変動費合計: ¥{int(var_cost):,}
+- 月次粗利: ¥{int(profit):,}
+
+※ Keita 1人で全プロジェクトを開発しているため人件費はゼロ。"""
+
+    def generate():
+        try:
+            with client.messages.stream(
+                model="claude-sonnet-4-5",
+                max_tokens=1500,
+                system="""あなたはCEO Keita専属の事業アドバイザーAIです。
+Keitaは1人で複数のプロダクトを開発しているソロプレナー。人件費はゼロです。
+財務指標を見て、以下のフォーマットで簡潔に回答してください:
+
+## 📊 現状診断 (3行以内)
+(数字から見える現在の事業状態を率直に)
+
+## ⚠️ 最優先で直すべき1点
+(最もインパクトのある改善点を1つだけ)
+
+## 🎯 来週やるべき1アクション
+(「フェーズ2で〜」のような未来への先送りは禁止。来週中にKeitaが具体的に着手できる1つだけ)
+
+ルール:
+- 人件費・人月・外注費の項目は一切含めない
+- 「数ヶ月後に〜」という発言は禁止
+- 具体的な数字とアクションで語る
+- Markdown形式で簡潔に""",
+                messages=[{"role": "user", "content": metrics_text}],
+            ) as s:
+                for text in s.text_stream:
+                    yield f"data: {json.dumps({'type': 'text', 'content': text}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
+
+    return Response(generate(), mimetype="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 @app.route("/api/summarize", methods=["POST"])
 def api_summarize():
     data = request.json or {}
@@ -843,6 +955,45 @@ textarea::placeholder{color:rgba(26,46,92,0.4)}
 .design-hist{display:flex;gap:6px;flex-wrap:wrap}
 .design-chip{padding:4px 10px;border-radius:16px;font-size:11px;cursor:pointer;border:1px solid rgba(0,0,0,0.1);color:rgba(0,0,0,0.45);background:#FFFFFF;font-family:inherit}
 .design-chip.active{border-color:#9C27B0;color:#9C27B0;background:rgba(156,39,176,0.15)}
+
+/* Business Plan Tab */
+.biz-panel{display:flex;flex-direction:column;gap:24px}
+.biz-section{background:#FFFFFF;border:1px solid rgba(0,0,0,0.08);border-radius:14px;padding:18px}
+.biz-section-title{font-size:15px;font-weight:700;color:#1A2E5C;margin-bottom:14px;letter-spacing:-0.01em}
+.biz-note{font-size:11px;color:#9C27B0;background:rgba(156,39,176,0.08);border-left:3px solid #9C27B0;padding:8px 12px;border-radius:4px;margin-bottom:14px}
+.biz-project-grid{display:flex;flex-direction:column;gap:12px}
+.biz-project-card{background:#FAFBFC;border:1px solid rgba(0,0,0,0.06);border-radius:10px;padding:14px}
+.biz-project-card h4{font-size:14px;font-weight:700;color:#1A2E5C;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.biz-project-card a{color:#1976D2;font-size:11px;text-decoration:none;word-break:break-all}
+.biz-project-card a:hover{text-decoration:underline}
+.biz-project-meta{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.biz-project-tag{font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(25,118,210,0.1);color:#1976D2;font-weight:600}
+.biz-project-status{background:rgba(76,175,80,0.12);color:#2E7D32}
+.biz-project-tech{font-size:11px;color:rgba(0,0,0,0.55);line-height:1.5;margin-top:6px}
+.biz-project-money{display:flex;gap:14px;margin-top:8px;font-size:11px;color:rgba(0,0,0,0.6)}
+.biz-project-money strong{color:#1A2E5C;font-weight:700}
+
+.biz-sim{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
+.biz-sim-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;color:rgba(0,0,0,0.65)}
+.biz-sim-row label{flex:1;font-weight:600}
+.biz-sim-row input{width:100px;padding:6px 10px;border:1px solid rgba(0,0,0,0.15);border-radius:6px;font-size:13px;font-family:inherit;text-align:right;color:#1A2E5C;background:#fff}
+.biz-sim-row input:focus{outline:none;border-color:#1976D2}
+
+.biz-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:14px;background:#F0F4F8;border-radius:10px}
+.biz-stat{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+.biz-stat-label{font-size:10px;color:rgba(0,0,0,0.5);font-weight:600;letter-spacing:0.05em}
+.biz-stat-value{font-size:18px;font-weight:800;color:#1A2E5C;letter-spacing:-0.02em}
+.biz-stat-value.profit{color:#2E7D32}
+.biz-stat-value.loss{color:#C62828}
+
+.btn-biz{background:#1976D2;border:none;color:#fff;padding:11px 22px;border-radius:24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s ease;box-shadow:0 2px 8px rgba(25,118,210,0.25);margin-bottom:14px}
+.btn-biz:hover:not(:disabled){background:#1565C0;transform:translateY(-1px)}
+.btn-biz:disabled{opacity:0.5;cursor:not-allowed}
+.biz-summary{background:#FAFBFC;border:1px solid rgba(0,0,0,0.06);border-radius:10px;padding:16px;font-size:13px;line-height:1.7;color:#1A2E5C;min-height:80px}
+.biz-summary-empty{color:rgba(0,0,0,0.4);font-size:12px;text-align:center;padding:12px}
+.biz-summary h2{font-size:14px;color:#1976D2;margin:10px 0 6px}
+.biz-summary p{margin:4px 0}
+.biz-summary ul{padding-left:18px;margin:4px 0}
 
 .mansion{flex:1;overflow-y:auto;padding:20px 24px;background:#EEEEF2}
 .mansion-h{font-size:20px;font-weight:700;color:#1A1A2E;margin-bottom:20px;padding-bottom:10px;border-bottom:2px solid rgba(0,0,0,0.1);letter-spacing:-0.02em}
@@ -994,9 +1145,66 @@ textarea::placeholder{color:rgba(26,46,92,0.4)}
     <div class="mansion-tabs">
       <button class="mansion-tab active" id="tabFloor" onclick="switchTab('floor')">&#127970; &#12501;&#12525;&#12450;</button>
       <button class="mansion-tab" id="tabDesign" onclick="switchTab('design')">&#127912; &#12487;&#12470;&#12452;&#12531;</button>
+      <button class="mansion-tab" id="tabBusiness" onclick="switchTab('business')">&#128188; &#20107;&#26989;&#35336;&#30011;</button>
     </div>
     <div id="tabFloor_c">
       <div id="floors"></div>
+    </div>
+    <div id="tabBusiness_c" style="display:none">
+      <div class="biz-panel">
+        <div class="biz-section">
+          <h3 class="biz-section-title">&#128202; &#12503;&#12525;&#12472;&#12455;&#12463;&#12488;&#19968;&#35239;</h3>
+          <div class="biz-project-grid" id="bizProjects">
+            <div style="color:#888;font-size:12px">&#35501;&#12415;&#36796;&#12415;&#20013;...</div>
+          </div>
+        </div>
+
+        <div class="biz-section">
+          <h3 class="biz-section-title">&#128176; &#36001;&#21209;&#12471;&#12511;&#12517;&#12524;&#12540;&#12479;&#12540;</h3>
+          <div class="biz-note">&#9888;&#65039; Keita 1&#20154;&#38283;&#30330;&#12289;&#20154;&#20214;&#36027;&#12476;&#12525; (\u30a8\u30f3\u30b8\u30cb\u30a2\u4eba\u6708\u30b3\u30b9\u30c8\u4e0d\u8003\u616e)</div>
+          <div class="biz-sim">
+            <div class="biz-sim-row">
+              <label>MAU (\u6708\u9593\u30a2\u30af\u30c6\u30a3\u30d6\u30e6\u30fc\u30b6\u30fc)</label>
+              <input type="number" id="bizMau" min="0" max="100000" step="10">
+            </div>
+            <div class="biz-sim-row">
+              <label>\u30c8\u30e9\u30a4\u30a2\u30eb\u2192\u6709\u6599\u8ee2\u63db\u7387 (%)</label>
+              <input type="number" id="bizConv" min="0" max="100" step="1">
+            </div>
+            <div class="biz-sim-row">
+              <label>\u6708\u984d\u30d7\u30e9\u30f3\u4fa1\u683c (\u00a5)</label>
+              <input type="number" id="bizMonthly" min="0" step="100">
+            </div>
+            <div class="biz-sim-row">
+              <label>\u5e74\u984d\u30d7\u30e9\u30f3\u4fa1\u683c (\u00a5)</label>
+              <input type="number" id="bizYearly" min="0" step="100">
+            </div>
+            <div class="biz-sim-row">
+              <label>\u6708\u984d\u30e6\u30fc\u30b6\u30fc\u6bd4\u7387 (%)</label>
+              <input type="number" id="bizMonthlyRatio" min="0" max="100" step="5">
+            </div>
+            <div class="biz-sim-row">
+              <label>AI\u554f\u984c1\u554f\u3042\u305f\u308a\u306eAPI\u30b3\u30b9\u30c8 (\u00a5)</label>
+              <input type="number" id="bizApiCost" min="0" step="0.1">
+            </div>
+            <div class="biz-sim-row">
+              <label>1\u30e6\u30fc\u30b6\u30fc\u6708\u9593\u554f\u984c\u6570 (\u6709\u6599)</label>
+              <input type="number" id="bizProblems" min="0" max="500" step="10">
+            </div>
+            <div class="biz-sim-row">
+              <label>Render\u30db\u30b9\u30c6\u30a3\u30f3\u30b0\u6708\u984d (\u00a5)</label>
+              <input type="number" id="bizHosting" min="0" step="100">
+            </div>
+          </div>
+          <div class="biz-stats" id="bizStats"></div>
+        </div>
+
+        <div class="biz-section">
+          <h3 class="biz-section-title">&#10024; AI\u30b5\u30de\u30ea\u30fc</h3>
+          <button class="btn-biz" id="bizSummaryBtn" onclick="genBizSummary()">&#128202; &#20170;&#26376;&#12398;&#12469;&#12510;&#12522;&#12540;&#12434;&#29983;&#25104;</button>
+          <div class="biz-summary" id="bizSummary"><div class="biz-summary-empty">\u8caa\u52d9\u6307\u6a19\u3092\u5165\u529b\u3057\u3066\u300c\u30b5\u30de\u30ea\u30fc\u751f\u6210\u300d\u3092\u30af\u30ea\u30c3\u30af</div></div>
+        </div>
+      </div>
     </div>
     <div id="tabDesign_c" style="display:none">
       <div class="design-panel">
@@ -1388,9 +1596,107 @@ document.addEventListener('click',(e)=>{if(!e.target.closest('.card-foot'))docum
 function switchTab(t){
   document.getElementById('tabFloor').classList.toggle('active',t==='floor');
   document.getElementById('tabDesign').classList.toggle('active',t==='design');
+  document.getElementById('tabBusiness').classList.toggle('active',t==='business');
   document.getElementById('tabFloor_c').style.display=t==='floor'?'block':'none';
   document.getElementById('tabDesign_c').style.display=t==='design'?'block':'none';
+  document.getElementById('tabBusiness_c').style.display=t==='business'?'block':'none';
   if(t==='floor'){setTimeout(()=>document.getElementById('ceoInput')?.focus(),100);}
+  if(t==='business'){loadBizProjects();initBizSim();}
+}
+
+// === BUSINESS PLAN TAB ===
+const BIZ_DEFAULTS={mau:100,convRate:20,monthlyPrice:500,yearlyPrice:3500,monthlyRatio:70,apiCostPerProblem:1.5,problemsPerUser:50,hosting:0};
+let bizSim=Object.assign({},BIZ_DEFAULTS,JSON.parse(localStorage.getItem('apollo-biz-sim')||'{}'));
+function saveBizSim(){localStorage.setItem('apollo-biz-sim',JSON.stringify(bizSim));}
+
+async function loadBizProjects(){
+  const el=document.getElementById('bizProjects');
+  if(!el)return;
+  try{
+    const res=await fetch('/api/projects');
+    const projects=await res.json();
+    el.innerHTML=projects.map(p=>`
+      <div class="biz-project-card">
+        <h4>\u{1F4E6} ${esc(p.name)}</h4>
+        <a href="${esc(p.url)}" target="_blank">${esc(p.url)}</a>
+        <div class="biz-project-meta">
+          <span class="biz-project-tag">${esc(p.category)}</span>
+          <span class="biz-project-tag biz-project-status">${esc(p.status)}</span>
+        </div>
+        <div class="biz-project-tech">${esc(p.tech)}</div>
+        <div class="biz-project-tech" style="margin-top:4px">\u{1F4B0} ${esc(p.monetization)}</div>
+        <div class="biz-project-money">
+          <span>MAU: <strong>${p.mau}</strong></span>
+          <span>\u6708\u30b3\u30b9\u30c8: <strong>\u00a5${p.monthly_cost.toLocaleString()}</strong></span>
+          <span>\u6708\u58f2\u4e0a: <strong>\u00a5${p.monthly_revenue.toLocaleString()}</strong></span>
+        </div>
+      </div>`).join('');
+  }catch(e){el.innerHTML='<div style="color:#c00;font-size:12px">\u8aad\u307f\u8fbc\u307f\u30a8\u30e9\u30fc</div>';}
+}
+
+function initBizSim(){
+  const map={mau:'bizMau',convRate:'bizConv',monthlyPrice:'bizMonthly',yearlyPrice:'bizYearly',monthlyRatio:'bizMonthlyRatio',apiCostPerProblem:'bizApiCost',problemsPerUser:'bizProblems',hosting:'bizHosting'};
+  for(const[key,id]of Object.entries(map)){
+    const el=document.getElementById(id);
+    if(!el)continue;
+    el.value=bizSim[key];
+    el.oninput=()=>{bizSim[key]=parseFloat(el.value)||0;saveBizSim();recalcBiz();};
+  }
+  recalcBiz();
+}
+
+function recalcBiz(){
+  const s=bizSim;
+  const paid=s.mau*s.convRate/100;
+  const monthlyU=paid*s.monthlyRatio/100;
+  const yearlyU=paid*(100-s.monthlyRatio)/100;
+  const revenue=(monthlyU*s.monthlyPrice)+(yearlyU*s.yearlyPrice/12);
+  const aiCost=paid*s.problemsPerUser*s.apiCostPerProblem;
+  const stripeFee=revenue*0.036;
+  const varCost=aiCost+stripeFee+s.hosting;
+  const profit=revenue-varCost;
+  // Break-even MAU: smallest MAU where revenue >= varCost
+  // Approximation: assume cost/user = problemsPerUser*apiCost*convRate, revenue/user = avgARPU*convRate
+  const arpuMonthly=(s.monthlyRatio/100)*s.monthlyPrice+((100-s.monthlyRatio)/100)*(s.yearlyPrice/12);
+  const profitPerPaidUser=arpuMonthly-(s.problemsPerUser*s.apiCostPerProblem)-(arpuMonthly*0.036);
+  const breakeven=profitPerPaidUser>0?Math.ceil(s.hosting/(profitPerPaidUser*s.convRate/100)):'\u221e';
+
+  const el=document.getElementById('bizStats');
+  if(!el)return;
+  el.innerHTML=`
+    <div class="biz-stat"><span class="biz-stat-label">\u6709\u6599\u30e6\u30fc\u30b6\u30fc</span><span class="biz-stat-value">${Math.round(paid)}\u4eba</span></div>
+    <div class="biz-stat"><span class="biz-stat-label">\u6708\u6b21\u58f2\u4e0a</span><span class="biz-stat-value">\u00a5${Math.round(revenue).toLocaleString()}</span></div>
+    <div class="biz-stat"><span class="biz-stat-label">\u6708\u6b21AI\u30b3\u30b9\u30c8</span><span class="biz-stat-value">\u00a5${Math.round(aiCost).toLocaleString()}</span></div>
+    <div class="biz-stat"><span class="biz-stat-label">\u6708\u6b21\u7c97\u5229</span><span class="biz-stat-value ${profit>=0?'profit':'loss'}">\u00a5${Math.round(profit).toLocaleString()}</span></div>
+    <div class="biz-stat" style="grid-column:1/-1"><span class="biz-stat-label">\u640d\u76ca\u5206\u5c90MAU</span><span class="biz-stat-value">${breakeven}\u4eba</span></div>
+  `;
+}
+
+async function genBizSummary(){
+  const btn=document.getElementById('bizSummaryBtn');
+  btn.disabled=true;btn.textContent='\u29D7 \u751F\u6210\u4E2D...';
+  const area=document.getElementById('bizSummary');
+  area.innerHTML='<div class="biz-summary-empty">\u29D7 \u751F\u6210\u4E2D...</div>';
+  let raw='';
+  try{
+    const res=await fetch('/api/business-summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(bizSim)});
+    const reader=res.body.getReader();const dec=new TextDecoder();let buf='';
+    function read(){reader.read().then(({done,value})=>{
+      if(done)return;
+      buf+=dec.decode(value);const lines=buf.split('\n');buf=lines.pop();
+      for(const line of lines){
+        if(!line.startsWith('data: '))continue;
+        try{
+          const d=JSON.parse(line.slice(6));
+          if(d.type==='text'){raw+=d.content;area.innerHTML=marked.parse(raw);}
+          if(d.type==='done'){btn.textContent='\uD83D\uDCCA \u4eca\u6708\u306e\u30b5\u30de\u30ea\u30fc\u3092\u751f\u6210';btn.disabled=false;}
+          if(d.type==='error'){area.innerHTML=`<div class="biz-summary-empty" style="color:#c00">Error: ${esc(d.content)}</div>`;btn.textContent='\uD83D\uDCCA \u4eca\u6708\u306e\u30b5\u30de\u30ea\u30fc\u3092\u751f\u6210';btn.disabled=false;}
+        }catch(e){}
+      }
+      read();
+    });}
+    read();
+  }catch(e){area.innerHTML=`<div class="biz-summary-empty" style="color:#c00">Error</div>`;btn.textContent='\uD83D\uDCCA \u4eca\u6708\u306e\u30b5\u30de\u30ea\u30fc\u3092\u751f\u6210';btn.disabled=false;}
 }
 
 // === DESIGN PREVIEW ===
