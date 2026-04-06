@@ -472,7 +472,7 @@ def generate_output():
         try:
             with client.messages.stream(
                 model="claude-sonnet-4-6",
-                max_tokens=4096,
+                max_tokens=8192,
                 system=f"""あなたはCXO会議のアウトプット生成AIです。
 CXO全員の議論内容を分析し、Claude Codeにそのままコピペして実装を依頼できる形式でまとめてください。
 
