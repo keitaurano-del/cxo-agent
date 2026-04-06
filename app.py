@@ -738,7 +738,7 @@ def api_design_preview():
         try:
             with client.messages.stream(
                 model="claude-sonnet-4-6",
-                max_tokens=4096,
+                max_tokens=16000,
                 system="""あなたはUIデザイナーAIです。CXOの議論内容に基づいて、提案されたUI/デザイン変更のHTMLモックアップを生成してください。
 
 ルール:
@@ -746,8 +746,10 @@ def api_design_preview():
 - モバイル対応のレスポンシブデザイン
 - 日本語のUIテキスト
 - シンプルで美しいデザイン
-- <html>から</html>まで完全なHTMLドキュメントを返す
-- コードブロックやマークダウンで囲まず、生のHTMLのみを返す""",
+- <!DOCTYPE html>から</html>まで完全なHTMLドキュメントを必ず返す
+- 必ず</html>で終わらせる（途中で止めない）
+- コードブロックやマークダウンで囲まず、生のHTMLのみを返す
+- 簡潔に：1ページのモックアップを完結させることを優先""",
                 messages=[{"role": "user", "content": "\n\n".join(parts)}],
             ) as s:
                 for text in s.text_stream:
@@ -1349,12 +1351,13 @@ function renderDesignIframe(html){
   const area=document.getElementById('designArea');
   area.innerHTML='';
   const iframe=document.createElement('iframe');
-  iframe.sandbox='allow-scripts';
+  iframe.style.width='100%';
+  iframe.style.border='none';
+  iframe.style.borderRadius='16px';
+  iframe.style.background='#fff';
+  iframe.srcdoc=html;
+  iframe.onload=()=>{try{const h=iframe.contentDocument.documentElement.scrollHeight;iframe.style.height=Math.max(300,Math.min(h+20,800))+'px';}catch(e){iframe.style.height='600px';}};
   area.appendChild(iframe);
-  iframe.contentDocument.open();
-  iframe.contentDocument.write(html);
-  iframe.contentDocument.close();
-  iframe.onload=()=>{try{const h=iframe.contentDocument.documentElement.scrollHeight;iframe.style.height=Math.max(300,Math.min(h+20,800))+'px';}catch(e){}};
 }
 
 async function genDesign(fb){
@@ -1382,7 +1385,9 @@ async function genDesign(fb){
           const d=JSON.parse(line.slice(6));
           if(d.type==='text'){raw+=d.content;area.innerHTML=`<div style="padding:12px;font-size:11px;color:#888;font-family:monospace;white-space:pre-wrap;max-height:500px;overflow:auto">${esc(raw)}</div>`;}
           if(d.type==='done'){
-            let h=raw;if(h.includes('\`\`\`html'))h=h.replace(/\`\`\`html\n?/,'').replace(/\n?\`\`\`$/,'');
+            let h=raw.trim();
+            // Strip markdown code fences if present
+            h=h.replace(/^```html\s*\n?/i,'').replace(/^```\s*\n?/,'').replace(/\n?```\s*$/,'');
             designHist.push({html:h,feedback:fb||null});designIdx=designHist.length-1;
             saveDesignHist();renderDesignIframe(h);renderDesignHist();
             btn.textContent='\uD83C\uDFA8 \u30C7\u30B6\u30A4\u30F3\u6848\u3092\u751F\u6210';btn.disabled=false;
