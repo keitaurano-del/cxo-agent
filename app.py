@@ -701,6 +701,11 @@ def delete_knowledge_item(agent_id, item_id):
     return jsonify({"error": "item not found"}), 404
 
 
+@app.route("/api/health")
+def api_health():
+    return jsonify({"ok": True, "ts": time.time()})
+
+
 @app.route("/api/summarize", methods=["POST"])
 def api_summarize():
     data = request.json or {}
@@ -1184,36 +1189,95 @@ function startRoundtable(feedback){
     }catch(e){}
   }
 
-  if(!feedback){
-    // GET with EventSource for initial round (short URL)
-    const url=`/roundtable?topic=${encodeURIComponent(fullTopic)}&order=${targets.join(',')}&projects=${encodeURIComponent(projects.join(','))}&round=${roundNum}`;
-    const es=new EventSource(url);
-    es.onmessage=(e)=>handleSSE('data: '+e.data);
-    es.addEventListener('done',()=>es.close());
-    es.onerror=()=>{es.close();document.getElementById('startBtn').disabled=false;document.getElementById('feedbackBtn').disabled=false;};
-  } else {
-    // POST with fetch for feedback rounds (long prev_discussion)
-    fetch('/roundtable',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({topic:fullTopic,order:targets.join(','),projects:projects.join(','),round:String(roundNum),feedback,prev_discussion:prevDisc})
-    }).then(res=>{
-      const reader=res.body.getReader();
-      const dec=new TextDecoder();
-      let buf='';
-      function read(){
-        reader.read().then(({done,value})=>{
-          if(done)return;
-          buf+=dec.decode(value);
-          const lines=buf.split('\n');
-          buf=lines.pop();
-          for(const line of lines)handleSSE(line);
-          read();
-        });
-      }
-      read();
-    }).catch(()=>{document.getElementById('startBtn').disabled=false;document.getElementById('feedbackBtn').disabled=false;});
+  let attempt=0;
+  let receivedAnyData=false;
+  let watchdog=null;
+  const maxAttempts=3;
+
+  function resetButtons(){
+    document.getElementById('startBtn').disabled=false;
+    document.getElementById('feedbackBtn').disabled=false;
   }
+
+  function clearWatchdog(){if(watchdog){clearTimeout(watchdog);watchdog=null;}}
+
+  function startAttempt(){
+    attempt++;
+    receivedAnyData=false;
+    if(attempt>1)showToast(`\u63a5\u7d9a\u30ea\u30c8\u30e9\u30a4 (${attempt}/${maxAttempts})...`);
+
+    // Watchdog: if no data within 8 seconds, try health check + retry
+    clearWatchdog();
+    watchdog=setTimeout(async ()=>{
+      if(receivedAnyData)return;
+      try{
+        const r=await fetch('/api/health',{cache:'no-store'});
+        if(!r.ok)throw new Error('unhealthy');
+      }catch{
+        // server down — wait briefly and retry
+      }
+      if(attempt<maxAttempts){
+        startAttempt();
+      } else {
+        showToast('\u26a0\ufe0f \u30b5\u30fc\u30d0\u30fc\u306b\u63a5\u7d9a\u3067\u304d\u307e\u305b\u3093');
+        resetButtons();
+      }
+    },8000);
+
+    if(!feedback){
+      const url=`/roundtable?topic=${encodeURIComponent(fullTopic)}&order=${targets.join(',')}&projects=${encodeURIComponent(projects.join(','))}&round=${roundNum}`;
+      const es=new EventSource(url);
+      es.onmessage=(e)=>{receivedAnyData=true;clearWatchdog();handleSSE('data: '+e.data);};
+      es.addEventListener('done',()=>{clearWatchdog();es.close();});
+      es.onerror=()=>{
+        es.close();
+        if(!receivedAnyData&&attempt<maxAttempts){
+          clearWatchdog();
+          setTimeout(()=>startAttempt(),1500);
+        } else {
+          clearWatchdog();
+          if(!receivedAnyData)showToast('\u26a0\ufe0f \u63a5\u7d9a\u30a8\u30e9\u30fc');
+          resetButtons();
+        }
+      };
+    } else {
+      fetch('/roundtable',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({topic:fullTopic,order:targets.join(','),projects:projects.join(','),round:String(roundNum),feedback,prev_discussion:prevDisc})
+      }).then(res=>{
+        if(!res.ok)throw new Error('http '+res.status);
+        const reader=res.body.getReader();
+        const dec=new TextDecoder();
+        let buf='';
+        function read(){
+          reader.read().then(({done,value})=>{
+            if(done){clearWatchdog();return;}
+            receivedAnyData=true;clearWatchdog();
+            buf+=dec.decode(value);
+            const lines=buf.split('\n');
+            buf=lines.pop();
+            for(const line of lines)handleSSE(line);
+            read();
+          }).catch(()=>{
+            if(!receivedAnyData&&attempt<maxAttempts){
+              clearWatchdog();setTimeout(()=>startAttempt(),1500);
+            } else {clearWatchdog();resetButtons();}
+          });
+        }
+        read();
+      }).catch(()=>{
+        clearWatchdog();
+        if(attempt<maxAttempts){
+          setTimeout(()=>startAttempt(),1500);
+        } else {
+          showToast('\u26a0\ufe0f \u63a5\u7d9a\u30a8\u30e9\u30fc');
+          resetButtons();
+        }
+      });
+    }
+  }
+  startAttempt();
 }
 
 function submitFeedback(){
