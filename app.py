@@ -355,30 +355,44 @@ def reset():
 
 @app.route("/generate_output", methods=["POST"])
 def generate_output():
-    """CXO議論結果をコピペ形式+Claude Code想定コストで出力する。"""
+    """全ラウンドのCXO議論を総括してコピペ形式で出力する。"""
     data = request.json
-    discussions = data.get("discussions", [])  # [{title, name, text}, ...]
+    round_history = data.get("roundHistory", [])
     topic = data.get("topic", "")
     projects = data.get("projects", [])
 
-    discussion_text = "\n\n".join(
-        f"【{d['title']} {d['name']}】\n{d['text']}" for d in discussions if d.get("text")
-    )
-
-    if not discussion_text:
+    if not round_history:
         def empty():
             yield f"data: {json.dumps({'type': 'error', 'content': 'CXOの回答がありません'}, ensure_ascii=False)}\n\n"
         return Response(empty(), mimetype="text/event-stream")
 
+    # Build comprehensive discussion text from ALL rounds
+    all_rounds_text = ""
+    for r in round_history:
+        rnum = r.get("round", "?")
+        feedback = r.get("feedback")
+        all_rounds_text += f"\n\n{'='*40}\n## Round {rnum}\n"
+        if feedback:
+            all_rounds_text += f"\n**CEOフィードバック:** {feedback}\n"
+        for d in r.get("discussions", []):
+            if d.get("text"):
+                all_rounds_text += f"\n【{d['title']} {d['name']}】\n{d['text']}\n"
+
     project_context = ", ".join(projects) if projects else "未指定"
+    total_rounds = len(round_history)
 
     def generate():
         try:
             with client.messages.stream(
                 model="claude-sonnet-4-6",
                 max_tokens=4096,
-                system="""あなたはCXO会議のアウトプット生成AIです。
+                system=f"""あなたはCXO会議のアウトプット生成AIです。
 CXO全員の議論内容を分析し、Claude Codeにそのままコピペして実装を依頼できる形式でまとめてください。
+
+重要: この議論は{total_rounds}ラウンドにわたって行われました。
+各ラウンドでCEOがフィードバックを出し、CXOが改善提案を繰り返しています。
+最終ラウンドだけでなく、全ラウンドの議論の経緯と最終結論を総括してまとめてください。
+途中で却下・修正された案は最終版に含めず、最終合意内容を中心にまとめてください。
 
 以下のフォーマットで出力してください:
 
@@ -387,8 +401,11 @@ CXO全員の議論内容を分析し、Claude Codeにそのままコピペして
 ## 概要
 （何を実現するかを1〜2文で）
 
+## 議論の経緯
+（全{total_rounds}ラウンドの流れを簡潔にまとめる。各ラウンドでのCEOフィードバックと、それに対するCXOの改善点）
+
 ## CXO議論サマリー
-（各CXOの主要意見を箇条書きで）
+（各CXOの最終的な主要意見を箇条書きで。途中で修正された意見は最終版のみ記載）
 
 ## 実装計画
 ### タスク一覧
@@ -417,7 +434,7 @@ CXO全員の議論内容を分析し、Claude Codeにそのままコピペして
 
 ## コピペ用プロンプト
 ```
-（Claude Codeにそのまま渡せる具体的な指示文。プロジェクト情報、実装要件、注意事項を含む）
+（Claude Codeにそのまま渡せる具体的な指示文。プロジェクト情報、実装要件、注意事項を含む。全ラウンドの議論で合意された最終仕様を反映すること）
 ```
 
 ---
@@ -427,7 +444,7 @@ CXO全員の議論内容を分析し、Claude Codeにそのままコピペして
 - 実装の具体性を重視（抽象的な表現は避ける）
 - コスト見積もりは現実的な範囲で
 - コピペ用プロンプトは、Claude Codeが迷わず実装できるレベルの具体性で書く""",
-                messages=[{"role": "user", "content": f"テーマ: {topic}\n対象プロジェクト: {project_context}\n\n以下のCXO議論をまとめてください:\n\n{discussion_text[:8000]}"}],
+                messages=[{"role": "user", "content": f"テーマ: {topic}\n対象プロジェクト: {project_context}\n合計ラウンド数: {total_rounds}\n\n以下の全ラウンドの議論を総括してまとめてください:\n{all_rounds_text[:12000]}"}],
             ) as s:
                 for text in s.text_stream:
                     yield f"data: {json.dumps({'type': 'text', 'content': text}, ensure_ascii=False)}\n\n"
@@ -811,6 +828,7 @@ const rawTxt={};
 let currentTopic='';
 let roundNum=0;
 let outputRaw='';
+let roundHistory=[];  // [{round:1, feedbackGiven:null, discussions:[{title,name,text},...]}]
 
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 
@@ -894,6 +912,9 @@ function startRoundtable(feedback){
         document.getElementById(`st-${id}`).textContent='\u767A\u8A00\u6E08';
       }
       if(d.type==='done'){
+        // Save this round's discussions to history
+        const thisRound=ORDER.map(id=>({title:AGENTS[id].title,name:AGENTS[id].name,text:rawTxt[id]||''})).filter(d=>d.text);
+        roundHistory.push({round:roundNum,feedback:feedback||null,discussions:thisRound});
         document.getElementById('startBtn').disabled=false;
         document.getElementById('feedbackBtn').disabled=false;
         const panel=document.getElementById('actionPanel');
@@ -951,13 +972,12 @@ function submitFeedback(){
 async function generateOutput(){
   const btn=document.getElementById('outputGenBtn');
   btn.disabled=true;btn.textContent='\u29D7 \u751F\u6210\u4E2D...';
-  const discussions=ORDER.map(id=>({title:AGENTS[id].title,name:AGENTS[id].name,text:rawTxt[id]||''})).filter(d=>d.text);
-  if(!discussions.length){btn.textContent='\uD83D\uDCCB \u30B3\u30D4\u30DA\u7528\u51FA\u529B\u3092\u751F\u6210';btn.disabled=false;return;}
+  if(!roundHistory.length){btn.textContent='\uD83D\uDCCB \u30B3\u30D4\u30DA\u7528\u51FA\u529B\u3092\u751F\u6210';btn.disabled=false;return;}
   document.getElementById('outputModal').style.display='flex';
   const body=document.getElementById('outputModalBody');
   body.innerHTML='<span style="color:#aaa">\u29D7 \u751F\u6210\u4E2D...</span>';outputRaw='';
   try{
-    const res=await fetch('/generate_output',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({discussions,topic:currentTopic,projects:getProjects()})});
+    const res=await fetch('/generate_output',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roundHistory,topic:currentTopic,projects:getProjects()})});
     const reader=res.body.getReader();const dec=new TextDecoder();
     function read(){reader.read().then(({done,value})=>{
       if(done)return;
@@ -996,7 +1016,7 @@ async function resetAll(){
     document.getElementById(`ch-${id}`).textContent='0\u6587\u5B57';
   }
   document.getElementById('actionPanel').classList.add('hidden');
-  currentTopic='';roundNum=0;
+  currentTopic='';roundNum=0;roundHistory=[];
 }
 
 document.addEventListener('keydown',(e)=>{if(e.ctrlKey&&e.key==='Enter'){e.preventDefault();startRoundtable();}});
