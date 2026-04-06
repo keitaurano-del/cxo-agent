@@ -701,6 +701,64 @@ def delete_knowledge_item(agent_id, item_id):
     return jsonify({"error": "item not found"}), 404
 
 
+@app.route("/api/summarize", methods=["POST"])
+def api_summarize():
+    data = request.json or {}
+    text = data.get("text", "")
+    if not text or len(text) < 30:
+        return jsonify({"summary": text})
+    try:
+        result = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=100,
+            system="ユーザーの入力テキストを1〜2文（50文字以内）で要約してください。要約のみを返してください。",
+            messages=[{"role": "user", "content": text}],
+        )
+        return jsonify({"summary": result.content[0].text.strip()})
+    except Exception:
+        return jsonify({"summary": text[:50] + "..."})
+
+
+@app.route("/api/design-preview", methods=["POST"])
+def api_design_preview():
+    data = request.json or {}
+    discussion = data.get("discussion", "")
+    feedback = data.get("feedback", "")
+    previous_html = data.get("previous_html", "")
+
+    parts = []
+    if discussion:
+        parts.append(f"## CXO議論内容\n{discussion[:6000]}")
+    if previous_html:
+        parts.append(f"## 前回のデザイン\n```html\n{previous_html[:4000]}\n```")
+    if feedback:
+        parts.append(f"## CEOフィードバック\n{feedback}")
+
+    def generate():
+        try:
+            with client.messages.stream(
+                model="claude-sonnet-4-6",
+                max_tokens=4096,
+                system="""あなたはUIデザイナーAIです。CXOの議論内容に基づいて、提案されたUI/デザイン変更のHTMLモックアップを生成してください。
+
+ルール:
+- 完全に自己完結したHTMLを生成（inline CSSのみ、外部依存なし）
+- モバイル対応のレスポンシブデザイン
+- 日本語のUIテキスト
+- シンプルで美しいデザイン
+- <html>から</html>まで完全なHTMLドキュメントを返す
+- コードブロックやマークダウンで囲まず、生のHTMLのみを返す""",
+                messages=[{"role": "user", "content": "\n\n".join(parts)}],
+            ) as s:
+                for text in s.text_stream:
+                    yield f"data: {json.dumps({'type': 'text', 'content': text}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
+
+    return Response(generate(), mimetype="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 HTML_CONTENT = r"""<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -754,6 +812,30 @@ textarea::placeholder{color:rgba(255,255,255,0.3)}
 .ceo-log-item.topic{background:rgba(255,215,0,0.1);border-left:3px solid #FFD700;color:rgba(255,255,255,0.85)}
 .ceo-log-item.feedback{background:rgba(79,195,247,0.08);border-left:3px solid #4FC3F7;color:rgba(255,255,255,0.75)}
 .ceo-log-round{font-size:9px;color:rgba(255,255,255,0.35);font-weight:600;margin-bottom:1px}
+.ceo-log-detail{display:none;margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.1);font-size:10px;color:rgba(255,255,255,0.45);word-break:break-all}
+.ceo-log-item[onclick]:hover{background:rgba(255,255,255,0.04)}
+
+.mansion-tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid #1a237e}
+.mansion-tab{padding:10px 20px;font-size:14px;font-weight:600;color:#6B6B7B;background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit;transition:all 0.2s}
+.mansion-tab.active{color:#1a237e;border-bottom-color:#1a237e}
+.mansion-tab:hover:not(.active){color:#444}
+
+.design-panel{display:flex;flex-direction:column;gap:14px}
+.design-controls{display:flex;align-items:center;gap:12px}
+.btn-design{background:#9C27B0;border:none;color:#fff;padding:10px 22px;border-radius:24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s;box-shadow:0 2px 8px rgba(156,39,176,0.3)}
+.btn-design:disabled{opacity:0.4;cursor:not-allowed;box-shadow:none}
+.btn-design:hover:not(:disabled){background:#7B1FA2;transform:translateY(-1px)}
+.design-ver{font-size:12px;color:#6B6B7B;font-weight:600}
+.design-preview{background:#fff;border:1px solid #e0ddd8;border-radius:16px;min-height:300px;overflow:hidden;box-shadow:0 1px 3px rgba(166,156,143,0.12)}
+.design-preview iframe{width:100%;height:500px;border:none;border-radius:16px}
+.design-empty{padding:60px 20px;text-align:center;color:#bbb;font-size:14px}
+.design-fb textarea{background:#fff;border:1px solid #e0ddd8;border-radius:10px;color:#2D2D2D;padding:12px;font-size:13px;font-family:inherit;resize:vertical;min-height:50px;width:100%}
+.design-fb textarea:focus{outline:none;border-color:#9C27B0}
+.btn-design-fb{background:none;border:1px solid rgba(156,39,176,0.4);color:#9C27B0;padding:10px;border-radius:24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;margin-top:6px;transition:all 0.2s}
+.btn-design-fb:disabled{opacity:0.4;cursor:not-allowed}
+.design-hist{display:flex;gap:6px;flex-wrap:wrap}
+.design-chip{padding:4px 10px;border-radius:16px;font-size:11px;cursor:pointer;border:1px solid #e0ddd8;color:#6B6B7B;background:#fff;font-family:inherit}
+.design-chip.active{border-color:#9C27B0;color:#9C27B0;background:rgba(156,39,176,0.05)}
 
 .mansion{flex:1;overflow-y:auto;padding:20px 24px;background:#F8F7F5}
 .mansion-h{font-size:20px;font-weight:700;color:#1a237e;margin-bottom:20px;padding-bottom:10px;border-bottom:2px solid #1a237e;letter-spacing:-0.02em}
@@ -900,8 +982,29 @@ textarea::placeholder{color:rgba(255,255,255,0.3)}
   </div>
 
   <div class="mansion">
-    <div class="mansion-h">&#127970; Apollo Mansion &#8212; &#12501;&#12525;&#12450;&#19968;&#35239;</div>
-    <div id="floors"></div>
+    <div class="mansion-tabs">
+      <button class="mansion-tab active" id="tabFloor" onclick="switchTab('floor')">&#127970; &#12501;&#12525;&#12450;</button>
+      <button class="mansion-tab" id="tabDesign" onclick="switchTab('design')">&#127912; &#12487;&#12470;&#12452;&#12531;</button>
+    </div>
+    <div id="tabFloor_c">
+      <div id="floors"></div>
+    </div>
+    <div id="tabDesign_c" style="display:none">
+      <div class="design-panel">
+        <div class="design-controls">
+          <button class="btn-design" id="designGenBtn" onclick="genDesign()">&#127912; &#12487;&#12470;&#12452;&#12531;&#26696;&#12434;&#29983;&#25104;</button>
+          <span class="design-ver" id="designVer"></span>
+        </div>
+        <div class="design-hist" id="designHist"></div>
+        <div class="design-preview" id="designArea">
+          <div class="design-empty">CXO&#20870;&#21331;&#20250;&#35696;&#12398;&#24460;&#12289;&#12300;&#12487;&#12470;&#12452;&#12531;&#26696;&#12434;&#29983;&#25104;&#12301;&#12434;&#12463;&#12522;&#12483;&#12463;</div>
+        </div>
+        <div class="design-fb">
+          <textarea id="designFbInput" placeholder="&#12487;&#12470;&#12452;&#12531;&#12408;&#12398;&#12501;&#12451;&#12540;&#12489;&#12496;&#12483;&#12463;..."></textarea>
+          <button class="btn-design-fb" id="designFbBtn" onclick="submitDesignFb()">&#128260; &#20462;&#27491;&#12434;&#20381;&#38972;</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -937,9 +1040,18 @@ function saveCeoLog(){localStorage.setItem('apollo-ceolog',JSON.stringify(ceoLog
 function renderCeoLog(){
   const el=document.getElementById('ceoLog');
   if(!el)return;
-  el.innerHTML=ceoLog.map(e=>`<div class="ceo-log-item ${e.type}"><div class="ceo-log-round">Round ${e.round}</div>${esc(e.text)}</div>`).join('');
+  el.innerHTML=ceoLog.map((e,i)=>{
+    const display=e.summary||e.text;
+    const hasDetail=e.summary&&e.summary!==e.text;
+    return `<div class="ceo-log-item ${e.type}"${hasDetail?` onclick="toggleLogDetail(${i})" style="cursor:pointer"`:''}>
+      <div class="ceo-log-round">Round ${e.round}${hasDetail?' ▾':''}</div>
+      ${esc(display)}
+      ${hasDetail?`<div class="ceo-log-detail" id="logd-${i}">${esc(e.text)}</div>`:''}
+    </div>`;
+  }).join('');
   el.scrollTop=el.scrollHeight;
 }
+function toggleLogDetail(i){const el=document.getElementById('logd-'+i);if(el)el.style.display=el.style.display==='block'?'none':'block';}
 
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 
@@ -990,6 +1102,11 @@ function startRoundtable(feedback){
     ceoLog.push({round:roundNum,type:'feedback',text:feedback});
   }
   saveCeoLog();renderCeoLog();
+  const _logIdx=ceoLog.length-1;
+  if(ceoLog[_logIdx].text.length>30){
+    fetch('/api/summarize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:ceoLog[_logIdx].text})})
+    .then(r=>r.json()).then(d=>{if(d.summary){ceoLog[_logIdx].summary=d.summary;saveCeoLog();renderCeoLog();}}).catch(()=>{});
+  }
   document.getElementById('startBtn').disabled=true;
   document.getElementById('actionPanel').classList.add('hidden');
 
@@ -1136,6 +1253,10 @@ async function resetAll(){
   }
   document.getElementById('actionPanel').classList.add('hidden');
   currentTopic='';roundNum=0;roundHistory=[];saveRoundHistory();saveRawTxt();ceoLog=[];saveCeoLog();renderCeoLog();localStorage.removeItem('apollo-topic');localStorage.removeItem('apollo-round');
+  designHist=[];designIdx=-1;saveDesignHist();
+  document.getElementById('designArea').innerHTML='<div class="design-empty">CXO\u5186\u5353\u4F1A\u8B70\u306E\u5F8C\u3001\u300C\u30C7\u30B6\u30A4\u30F3\u6848\u3092\u751F\u6210\u300D\u3092\u30AF\u30EA\u30C3\u30AF</div>';
+  document.getElementById('designHist').innerHTML='';
+  document.getElementById('designVer').textContent='';
 }
 
 document.addEventListener('keydown',(e)=>{if(e.ctrlKey&&e.key==='Enter'){e.preventDefault();startRoundtable();}});
@@ -1179,6 +1300,90 @@ async function delK(agentId, itemId){
 }
 document.addEventListener('click',(e)=>{if(!e.target.closest('.card-foot'))document.querySelectorAll('.kpop').forEach(p=>p.style.display='none');});
 
+// === TAB SWITCHING ===
+function switchTab(t){
+  document.getElementById('tabFloor').classList.toggle('active',t==='floor');
+  document.getElementById('tabDesign').classList.toggle('active',t==='design');
+  document.getElementById('tabFloor_c').style.display=t==='floor'?'block':'none';
+  document.getElementById('tabDesign_c').style.display=t==='design'?'block':'none';
+}
+
+// === DESIGN PREVIEW ===
+let designHist=JSON.parse(localStorage.getItem('apollo-designs')||'[]');
+let designIdx=designHist.length-1;
+function saveDesignHist(){localStorage.setItem('apollo-designs',JSON.stringify(designHist));}
+
+function renderDesignHist(){
+  const el=document.getElementById('designHist');
+  if(!designHist.length){el.innerHTML='';document.getElementById('designVer').textContent='';return;}
+  el.innerHTML=designHist.map((d,i)=>`<button class="design-chip ${i===designIdx?'active':''}" onclick="showDesign(${i})">v${i+1}</button>`).join('');
+  document.getElementById('designVer').textContent=`v${designIdx+1} / ${designHist.length}`;
+}
+
+function showDesign(i){
+  designIdx=i;
+  renderDesignIframe(designHist[i].html);
+  renderDesignHist();
+}
+
+function renderDesignIframe(html){
+  const area=document.getElementById('designArea');
+  area.innerHTML='';
+  const iframe=document.createElement('iframe');
+  iframe.sandbox='allow-scripts';
+  area.appendChild(iframe);
+  iframe.contentDocument.open();
+  iframe.contentDocument.write(html);
+  iframe.contentDocument.close();
+  iframe.onload=()=>{try{const h=iframe.contentDocument.documentElement.scrollHeight;iframe.style.height=Math.max(300,Math.min(h+20,800))+'px';}catch(e){}};
+}
+
+async function genDesign(fb){
+  const btn=document.getElementById('designGenBtn');
+  btn.disabled=true;btn.textContent='\u23F3 \u751F\u6210\u4E2D...';
+  let disc='';
+  for(const r of roundHistory){
+    disc+=`\nRound ${r.round}:\n`;
+    if(r.feedback)disc+=`CEO: ${r.feedback}\n`;
+    for(const d of r.discussions)if(d.text)disc+=`${d.title} ${d.name}: ${d.text.slice(0,500)}\n`;
+  }
+  const prevHtml=designHist.length?designHist[designHist.length-1].html:'';
+  const area=document.getElementById('designArea');
+  area.innerHTML='<div class="design-empty">\u23F3 \u30C7\u30B6\u30A4\u30F3\u751F\u6210\u4E2D...</div>';
+  let raw='';
+  try{
+    const res=await fetch('/api/design-preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({discussion:disc.slice(0,6000),feedback:fb||'',previous_html:fb?prevHtml:''})});
+    const reader=res.body.getReader();const dec=new TextDecoder();let buf='';
+    function read(){reader.read().then(({done,value})=>{
+      if(done)return;
+      buf+=dec.decode(value);const lines=buf.split('\n');buf=lines.pop();
+      for(const line of lines){
+        if(!line.startsWith('data: '))continue;
+        try{
+          const d=JSON.parse(line.slice(6));
+          if(d.type==='text'){raw+=d.content;area.innerHTML=`<div style="padding:12px;font-size:11px;color:#888;font-family:monospace;white-space:pre-wrap;max-height:500px;overflow:auto">${esc(raw)}</div>`;}
+          if(d.type==='done'){
+            let h=raw;if(h.includes('\`\`\`html'))h=h.replace(/\`\`\`html\n?/,'').replace(/\n?\`\`\`$/,'');
+            designHist.push({html:h,feedback:fb||null});designIdx=designHist.length-1;
+            saveDesignHist();renderDesignIframe(h);renderDesignHist();
+            btn.textContent='\uD83C\uDFA8 \u30C7\u30B6\u30A4\u30F3\u6848\u3092\u751F\u6210';btn.disabled=false;
+          }
+          if(d.type==='error'){area.innerHTML=`<div class="design-empty" style="color:#f44336">Error: ${esc(d.content)}</div>`;btn.textContent='\uD83C\uDFA8 \u30C7\u30B6\u30A4\u30F3\u6848\u3092\u751F\u6210';btn.disabled=false;}
+        }catch(e){}
+      }
+      read();
+    });}
+    read();
+  }catch(e){area.innerHTML=`<div class="design-empty" style="color:#f44336">Error</div>`;btn.textContent='\uD83C\uDFA8 \u30C7\u30B6\u30A4\u30F3\u6848\u3092\u751F\u6210';btn.disabled=false;}
+}
+
+function submitDesignFb(){
+  const fb=document.getElementById('designFbInput').value.trim();
+  if(!fb){alert('\u30D5\u30A3\u30FC\u30C9\u30D0\u30C3\u30AF\u3092\u5165\u529B');return;}
+  document.getElementById('designFbBtn').disabled=true;
+  genDesign(fb).then(()=>{document.getElementById('designFbBtn').disabled=false;document.getElementById('designFbInput').value='';});
+}
+
 createFloors();
 // Restore card content from localStorage on page load
 (function restoreCards(){
@@ -1196,6 +1401,7 @@ createFloors();
     document.getElementById('outputGenBtn').disabled=false;
     renderCeoLog();
   }
+  if(designHist.length){renderDesignIframe(designHist[designHist.length-1].html);renderDesignHist();}
 })();
 </script>
 </body>
