@@ -825,10 +825,11 @@ const AGENTS={
 };
 const ORDER=["cso","cfo","cmo","cto","cpo"];
 const rawTxt={};
-let currentTopic='';
-let roundNum=0;
+let currentTopic=sessionStorage.getItem('apollo-topic')||'';
+let roundNum=parseInt(sessionStorage.getItem('apollo-round')||'0');
 let outputRaw='';
-let roundHistory=[];  // [{round:1, feedbackGiven:null, discussions:[{title,name,text},...]}]
+let roundHistory=JSON.parse(sessionStorage.getItem('apollo-rounds')||'[]');
+function saveRoundHistory(){sessionStorage.setItem('apollo-rounds',JSON.stringify(roundHistory));}
 
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 
@@ -870,8 +871,8 @@ function startRoundtable(feedback){
   const targets=getTargets();
   if(!targets.length){alert('\u5BFE\u8C61CXO\u3092\u9078\u629E');return;}
 
-  currentTopic=topic;
-  roundNum++;
+  currentTopic=topic;sessionStorage.setItem('apollo-topic',topic);
+  roundNum++;sessionStorage.setItem('apollo-round',String(roundNum));
   document.getElementById('startBtn').disabled=true;
   document.getElementById('actionPanel').classList.add('hidden');
 
@@ -914,7 +915,7 @@ function startRoundtable(feedback){
       if(d.type==='done'){
         // Save this round's discussions to history
         const thisRound=ORDER.map(id=>({title:AGENTS[id].title,name:AGENTS[id].name,text:rawTxt[id]||''})).filter(d=>d.text);
-        roundHistory.push({round:roundNum,feedback:feedback||null,discussions:thisRound});
+        roundHistory.push({round:roundNum,feedback:feedback||null,discussions:thisRound});saveRoundHistory();
         document.getElementById('startBtn').disabled=false;
         document.getElementById('feedbackBtn').disabled=false;
         const panel=document.getElementById('actionPanel');
@@ -1016,7 +1017,7 @@ async function resetAll(){
     document.getElementById(`ch-${id}`).textContent='0\u6587\u5B57';
   }
   document.getElementById('actionPanel').classList.add('hidden');
-  currentTopic='';roundNum=0;roundHistory=[];
+  currentTopic='';roundNum=0;roundHistory=[];saveRoundHistory();sessionStorage.removeItem('apollo-topic');sessionStorage.removeItem('apollo-round');
 }
 
 document.addEventListener('keydown',(e)=>{if(e.ctrlKey&&e.key==='Enter'){e.preventDefault();startRoundtable();}});
