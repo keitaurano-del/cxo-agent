@@ -824,13 +824,13 @@ const AGENTS={
   cpo:{title:"CPO",name:"Dorami",floor:"1F",color:"#FFD700",icon:"\uD83D\uDC67"}
 };
 const ORDER=["cso","cfo","cmo","cto","cpo"];
-const rawTxt=JSON.parse(sessionStorage.getItem('apollo-rawTxt')||'{}');
-function saveRawTxt(){sessionStorage.setItem('apollo-rawTxt',JSON.stringify(rawTxt));}
-let currentTopic=sessionStorage.getItem('apollo-topic')||'';
-let roundNum=parseInt(sessionStorage.getItem('apollo-round')||'0');
+const rawTxt=JSON.parse(localStorage.getItem('apollo-rawTxt')||'{}');
+function saveRawTxt(){localStorage.setItem('apollo-rawTxt',JSON.stringify(rawTxt));}
+let currentTopic=localStorage.getItem('apollo-topic')||'';
+let roundNum=parseInt(localStorage.getItem('apollo-round')||'0');
 let outputRaw='';
-let roundHistory=JSON.parse(sessionStorage.getItem('apollo-rounds')||'[]');
-function saveRoundHistory(){sessionStorage.setItem('apollo-rounds',JSON.stringify(roundHistory));}
+let roundHistory=JSON.parse(localStorage.getItem('apollo-rounds')||'[]');
+function saveRoundHistory(){localStorage.setItem('apollo-rounds',JSON.stringify(roundHistory));}
 
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 
@@ -872,8 +872,8 @@ function startRoundtable(feedback){
   const targets=getTargets();
   if(!targets.length){alert('\u5BFE\u8C61CXO\u3092\u9078\u629E');return;}
 
-  currentTopic=topic;sessionStorage.setItem('apollo-topic',topic);
-  roundNum++;sessionStorage.setItem('apollo-round',String(roundNum));
+  currentTopic=topic;localStorage.setItem('apollo-topic',topic);
+  roundNum++;localStorage.setItem('apollo-round',String(roundNum));
   document.getElementById('startBtn').disabled=true;
   document.getElementById('actionPanel').classList.add('hidden');
 
@@ -1019,7 +1019,7 @@ async function resetAll(){
     document.getElementById(`ch-${id}`).textContent='0\u6587\u5B57';
   }
   document.getElementById('actionPanel').classList.add('hidden');
-  currentTopic='';roundNum=0;roundHistory=[];saveRoundHistory();saveRawTxt();sessionStorage.removeItem('apollo-topic');sessionStorage.removeItem('apollo-round');
+  currentTopic='';roundNum=0;roundHistory=[];saveRoundHistory();saveRawTxt();localStorage.removeItem('apollo-topic');localStorage.removeItem('apollo-round');
 }
 
 document.addEventListener('keydown',(e)=>{if(e.ctrlKey&&e.key==='Enter'){e.preventDefault();startRoundtable();}});
@@ -1064,7 +1064,7 @@ async function delK(agentId, itemId){
 document.addEventListener('click',(e)=>{if(!e.target.closest('.card-foot'))document.querySelectorAll('.kpop').forEach(p=>p.style.display='none');});
 
 createFloors();
-// Restore card content from sessionStorage on page load
+// Restore card content from localStorage on page load
 (function restoreCards(){
   for(const id of ORDER){
     if(rawTxt[id]){
