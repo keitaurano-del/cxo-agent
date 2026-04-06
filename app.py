@@ -453,15 +453,24 @@ def reset_knowledge(agent_id):
     return jsonify({"ok": True})
 
 
-@app.route("/roundtable")
+@app.route("/roundtable", methods=["GET", "POST"])
 def roundtable():
-    topic = request.args.get("topic", "")
-    order_str = request.args.get("order", ",".join(AGENTS.keys()))
+    if request.method == "POST":
+        data = request.json or {}
+        topic = data.get("topic", "")
+        order_str = data.get("order", ",".join(AGENTS.keys()))
+        projects_str = data.get("projects", "")
+        feedback = data.get("feedback", "")
+        prev_discussion = data.get("prev_discussion", "")
+        round_num = data.get("round", "1")
+    else:
+        topic = request.args.get("topic", "")
+        order_str = request.args.get("order", ",".join(AGENTS.keys()))
+        projects_str = request.args.get("projects", "")
+        feedback = request.args.get("feedback", "")
+        prev_discussion = request.args.get("prev_discussion", "")
+        round_num = request.args.get("round", "1")
     order = [x for x in order_str.split(",") if x in AGENTS]
-    projects_str = request.args.get("projects", "")
-    feedback = request.args.get("feedback", "")
-    prev_discussion = request.args.get("prev_discussion", "")
-    round_num = request.args.get("round", "1")
 
     def generate():
         discussion = []
@@ -1001,48 +1010,76 @@ function startRoundtable(feedback){
   }
   input.value='';
 
-  let url=`/roundtable?topic=${encodeURIComponent(fullTopic)}&order=${targets.join(',')}&projects=${encodeURIComponent(projects.join(','))}&round=${roundNum}`;
-  if(feedback)url+=`&feedback=${encodeURIComponent(feedback)}&prev_discussion=${encodeURIComponent(prevDisc)}`;
+  function handleSSE(line){
+    if(!line.startsWith('data: '))return;
+    try{
+      const d=JSON.parse(line.slice(6));
+      if(d.type==='agent_start'){
+        const id=d.agent_id;
+        document.getElementById(`dot-${id}`).className='dot working';
+        document.getElementById(`st-${id}`).textContent='\u767A\u8A00\u4E2D...';
+        rawTxt[id]='';
+        document.getElementById(`body-${id}`).innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum}</span><span class="typing"></span>`;
+      }
+      if(d.type==='text'){
+        const id=d.agent_id;const body=document.getElementById(`body-${id}`);
+        rawTxt[id]+=d.content;
+        body.innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum}</span>`+marked.parse(rawTxt[id])+'<span class="typing"></span>';
+        body.scrollTop=body.scrollHeight;
+        document.getElementById(`ch-${id}`).textContent=`${rawTxt[id].length}\u6587\u5B57`;
+      }
+      if(d.type==='agent_done'){
+        const id=d.agent_id;
+        document.getElementById(`body-${id}`).innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum}</span>`+marked.parse(rawTxt[id]);
+        document.getElementById(`dot-${id}`).className='dot done';
+        document.getElementById(`st-${id}`).textContent='\u767A\u8A00\u6E08';
+      }
+      if(d.type==='done'){
+        document.getElementById('startBtn').disabled=false;
+        document.getElementById('feedbackBtn').disabled=false;
+        const panel=document.getElementById('actionPanel');
+        panel.classList.remove('hidden');
+        document.getElementById('roundBadge').textContent=`Round ${roundNum} \u5B8C\u4E86`;
+        document.getElementById('outputGenBtn').disabled=false;
+        document.getElementById('feedbackInput').value='';
+      }
+      if(d.type==='error'){
+        const id=d.agent_id;
+        document.getElementById(`body-${id}`).innerHTML+=`<div style="color:#f44336;font-size:11px">Error: ${esc(d.content)}</div>`;
+      }
+    }catch(e){}
+  }
 
-  const es=new EventSource(url);
-  es.onmessage=(e)=>{
-    const d=JSON.parse(e.data);
-    if(d.type==='agent_start'){
-      const id=d.agent_id;
-      document.getElementById(`dot-${id}`).className='dot working';
-      document.getElementById(`st-${id}`).textContent='\u767A\u8A00\u4E2D...';
-      rawTxt[id]='';
-      document.getElementById(`body-${id}`).innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum}</span><span class="typing"></span>`;
-    }
-    if(d.type==='text'){
-      const id=d.agent_id;const body=document.getElementById(`body-${id}`);
-      rawTxt[id]+=d.content;
-      body.innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum}</span>`+marked.parse(rawTxt[id])+'<span class="typing"></span>';
-      body.scrollTop=body.scrollHeight;
-      document.getElementById(`ch-${id}`).textContent=`${rawTxt[id].length}\u6587\u5B57`;
-    }
-    if(d.type==='agent_done'){
-      const id=d.agent_id;
-      document.getElementById(`body-${id}`).innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum}</span>`+marked.parse(rawTxt[id]);
-      document.getElementById(`dot-${id}`).className='dot done';
-      document.getElementById(`st-${id}`).textContent='\u767A\u8A00\u6E08';
-    }
-    if(d.type==='done'){
-      es.close();
-      document.getElementById('startBtn').disabled=false;
-      // Show action panel
-      const panel=document.getElementById('actionPanel');
-      panel.classList.remove('hidden');
-      document.getElementById('roundBadge').textContent=`Round ${roundNum} \u5B8C\u4E86`;
-      document.getElementById('outputGenBtn').disabled=false;
-      document.getElementById('feedbackInput').value='';
-    }
-    if(d.type==='error'){
-      const id=d.agent_id;
-      document.getElementById(`body-${id}`).innerHTML+=`<div style="color:#f44336;font-size:11px">Error: ${esc(d.content)}</div>`;
-    }
-  };
-  es.onerror=()=>{es.close();document.getElementById('startBtn').disabled=false;};
+  if(!feedback){
+    // GET with EventSource for initial round (short URL)
+    const url=`/roundtable?topic=${encodeURIComponent(fullTopic)}&order=${targets.join(',')}&projects=${encodeURIComponent(projects.join(','))}&round=${roundNum}`;
+    const es=new EventSource(url);
+    es.onmessage=(e)=>handleSSE('data: '+e.data);
+    es.addEventListener('done',()=>es.close());
+    es.onerror=()=>{es.close();document.getElementById('startBtn').disabled=false;document.getElementById('feedbackBtn').disabled=false;};
+  } else {
+    // POST with fetch for feedback rounds (long prev_discussion)
+    fetch('/roundtable',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({topic:fullTopic,order:targets.join(','),projects:projects.join(','),round:String(roundNum),feedback,prev_discussion:prevDisc})
+    }).then(res=>{
+      const reader=res.body.getReader();
+      const dec=new TextDecoder();
+      let buf='';
+      function read(){
+        reader.read().then(({done,value})=>{
+          if(done)return;
+          buf+=dec.decode(value);
+          const lines=buf.split('\n');
+          buf=lines.pop();
+          for(const line of lines)handleSSE(line);
+          read();
+        });
+      }
+      read();
+    }).catch(()=>{document.getElementById('startBtn').disabled=false;document.getElementById('feedbackBtn').disabled=false;});
+  }
 }
 
 function submitFeedback(){
