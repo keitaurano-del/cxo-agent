@@ -1161,38 +1161,38 @@ textarea::placeholder{color:rgba(26,46,92,0.4)}
 
         <div class="biz-section">
           <h3 class="biz-section-title">&#128176; &#36001;&#21209;&#12471;&#12511;&#12517;&#12524;&#12540;&#12479;&#12540;</h3>
-          <div class="biz-note">&#9888;&#65039; Keita 1&#20154;&#38283;&#30330;&#12289;&#20154;&#20214;&#36027;&#12476;&#12525; (\u30a8\u30f3\u30b8\u30cb\u30a2\u4eba\u6708\u30b3\u30b9\u30c8\u4e0d\u8003\u616e)</div>
+          <div class="biz-note">⚠️ Keita 1人開発、人件費ゼロ (エンジニア人月コスト不考慮)</div>
           <div class="biz-sim">
             <div class="biz-sim-row">
-              <label>MAU (\u6708\u9593\u30a2\u30af\u30c6\u30a3\u30d6\u30e6\u30fc\u30b6\u30fc)</label>
+              <label>MAU (月間アクティブユーザー)</label>
               <input type="number" id="bizMau" min="0" max="100000" step="10">
             </div>
             <div class="biz-sim-row">
-              <label>\u30c8\u30e9\u30a4\u30a2\u30eb\u2192\u6709\u6599\u8ee2\u63db\u7387 (%)</label>
+              <label>トライアル→有料転換率 (%)</label>
               <input type="number" id="bizConv" min="0" max="100" step="1">
             </div>
             <div class="biz-sim-row">
-              <label>\u6708\u984d\u30d7\u30e9\u30f3\u4fa1\u683c (\u00a5)</label>
+              <label>月額プラン価格 (¥)</label>
               <input type="number" id="bizMonthly" min="0" step="100">
             </div>
             <div class="biz-sim-row">
-              <label>\u5e74\u984d\u30d7\u30e9\u30f3\u4fa1\u683c (\u00a5)</label>
+              <label>年額プラン価格 (¥)</label>
               <input type="number" id="bizYearly" min="0" step="100">
             </div>
             <div class="biz-sim-row">
-              <label>\u6708\u984d\u30e6\u30fc\u30b6\u30fc\u6bd4\u7387 (%)</label>
+              <label>月額ユーザー比率 (%)</label>
               <input type="number" id="bizMonthlyRatio" min="0" max="100" step="5">
             </div>
             <div class="biz-sim-row">
-              <label>AI\u554f\u984c1\u554f\u3042\u305f\u308a\u306eAPI\u30b3\u30b9\u30c8 (\u00a5)</label>
+              <label>AI問題1問あたりのAPIコスト (¥)</label>
               <input type="number" id="bizApiCost" min="0" step="0.1">
             </div>
             <div class="biz-sim-row">
-              <label>1\u30e6\u30fc\u30b6\u30fc\u6708\u9593\u554f\u984c\u6570 (\u6709\u6599)</label>
+              <label>1ユーザー月間問題数 (有料)</label>
               <input type="number" id="bizProblems" min="0" max="500" step="10">
             </div>
             <div class="biz-sim-row">
-              <label>Render\u30db\u30b9\u30c6\u30a3\u30f3\u30b0\u6708\u984d (\u00a5)</label>
+              <label>Renderホスティング月額 (¥)</label>
               <input type="number" id="bizHosting" min="0" step="100">
             </div>
           </div>
@@ -1200,8 +1200,8 @@ textarea::placeholder{color:rgba(26,46,92,0.4)}
         </div>
 
         <div class="biz-section">
-          <h3 class="biz-section-title">&#10024; AI\u30b5\u30de\u30ea\u30fc</h3>
-          <button class="btn-biz" id="bizSummaryBtn" onclick="genBizSummary()">&#128202; &#20170;&#26376;&#12398;&#12469;&#12510;&#12522;&#12540;&#12434;&#29983;&#25104;</button>
+          <h3 class="biz-section-title">✨ AIサマリー</h3>
+          <button class="btn-biz" id="bizSummaryBtn" onclick="genBizSummary()">📊 今月のサマリーを生成</button>
           <div class="biz-summary" id="bizSummary"><div class="biz-summary-empty">\u8caa\u52d9\u6307\u6a19\u3092\u5165\u529b\u3057\u3066\u300c\u30b5\u30de\u30ea\u30fc\u751f\u6210\u300d\u3092\u30af\u30ea\u30c3\u30af</div></div>
         </div>
       </div>
