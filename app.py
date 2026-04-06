@@ -591,110 +591,6 @@ def delete_knowledge_item(agent_id, item_id):
     return jsonify({"error": "item not found"}), 404
 
 
-# --- Ticket Board Data ---
-TICKETS_FILE = os.path.join(PROJECT_DIR, "tickets.json")
-
-
-def load_tickets():
-    """Load ticket board data from disk."""
-    if os.path.exists(TICKETS_FILE):
-        with open(TICKETS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    # Initialize with default Sprint 1
-    default_data = {
-        "tickets": [],
-        "sprints": [{"id": 1, "name": "Sprint 1", "goal": "チケット管理MVP"}],
-        "next_ticket_id": 1,
-        "next_sprint_id": 2,
-    }
-    save_tickets(default_data)
-    return default_data
-
-
-def save_tickets(data):
-    """Save ticket board data to disk."""
-    with open(TICKETS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-@app.route("/api/tickets", methods=["GET"])
-def api_get_tickets():
-    data = load_tickets()
-    sprint_id = request.args.get("sprint_id")
-    tickets = data["tickets"]
-    if sprint_id:
-        try:
-            sid = int(sprint_id)
-            tickets = [t for t in tickets if t.get("sprint_id") == sid]
-        except ValueError:
-            pass
-    return jsonify(tickets)
-
-
-@app.route("/api/tickets", methods=["POST"])
-def api_create_ticket():
-    data = load_tickets()
-    body = request.json or {}
-    ticket = {
-        "id": data["next_ticket_id"],
-        "title": body.get("title", "").strip(),
-        "description": body.get("description", ""),
-        "assignee_cxo": body.get("assignee_cxo", ""),
-        "status": "Todo",
-        "sprint_id": body.get("sprint_id", 1),
-        "created_at": time.strftime("%Y-%m-%d %H:%M"),
-    }
-    if not ticket["title"]:
-        return jsonify({"error": "title is required"}), 400
-    data["tickets"].append(ticket)
-    data["next_ticket_id"] += 1
-    save_tickets(data)
-    return jsonify(ticket), 201
-
-
-@app.route("/api/tickets/<int:ticket_id>", methods=["PATCH"])
-def api_update_ticket(ticket_id):
-    data = load_tickets()
-    body = request.json or {}
-    for t in data["tickets"]:
-        if t["id"] == ticket_id:
-            for key in ("title", "description", "assignee_cxo", "status", "sprint_id"):
-                if key in body:
-                    t[key] = body[key]
-            save_tickets(data)
-            return jsonify(t)
-    return jsonify({"error": "not found"}), 404
-
-
-@app.route("/api/tickets/<int:ticket_id>", methods=["DELETE"])
-def api_delete_ticket(ticket_id):
-    data = load_tickets()
-    data["tickets"] = [t for t in data["tickets"] if t["id"] != ticket_id]
-    save_tickets(data)
-    return jsonify({"ok": True})
-
-
-@app.route("/api/sprints", methods=["GET"])
-def api_get_sprints():
-    data = load_tickets()
-    return jsonify(data["sprints"])
-
-
-@app.route("/api/sprints", methods=["POST"])
-def api_create_sprint():
-    data = load_tickets()
-    body = request.json or {}
-    sprint = {
-        "id": data["next_sprint_id"],
-        "name": body.get("name", "").strip() or f"Sprint {data['next_sprint_id']}",
-        "goal": body.get("goal", ""),
-    }
-    data["sprints"].append(sprint)
-    data["next_sprint_id"] += 1
-    save_tickets(data)
-    return jsonify(sprint), 201
-
-
 HTML_CONTENT = r"""<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -702,157 +598,145 @@ HTML_CONTENT = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Apollo Mansion - CXO Agent</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:system-ui,-apple-system,sans-serif;background:#f5f5f5;color:#333}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#F8F7F5;color:#2D2D2D}
 
-.header{background:#1a237e;color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between}
-.logo{font-size:18px;font-weight:bold}
+.header{background:#1a237e;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(26,35,126,0.3)}
+.logo{font-size:18px;font-weight:700;letter-spacing:-0.02em}
 .header-links{display:flex;gap:6px}
-.header-links a,.reset-btn{color:#fff;text-decoration:none;font-size:11px;padding:4px 10px;border:1px solid rgba(255,255,255,0.25);border-radius:4px;background:none;cursor:pointer;font-family:inherit}
+.header-links a,.reset-btn{color:#fff;text-decoration:none;font-size:11px;padding:5px 12px;border:1px solid rgba(255,255,255,0.2);border-radius:20px;background:none;cursor:pointer;font-family:inherit;transition:all 0.2s ease}
 
 .main{display:flex;height:calc(100vh - 42px)}
 
-.ceo-panel{width:340px;min-width:340px;background:#1a237e;color:#fff;display:flex;flex-direction:column;overflow-y:auto}
-.section{padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.08)}
-.ceo-title{font-size:16px;font-weight:bold;color:#FFD700;margin-bottom:2px}
+.ceo-panel{width:340px;min-width:340px;background:linear-gradient(180deg,#1a237e,#151c6a);color:#fff;display:flex;flex-direction:column;overflow-y:auto}
+.section{padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.06)}
+.ceo-title{font-size:17px;font-weight:700;color:#FFD700;margin-bottom:4px;letter-spacing:-0.02em}
 .ceo-sub{font-size:11px;color:rgba(255,255,255,0.45)}
 
 .chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
-.chip{padding:3px 10px;border-radius:12px;font-size:11px;cursor:pointer;border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.5);background:none;font-family:inherit}
+.chip{padding:5px 12px;border-radius:20px;font-size:11px;cursor:pointer;border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.5);background:none;font-family:inherit;transition:all 0.2s ease}
 .chip.active{border-color:var(--c,#FFD700);color:var(--c,#FFD700)}
-.chip-all{padding:3px 10px;border-radius:12px;font-size:11px;cursor:pointer;border:1px solid #FFD700;color:#FFD700;background:none;font-family:inherit}
+.chip-all{padding:5px 12px;border-radius:20px;font-size:11px;cursor:pointer;border:1px solid #FFD700;color:#FFD700;background:none;font-family:inherit;transition:all 0.2s ease}
 .label{font-size:10px;color:rgba(255,255,255,0.3);margin-right:4px}
 
-textarea{width:100%;min-height:80px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;padding:10px;font-size:13px;font-family:inherit;resize:vertical}
+textarea{width:100%;min-height:80px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;padding:12px;font-size:13px;font-family:inherit;resize:vertical;transition:border-color 0.2s ease}
 textarea:focus{outline:none;border-color:#FFD700}
 textarea::placeholder{color:rgba(255,255,255,0.3)}
 
 .btn-row{display:flex;gap:6px;margin-top:8px;align-items:center;justify-content:space-between}
-.btn-pri{background:#FFD700;border:none;color:#1a237e;padding:8px 20px;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;font-family:inherit}
-.btn-pri:disabled{opacity:0.4;cursor:not-allowed}
+.btn-pri{background:#FF4B4B;border:none;color:#fff;padding:10px 22px;border-radius:24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s ease;box-shadow:0 2px 8px rgba(255,75,75,0.3)}
+.btn-pri:disabled{opacity:0.4;cursor:not-allowed;box-shadow:none}
 .hint{font-size:11px;color:rgba(255,255,255,0.3)}
 
 .hidden{display:none}
-.btn-out{width:100%;padding:10px;background:#FFD700;border:none;color:#1a237e;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;font-family:inherit}
-.btn-out:disabled{opacity:0.4;cursor:not-allowed}
-.btn-fb{width:100%;padding:10px;background:none;border:1px solid rgba(0,150,214,0.5);color:#4FC3F7;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;font-family:inherit;margin-top:6px}
+.btn-out{width:100%;padding:10px;background:#FF4B4B;border:none;color:#fff;border-radius:24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s ease;box-shadow:0 2px 8px rgba(255,75,75,0.3)}
+.btn-out:disabled{opacity:0.4;cursor:not-allowed;box-shadow:none}
+.btn-fb{width:100%;padding:10px;background:none;border:1px solid rgba(0,150,214,0.4);color:#4FC3F7;border-radius:24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:6px;transition:all 0.2s ease}
 .btn-fb:disabled{opacity:0.4;cursor:not-allowed}
 
-.round-badge{display:inline-block;background:rgba(255,215,0,0.15);color:#FFD700;border:1px solid rgba(255,215,0,0.3);border-radius:10px;font-size:10px;padding:2px 8px;font-weight:bold;margin-bottom:6px}
+.round-badge{display:inline-block;background:rgba(255,75,75,0.15);color:#FF6B6B;border:1px solid rgba(255,75,75,0.3);border-radius:20px;font-size:10px;padding:2px 8px;font-weight:bold;margin-bottom:6px}
 
-.mansion{flex:1;overflow-y:auto;padding:16px;background:#f5f5f5}
-.mansion-h{font-size:18px;font-weight:bold;color:#1a237e;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #1a237e}
+.mansion{flex:1;overflow-y:auto;padding:20px 24px;background:#F8F7F5}
+.mansion-h{font-size:20px;font-weight:700;color:#1a237e;margin-bottom:20px;padding-bottom:10px;border-bottom:2px solid #1a237e;letter-spacing:-0.02em}
 
-.card{background:#fff;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;overflow:hidden}
-.card-h{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid #eee;background:#fafafa}
-.card-floor{font-size:12px;font-weight:bold;color:#8B7355;min-width:22px}
-.card-title{font-size:13px;font-weight:bold}
-.card-name{font-size:12px;color:#888}
-.card-st{margin-left:auto;font-size:10px;color:#aaa;display:flex;align-items:center;gap:4px}
+.card{background:#fff;border:none;border-radius:16px;margin-bottom:14px;overflow:hidden;box-shadow:0 1px 3px rgba(166,156,143,0.12),0 4px 12px rgba(166,156,143,0.08);transition:box-shadow 0.2s ease}
+.card-h{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid #f0eeeb;background:#fafaf8}
+.card-floor{font-size:11px;font-weight:700;color:#fff;min-width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:#8B7355;border-radius:8px}
+.card-title{font-size:14px;font-weight:700;letter-spacing:-0.01em}
+.card-name{font-size:12px;color:#6B6B7B}
+.card-st{margin-left:auto;font-size:10px;color:#9B9BA7;display:flex;align-items:center;gap:4px}
 .dot{width:6px;height:6px;border-radius:50%;background:#ccc}
 .dot.working{background:#0096D6;animation:pulse 1s infinite}
 .dot.done{background:#4CAF50}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
 
-.card-body{padding:10px 14px;font-size:12px;line-height:1.7;color:#444;min-height:32px;max-height:300px;overflow-y:auto}
-.card-body h1,.card-body h2,.card-body h3{color:#333;margin:8px 0 4px}
+.card-body{padding:14px 16px;font-size:12.5px;line-height:1.75;color:#3D3D4D;min-height:36px;max-height:300px;overflow-y:auto}
+.card-body h1,.card-body h2,.card-body h3{color:#2D2D2D;margin:8px 0 4px}
 .card-body h1{font-size:14px} .card-body h2{font-size:13px} .card-body h3{font-size:12px}
 .card-body p{margin:3px 0} .card-body ul,.card-body ol{padding-left:16px;margin:3px 0}
 .card-body table{border-collapse:collapse;width:100%;margin:4px 0;font-size:11px}
-.card-body th{background:#f5f5f5;padding:3px 6px;border:1px solid #ddd;text-align:left}
-.card-body td{padding:3px 6px;border:1px solid #ddd}
-.card-body code{background:#f5f5f5;padding:1px 3px;border-radius:2px;font-size:11px}
-.card-body pre{background:#f5f5f5;padding:8px;border-radius:4px;overflow-x:auto;margin:4px 0}
+.card-body th{background:#F5F3F0;padding:3px 6px;border:1px solid #e0ddd8;text-align:left}
+.card-body td{padding:3px 6px;border:1px solid #e0ddd8}
+.card-body code{background:#F5F3F0;padding:1px 3px;border-radius:4px;font-size:11px}
+.card-body pre{background:#F5F3F0;padding:8px;border-radius:8px;overflow-x:auto;margin:4px 0}
 .card-body strong{color:#333} .card-body hr{border:none;border-top:1px solid #eee;margin:6px 0}
 .typing{display:inline-block;width:2px;height:12px;background:#0096D6;animation:blink .8s infinite;vertical-align:middle;margin-left:2px}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 .placeholder{color:#ccc}
-.rt-tag{display:inline-block;background:#e3f2fd;color:#0096D6;border:1px solid #bbdefb;border-radius:4px;font-size:10px;padding:1px 6px;margin-bottom:4px;font-weight:bold}
+.rt-tag{display:inline-block;background:#e3f2fd;color:#0096D6;border:1px solid #bbdefb;border-radius:10px;font-size:10px;padding:2px 8px;margin-bottom:4px;font-weight:600}
 
-.card-foot{padding:4px 14px 8px;font-size:10px;color:#aaa;display:flex;gap:10px;position:relative}
+.card-foot{padding:6px 16px 10px;font-size:10px;color:#9B9BA7;display:flex;gap:10px;position:relative}
 .kbtn{background:none;border:none;color:#8B7355;font-size:10px;cursor:pointer;font-family:inherit}
 .kbtn:hover{color:#5D4037}
-.kpop{position:absolute;bottom:calc(100% + 4px);right:14px;width:240px;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.1);padding:8px 10px;z-index:100;font-size:11px;line-height:1.5;color:#444;max-height:200px;overflow-y:auto;display:none}
+.kpop{position:absolute;bottom:calc(100% + 4px);right:14px;width:240px;background:#fff;border:1px solid #eeebe7;border-radius:12px;box-shadow:0 4px 16px rgba(166,156,143,0.15);padding:8px 10px;z-index:100;font-size:11px;line-height:1.5;color:#3D3D4D;max-height:200px;overflow-y:auto;display:none}
 .kpop-title{font-size:10px;font-weight:bold;color:#8B7355;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
-.kpop-item{padding:6px 0;border-bottom:1px solid #f0f0f0;display:flex;align-items:flex-start;gap:6px}
+.kpop-item{padding:6px 0;border-bottom:1px solid #f0eeeb;display:flex;align-items:flex-start;gap:6px}
 .kpop-item:last-child{border-bottom:none}
 .kpop-pin{background:none;border:none;cursor:pointer;font-size:14px;padding:0;line-height:1;flex-shrink:0}
 .kpop-pin.pinned{color:#FFD700}
 .kpop-pin:not(.pinned){color:#ccc}
 .kpop-text{flex:1;font-size:11px;color:#444;line-height:1.4}
 .kpop-tags{display:flex;gap:3px;flex-wrap:wrap;margin-top:2px}
-.kpop-tag{font-size:9px;padding:1px 4px;border-radius:3px;background:#f0f0f0;color:#888}
+.kpop-tag{font-size:9px;padding:1px 4px;border-radius:6px;background:#F0EDE8;color:#6B6B7B}
 .kpop-meta{font-size:9px;color:#bbb;margin-top:2px}
 .kpop-del{background:none;border:none;color:#ddd;cursor:pointer;font-size:11px;padding:0 2px;flex-shrink:0}
 .kpop-del:hover{color:#f44336}
 
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000}
-.modal{background:#fff;border-radius:10px;width:700px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:20px}
-.modal-title{font-size:16px;font-weight:bold;color:#1a237e;margin-bottom:12px}
-.modal-body{background:#f8f8f8;border:1px solid #ddd;border-radius:6px;padding:14px;font-size:12px;line-height:1.8;max-height:55vh;overflow-y:auto}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px)}
+.modal{background:#fff;border-radius:20px;width:700px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.15)}
+.modal-title{font-size:18px;font-weight:700;color:#1a237e;margin-bottom:14px;letter-spacing:-0.02em}
+.modal-body{background:#FAF9F7;border:1px solid #eeebe7;border-radius:12px;padding:16px;font-size:12px;line-height:1.8;max-height:55vh;overflow-y:auto}
 .modal-body h1,.modal-body h2,.modal-body h3{color:#1a237e;margin:10px 0 4px}
 .modal-body h1{font-size:15px} .modal-body h2{font-size:13px} .modal-body h3{font-size:12px}
 .modal-body p{margin:3px 0} .modal-body ul,.modal-body ol{padding-left:16px;margin:3px 0}
 .modal-body table{border-collapse:collapse;width:100%;margin:6px 0;font-size:11px}
-.modal-body th{background:#e8eaf6;color:#1a237e;padding:3px 6px;border:1px solid #ddd;text-align:left}
-.modal-body td{padding:3px 6px;border:1px solid #ddd}
-.modal-body code{background:#eee;padding:1px 3px;border-radius:2px;font-size:11px}
-.modal-body pre{background:#263238;color:#eee;padding:10px;border-radius:4px;overflow-x:auto;margin:6px 0}
+.modal-body th{background:#EDEAF6;color:#1a237e;padding:3px 6px;border:1px solid #e0ddd8;text-align:left}
+.modal-body td{padding:3px 6px;border:1px solid #e0ddd8}
+.modal-body code{background:#F0EDE8;padding:1px 3px;border-radius:4px;font-size:11px}
+.modal-body pre{background:#263238;color:#eee;padding:10px;border-radius:8px;overflow-x:auto;margin:6px 0}
 .modal-body pre code{background:none;color:inherit}
 .modal-body strong{color:#333} .modal-body hr{border:none;border-top:1px solid #ddd;margin:8px 0}
 .modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
-.btn-copy{background:#1a237e;border:none;color:#fff;padding:8px 20px;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;font-family:inherit}
-.btn-close{background:none;border:1px solid #ddd;color:#888;padding:8px 16px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit}
+.btn-copy{background:#FF4B4B;border:none;color:#fff;padding:10px 22px;border-radius:24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s ease;box-shadow:0 2px 8px rgba(255,75,75,0.25)}
+.btn-close{background:none;border:1px solid #e0ddd8;color:#6B6B7B;padding:10px 18px;border-radius:24px;font-size:12px;cursor:pointer;font-family:inherit;transition:all 0.2s ease}
 
 @media(max-width:768px){
-  .main{flex-direction:column;height:auto;min-height:calc(100vh - 42px)}
+  .main{flex-direction:column;height:auto;min-height:calc(100vh - 48px)}
   .ceo-panel{width:100%;min-width:0;max-height:none}
-  .mansion{min-height:300px}
-  .header{padding:8px 12px;flex-wrap:wrap;gap:6px}
-  .logo{font-size:15px}
+  .mansion{min-height:300px;padding:16px}
+  .header{padding:10px 14px;flex-wrap:wrap;gap:6px}
+  .logo{font-size:16px}
   .header-links{gap:4px}
-  .header-links a,.reset-btn{font-size:10px;padding:3px 8px}
+  .header-links a,.reset-btn{font-size:10px;padding:4px 10px}
   .card-body{max-height:200px}
-  .modal{max-width:96vw;max-height:90vh;padding:14px}
+  .modal{max-width:96vw;max-height:90vh;padding:16px;border-radius:16px}
   .modal-body{max-height:60vh}
-  .kpop{width:200px;right:0}
+  .kpop{width:220px;right:0}
+  .btn-pri{width:100%;text-align:center}
 }
 
-/* Ticket Board */
-.board{display:flex;gap:12px;padding:16px}
-.board-col{flex:1;min-width:0}
-.board-col-title{font-size:13px;font-weight:bold;color:#666;margin-bottom:10px;padding:6px 0;border-bottom:2px solid #ddd}
-.board-col-title.todo{border-color:#0096D6}
-.board-col-title.wip{border-color:#FF9800}
-.board-col-title.done{border-color:#4CAF50}
-.ticket{background:#fff;border:1px solid #ddd;border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px}
-.ticket-title{font-weight:600;color:#333;margin-bottom:4px}
-.ticket-meta{display:flex;align-items:center;gap:6px;color:#888;font-size:10px;margin-bottom:6px}
-.ticket-cxo{display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;color:#fff}
-.ticket-actions{display:flex;gap:4px}
-.ticket-btn{padding:3px 8px;border-radius:4px;font-size:10px;border:1px solid #ddd;background:#fff;cursor:pointer;font-family:inherit}
-.ticket-btn:hover{background:#f0f0f0}
-.ticket-btn.del{color:#f44336;border-color:#f44336}
-.new-ticket{background:#f8f8f8;border:1px dashed #ccc;border-radius:8px;padding:10px;margin-bottom:12px}
-.new-ticket input,.new-ticket select{width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;font-family:inherit;margin-bottom:6px}
-.new-ticket button{background:#1a237e;color:#fff;border:none;padding:6px 14px;border-radius:4px;font-size:12px;font-weight:bold;cursor:pointer;font-family:inherit}
-.sprint-selector{margin-bottom:12px;display:flex;gap:6px;align-items:center;font-size:12px}
-.sprint-selector select{padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;font-family:inherit}
-.board-stats{display:flex;gap:16px;padding:0 16px 8px;font-size:11px;color:#888}
-.view-toggle{display:flex;gap:4px}
-.view-btn{padding:4px 12px;border-radius:4px;font-size:11px;border:1px solid rgba(255,255,255,0.2);background:none;color:rgba(255,255,255,0.5);cursor:pointer;font-family:inherit}
-.view-btn.active{background:rgba(255,255,255,0.1);color:#FFD700;border-color:#FFD700}
+.header-links a:hover,.reset-btn:hover{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.4)}
+.card:hover{box-shadow:0 2px 6px rgba(166,156,143,0.16),0 8px 20px rgba(166,156,143,0.12)}
+.chip:hover{border-color:var(--c,rgba(255,255,255,0.4))}
+.chip-all:hover{background:rgba(255,215,0,0.1)}
+.btn-pri:hover:not(:disabled){background:#E63E3E;box-shadow:0 4px 12px rgba(255,75,75,0.4);transform:translateY(-1px)}
+.btn-out:hover:not(:disabled){background:#E63E3E;transform:translateY(-1px)}
+.btn-fb:hover:not(:disabled){background:rgba(0,150,214,0.05)}
+.btn-copy:hover{background:#E63E3E;transform:translateY(-1px)}
+.btn-close:hover{background:#F8F7F5;color:#2D2D2D}
+.mansion::-webkit-scrollbar,.card-body::-webkit-scrollbar,.modal-body::-webkit-scrollbar{width:6px}
+.mansion::-webkit-scrollbar-track,.card-body::-webkit-scrollbar-track{background:transparent}
+.mansion::-webkit-scrollbar-thumb{background:#d4d0c8;border-radius:3px}
+.mansion::-webkit-scrollbar-thumb:hover{background:#b8b4ac}
+::selection{background:rgba(255,75,75,0.15);color:#2D2D2D}
 </style>
 </head>
 <body>
 
 <div class="header">
   <div class="logo">&#127970; Apollo Mansion Inc.</div>
-  <div class="view-toggle">
-    <button class="view-btn active" onclick="switchView('mansion')" id="viewMansion">&#127970; &#12501;&#12525;&#12450;</button>
-    <button class="view-btn" onclick="switchView('tickets')" id="viewTickets">&#127915; &#12481;&#12465;&#12483;&#12488;</button>
-  </div>
   <div class="header-links">
     <a href="https://logic-u5wn.onrender.com" target="_blank">Logic</a>
     <a href="https://sengoku-chakai.onrender.com/ja" target="_blank">&#21315;&#30707;&#33590;&#36947;</a>
@@ -884,7 +768,6 @@ textarea::placeholder{color:rgba(255,255,255,0.3)}
       <textarea id="ceoInput" placeholder="&#35696;&#35542;&#12486;&#12540;&#12510;&#12434;&#20837;&#21147;..."></textarea>
       <div class="btn-row">
         <span class="hint">Ctrl+Enter</span>
-        <button class="ticket-btn" onclick="createTicketFromInput()" style="color:#FFD700;border-color:#FFD700;font-size:11px;padding:4px 10px">&#127915; &#12481;&#12465;&#12483;&#12488;&#21270;</button>
         <button class="btn-pri" id="startBtn" onclick="startRoundtable()">&#128483; &#20870;&#21331;&#20250;&#35696;&#12434;&#38283;&#22987;</button>
       </div>
     </div>
@@ -898,33 +781,9 @@ textarea::placeholder{color:rgba(255,255,255,0.3)}
     </div>
   </div>
 
-  <div class="mansion" id="mansionView" style="display:block">
+  <div class="mansion">
     <div class="mansion-h">&#127970; Apollo Mansion &#8212; &#12501;&#12525;&#12450;&#19968;&#35239;</div>
     <div id="floors"></div>
-  </div>
-  <div class="mansion" id="ticketView" style="display:none">
-    <div class="mansion-h">&#127915; &#12481;&#12465;&#12483;&#12488;&#12508;&#12540;&#12489;</div>
-    <div class="sprint-selector">
-      <label>Sprint:</label>
-      <select id="sprintSelect" onchange="loadTickets()"></select>
-      <button onclick="openNewSprint()" style="font-size:10px;padding:2px 8px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer">+ New</button>
-    </div>
-    <div class="board-stats" id="boardStats"></div>
-    <div class="new-ticket" id="newTicketForm">
-      <input id="ticketTitle" placeholder="&#12481;&#12465;&#12483;&#12488;&#12479;&#12452;&#12488;&#12523;...">
-      <div style="display:flex;gap:6px">
-        <select id="ticketAssignee">
-          <option value="">&#25285;&#24403;CXO</option>
-          <option value="Nobita">Nobita (CSO)</option>
-          <option value="Suneo">Suneo (CFO)</option>
-          <option value="Dekisugi">Dekisugi (CMO)</option>
-          <option value="Doraemon">Doraemon (CTO)</option>
-          <option value="Dorami">Dorami (CPO)</option>
-        </select>
-        <button onclick="createTicket()">+ &#20316;&#25104;</button>
-      </div>
-    </div>
-    <div class="board" id="ticketBoard"></div>
   </div>
 </div>
 
@@ -1180,122 +1039,6 @@ async function delK(agentId, itemId){
   toggleK(agentId);
 }
 document.addEventListener('click',(e)=>{if(!e.target.closest('.card-foot'))document.querySelectorAll('.kpop').forEach(p=>p.style.display='none');});
-
-// --- Ticket Board ---
-function switchView(view) {
-  document.getElementById('mansionView').style.display = view === 'mansion' ? 'block' : 'none';
-  document.getElementById('ticketView').style.display = view === 'tickets' ? 'block' : 'none';
-  document.getElementById('viewMansion').className = 'view-btn' + (view === 'mansion' ? ' active' : '');
-  document.getElementById('viewTickets').className = 'view-btn' + (view === 'tickets' ? ' active' : '');
-  if (view === 'tickets') { loadSprints(); loadTickets(); }
-}
-
-const CXO_COLORS = {
-  Nobita: '#FF9800', Suneo: '#4CAF50', Dekisugi: '#9C27B0',
-  Doraemon: '#0096D6', Dorami: '#FFD700'
-};
-
-async function loadSprints() {
-  const res = await fetch('/api/sprints');
-  const sprints = await res.json();
-  const sel = document.getElementById('sprintSelect');
-  sel.innerHTML = sprints.map(s => '<option value="' + s.id + '">' + esc(s.name) + '</option>').join('');
-}
-
-async function loadTickets() {
-  const sprintId = document.getElementById('sprintSelect').value;
-  const res = await fetch('/api/tickets?sprint_id=' + sprintId);
-  const tickets = await res.json();
-  renderBoard(tickets);
-}
-
-function renderBoard(tickets) {
-  const cols = { Todo: [], 'In Progress': [], Done: [] };
-  tickets.forEach(function(t) { if (cols[t.status]) cols[t.status].push(t); });
-
-  const stats = document.getElementById('boardStats');
-  const total = tickets.length;
-  const done = cols.Done.length;
-  stats.textContent = total > 0 ? done + '/' + total + ' \u5B8C\u4E86 (' + Math.round(done/total*100) + '%)' : '';
-
-  const board = document.getElementById('ticketBoard');
-  board.innerHTML = ['Todo', 'In Progress', 'Done'].map(function(status) {
-    var cls = status === 'Todo' ? 'todo' : status === 'In Progress' ? 'wip' : 'done';
-    var count = cols[status].length;
-    return '<div class="board-col">' +
-      '<div class="board-col-title ' + cls + '">' + status + ' (' + count + ')</div>' +
-      cols[status].map(function(t) { return renderTicket(t, status); }).join('') +
-    '</div>';
-  }).join('');
-}
-
-function renderTicket(t, status) {
-  var color = CXO_COLORS[t.assignee_cxo] || '#888';
-  var nextBtn = status === 'Todo'
-    ? '<button class="ticket-btn" onclick="moveTicket(' + t.id + ',\'In Progress\')">\u2192 WIP</button>'
-    : status === 'In Progress'
-    ? '<button class="ticket-btn" onclick="moveTicket(' + t.id + ',\'Done\')">\u2192 Done</button>'
-    : '';
-  var prevBtn = status === 'Done'
-    ? '<button class="ticket-btn" onclick="moveTicket(' + t.id + ',\'In Progress\')">\u2190 WIP</button>'
-    : status === 'In Progress'
-    ? '<button class="ticket-btn" onclick="moveTicket(' + t.id + ',\'Todo\')">\u2190 Todo</button>'
-    : '';
-  return '<div class="ticket">' +
-    '<div class="ticket-title">' + esc(t.title) + '</div>' +
-    '<div class="ticket-meta">' +
-      (t.assignee_cxo ? '<span class="ticket-cxo" style="background:' + color + '">' + esc(t.assignee_cxo) + '</span>' : '') +
-      '<span>' + (t.created_at || '') + '</span>' +
-    '</div>' +
-    '<div class="ticket-actions">' +
-      prevBtn + nextBtn +
-      '<button class="ticket-btn del" onclick="deleteTicket(' + t.id + ')">\u00D7</button>' +
-    '</div>' +
-  '</div>';
-}
-
-async function createTicket() {
-  var title = document.getElementById('ticketTitle').value.trim();
-  if (!title) return;
-  var assignee = document.getElementById('ticketAssignee').value;
-  var sprintId = document.getElementById('sprintSelect').value;
-  await fetch('/api/tickets', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({title: title, assignee_cxo: assignee, sprint_id: parseInt(sprintId) || 1})
-  });
-  document.getElementById('ticketTitle').value = '';
-  loadTickets();
-}
-
-async function moveTicket(id, newStatus) {
-  await fetch('/api/tickets/' + id, {
-    method: 'PATCH', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({status: newStatus})
-  });
-  loadTickets();
-}
-
-async function deleteTicket(id) {
-  await fetch('/api/tickets/' + id, {method: 'DELETE'});
-  loadTickets();
-}
-
-function createTicketFromInput() {
-  var text = document.getElementById('ceoInput').value.trim();
-  if (!text) return;
-  switchView('tickets');
-  document.getElementById('ticketTitle').value = text;
-}
-
-async function openNewSprint() {
-  var name = prompt('Sprint\u540D\u3092\u5165\u529B:');
-  if (!name) return;
-  await fetch('/api/sprints', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({name: name})
-  });
-  loadSprints();
-}
 
 createFloors();
 </script>
