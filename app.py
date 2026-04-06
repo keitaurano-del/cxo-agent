@@ -2,9 +2,11 @@ import anthropic
 import os
 import json
 import time
-import queue
 import threading
-from flask import Flask, Response, request, jsonify, send_from_directory
+from flask import Flask, Response, request, jsonify
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
@@ -12,8 +14,6 @@ client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 conversations = {}
-ceo_inbox = queue.Queue()
-ceo_clients = []
 
 KNOWLEDGE_DIR = os.path.join(PROJECT_DIR, "knowledge")
 os.makedirs(KNOWLEDGE_DIR, exist_ok=True)
@@ -40,7 +40,7 @@ def summarize_and_learn(agent_id, full_text):
     knowledge = load_knowledge(agent_id)
     try:
         result = client.messages.create(
-            model="claude-sonnet-4-5-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=500,
             system="あなたはナレッジ抽出AIです。CXOの回答から重要な学び・決定事項・知見を3つ以内で簡潔に抽出してください。JSON配列で返してください。例: [\"フリーミアムモデルを推奨\", \"ロールプレイ機能が差別化の核\"]",
             messages=[{"role": "user", "content": full_text}],
@@ -65,20 +65,17 @@ def get_knowledge_prompt(agent_id):
     items = "\n".join(f"- {l}" for l in knowledge["learnings"])
     return f"\n\n## これまでの蓄積ナレッジ\n以下はこれまでの議論で得られた知見です。これらを踏まえて回答してください:\n{items}"
 
-TASKS_FILE = os.path.join(PROJECT_DIR, "tasks.json")
+CONVERSATIONS_FILE = os.path.join(PROJECT_DIR, "conversations.json")
 
-
-def load_tasks():
-    if os.path.exists(TASKS_FILE):
-        with open(TASKS_FILE, "r", encoding="utf-8") as f:
+def load_conversations_from_disk():
+    if os.path.exists(CONVERSATIONS_FILE):
+        with open(CONVERSATIONS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    return []
+    return {aid: [] for aid in AGENTS}
 
-
-def save_tasks(tasks):
-    with open(TASKS_FILE, "w", encoding="utf-8") as f:
-        json.dump(tasks, f, ensure_ascii=False, indent=2)
-
+def save_conversations_to_disk():
+    with open(CONVERSATIONS_FILE, "w", encoding="utf-8") as f:
+        json.dump(conversations, f, ensure_ascii=False, indent=2)
 
 AGENTS = {
     "cso": {
@@ -175,91 +172,44 @@ AGENTS = {
     },
 }
 
+PROJECTS = {
+    "Logic": {
+        "url_prod": "https://logic-u5wn.onrender.com",
+        "description": """## プロジェクト: Logic
+ビジネスパーソン向けスキルアップ学習アプリ。
+- 技術: React + TypeScript + Vite（フロント）、Node.js（バック）
+- 機能: 簿記3級・2級（商業・工業）レッスン/ドリル/模擬試験、ロールプレイ（職場シナリオ）、フラッシュカード、ジャーナル、XP（5段階レベル）・ストリーク、プロフィール・タスク管理
+- 対象: 資格取得・スキルアップを目指すビジネスパーソン
+- リポジトリ: keitaurano-del/logic""",
+    },
+    "千石茶道": {
+        "url_prod": "https://sengoku-chakai.onrender.com/ja",
+        "description": """## プロジェクト: 千石茶道
+茶道体験の予約・決済サイト。
+- 技術: Next.js（App Router）+ TypeScript + Prisma + PostgreSQL + Stripe
+- 機能: 多言語対応（日/英）、プラン選択・日時・人数予約、Stripe決済、予約確認・キャンセル、管理画面
+- 対象: 茶道体験を予約したいお客様（インバウンド観光客含む）
+- リポジトリ: keitaurano-del/sengoku-chakai""",
+    },
+    "Apollo Mansion": {
+        "url_prod": "https://symmetrical-broccoli-97pw5gv6jp94h7jjg-5000.app.github.dev/",
+        "description": """## プロジェクト: Apollo Mansion
+CXOエージェント管理システム（本システム）。
+- 技術: Python + Flask + Server-Sent Events + Anthropic Claude API
+- 機能: CXO5名（CSO/CFO/CMO/CTO/CPO）へのAI指示、円卓会議、議論結果のコピペ出力（Claude Code想定コスト付き）、ナレッジ蓄積
+- 対象: CEO Keita による経営意思決定支援
+- リポジトリ: keitaurano-del/cxo-agent""",
+    },
+}
+
+_saved = load_conversations_from_disk()
 for agent_id in AGENTS:
-    conversations[agent_id] = []
-
-
-def save_to_file(agent_id, instruction, response_text):
-    agent = AGENTS[agent_id]
-    filename = f"output_{agent_id}.md"
-    filepath = os.path.join(PROJECT_DIR, filename)
-    header = f"# {agent['title']} - {agent['name']}\n\n"
-    content = header
-    for i in range(0, len(conversations[agent_id]), 2):
-        ceo_msg = conversations[agent_id][i]["content"] if i < len(conversations[agent_id]) else ""
-        agent_msg = conversations[agent_id][i + 1]["content"] if i + 1 < len(conversations[agent_id]) else ""
-        turn = i // 2 + 1
-        content += f"---\n\n## CEO指示 #{turn}\n\n> {ceo_msg}\n\n## {agent['title']}回答 #{turn}\n\n{agent_msg}\n\n"
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(content)
-    return filename
-
-
-def extract_ceo_items(agent_id, text):
-    items = []
-    for line in text.split("\n"):
-        if "\u3010\u627f\u8a8d\u4f9d\u983c\u3011" in line:
-            items.append({"type": "approval", "agent": agent_id, "title": AGENTS[agent_id]["title"], "name": AGENTS[agent_id]["name"], "content": line.replace("\u3010\u627f\u8a8d\u4f9d\u983c\u3011", "").strip()})
-        elif "\u3010\u63d0\u6848\u3011" in line:
-            items.append({"type": "proposal", "agent": agent_id, "title": AGENTS[agent_id]["title"], "name": AGENTS[agent_id]["name"], "content": line.replace("\u3010\u63d0\u6848\u3011", "").strip()})
-    return items
+    conversations[agent_id] = _saved.get(agent_id, [])
 
 
 @app.route("/")
 def index():
     return HTML_CONTENT
-
-
-@app.route("/send", methods=["POST"])
-def send_instruction():
-    data = request.json
-    instruction = data.get("instruction", "")
-    targets = data.get("targets", list(AGENTS.keys()))
-    for agent_id in targets:
-        if agent_id in AGENTS:
-            conversations[agent_id].append({"role": "user", "content": instruction})
-    return jsonify({"ok": True, "targets": targets})
-
-
-@app.route("/stream/<agent_id>")
-def stream(agent_id):
-    if agent_id not in AGENTS:
-        return "Not found", 404
-    agent = AGENTS[agent_id]
-    def generate():
-        try:
-            system_with_knowledge = agent["system"] + get_knowledge_prompt(agent_id)
-            with client.messages.stream(
-                model="claude-sonnet-4-5-20250514",
-                max_tokens=4096,
-                system=system_with_knowledge,
-                messages=conversations[agent_id],
-            ) as s:
-                full_text = ""
-                for text in s.text_stream:
-                    full_text += text
-                    yield f"data: {json.dumps({'type': 'text', 'content': text}, ensure_ascii=False)}\n\n"
-                conversations[agent_id].append({"role": "assistant", "content": full_text})
-                filename = save_to_file(agent_id, "", full_text)
-                # Learn from this response in background
-                threading.Thread(target=summarize_and_learn, args=(agent_id, full_text), daemon=True).start()
-                items = extract_ceo_items(agent_id, full_text)
-                if items:
-                    yield f"data: {json.dumps({'type': 'ceo_items', 'items': items}, ensure_ascii=False)}\n\n"
-                yield f"data: {json.dumps({'type': 'done', 'file': filename})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
-    return Response(generate(), mimetype="text/event-stream")
-
-
-@app.route("/respond_to_agent", methods=["POST"])
-def respond_to_agent():
-    data = request.json
-    agent_id = data.get("agent_id")
-    response = data.get("response", "")
-    if agent_id in AGENTS:
-        conversations[agent_id].append({"role": "user", "content": response})
-    return jsonify({"ok": True})
 
 
 @app.route("/history/<agent_id>")
@@ -269,47 +219,95 @@ def get_history(agent_id):
     return jsonify(conversations.get(agent_id, []))
 
 
+@app.route("/history_all")
+def get_history_all():
+    return jsonify({aid: conversations[aid] for aid in AGENTS})
+
+
 @app.route("/reset", methods=["POST"])
 def reset():
     for agent_id in AGENTS:
         conversations[agent_id] = []
+    save_conversations_to_disk()
     # Note: knowledge is NOT reset - it accumulates forever
     return jsonify({"ok": True})
 
 
-@app.route("/secretary/summarize", methods=["POST"])
-def secretary_summarize():
-    """Shizuka summarizes all CXO discussions."""
-    all_responses = {}
-    for agent_id, agent in AGENTS.items():
-        if conversations[agent_id]:
-            last_msgs = [m for m in conversations[agent_id] if m["role"] == "assistant"]
-            if last_msgs:
-                all_responses[agent["name"]] = last_msgs[-1]["content"][:1500]
+@app.route("/generate_output", methods=["POST"])
+def generate_output():
+    """CXO議論結果をコピペ形式+Claude Code想定コストで出力する。"""
+    data = request.json
+    discussions = data.get("discussions", [])  # [{title, name, text}, ...]
+    topic = data.get("topic", "")
+    projects = data.get("projects", [])
 
-    if not all_responses:
-        return jsonify({"summary": "まだCXOからの回答がありません。"})
+    discussion_text = "\n\n".join(
+        f"【{d['title']} {d['name']}】\n{d['text']}" for d in discussions if d.get("text")
+    )
 
-    context = "\n\n".join(f"### {name}\n{text}" for name, text in all_responses.items())
+    if not discussion_text:
+        def empty():
+            yield f"data: {json.dumps({'type': 'error', 'content': 'CXOの回答がありません'}, ensure_ascii=False)}\n\n"
+        return Response(empty(), mimetype="text/event-stream")
+
+    project_context = ", ".join(projects) if projects else "未指定"
 
     def generate():
         try:
             with client.messages.stream(
-                model="claude-sonnet-4-5-20250514",
-                max_tokens=2048,
-                system="""あなたはApollo Mansion社の秘書Shizukaです。
-優秀で気配りができ、要点を的確にまとめる能力がある。
-CEO Keitaのために、全CXOの議論を分かりやすく整理してください。
+                model="claude-sonnet-4-6",
+                max_tokens=4096,
+                system="""あなたはCXO会議のアウトプット生成AIです。
+CXO全員の議論内容を分析し、Claude Codeにそのままコピペして実装を依頼できる形式でまとめてください。
 
-フォーマット:
-1. 全体サマリー（3行以内）
-2. 各CXOの要点（箇条書き）
-3. CXO間で一致している点
-4. CXO間で意見が分かれている点
-5. CEOが判断すべき事項
+以下のフォーマットで出力してください:
 
-Markdown形式・日本語で回答してください。""",
-                messages=[{"role": "user", "content": f"以下の各CXOの回答を要約・整理してください:\n\n{context}"}],
+---
+
+## 概要
+（何を実現するかを1〜2文で）
+
+## CXO議論サマリー
+（各CXOの主要意見を箇条書きで）
+
+## 実装計画
+### タスク一覧
+（具体的な実装タスクを番号付きリストで）
+
+### 変更が想定されるファイル
+（推定されるファイルパスをリストで）
+
+## Claude Code 想定コスト
+以下の基準で見積もってください:
+- Claude Sonnet: 入力$3/MTok, 出力$15/MTok
+- Claude Opus: 入力$15/MTok, 出力$75/MTok
+- 1トークン ≒ 日本語0.5文字, 英語0.25単語
+- 1ファイル読み込み ≒ 1-3k tokens
+- 1ファイル書き込み ≒ 0.5-2k tokens
+
+| 項目 | 見積もり |
+|------|---------|
+| 想定作業時間 | X分 |
+| 想定トークン（入力） | Xk tokens |
+| 想定トークン（出力） | Xk tokens |
+| Sonnet利用時の想定費用 | $X（約¥X） |
+| Opus利用時の想定費用 | $X（約¥X） |
+
+※ 複雑さ・ファイル数・修正範囲から推定した概算です
+
+## コピペ用プロンプト
+```
+（Claude Codeにそのまま渡せる具体的な指示文。プロジェクト情報、実装要件、注意事項を含む）
+```
+
+---
+
+ルール:
+- Markdown形式で日本語で回答
+- 実装の具体性を重視（抽象的な表現は避ける）
+- コスト見積もりは現実的な範囲で
+- コピペ用プロンプトは、Claude Codeが迷わず実装できるレベルの具体性で書く""",
+                messages=[{"role": "user", "content": f"テーマ: {topic}\n対象プロジェクト: {project_context}\n\n以下のCXO議論をまとめてください:\n\n{discussion_text[:8000]}"}],
             ) as s:
                 for text in s.text_stream:
                     yield f"data: {json.dumps({'type': 'text', 'content': text}, ensure_ascii=False)}\n\n"
@@ -318,47 +316,6 @@ Markdown形式・日本語で回答してください。""",
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
 
     return Response(generate(), mimetype="text/event-stream")
-
-
-@app.route("/tasks", methods=["GET"])
-def get_tasks():
-    return jsonify(load_tasks())
-
-
-@app.route("/tasks", methods=["POST"])
-def add_task():
-    data = request.json
-    tasks = load_tasks()
-    task = {
-        "id": int(time.time() * 1000),
-        "text": data.get("text", ""),
-        "assignee": data.get("assignee", ""),
-        "status": "todo",
-        "created": time.strftime("%Y-%m-%d %H:%M"),
-    }
-    tasks.append(task)
-    save_tasks(tasks)
-    return jsonify(task)
-
-
-@app.route("/tasks/<int:task_id>", methods=["PATCH"])
-def update_task(task_id):
-    data = request.json
-    tasks = load_tasks()
-    for t in tasks:
-        if t["id"] == task_id:
-            t.update({k: v for k, v in data.items() if k in ("status", "text", "assignee")})
-            break
-    save_tasks(tasks)
-    return jsonify({"ok": True})
-
-
-@app.route("/tasks/<int:task_id>", methods=["DELETE"])
-def delete_task(task_id):
-    tasks = load_tasks()
-    tasks = [t for t in tasks if t["id"] != task_id]
-    save_tasks(tasks)
-    return jsonify({"ok": True})
 
 
 @app.route("/knowledge/<agent_id>")
@@ -376,550 +333,738 @@ def reset_knowledge(agent_id):
     return jsonify({"ok": True})
 
 
+@app.route("/roundtable")
+def roundtable():
+    topic = request.args.get("topic", "")
+    order_str = request.args.get("order", ",".join(AGENTS.keys()))
+    order = [x for x in order_str.split(",") if x in AGENTS]
+    projects_str = request.args.get("projects", "")
+    feedback = request.args.get("feedback", "")
+    prev_discussion = request.args.get("prev_discussion", "")
+    round_num = request.args.get("round", "1")
+
+    def generate():
+        discussion = []
+        for agent_id in order:
+            agent = AGENTS[agent_id]
+            prior = ""
+            if discussion:
+                prior = "\n\n## これまでの発言\n" + "\n\n".join(
+                    f"**{AGENTS[e['id']]['title']} {AGENTS[e['id']]['name']}**:\n{e['text']}"
+                    for e in discussion
+                )
+            proj_ctx = ""
+            for pname in projects_str.split(","):
+                if pname in PROJECTS:
+                    proj_ctx += "\n\n" + PROJECTS[pname]["description"]
+
+            feedback_ctx = ""
+            if feedback and prev_discussion:
+                feedback_ctx = f"""
+
+## CEOからのフィードバック（Round {round_num}）
+CEOが前回の議論に対して以下のフィードバックを出しました。これを踏まえて改善・修正した提案をしてください。
+
+**CEOフィードバック:** {feedback}
+
+## 前回の議論内容
+{prev_discussion[:3000]}"""
+
+            roundtable_system = (
+                agent["system"]
+                + proj_ctx
+                + get_knowledge_prompt(agent_id)
+                + f"""
+
+## CXO円卓会議モード
+CXO全員での円卓会議です。テーマについて専門的観点から発言してください。
+- 他のCXOの発言があれば同意・反論・補足してください
+- 300〜500文字程度で簡潔に
+- {agent['title']}としての専門性を活かした発言を"""
+                + feedback_ctx
+            )
+            msg = f"【円卓会議テーマ】{topic}{prior}\n\n{agent['title']}として発言してください。"
+            yield f"data: {json.dumps({'type': 'agent_start', 'agent_id': agent_id}, ensure_ascii=False)}\n\n"
+            full_text = ""
+            try:
+                with client.messages.stream(
+                    model="claude-sonnet-4-6",
+                    max_tokens=800,
+                    system=roundtable_system,
+                    messages=[{"role": "user", "content": msg}],
+                ) as s:
+                    for text in s.text_stream:
+                        full_text += text
+                        yield f"data: {json.dumps({'type': 'text', 'agent_id': agent_id, 'content': text}, ensure_ascii=False)}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'agent_id': agent_id, 'content': str(e)}, ensure_ascii=False)}\n\n"
+                continue
+            discussion.append({"id": agent_id, "text": full_text})
+            conversations[agent_id].append({"role": "user", "content": f"[円卓会議] テーマ: {topic}"})
+            conversations[agent_id].append({"role": "assistant", "content": full_text})
+            save_conversations_to_disk()
+            threading.Thread(target=summarize_and_learn, args=(agent_id, full_text), daemon=True).start()
+            yield f"data: {json.dumps({'type': 'agent_done', 'agent_id': agent_id}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+
+    return Response(generate(), mimetype="text/event-stream")
+
+
+
+
+
+
+
+
+
+# --- Ticket Board Data ---
+TICKETS_FILE = os.path.join(PROJECT_DIR, "tickets.json")
+
+
+def load_tickets():
+    """Load ticket board data from disk."""
+    if os.path.exists(TICKETS_FILE):
+        with open(TICKETS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    # Initialize with default Sprint 1
+    default_data = {
+        "tickets": [],
+        "sprints": [{"id": 1, "name": "Sprint 1", "goal": "チケット管理MVP"}],
+        "next_ticket_id": 1,
+        "next_sprint_id": 2,
+    }
+    save_tickets(default_data)
+    return default_data
+
+
+def save_tickets(data):
+    """Save ticket board data to disk."""
+    with open(TICKETS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+@app.route("/api/tickets", methods=["GET"])
+def api_get_tickets():
+    data = load_tickets()
+    sprint_id = request.args.get("sprint_id")
+    tickets = data["tickets"]
+    if sprint_id:
+        try:
+            sid = int(sprint_id)
+            tickets = [t for t in tickets if t.get("sprint_id") == sid]
+        except ValueError:
+            pass
+    return jsonify(tickets)
+
+
+@app.route("/api/tickets", methods=["POST"])
+def api_create_ticket():
+    data = load_tickets()
+    body = request.json or {}
+    ticket = {
+        "id": data["next_ticket_id"],
+        "title": body.get("title", "").strip(),
+        "description": body.get("description", ""),
+        "assignee_cxo": body.get("assignee_cxo", ""),
+        "status": "Todo",
+        "sprint_id": body.get("sprint_id", 1),
+        "created_at": time.strftime("%Y-%m-%d %H:%M"),
+    }
+    if not ticket["title"]:
+        return jsonify({"error": "title is required"}), 400
+    data["tickets"].append(ticket)
+    data["next_ticket_id"] += 1
+    save_tickets(data)
+    return jsonify(ticket), 201
+
+
+@app.route("/api/tickets/<int:ticket_id>", methods=["PATCH"])
+def api_update_ticket(ticket_id):
+    data = load_tickets()
+    body = request.json or {}
+    for t in data["tickets"]:
+        if t["id"] == ticket_id:
+            for key in ("title", "description", "assignee_cxo", "status", "sprint_id"):
+                if key in body:
+                    t[key] = body[key]
+            save_tickets(data)
+            return jsonify(t)
+    return jsonify({"error": "not found"}), 404
+
+
+@app.route("/api/tickets/<int:ticket_id>", methods=["DELETE"])
+def api_delete_ticket(ticket_id):
+    data = load_tickets()
+    data["tickets"] = [t for t in data["tickets"] if t["id"] != ticket_id]
+    save_tickets(data)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/sprints", methods=["GET"])
+def api_get_sprints():
+    data = load_tickets()
+    return jsonify(data["sprints"])
+
+
+@app.route("/api/sprints", methods=["POST"])
+def api_create_sprint():
+    data = load_tickets()
+    body = request.json or {}
+    sprint = {
+        "id": data["next_sprint_id"],
+        "name": body.get("name", "").strip() or f"Sprint {data['next_sprint_id']}",
+        "goal": body.get("goal", ""),
+    }
+    data["sprints"].append(sprint)
+    data["next_sprint_id"] += 1
+    save_tickets(data)
+    return jsonify(sprint), 201
+
+
 HTML_CONTENT = r"""<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Apollo Mansion Inc. - CXO Agent Office</title>
+<title>Apollo Mansion - CXO Agent</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&family=Nunito:wght@700;900&display=swap');
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Noto Sans JP',sans-serif; background:#87CEEB; min-height:100vh; display:flex; flex-direction:column; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f5f5f5;color:#333}
 
-  /* === HEADER === */
-  .header { background:linear-gradient(135deg,#1a237e,#0d47a1); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 10px rgba(0,0,0,0.3); position:relative; z-index:10; }
-  .header-left { display:flex; align-items:center; gap:14px; }
-  .logo { font-family:'Nunito',sans-serif; font-size:22px; font-weight:900; color:#fff; }
-  .logo span { color:#FFD700; }
-  .header-links { display:flex; gap:8px; align-items:center; }
-  .header-link { padding:5px 14px; border-radius:6px; font-size:12px; font-weight:600; text-decoration:none; border:1px solid rgba(255,255,255,0.2); color:#fff; transition:all 0.2s; }
-  .header-link:hover { background:rgba(255,255,255,0.1); transform:translateY(-1px); }
-  .reset-btn { background:transparent; border:1px solid rgba(255,255,255,0.2); color:rgba(255,255,255,0.6); padding:5px 14px; border-radius:6px; font-size:12px; cursor:pointer; font-family:inherit; transition:all 0.2s; }
-  .reset-btn:hover { border-color:#f44336; color:#f44336; }
+.header{background:#1a237e;color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between}
+.logo{font-size:18px;font-weight:bold}
+.header-links{display:flex;gap:6px}
+.header-links a,.reset-btn{color:#fff;text-decoration:none;font-size:11px;padding:4px 10px;border:1px solid rgba(255,255,255,0.25);border-radius:4px;background:none;cursor:pointer;font-family:inherit}
 
-  /* === MAIN === */
-  .main { display:flex; flex:1; overflow:hidden; }
+.main{display:flex;height:calc(100vh - 42px)}
 
-  /* === CEO PANEL === */
-  .ceo-panel { width:360px; min-width:360px; background:linear-gradient(180deg,#1a237e 0%,#283593 100%); border-right:3px solid #FFD700; display:flex; flex-direction:column; }
-  .ceo-header { padding:20px; border-bottom:1px solid rgba(255,255,255,0.1); }
-  .ceo-profile { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
-  .ceo-avatar-wrap { position:relative; }
-  .ceo-avatar { width:56px; height:56px; border-radius:50%; background:#FFD700; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:900; color:#1a237e; border:3px solid #FFD700; }
-  .ceo-crown { position:absolute; top:-10px; left:50%; transform:translateX(-50%); font-size:18px; }
-  .ceo-name { font-size:20px; font-weight:900; color:#FFD700; font-family:'Nunito',sans-serif; }
-  .ceo-role { font-size:11px; color:rgba(255,255,255,0.6); }
-  .ceo-floor-badge { background:rgba(255,215,0,0.15); color:#FFD700; padding:2px 10px; border-radius:10px; font-size:11px; font-weight:700; border:1px solid rgba(255,215,0,0.3); display:inline-block; margin-top:4px; }
+.ceo-panel{width:340px;min-width:340px;background:#1a237e;color:#fff;display:flex;flex-direction:column;overflow-y:auto}
+.section{padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.08)}
+.ceo-title{font-size:16px;font-weight:bold;color:#FFD700;margin-bottom:2px}
+.ceo-sub{font-size:11px;color:rgba(255,255,255,0.45)}
 
-  .target-select { display:flex; gap:5px; flex-wrap:wrap; margin-top:10px; }
-  .target-chip { padding:4px 10px; border-radius:14px; font-size:11px; cursor:pointer; border:1px solid rgba(255,255,255,0.2); color:rgba(255,255,255,0.5); background:transparent; font-family:inherit; transition:all 0.2s; user-select:none; }
-  .target-chip.active { border-color:var(--c); color:var(--c); background:rgba(var(--cr),0.15); }
-  .target-chip-all { padding:4px 10px; border-radius:14px; font-size:11px; cursor:pointer; border:1px solid #FFD700; color:#FFD700; background:rgba(255,215,0,0.1); font-family:inherit; user-select:none; }
+.chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.chip{padding:3px 10px;border-radius:12px;font-size:11px;cursor:pointer;border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.5);background:none;font-family:inherit}
+.chip.active{border-color:var(--c,#FFD700);color:var(--c,#FFD700)}
+.chip-all{padding:3px 10px;border-radius:12px;font-size:11px;cursor:pointer;border:1px solid #FFD700;color:#FFD700;background:none;font-family:inherit}
+.label{font-size:10px;color:rgba(255,255,255,0.3);margin-right:4px}
 
-  .project-select { display:flex; gap:6px; margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.08); }
-  .project-select-label { font-size:10px; color:rgba(255,255,255,0.3); align-self:center; margin-right:2px; }
-  .project-chip { padding:4px 12px; border-radius:14px; font-size:11px; cursor:pointer; border:1px solid rgba(255,255,255,0.15); color:rgba(255,255,255,0.4); background:transparent; font-family:inherit; transition:all 0.2s; user-select:none; }
-  .project-chip.active.logic { border-color:#4facfe; color:#4facfe; background:rgba(79,172,254,0.12); }
-  .project-chip.active.sengoku { border-color:#81c784; color:#81c784; background:rgba(129,199,132,0.12); }
+textarea{width:100%;min-height:80px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;padding:10px;font-size:13px;font-family:inherit;resize:vertical}
+textarea:focus{outline:none;border-color:#FFD700}
+textarea::placeholder{color:rgba(255,255,255,0.3)}
 
-  .ceo-input-area { padding:16px 20px; border-bottom:1px solid rgba(255,255,255,0.1); }
-  .ceo-textarea { width:100%; min-height:90px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:10px; color:#fff; padding:12px; font-size:13px; font-family:inherit; resize:vertical; line-height:1.6; }
-  .ceo-textarea:focus { outline:none; border-color:#FFD700; }
-  .ceo-textarea::placeholder { color:rgba(255,255,255,0.3); }
-  .send-row { display:flex; justify-content:space-between; align-items:center; margin-top:10px; }
-  .send-hint { font-size:11px; color:rgba(255,255,255,0.3); }
-  .send-btn { background:#FFD700; border:none; color:#1a237e; padding:10px 28px; border-radius:8px; font-size:14px; font-weight:900; cursor:pointer; font-family:inherit; transition:all 0.2s; }
-  .send-btn:hover { transform:translateY(-1px); box-shadow:0 4px 15px rgba(255,215,0,0.4); }
-  .send-btn:disabled { opacity:0.4; cursor:not-allowed; transform:none; }
+.btn-row{display:flex;gap:6px;margin-top:8px;align-items:center;justify-content:space-between}
+.btn-pri{background:#FFD700;border:none;color:#1a237e;padding:8px 20px;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;font-family:inherit}
+.btn-pri:disabled{opacity:0.4;cursor:not-allowed}
+.hint{font-size:11px;color:rgba(255,255,255,0.3)}
 
-  .ceo-inbox { flex:1; overflow-y:auto; padding:12px; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,0.1) transparent; }
-  .ceo-inbox::-webkit-scrollbar { width:5px; }
-  .ceo-inbox::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:3px; }
-  .inbox-title { font-size:11px; font-weight:700; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:1px; padding:8px 8px 12px; }
-  .inbox-item { background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:12px; margin-bottom:10px; }
-  .inbox-item-header { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-  .inbox-badge { font-size:10px; padding:2px 8px; border-radius:10px; font-weight:700; }
-  .inbox-badge.approval { background:rgba(255,152,0,0.2); color:#FF9800; }
-  .inbox-badge.proposal { background:rgba(0,150,214,0.2); color:#0096D6; }
-  .inbox-from { font-size:12px; font-weight:600; color:rgba(255,255,255,0.7); }
-  .inbox-content { font-size:12px; line-height:1.6; color:rgba(255,255,255,0.8); margin-bottom:10px; }
-  .inbox-actions { display:flex; gap:6px; }
-  .inbox-btn { padding:5px 14px; border-radius:6px; font-size:11px; cursor:pointer; font-family:inherit; font-weight:600; border:none; transition:all 0.2s; }
-  .inbox-btn.approve { background:rgba(76,175,80,0.2); color:#4CAF50; }
-  .inbox-btn.approve:hover { background:rgba(76,175,80,0.4); }
-  .inbox-btn.reject { background:rgba(244,67,54,0.2); color:#f44336; }
-  .inbox-btn.reject:hover { background:rgba(244,67,54,0.4); }
-  .inbox-btn.comment { background:rgba(0,150,214,0.2); color:#0096D6; }
-  .inbox-btn.comment:hover { background:rgba(0,150,214,0.4); }
-  .inbox-reply-input { width:100%; margin-top:8px; padding:8px 10px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:6px; color:#fff; font-size:12px; font-family:inherit; display:none; }
-  .inbox-reply-input:focus { outline:none; border-color:#FFD700; }
+.hidden{display:none}
+.btn-out{width:100%;padding:10px;background:#FFD700;border:none;color:#1a237e;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;font-family:inherit}
+.btn-out:disabled{opacity:0.4;cursor:not-allowed}
+.btn-fb{width:100%;padding:10px;background:none;border:1px solid rgba(0,150,214,0.5);color:#4FC3F7;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;font-family:inherit;margin-top:6px}
+.btn-fb:disabled{opacity:0.4;cursor:not-allowed}
 
-  /* === SHIZUKA === */
-  .shizuka-panel { border-bottom:1px solid rgba(255,255,255,0.1); }
-  .shizuka-header { padding:12px 20px; display:flex; align-items:center; gap:10px; border-bottom:1px solid rgba(255,255,255,0.05); }
-  .shizuka-avatar { width:36px; height:36px; border-radius:50%; background:#FFE0F0; border:2px solid #FF69B4; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
-  .shizuka-name { font-size:14px; font-weight:700; color:#FF69B4; }
-  .shizuka-role { font-size:10px; color:rgba(255,255,255,0.4); }
-  .shizuka-btn { margin-left:auto; background:rgba(255,105,180,0.15); border:1px solid rgba(255,105,180,0.3); color:#FF69B4; padding:4px 12px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:all 0.2s; }
-  .shizuka-btn:hover { background:rgba(255,105,180,0.3); }
-  .shizuka-body { padding:10px 20px; max-height:200px; overflow-y:auto; font-size:12px; line-height:1.7; color:rgba(255,255,255,0.8); scrollbar-width:thin; }
-  .shizuka-body::-webkit-scrollbar { width:4px; }
-  .shizuka-body::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:2px; }
-  .shizuka-body .placeholder { color:rgba(255,255,255,0.25); font-size:11px; }
-  .shizuka-body h1,.shizuka-body h2,.shizuka-body h3 { color:#FF69B4; margin:8px 0 4px; font-weight:700; }
-  .shizuka-body h1 { font-size:14px; } .shizuka-body h2 { font-size:12px; } .shizuka-body h3 { font-size:11px; }
-  .shizuka-body p { margin:3px 0; } .shizuka-body ul,.shizuka-body ol { padding-left:16px; margin:3px 0; }
-  .shizuka-body strong { color:#fff; }
-  .shizuka-body table { border-collapse:collapse; width:100%; font-size:10px; margin:4px 0; }
-  .shizuka-body th { background:rgba(0,0,0,0.2); color:#FF69B4; padding:3px 6px; border:1px solid rgba(255,255,255,0.1); text-align:left; }
-  .shizuka-body td { padding:3px 6px; border:1px solid rgba(255,255,255,0.1); }
-  .shizuka-body hr { border:none; border-top:1px solid rgba(255,255,255,0.1); margin:6px 0; }
+.round-badge{display:inline-block;background:rgba(255,215,0,0.15);color:#FFD700;border:1px solid rgba(255,215,0,0.3);border-radius:10px;font-size:10px;padding:2px 8px;font-weight:bold;margin-bottom:6px}
 
-  .shizuka-tasks { padding:8px 20px 12px; border-top:1px solid rgba(255,255,255,0.05); }
-  .tasks-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
-  .tasks-title { font-size:11px; font-weight:700; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:1px; }
-  .task-add-btn { background:rgba(255,105,180,0.15); border:1px solid rgba(255,105,180,0.3); color:#FF69B4; width:22px; height:22px; border-radius:50%; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-family:inherit; }
-  .task-input-row { display:flex; gap:6px; margin-bottom:6px; }
-  .task-input { flex:1; padding:5px 8px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:4px; color:#fff; font-size:11px; font-family:inherit; }
-  .task-input:focus { outline:none; border-color:#FF69B4; }
-  .task-assignee { padding:5px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:4px; color:#fff; font-size:10px; font-family:inherit; }
-  .task-list { max-height:150px; overflow-y:auto; scrollbar-width:thin; }
-  .task-list::-webkit-scrollbar { width:4px; }
-  .task-list::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:2px; }
-  .task-item { display:flex; align-items:center; gap:6px; padding:4px 0; font-size:11px; color:rgba(255,255,255,0.7); border-bottom:1px solid rgba(255,255,255,0.03); }
-  .task-check { width:14px; height:14px; border-radius:3px; border:1px solid rgba(255,255,255,0.3); background:transparent; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:9px; color:#4CAF50; }
-  .task-check.done { background:rgba(76,175,80,0.2); border-color:#4CAF50; }
-  .task-text { flex:1; }
-  .task-text.done { text-decoration:line-through; opacity:0.4; }
-  .task-assignee-badge { font-size:9px; padding:1px 6px; border-radius:8px; background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.5); }
-  .task-del { background:none; border:none; color:rgba(255,255,255,0.2); cursor:pointer; font-size:10px; padding:0 2px; }
-  .task-del:hover { color:#f44336; }
+.mansion{flex:1;overflow-y:auto;padding:16px;background:#f5f5f5}
+.mansion-h{font-size:18px;font-weight:bold;color:#1a237e;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #1a237e}
 
-  /* === MANSION === */
-  .mansion-area { flex:1; overflow-y:auto; display:flex; justify-content:center; padding:20px; background:linear-gradient(180deg,#87CEEB 0%,#B0E0E6 60%,#90EE90 95%,#228B22 100%); }
-  .mansion-area::-webkit-scrollbar { width:8px; }
-  .mansion-area::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.15); border-radius:4px; }
+.card{background:#fff;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;overflow:hidden}
+.card-h{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid #eee;background:#fafafa}
+.card-floor{font-size:12px;font-weight:bold;color:#8B7355;min-width:22px}
+.card-title{font-size:13px;font-weight:bold}
+.card-name{font-size:12px;color:#888}
+.card-st{margin-left:auto;font-size:10px;color:#aaa;display:flex;align-items:center;gap:4px}
+.dot{width:6px;height:6px;border-radius:50%;background:#ccc}
+.dot.working{background:#0096D6;animation:pulse 1s infinite}
+.dot.done{background:#4CAF50}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
 
-  .mansion { width:100%; max-width:800px; display:flex; flex-direction:column; }
+.card-body{padding:10px 14px;font-size:12px;line-height:1.7;color:#444;min-height:32px;max-height:300px;overflow-y:auto}
+.card-body h1,.card-body h2,.card-body h3{color:#333;margin:8px 0 4px}
+.card-body h1{font-size:14px} .card-body h2{font-size:13px} .card-body h3{font-size:12px}
+.card-body p{margin:3px 0} .card-body ul,.card-body ol{padding-left:16px;margin:3px 0}
+.card-body table{border-collapse:collapse;width:100%;margin:4px 0;font-size:11px}
+.card-body th{background:#f5f5f5;padding:3px 6px;border:1px solid #ddd;text-align:left}
+.card-body td{padding:3px 6px;border:1px solid #ddd}
+.card-body code{background:#f5f5f5;padding:1px 3px;border-radius:2px;font-size:11px}
+.card-body pre{background:#f5f5f5;padding:8px;border-radius:4px;overflow-x:auto;margin:4px 0}
+.card-body strong{color:#333} .card-body hr{border:none;border-top:1px solid #eee;margin:6px 0}
+.typing{display:inline-block;width:2px;height:12px;background:#0096D6;animation:blink .8s infinite;vertical-align:middle;margin-left:2px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.placeholder{color:#ccc}
+.rt-tag{display:inline-block;background:#e3f2fd;color:#0096D6;border:1px solid #bbdefb;border-radius:4px;font-size:10px;padding:1px 6px;margin-bottom:4px;font-weight:bold}
 
-  /* Roof */
-  .mansion-roof { background:linear-gradient(135deg,#8B0000,#B22222); height:40px; border-radius:8px 8px 0 0; position:relative; display:flex; align-items:center; justify-content:center; box-shadow:0 -2px 10px rgba(0,0,0,0.2); }
-  .mansion-roof::before { content:''; position:absolute; top:-15px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:60px solid transparent; border-right:60px solid transparent; border-bottom:18px solid #8B0000; }
-  .mansion-name { font-family:'Nunito',sans-serif; font-size:14px; font-weight:900; color:#FFD700; letter-spacing:2px; text-shadow:0 1px 3px rgba(0,0,0,0.5); }
+.card-foot{padding:4px 14px 8px;font-size:10px;color:#aaa;display:flex;gap:10px;position:relative}
+.kbtn{background:none;border:none;color:#8B7355;font-size:10px;cursor:pointer;font-family:inherit}
+.kbtn:hover{color:#5D4037}
+.kpop{position:absolute;bottom:calc(100% + 4px);right:14px;width:240px;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.1);padding:8px 10px;z-index:100;font-size:11px;line-height:1.5;color:#444;max-height:200px;overflow-y:auto;display:none}
+.kpop-title{font-size:10px;font-weight:bold;color:#8B7355;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.kpop-item{padding:2px 0;border-bottom:1px solid #f0f0f0}
+.kpop-item:last-child{border-bottom:none}
 
-  /* Floor */
-  .floor { background:linear-gradient(180deg,#F5F5DC 0%,#FFFDE7 100%); border-left:6px solid #8B7355; border-right:6px solid #8B7355; border-bottom:4px solid #A0926B; display:flex; min-height:120px; position:relative; transition:all 0.3s; }
-  .floor.active { background:linear-gradient(180deg,#FFF9C4 0%,#FFFDE7 100%); box-shadow:inset 0 0 30px rgba(var(--fc-rgb),0.1); }
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000}
+.modal{background:#fff;border-radius:10px;width:700px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:20px}
+.modal-title{font-size:16px;font-weight:bold;color:#1a237e;margin-bottom:12px}
+.modal-body{background:#f8f8f8;border:1px solid #ddd;border-radius:6px;padding:14px;font-size:12px;line-height:1.8;max-height:55vh;overflow-y:auto}
+.modal-body h1,.modal-body h2,.modal-body h3{color:#1a237e;margin:10px 0 4px}
+.modal-body h1{font-size:15px} .modal-body h2{font-size:13px} .modal-body h3{font-size:12px}
+.modal-body p{margin:3px 0} .modal-body ul,.modal-body ol{padding-left:16px;margin:3px 0}
+.modal-body table{border-collapse:collapse;width:100%;margin:6px 0;font-size:11px}
+.modal-body th{background:#e8eaf6;color:#1a237e;padding:3px 6px;border:1px solid #ddd;text-align:left}
+.modal-body td{padding:3px 6px;border:1px solid #ddd}
+.modal-body code{background:#eee;padding:1px 3px;border-radius:2px;font-size:11px}
+.modal-body pre{background:#263238;color:#eee;padding:10px;border-radius:4px;overflow-x:auto;margin:6px 0}
+.modal-body pre code{background:none;color:inherit}
+.modal-body strong{color:#333} .modal-body hr{border:none;border-top:1px solid #ddd;margin:8px 0}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.btn-copy{background:#1a237e;border:none;color:#fff;padding:8px 20px;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;font-family:inherit}
+.btn-close{background:none;border:1px solid #ddd;color:#888;padding:8px 16px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit}
 
-  .floor-label { width:48px; display:flex; align-items:center; justify-content:center; font-family:'Nunito',sans-serif; font-size:16px; font-weight:900; color:#8B7355; background:rgba(0,0,0,0.05); border-right:2px solid #D2C5A0; flex-shrink:0; }
+@media(max-width:768px){
+  .main{flex-direction:column;height:auto;min-height:calc(100vh - 42px)}
+  .ceo-panel{width:100%;min-width:0;max-height:none}
+  .mansion{min-height:300px}
+  .header{padding:8px 12px;flex-wrap:wrap;gap:6px}
+  .logo{font-size:15px}
+  .header-links{gap:4px}
+  .header-links a,.reset-btn{font-size:10px;padding:3px 8px}
+  .card-body{max-height:200px}
+  .modal{max-width:96vw;max-height:90vh;padding:14px}
+  .modal-body{max-height:60vh}
+  .kpop{width:200px;right:0}
+}
 
-  .floor-resident { display:flex; align-items:flex-start; gap:12px; padding:12px 16px; flex:1; overflow:hidden; }
-
-  /* Character Avatars */
-  .char-avatar { width:52px; height:52px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0; border:3px solid; position:relative; margin-top:4px; }
-  .char-avatar.nobita { background:#FFF3E0; border-color:#FF9800; }
-  .char-avatar.suneo { background:#E8F5E9; border-color:#4CAF50; }
-  .char-avatar.dekisugi { background:#F3E5F5; border-color:#9C27B0; }
-  .char-avatar.doraemon { background:#E1F5FE; border-color:#0096D6; }
-  .char-avatar.dorami { background:#FFFDE7; border-color:#FFD700; }
-
-  .char-info { flex:1; min-width:0; overflow:hidden; }
-  .char-top { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
-  .char-title { font-size:14px; font-weight:900; color:var(--fc); }
-  .char-name { font-size:12px; color:#8B7355; font-weight:500; }
-  .char-status { display:flex; align-items:center; gap:4px; font-size:10px; color:#aaa; margin-left:auto; padding:2px 8px; border-radius:10px; background:rgba(0,0,0,0.05); }
-  .status-dot { width:6px; height:6px; border-radius:50%; background:#ccc; }
-  .status-dot.waiting { background:#ccc; }
-  .status-dot.working { background:#0096D6; animation:pulse 1s infinite; }
-  .status-dot.done { background:#4CAF50; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-
-  .char-body { font-size:12px; line-height:1.7; color:#555; max-height:300px; overflow-y:auto; scrollbar-width:thin; }
-  .char-body::-webkit-scrollbar { width:4px; }
-  .char-body::-webkit-scrollbar-thumb { background:#D2C5A0; border-radius:2px; }
-  .char-body .placeholder { color:#ccc; font-size:12px; }
-
-  /* Markdown in floor */
-  .char-body h1,.char-body h2,.char-body h3 { color:#333; margin:10px 0 4px; font-weight:700; }
-  .char-body h1 { font-size:15px; border-bottom:1px solid #D2C5A0; padding-bottom:4px; }
-  .char-body h2 { font-size:13px; }
-  .char-body h3 { font-size:12px; }
-  .char-body p { margin:4px 0; }
-  .char-body ul,.char-body ol { padding-left:18px; margin:4px 0; }
-  .char-body table { border-collapse:collapse; width:100%; margin:6px 0; font-size:11px; }
-  .char-body th { background:#F5F5DC; color:var(--fc); padding:4px 6px; text-align:left; border:1px solid #D2C5A0; }
-  .char-body td { padding:3px 6px; border:1px solid #D2C5A0; }
-  .char-body code { background:#F5F5DC; padding:1px 4px; border-radius:3px; font-size:11px; color:#1a237e; }
-  .char-body pre { background:#F5F5DC; padding:8px; border-radius:6px; overflow-x:auto; margin:6px 0; border:1px solid #D2C5A0; }
-  .char-body pre code { padding:0; background:none; }
-  .char-body strong { color:#333; }
-  .char-body hr { border:none; border-top:1px solid #D2C5A0; margin:8px 0; }
-  .char-body .ceo-instruction { background:rgba(26,35,126,0.06); border-left:3px solid #1a237e; padding:6px 10px; border-radius:0 6px 6px 0; margin-bottom:8px; font-size:11px; color:#666; }
-  .typing-cursor { display:inline-block; width:2px; height:12px; background:var(--fc); animation:blink 0.8s infinite; vertical-align:middle; margin-left:2px; }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-
-  .char-footer { font-size:9px; color:#bbb; margin-top:4px; display:flex; gap:12px; }
-
-  /* Ground */
-  .mansion-ground { height:16px; background:linear-gradient(180deg,#8B7355,#6B5344); border-radius:0 0 4px 4px; }
-
-  /* Clouds */
-  .cloud { position:fixed; color:rgba(255,255,255,0.6); font-size:40px; animation:float 20s infinite linear; pointer-events:none; z-index:0; }
-  .cloud:nth-child(1) { top:15%; animation-duration:25s; }
-  .cloud:nth-child(2) { top:30%; animation-duration:35s; animation-delay:-10s; font-size:30px; }
-  .cloud:nth-child(3) { top:8%; animation-duration:30s; animation-delay:-5s; font-size:50px; }
-  @keyframes float { 0%{left:-10%} 100%{left:110%} }
-
-  @media(max-width:900px) { .ceo-panel{width:300px;min-width:300px;} }
+/* Ticket Board */
+.board{display:flex;gap:12px;padding:16px}
+.board-col{flex:1;min-width:0}
+.board-col-title{font-size:13px;font-weight:bold;color:#666;margin-bottom:10px;padding:6px 0;border-bottom:2px solid #ddd}
+.board-col-title.todo{border-color:#0096D6}
+.board-col-title.wip{border-color:#FF9800}
+.board-col-title.done{border-color:#4CAF50}
+.ticket{background:#fff;border:1px solid #ddd;border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px}
+.ticket-title{font-weight:600;color:#333;margin-bottom:4px}
+.ticket-meta{display:flex;align-items:center;gap:6px;color:#888;font-size:10px;margin-bottom:6px}
+.ticket-cxo{display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;color:#fff}
+.ticket-actions{display:flex;gap:4px}
+.ticket-btn{padding:3px 8px;border-radius:4px;font-size:10px;border:1px solid #ddd;background:#fff;cursor:pointer;font-family:inherit}
+.ticket-btn:hover{background:#f0f0f0}
+.ticket-btn.del{color:#f44336;border-color:#f44336}
+.new-ticket{background:#f8f8f8;border:1px dashed #ccc;border-radius:8px;padding:10px;margin-bottom:12px}
+.new-ticket input,.new-ticket select{width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;font-family:inherit;margin-bottom:6px}
+.new-ticket button{background:#1a237e;color:#fff;border:none;padding:6px 14px;border-radius:4px;font-size:12px;font-weight:bold;cursor:pointer;font-family:inherit}
+.sprint-selector{margin-bottom:12px;display:flex;gap:6px;align-items:center;font-size:12px}
+.sprint-selector select{padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;font-family:inherit}
+.board-stats{display:flex;gap:16px;padding:0 16px 8px;font-size:11px;color:#888}
+.view-toggle{display:flex;gap:4px}
+.view-btn{padding:4px 12px;border-radius:4px;font-size:11px;border:1px solid rgba(255,255,255,0.2);background:none;color:rgba(255,255,255,0.5);cursor:pointer;font-family:inherit}
+.view-btn.active{background:rgba(255,255,255,0.1);color:#FFD700;border-color:#FFD700}
 </style>
 </head>
 <body>
 
-<div class="cloud">&#9729;</div>
-<div class="cloud">&#9729;</div>
-<div class="cloud">&#9729;</div>
-
 <div class="header">
-  <div class="header-left">
-    <div class="logo"><span>Apollo Mansion</span> Inc.</div>
+  <div class="logo">&#127970; Apollo Mansion Inc.</div>
+  <div class="view-toggle">
+    <button class="view-btn active" onclick="switchView('mansion')" id="viewMansion">&#127970; &#12501;&#12525;&#12450;</button>
+    <button class="view-btn" onclick="switchView('tickets')" id="viewTickets">&#127915; &#12481;&#12465;&#12483;&#12488;</button>
   </div>
   <div class="header-links">
-    <a class="header-link" href="https://logic-u5wn.onrender.com" target="_blank">Logic</a>
-    <a class="header-link" href="https://sengoku-chakai.onrender.com/ja" target="_blank">&#21315;&#30707;&#33590;&#36947;</a>
+    <a href="https://logic-u5wn.onrender.com" target="_blank">Logic</a>
+    <a href="https://sengoku-chakai.onrender.com/ja" target="_blank">&#21315;&#30707;&#33590;&#36947;</a>
     <button class="reset-btn" onclick="resetAll()">&#12522;&#12475;&#12483;&#12488;</button>
   </div>
 </div>
 
 <div class="main">
-  <!-- CEO Panel -->
   <div class="ceo-panel">
-    <div class="ceo-header">
-      <div class="ceo-profile">
-        <div class="ceo-avatar-wrap">
-          <div class="ceo-crown">&#128081;</div>
-          <div class="ceo-avatar">K</div>
-        </div>
-        <div>
-          <div class="ceo-name">Keita</div>
-          <div class="ceo-role">CEO / Founder</div>
-          <div class="ceo-floor-badge">&#127968; Penthouse</div>
-        </div>
+    <div class="section">
+      <div class="ceo-title">&#128081; Keita</div>
+      <div class="ceo-sub">CEO / Founder &#8212; Penthouse</div>
+      <div class="chips">
+        <button class="chip-all" onclick="toggleAll()">ALL</button>
+        <button class="chip active" data-id="cso" style="--c:#FF9800" onclick="toggleTarget(this)">Nobita</button>
+        <button class="chip active" data-id="cfo" style="--c:#4CAF50" onclick="toggleTarget(this)">Suneo</button>
+        <button class="chip active" data-id="cmo" style="--c:#9C27B0" onclick="toggleTarget(this)">Dekisugi</button>
+        <button class="chip active" data-id="cto" style="--c:#0096D6" onclick="toggleTarget(this)">Doraemon</button>
+        <button class="chip active" data-id="cpo" style="--c:#FFD700" onclick="toggleTarget(this)">Dorami</button>
       </div>
-      <div class="target-select">
-        <button class="target-chip-all" onclick="toggleAll()">ALL</button>
-        <button class="target-chip active" data-id="cso" style="--c:#FF9800;--cr:255,152,0" onclick="toggleTarget(this)">Nobita</button>
-        <button class="target-chip active" data-id="cfo" style="--c:#4CAF50;--cr:76,175,80" onclick="toggleTarget(this)">Suneo</button>
-        <button class="target-chip active" data-id="cmo" style="--c:#9C27B0;--cr:156,39,176" onclick="toggleTarget(this)">Dekisugi</button>
-        <button class="target-chip active" data-id="cto" style="--c:#0096D6;--cr:0,150,214" onclick="toggleTarget(this)">Doraemon</button>
-        <button class="target-chip active" data-id="cpo" style="--c:#FFD700;--cr:255,215,0" onclick="toggleTarget(this)">Dorami</button>
-      </div>
-      <div class="project-select">
-        <span class="project-select-label">&#23550;&#35937;:</span>
-        <button class="project-chip logic" onclick="toggleProject(this)">Logic</button>
-        <button class="project-chip sengoku" onclick="toggleProject(this)">&#21315;&#30707;&#33590;&#36947;</button>
+      <div class="chips" style="margin-top:6px">
+        <span class="label">&#23550;&#35937;:</span>
+        <button class="chip" data-project="Logic" onclick="toggleProject(this)">Logic</button>
+        <button class="chip" data-project="&#21315;&#30707;&#33590;&#36947;" onclick="toggleProject(this)">&#21315;&#30707;&#33590;&#36947;</button>
+        <button class="chip" data-project="Apollo Mansion" onclick="toggleProject(this)">Apollo Mansion</button>
       </div>
     </div>
-    <div class="ceo-input-area">
-      <textarea class="ceo-textarea" id="ceoInput" placeholder="CXO&#12408;&#12398;&#25351;&#31034;&#12434;&#20837;&#21147;..."></textarea>
-      <div class="send-row">
-        <span class="send-hint">Ctrl+Enter</span>
-        <button class="send-btn" id="sendBtn" onclick="sendInstruction()">&#25351;&#31034;&#12434;&#20986;&#12377;</button>
+    <div class="section">
+      <textarea id="ceoInput" placeholder="&#35696;&#35542;&#12486;&#12540;&#12510;&#12434;&#20837;&#21147;..."></textarea>
+      <div class="btn-row">
+        <span class="hint">Ctrl+Enter</span>
+        <button class="ticket-btn" onclick="createTicketFromInput()" style="color:#FFD700;border-color:#FFD700;font-size:11px;padding:4px 10px">&#127915; &#12481;&#12465;&#12483;&#12488;&#21270;</button>
+        <button class="btn-pri" id="startBtn" onclick="startRoundtable()">&#128483; &#20870;&#21331;&#20250;&#35696;&#12434;&#38283;&#22987;</button>
       </div>
     </div>
-    <!-- Shizuka Secretary Panel -->
-    <div class="shizuka-panel">
-      <div class="shizuka-header">
-        <div class="shizuka-avatar">&#127804;</div>
-        <div>
-          <div class="shizuka-name">Shizuka</div>
-          <div class="shizuka-role">Secretary</div>
-        </div>
-        <button class="shizuka-btn" onclick="askShizukaSummary()">&#35201;&#32004;</button>
+    <div class="section hidden" id="actionPanel">
+      <div class="round-badge" id="roundBadge">Round 1</div>
+      <button class="btn-out" id="outputGenBtn" onclick="generateOutput()">&#128203; &#12467;&#12500;&#12506;&#29992;&#20986;&#21147;&#12434;&#29983;&#25104;</button>
+      <div style="margin-top:10px">
+        <textarea id="feedbackInput" placeholder="&#12501;&#12451;&#12540;&#12489;&#12496;&#12483;&#12463;&#12434;&#20837;&#21147;... &#20363;: &#12467;&#12473;&#12488;&#38754;&#12434;&#12418;&#12387;&#12392;&#28145;&#25496;&#12426;&#12375;&#12390;&#12289;&#31478;&#21512;&#12392;&#12398;&#27604;&#36611;&#12434;&#36861;&#21152;&#12375;&#12390;" style="min-height:60px"></textarea>
+        <button class="btn-fb" id="feedbackBtn" onclick="submitFeedback()">&#128260; &#12501;&#12451;&#12540;&#12489;&#12496;&#12483;&#12463;&#12375;&#12390;&#20877;&#35696;&#35542;</button>
       </div>
-      <div class="shizuka-body" id="shizukaBody">
-        <span class="placeholder">&#9749; &#12362;&#25163;&#20253;&#12356;&#12391;&#12365;&#12427;&#12371;&#12392;&#12364;&#12354;&#12428;&#12400;&#12362;&#30003;&#12375;&#20184;&#12369;&#12367;&#12384;&#12373;&#12356;</span>
-      </div>
-      <div class="shizuka-tasks">
-        <div class="tasks-header">
-          <span class="tasks-title">Tasks</span>
-          <button class="task-add-btn" onclick="showTaskInput()">+</button>
-        </div>
-        <div class="task-input-row" id="taskInputRow" style="display:none">
-          <input class="task-input" id="taskInput" placeholder="&#12479;&#12473;&#12463;&#12434;&#20837;&#21147;..." onkeydown="if(event.key==='Enter')addTask()">
-          <select class="task-assignee" id="taskAssignee">
-            <option value="">&#25285;&#24403;</option>
-            <option value="Nobita">Nobita</option>
-            <option value="Suneo">Suneo</option>
-            <option value="Dekisugi">Dekisugi</option>
-            <option value="Doraemon">Doraemon</option>
-            <option value="Dorami">Dorami</option>
-          </select>
-        </div>
-        <div class="task-list" id="taskList"></div>
-      </div>
-    </div>
-
-    <div class="ceo-inbox" id="ceoInbox">
-      <div class="inbox-title">Inbox</div>
     </div>
   </div>
 
-  <!-- Mansion -->
-  <div class="mansion-area">
-    <div class="mansion">
-      <div class="mansion-roof"><div class="mansion-name">APOLLO MANSION</div></div>
-      <div id="floors"></div>
-      <div class="mansion-ground"></div>
+  <div class="mansion" id="mansionView" style="display:block">
+    <div class="mansion-h">&#127970; Apollo Mansion &#8212; &#12501;&#12525;&#12450;&#19968;&#35239;</div>
+    <div id="floors"></div>
+  </div>
+  <div class="mansion" id="ticketView" style="display:none">
+    <div class="mansion-h">&#127915; &#12481;&#12465;&#12483;&#12488;&#12508;&#12540;&#12489;</div>
+    <div class="sprint-selector">
+      <label>Sprint:</label>
+      <select id="sprintSelect" onchange="loadTickets()"></select>
+      <button onclick="openNewSprint()" style="font-size:10px;padding:2px 8px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer">+ New</button>
+    </div>
+    <div class="board-stats" id="boardStats"></div>
+    <div class="new-ticket" id="newTicketForm">
+      <input id="ticketTitle" placeholder="&#12481;&#12465;&#12483;&#12488;&#12479;&#12452;&#12488;&#12523;...">
+      <div style="display:flex;gap:6px">
+        <select id="ticketAssignee">
+          <option value="">&#25285;&#24403;CXO</option>
+          <option value="Nobita">Nobita (CSO)</option>
+          <option value="Suneo">Suneo (CFO)</option>
+          <option value="Dekisugi">Dekisugi (CMO)</option>
+          <option value="Doraemon">Doraemon (CTO)</option>
+          <option value="Dorami">Dorami (CPO)</option>
+        </select>
+        <button onclick="createTicket()">+ &#20316;&#25104;</button>
+      </div>
+    </div>
+    <div class="board" id="ticketBoard"></div>
+  </div>
+</div>
+
+<div id="outputModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeOutputModal()">
+  <div class="modal">
+    <div class="modal-title">&#128203; CXO&#35696;&#35542;&#12414;&#12392;&#12417; &#8212; &#12467;&#12500;&#12506;&#29992;&#20986;&#21147;</div>
+    <div class="modal-body" id="outputModalBody"></div>
+    <div class="modal-foot">
+      <button class="btn-close" onclick="closeOutputModal()">&#38281;&#12376;&#12427;</button>
+      <button class="btn-copy" onclick="copyOutput()">&#128203; &#12467;&#12500;&#12540;</button>
     </div>
   </div>
 </div>
 
 <script>
-const AGENTS = {
-  cso:  { title:"CSO", name:"Nobita",    floor:"5F", avatar:"nobita",    color:"#FF9800", icon:"\uD83D\uDC53" },
-  cfo:  { title:"CFO", name:"Suneo",     floor:"4F", avatar:"suneo",     color:"#4CAF50", icon:"\uD83D\uDCB0" },
-  cmo:  { title:"CMO", name:"Dekisugi",  floor:"3F", avatar:"dekisugi",  color:"#9C27B0", icon:"\u2B50" },
-  cto:  { title:"CTO", name:"Doraemon",  floor:"2F", avatar:"doraemon",  color:"#0096D6", icon:"\uD83D\uDC31" },
-  cpo:  { title:"CPO", name:"Dorami",    floor:"1F", avatar:"dorami",    color:"#FFD700", icon:"\uD83C\uDF38" },
+const AGENTS={
+  cso:{title:"CSO",name:"Nobita",floor:"5F",color:"#FF9800",icon:"\uD83D\uDC66"},
+  cfo:{title:"CFO",name:"Suneo",floor:"4F",color:"#4CAF50",icon:"\uD83D\uDC68"},
+  cmo:{title:"CMO",name:"Dekisugi",floor:"3F",color:"#9C27B0",icon:"\uD83E\uDDD1\u200D\uD83C\uDF93"},
+  cto:{title:"CTO",name:"Doraemon",floor:"2F",color:"#0096D6",icon:"\uD83E\uDD16"},
+  cpo:{title:"CPO",name:"Dorami",floor:"1F",color:"#FFD700",icon:"\uD83D\uDC67"}
 };
-const FLOOR_ORDER = ["cso","cfo","cmo","cto","cpo"];
-const agentFullContent = {};
-const agentRawTexts = {};
-let activeStreams = 0;
+const ORDER=["cso","cfo","cmo","cto","cpo"];
+const rawTxt={};
+let currentTopic='';
+let roundNum=0;
+let outputRaw='';
 
-function hexToRgb(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)].join(',');}
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 
 function createFloors(){
-  const container = document.getElementById('floors');
-  for(const id of FLOOR_ORDER){
-    const a = AGENTS[id];
-    const rgb = hexToRgb(a.color);
-    agentFullContent[id] = '';
-    agentRawTexts[id] = '';
-    container.innerHTML += `
-      <div class="floor" id="card-${id}" style="--fc:${a.color};--fc-rgb:${rgb}">
-        <div class="floor-label">${a.floor}</div>
-        <div class="floor-resident">
-          <div class="char-avatar ${a.avatar}">${a.icon}</div>
-          <div class="char-info">
-            <div class="char-top">
-              <span class="char-title">${a.title}</span>
-              <span class="char-name">${a.name}</span>
-              <div class="char-status"><div class="status-dot waiting" id="dot-${id}"></div><span id="stxt-${id}">&#24453;&#27231;&#20013;</span></div>
-            </div>
-            <div class="char-body" id="body-${id}"><span class="placeholder">&#9749; ${a.name}&#12399;&#37096;&#23627;&#12391;&#24453;&#27231;&#20013;...</span></div>
-            <div class="char-footer"><span id="chars-${id}">0&#25991;&#23383;</span><span id="file-${id}"></span></div>
-          </div>
+  const el=document.getElementById('floors');
+  for(const id of ORDER){
+    const a=AGENTS[id];rawTxt[id]='';
+    el.innerHTML+=`
+      <div class="card" id="card-${id}">
+        <div class="card-h">
+          <span class="card-floor">${a.floor}</span>
+          <span class="card-title" style="color:${a.color}">${a.icon} ${a.title}</span>
+          <span class="card-name">${a.name}</span>
+          <div class="card-st"><div class="dot" id="dot-${id}"></div><span id="st-${id}">\u5F85\u6A5F\u4E2D</span></div>
         </div>
+        <div class="card-body" id="body-${id}"><span class="placeholder">\u2615 ${a.name}\u306F\u90E8\u5C4B\u3067\u5F85\u6A5F\u4E2D...</span></div>
+        <div class="card-foot"><span id="ch-${id}">0\u6587\u5B57</span><button class="kbtn" onclick="toggleK('${id}')">&#128218; \u30CA\u30EC\u30C3\u30B8</button><div class="kpop" id="kp-${id}"></div></div>
       </div>`;
   }
 }
 
-function getSelectedTargets(){return[...document.querySelectorAll('.target-chip.active')].map(c=>c.dataset.id);}
+function getTargets(){return[...document.querySelectorAll('.chip.active[data-id]')].map(c=>c.dataset.id);}
 function toggleTarget(el){el.classList.toggle('active');}
-function toggleAll(){const c=document.querySelectorAll('.target-chip');const all=[...c].every(x=>x.classList.contains('active'));c.forEach(x=>all?x.classList.remove('active'):x.classList.add('active'));}
+function toggleAll(){const c=document.querySelectorAll('.chip[data-id]');const all=[...c].every(x=>x.classList.contains('active'));c.forEach(x=>all?x.classList.remove('active'):x.classList.add('active'));}
 function toggleProject(el){el.classList.toggle('active');}
-function getSelectedProjects(){return[...document.querySelectorAll('.project-chip.active')].map(c=>c.textContent.trim());}
+function getProjects(){return[...document.querySelectorAll('.chip.active[data-project]')].map(c=>c.dataset.project);}
 
-async function sendInstruction(){
-  const input=document.getElementById('ceoInput');
-  const text=input.value.trim();
-  if(!text)return;
-  const targets=getSelectedTargets();
-  if(!targets.length){alert('Select CXO targets');return;}
-  document.getElementById('sendBtn').disabled=true;
-  const projects=getSelectedProjects();
-  const projectLabel=projects.length?` [${projects.join(', ')}]`:'';
-  const fullInstruction=projects.length?`[対象プロジェクト: ${projects.join(', ')}]\n\n${text}`:text;
-  await fetch('/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instruction:fullInstruction,targets})});
-  for(const id of targets){
-    const body=document.getElementById(`body-${id}`);
-    agentFullContent[id]+=`<div class="ceo-instruction"><strong>CEO Keita${escapeHtml(projectLabel)}:</strong> ${escapeHtml(text)}</div>`;
-    body.innerHTML=agentFullContent[id]+'<span class="typing-cursor"></span>';
-    body.scrollTop=body.scrollHeight;
-  }
-  input.value='';
-  activeStreams=targets.length;
-  for(const id of targets){streamAgent(id);}
+function getPrevDiscussion(){
+  return ORDER.map(id=>{
+    const t=rawTxt[id];
+    return t?`【${AGENTS[id].title} ${AGENTS[id].name}】\n${t}`:'';
+  }).filter(Boolean).join('\n\n');
 }
 
-function streamAgent(id){
-  const body=document.getElementById(`body-${id}`);
-  const dot=document.getElementById(`dot-${id}`);
-  const stxt=document.getElementById(`stxt-${id}`);
-  const charsEl=document.getElementById(`chars-${id}`);
-  const card=document.getElementById(`card-${id}`);
-  dot.className='status-dot working';
-  stxt.textContent='\u5206\u6790\u4e2d...';
-  card.classList.add('active');
-  agentRawTexts[id]='';
-  const evtSource=new EventSource(`/stream/${id}`);
-  evtSource.onmessage=(e)=>{
-    const data=JSON.parse(e.data);
-    if(data.type==='text'){
-      agentRawTexts[id]+=data.content;
-      body.innerHTML=agentFullContent[id]+marked.parse(agentRawTexts[id])+'<span class="typing-cursor"></span>';
-      body.scrollTop=body.scrollHeight;
-      charsEl.textContent=`${agentRawTexts[id].length}\u6587\u5b57`;
+function startRoundtable(feedback){
+  const input=document.getElementById('ceoInput');
+  const topic=input.value.trim()||currentTopic;
+  if(!topic){alert('\u30C6\u30FC\u30DE\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044');return;}
+  const targets=getTargets();
+  if(!targets.length){alert('\u5BFE\u8C61CXO\u3092\u9078\u629E');return;}
+
+  currentTopic=topic;
+  roundNum++;
+  document.getElementById('startBtn').disabled=true;
+  document.getElementById('actionPanel').classList.add('hidden');
+
+  const projects=getProjects();
+  const fullTopic=projects.length?`[${projects.join(', ')}] ${topic}`:topic;
+  const prevDisc=feedback?getPrevDiscussion():'';
+
+  for(const id of targets){
+    rawTxt[id]='';
+    document.getElementById(`body-${id}`).innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum} \u2014 \u5F85\u6A5F\u4E2D</span>`;
+    document.getElementById(`dot-${id}`).className='dot';
+    document.getElementById(`st-${id}`).textContent='\u5F85\u6A5F\u4E2D';
+  }
+  input.value='';
+
+  let url=`/roundtable?topic=${encodeURIComponent(fullTopic)}&order=${targets.join(',')}&projects=${encodeURIComponent(projects.join(','))}&round=${roundNum}`;
+  if(feedback)url+=`&feedback=${encodeURIComponent(feedback)}&prev_discussion=${encodeURIComponent(prevDisc)}`;
+
+  const es=new EventSource(url);
+  es.onmessage=(e)=>{
+    const d=JSON.parse(e.data);
+    if(d.type==='agent_start'){
+      const id=d.agent_id;
+      document.getElementById(`dot-${id}`).className='dot working';
+      document.getElementById(`st-${id}`).textContent='\u767A\u8A00\u4E2D...';
+      rawTxt[id]='';
+      document.getElementById(`body-${id}`).innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum}</span><span class="typing"></span>`;
     }
-    if(data.type==='ceo_items'){for(const item of data.items){addInboxItem(item);}}
-    if(data.type==='done'){
-      evtSource.close();
-      agentFullContent[id]+=marked.parse(agentRawTexts[id]);
-      body.innerHTML=agentFullContent[id];
+    if(d.type==='text'){
+      const id=d.agent_id;const body=document.getElementById(`body-${id}`);
+      rawTxt[id]+=d.content;
+      body.innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum}</span>`+marked.parse(rawTxt[id])+'<span class="typing"></span>';
       body.scrollTop=body.scrollHeight;
-      dot.className='status-dot done';
-      stxt.textContent='\u5b8c\u4e86';
-      card.classList.remove('active');
-      activeStreams--;
-      if(activeStreams<=0)document.getElementById('sendBtn').disabled=false;
+      document.getElementById(`ch-${id}`).textContent=`${rawTxt[id].length}\u6587\u5B57`;
     }
-    if(data.type==='error'){
-      evtSource.close();
-      body.innerHTML+=`<div style="color:#f44336;padding:8px">Error: ${data.content}</div>`;
-      dot.style.background='#f44336';
-      stxt.textContent='\u30a8\u30e9\u30fc';
-      activeStreams--;
-      if(activeStreams<=0)document.getElementById('sendBtn').disabled=false;
+    if(d.type==='agent_done'){
+      const id=d.agent_id;
+      document.getElementById(`body-${id}`).innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum}</span>`+marked.parse(rawTxt[id]);
+      document.getElementById(`dot-${id}`).className='dot done';
+      document.getElementById(`st-${id}`).textContent='\u767A\u8A00\u6E08';
+    }
+    if(d.type==='done'){
+      es.close();
+      document.getElementById('startBtn').disabled=false;
+      // Show action panel
+      const panel=document.getElementById('actionPanel');
+      panel.classList.remove('hidden');
+      document.getElementById('roundBadge').textContent=`Round ${roundNum} \u5B8C\u4E86`;
+      document.getElementById('outputGenBtn').disabled=false;
+      document.getElementById('feedbackInput').value='';
+    }
+    if(d.type==='error'){
+      const id=d.agent_id;
+      document.getElementById(`body-${id}`).innerHTML+=`<div style="color:#f44336;font-size:11px">Error: ${esc(d.content)}</div>`;
     }
   };
-  evtSource.onerror=()=>{evtSource.close();};
+  es.onerror=()=>{es.close();document.getElementById('startBtn').disabled=false;};
 }
 
-function addInboxItem(item){
-  const inbox=document.getElementById('ceoInbox');
-  const div=document.createElement('div');
-  div.className='inbox-item';
-  const tl=item.type==='approval'?'\u627f\u8a8d\u4f9d\u983c':'\u63d0\u6848';
-  const tc=item.type==='approval'?'approval':'proposal';
-  const iid='inbox-'+Date.now()+Math.random().toString(36).slice(2,5);
-  div.innerHTML=`
-    <div class="inbox-item-header"><span class="inbox-badge ${tc}">${tl}</span><span class="inbox-from">${item.name} (${item.title})</span></div>
-    <div class="inbox-content">${escapeHtml(item.content)}</div>
-    <div class="inbox-actions">
-      <button class="inbox-btn approve" onclick="respondToAgent('${item.agent}','\u627f\u8a8d\u3057\u307e\u3059\u3002\u9032\u3081\u3066\u304f\u3060\u3055\u3044\u3002',this)">\u627f\u8a8d</button>
-      <button class="inbox-btn reject" onclick="respondToAgent('${item.agent}','\u5374\u4e0b\u3057\u307e\u3059\u3002\u518d\u691c\u8a0e\u3057\u3066\u304f\u3060\u3055\u3044\u3002',this)">\u5374\u4e0b</button>
-      <button class="inbox-btn comment" onclick="showReplyInput('${iid}')">Comment</button>
-    </div>
-    <input class="inbox-reply-input" id="${iid}" placeholder="..." onkeydown="if(event.key==='Enter'){respondToAgent('${item.agent}',this.value,this);this.style.display='none';}">`;
-  inbox.appendChild(div);
-  inbox.scrollTop=inbox.scrollHeight;
+function submitFeedback(){
+  const fb=document.getElementById('feedbackInput').value.trim();
+  if(!fb){alert('\u30D5\u30A3\u30FC\u30C9\u30D0\u30C3\u30AF\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044');return;}
+  document.getElementById('feedbackBtn').disabled=true;
+  startRoundtable(fb);
 }
 
-function showReplyInput(id){const el=document.getElementById(id);el.style.display='block';el.focus();}
-
-async function respondToAgent(agentId,message,btnEl){
-  await fetch('/respond_to_agent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent_id:agentId,response:`CEO Keita: ${message}`})});
-  const item=btnEl.closest('.inbox-item');
-  item.querySelectorAll('.inbox-btn').forEach(b=>{b.disabled=true;b.style.opacity='0.3';});
-  item.innerHTML+=`<div style="font-size:11px;color:#4CAF50;margin-top:6px">\u2713 ${escapeHtml(message)}</div>`;
-  const body=document.getElementById(`body-${agentId}`);
-  agentFullContent[agentId]+=`<div class="ceo-instruction"><strong>CEO Keita:</strong> ${escapeHtml(message)}</div>`;
-  body.innerHTML=agentFullContent[agentId]+'<span class="typing-cursor"></span>';
-  activeStreams=1;
-  document.getElementById('sendBtn').disabled=true;
-  streamAgent(agentId);
+async function generateOutput(){
+  const btn=document.getElementById('outputGenBtn');
+  btn.disabled=true;btn.textContent='\u29D7 \u751F\u6210\u4E2D...';
+  const discussions=ORDER.map(id=>({title:AGENTS[id].title,name:AGENTS[id].name,text:rawTxt[id]||''})).filter(d=>d.text);
+  if(!discussions.length){btn.textContent='\uD83D\uDCCB \u30B3\u30D4\u30DA\u7528\u51FA\u529B\u3092\u751F\u6210';btn.disabled=false;return;}
+  document.getElementById('outputModal').style.display='flex';
+  const body=document.getElementById('outputModalBody');
+  body.innerHTML='<span style="color:#aaa">\u29D7 \u751F\u6210\u4E2D...</span>';outputRaw='';
+  try{
+    const res=await fetch('/generate_output',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({discussions,topic:currentTopic,projects:getProjects()})});
+    const reader=res.body.getReader();const dec=new TextDecoder();
+    function read(){reader.read().then(({done,value})=>{
+      if(done)return;
+      for(const line of dec.decode(value).split('\n')){
+        if(!line.startsWith('data: '))continue;
+        try{
+          const d=JSON.parse(line.slice(6));
+          if(d.type==='text'){outputRaw+=d.content;body.innerHTML=marked.parse(outputRaw);}
+          if(d.type==='done'){body.innerHTML=marked.parse(outputRaw);btn.textContent='\uD83D\uDCCB \u30B3\u30D4\u30DA\u7528\u51FA\u529B\u3092\u751F\u6210';btn.disabled=false;}
+          if(d.type==='error'){body.innerHTML+=`<div style="color:#f44336">Error: ${d.content}</div>`;btn.textContent='\uD83D\uDCCB \u30B3\u30D4\u30DA\u7528\u51FA\u529B\u3092\u751F\u6210';btn.disabled=false;}
+        }catch(e){}
+      }
+      body.scrollTop=body.scrollHeight;read();
+    });}
+    read();
+  }catch(e){body.innerHTML=`<div style="color:#f44336">Error: ${e.message}</div>`;btn.textContent='\uD83D\uDCCB \u30B3\u30D4\u30DA\u7528\u51FA\u529B\u3092\u751F\u6210';btn.disabled=false;}
 }
+
+function copyOutput(){
+  navigator.clipboard.writeText(outputRaw).then(()=>{
+    const b=document.querySelector('.btn-copy');const o=b.textContent;
+    b.textContent='\u2713 \u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F\uFF01';
+    setTimeout(()=>b.textContent=o,2000);
+  });
+}
+function closeOutputModal(){document.getElementById('outputModal').style.display='none';}
 
 async function resetAll(){
-  if(!confirm('\u30ea\u30bb\u30c3\u30c8\u3057\u307e\u3059\u304b\uff1f'))return;
+  if(!confirm('\u30EA\u30BB\u30C3\u30C8\u3057\u307E\u3059\u304B\uFF1F'))return;
   await fetch('/reset',{method:'POST'});
-  for(const id of FLOOR_ORDER){
-    agentFullContent[id]='';agentRawTexts[id]='';
-    document.getElementById(`body-${id}`).innerHTML=`<span class="placeholder">\u2615 ${AGENTS[id].name}\u306f\u90e8\u5c4b\u3067\u5f85\u6a5f\u4e2d...</span>`;
-    document.getElementById(`dot-${id}`).className='status-dot waiting';
-    document.getElementById(`stxt-${id}`).textContent='\u5f85\u6a5f\u4e2d';
-    document.getElementById(`chars-${id}`).textContent='0\u6587\u5b57';
-    document.getElementById(`file-${id}`).innerHTML='';
-    document.getElementById(`card-${id}`).classList.remove('active');
+  for(const id of ORDER){
+    rawTxt[id]='';
+    document.getElementById(`body-${id}`).innerHTML=`<span class="placeholder">\u2615 ${AGENTS[id].name}\u306F\u90E8\u5C4B\u3067\u5F85\u6A5F\u4E2D...</span>`;
+    document.getElementById(`dot-${id}`).className='dot';
+    document.getElementById(`st-${id}`).textContent='\u5F85\u6A5F\u4E2D';
+    document.getElementById(`ch-${id}`).textContent='0\u6587\u5B57';
   }
-  document.getElementById('ceoInbox').innerHTML='<div class="inbox-title">Inbox</div>';
+  document.getElementById('actionPanel').classList.add('hidden');
+  currentTopic='';roundNum=0;
 }
 
-function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
-document.addEventListener('keydown',(e)=>{if(e.ctrlKey&&e.key==='Enter'){e.preventDefault();sendInstruction();}});
-// === SHIZUKA ===
-function askShizukaSummary(){
-  const body=document.getElementById('shizukaBody');
-  body.innerHTML='<span style="color:#FF69B4">&#10024; &#12414;&#12392;&#12417;&#12390;&#12356;&#12414;&#12377;...</span>';
-  fetch('/secretary/summarize',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
-    .then(r=>{
-      const reader=r.body.getReader();
-      const decoder=new TextDecoder();
-      let raw='';
-      function read(){
-        reader.read().then(({done,value})=>{
-          if(done)return;
-          const chunk=decoder.decode(value);
-          for(const line of chunk.split('\n')){
-            if(!line.startsWith('data: '))continue;
-            try{
-              const d=JSON.parse(line.slice(6));
-              if(d.type==='text'){raw+=d.content;body.innerHTML=marked.parse(raw);}
-              if(d.type==='done'){body.innerHTML=marked.parse(raw);}
-              if(d.type==='error'){body.innerHTML=`<span style="color:#f44336">Error: ${d.content}</span>`;}
-            }catch(e){}
-          }
-          body.scrollTop=body.scrollHeight;
-          read();
-        });
-      }
-      read();
-    });
+document.addEventListener('keydown',(e)=>{if(e.ctrlKey&&e.key==='Enter'){e.preventDefault();startRoundtable();}});
+
+async function toggleK(id){
+  const pop=document.getElementById(`kp-${id}`);
+  if(pop.style.display==='block'){pop.style.display='none';return;}
+  pop.innerHTML='<span style="color:#aaa">\u8AAD\u307F\u8FBC\u307F\u4E2D...</span>';pop.style.display='block';
+  document.querySelectorAll('.kpop').forEach(p=>{if(p!==pop)p.style.display='none';});
+  const res=await fetch(`/knowledge/${id}`);const data=await res.json();
+  const ls=data.learnings||[];
+  if(!ls.length){pop.innerHTML='<div class="kpop-title">\u84C4\u7A4D\u30CA\u30EC\u30C3\u30B8</div><span style="color:#aaa">\u307E\u3060\u306A\u3044</span>';}
+  else{pop.innerHTML=`<div class="kpop-title">\u84C4\u7A4D\u30CA\u30EC\u30C3\u30B8 (${ls.length})</div>`+ls.map(l=>`<div class="kpop-item">\u30FB${esc(l)}</div>`).join('');}
+}
+document.addEventListener('click',(e)=>{if(!e.target.closest('.card-foot'))document.querySelectorAll('.kpop').forEach(p=>p.style.display='none');});
+
+// --- Ticket Board ---
+function switchView(view) {
+  document.getElementById('mansionView').style.display = view === 'mansion' ? 'block' : 'none';
+  document.getElementById('ticketView').style.display = view === 'tickets' ? 'block' : 'none';
+  document.getElementById('viewMansion').className = 'view-btn' + (view === 'mansion' ? ' active' : '');
+  document.getElementById('viewTickets').className = 'view-btn' + (view === 'tickets' ? ' active' : '');
+  if (view === 'tickets') { loadSprints(); loadTickets(); }
 }
 
-// === TASKS ===
-function showTaskInput(){
-  const row=document.getElementById('taskInputRow');
-  row.style.display=row.style.display==='none'?'flex':'none';
-  if(row.style.display==='flex')document.getElementById('taskInput').focus();
+const CXO_COLORS = {
+  Nobita: '#FF9800', Suneo: '#4CAF50', Dekisugi: '#9C27B0',
+  Doraemon: '#0096D6', Dorami: '#FFD700'
+};
+
+async function loadSprints() {
+  const res = await fetch('/api/sprints');
+  const sprints = await res.json();
+  const sel = document.getElementById('sprintSelect');
+  sel.innerHTML = sprints.map(s => '<option value="' + s.id + '">' + esc(s.name) + '</option>').join('');
 }
 
-async function addTask(){
-  const input=document.getElementById('taskInput');
-  const assignee=document.getElementById('taskAssignee');
-  const text=input.value.trim();
-  if(!text)return;
-  await fetch('/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,assignee:assignee.value})});
-  input.value='';
-  assignee.value='';
-  loadTasks();
+async function loadTickets() {
+  const sprintId = document.getElementById('sprintSelect').value;
+  const res = await fetch('/api/tickets?sprint_id=' + sprintId);
+  const tickets = await res.json();
+  renderBoard(tickets);
 }
 
-async function toggleTask(id,currentStatus){
-  const newStatus=currentStatus==='todo'?'done':'todo';
-  await fetch(`/tasks/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:newStatus})});
-  loadTasks();
+function renderBoard(tickets) {
+  const cols = { Todo: [], 'In Progress': [], Done: [] };
+  tickets.forEach(function(t) { if (cols[t.status]) cols[t.status].push(t); });
+
+  const stats = document.getElementById('boardStats');
+  const total = tickets.length;
+  const done = cols.Done.length;
+  stats.textContent = total > 0 ? done + '/' + total + ' \u5B8C\u4E86 (' + Math.round(done/total*100) + '%)' : '';
+
+  const board = document.getElementById('ticketBoard');
+  board.innerHTML = ['Todo', 'In Progress', 'Done'].map(function(status) {
+    var cls = status === 'Todo' ? 'todo' : status === 'In Progress' ? 'wip' : 'done';
+    var count = cols[status].length;
+    return '<div class="board-col">' +
+      '<div class="board-col-title ' + cls + '">' + status + ' (' + count + ')</div>' +
+      cols[status].map(function(t) { return renderTicket(t, status); }).join('') +
+    '</div>';
+  }).join('');
 }
 
-async function deleteTask(id){
-  await fetch(`/tasks/${id}`,{method:'DELETE'});
-  loadTasks();
+function renderTicket(t, status) {
+  var color = CXO_COLORS[t.assignee_cxo] || '#888';
+  var nextBtn = status === 'Todo'
+    ? '<button class="ticket-btn" onclick="moveTicket(' + t.id + ',\'In Progress\')">\u2192 WIP</button>'
+    : status === 'In Progress'
+    ? '<button class="ticket-btn" onclick="moveTicket(' + t.id + ',\'Done\')">\u2192 Done</button>'
+    : '';
+  var prevBtn = status === 'Done'
+    ? '<button class="ticket-btn" onclick="moveTicket(' + t.id + ',\'In Progress\')">\u2190 WIP</button>'
+    : status === 'In Progress'
+    ? '<button class="ticket-btn" onclick="moveTicket(' + t.id + ',\'Todo\')">\u2190 Todo</button>'
+    : '';
+  return '<div class="ticket">' +
+    '<div class="ticket-title">' + esc(t.title) + '</div>' +
+    '<div class="ticket-meta">' +
+      (t.assignee_cxo ? '<span class="ticket-cxo" style="background:' + color + '">' + esc(t.assignee_cxo) + '</span>' : '') +
+      '<span>' + (t.created_at || '') + '</span>' +
+    '</div>' +
+    '<div class="ticket-actions">' +
+      prevBtn + nextBtn +
+      '<button class="ticket-btn del" onclick="deleteTicket(' + t.id + ')">\u00D7</button>' +
+    '</div>' +
+  '</div>';
 }
 
-async function loadTasks(){
-  const res=await fetch('/tasks');
-  const tasks=await res.json();
-  const list=document.getElementById('taskList');
-  list.innerHTML=tasks.map(t=>`
-    <div class="task-item">
-      <div class="task-check ${t.status}" onclick="toggleTask(${t.id},'${t.status}')">${t.status==='done'?'\u2713':''}</div>
-      <span class="task-text ${t.status}">${escapeHtml(t.text)}</span>
-      ${t.assignee?`<span class="task-assignee-badge">${escapeHtml(t.assignee)}</span>`:''}
-      <button class="task-del" onclick="deleteTask(${t.id})">\u00d7</button>
-    </div>`).join('');
+async function createTicket() {
+  var title = document.getElementById('ticketTitle').value.trim();
+  if (!title) return;
+  var assignee = document.getElementById('ticketAssignee').value;
+  var sprintId = document.getElementById('sprintSelect').value;
+  await fetch('/api/tickets', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({title: title, assignee_cxo: assignee, sprint_id: parseInt(sprintId) || 1})
+  });
+  document.getElementById('ticketTitle').value = '';
+  loadTickets();
 }
 
-loadTasks();
+async function moveTicket(id, newStatus) {
+  await fetch('/api/tickets/' + id, {
+    method: 'PATCH', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({status: newStatus})
+  });
+  loadTickets();
+}
+
+async function deleteTicket(id) {
+  await fetch('/api/tickets/' + id, {method: 'DELETE'});
+  loadTickets();
+}
+
+function createTicketFromInput() {
+  var text = document.getElementById('ceoInput').value.trim();
+  if (!text) return;
+  switchView('tickets');
+  document.getElementById('ticketTitle').value = text;
+}
+
+async function openNewSprint() {
+  var name = prompt('Sprint\u540D\u3092\u5165\u529B:');
+  if (!name) return;
+  await fetch('/api/sprints', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name: name})
+  });
+  loadSprints();
+}
+
 createFloors();
 </script>
 </body>
 </html>"""
 
-
 if __name__ == "__main__":
     print("\nApollo Mansion CXO Agent Office starting...")
     print("Open http://localhost:5000 in your browser\n")
-    app.run(debug=False, port=5000, threaded=True)
+    app.run(debug=True, port=5000, threaded=True)
