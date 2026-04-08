@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1440,initial-scale=1">
+<title>Logic v3 — Profile (Desktop)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@700;800;900&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared.css">
+<style>
+  .page-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 36px; }
+  .page-head h1 { font-family: var(--font-display); font-size: 40px; font-weight: 900; letter-spacing: -0.03em; }
+  .page-head .icon-btn {
+    width: 44px; height: 44px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-full);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-mute);
+    cursor: pointer;
+  }
+  .page-head .icon-btn svg { width: 20px; height: 20px; }
+
+  .top-grid {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 24px;
+    margin-bottom: 32px;
+  }
+  @media (max-width: 1100px) { .top-grid { grid-template-columns: 1fr; } }
+
+  .hero {
+    background: var(--navy);
+    color: white;
+    border-radius: var(--r-2xl);
+    padding: 44px 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    top: -100px; right: -100px;
+    width: 320px; height: 320px;
+    background: radial-gradient(circle, rgba(61,95,196,0.4) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .hero-inner { position: relative; display: flex; align-items: center; gap: 24px; margin-bottom: 32px; }
+  .avatar {
+    width: 92px; height: 92px;
+    background: linear-gradient(135deg, var(--accent) 0%, #9EB3F0 100%);
+    border-radius: var(--r-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 42px;
+    box-shadow: 0 12px 32px rgba(61,95,196,0.5);
+    border: 4px solid white;
+    flex-shrink: 0;
+  }
+  .hero-name { font-family: var(--font-display); font-size: 32px; font-weight: 900; letter-spacing: -0.025em; }
+  .hero-level { font-size: 13px; color: rgba(255,255,255,0.65); font-weight: 500; margin-top: 4px; letter-spacing: 0.05em; text-transform: uppercase; }
+
+  .hero-xp-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    position: relative;
+  }
+  .hero-xp-label { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.6); }
+  .hero-xp-val { font-family: var(--font-mono); font-size: 14px; color: rgba(255,255,255,0.85); font-weight: 600; }
+  .hero-xp-wrap {
+    background: rgba(255, 255, 255, 0.12);
+    height: 10px;
+    border-radius: var(--r-full);
+    overflow: hidden;
+    position: relative;
+  }
+  .hero-xp-fill {
+    background: var(--accent);
+    height: 100%;
+    width: 74%;
+    border-radius: var(--r-full);
+  }
+
+  .rank-card-big {
+    background: linear-gradient(135deg, var(--brand) 0%, var(--brand-mid) 100%);
+    color: white;
+    border-radius: var(--r-xl);
+    padding: 28px 32px;
+    margin-bottom: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .rank-card-big::before {
+    content: "";
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 240px; height: 240px;
+    background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .rank-card-big .rk-eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.75);
+    margin-bottom: 14px;
+    position: relative;
+  }
+  .rank-row-big { display: flex; align-items: flex-end; gap: 28px; position: relative; margin-bottom: 18px; flex-wrap: wrap; }
+  .rank-num-big { font-family: var(--font-display); font-size: 56px; font-weight: 900; letter-spacing: -0.035em; line-height: 0.9; }
+  .rank-num-big span { font-size: 24px; font-weight: 700; }
+  .rank-detail-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.65); margin-bottom: 4px; }
+  .rank-detail-val { font-family: var(--font-display); font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+  .rank-detail-sub { font-size: 11px; color: rgba(255,255,255,0.7); font-family: var(--font-mono); margin-top: 2px; }
+  .rank-bar-wrap-big { background: rgba(255,255,255,0.2); height: 8px; border-radius: var(--r-full); overflow: hidden; position: relative; }
+  .rank-bar-fill-big { background: white; height: 100%; width: 88%; border-radius: var(--r-full); }
+
+  .stats-stack { display: flex; flex-direction: column; gap: 16px; }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 22px 24px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+  .stat-icon-box {
+    width: 52px; height: 52px;
+    background: var(--accent-soft);
+    border-radius: var(--r-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+  .stat-value { font-family: var(--font-display); font-size: 32px; font-weight: 900; letter-spacing: -0.025em; line-height: 1; }
+  .stat-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); margin-top: 4px; }
+
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 1100px) { .bottom-grid { grid-template-columns: 1fr; } }
+
+  .section-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 28px;
+  }
+  .section-card h2 {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.015em;
+    margin-bottom: 20px;
+  }
+
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 4px;
+  }
+  .cal-day { aspect-ratio: 1; border-radius: 3px; background: var(--surface-2); }
+  .cal-day.l1 { background: #E1E8F9; }
+  .cal-day.l2 { background: #B6C3E8; }
+  .cal-day.l3 { background: #6B85D6; }
+  .cal-day.l4 { background: var(--accent); }
+  .cal-legend {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+    margin-top: 16px;
+    font-size: 11px;
+    color: var(--text-faint);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .cal-legend-swatches { display: flex; gap: 3px; }
+  .cal-legend-swatches > div { width: 11px; height: 11px; border-radius: 2px; }
+
+  .cat-row {
+    display: grid;
+    grid-template-columns: 100px 1fr 50px;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .cat-row:last-child { margin-bottom: 0; }
+  .cat-row-name { font-size: 14px; font-weight: 600; }
+  .cat-row-bar-wrap { background: var(--surface-2); height: 10px; border-radius: var(--r-full); overflow: hidden; }
+  .cat-row-bar-fill { background: var(--accent); height: 100%; border-radius: var(--r-full); }
+  .cat-row-val { font-family: var(--font-mono); font-size: 13px; color: var(--text-mute); text-align: right; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<aside class="sidebar-desktop">
+  <div class="sidebar-brand">
+    <div class="sidebar-brand-mark"><svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><rect x="60" y="60" width="80" height="80" rx="20" fill="#3D5FC4"/><rect x="78" y="76" width="12" height="44" rx="3" fill="#EEF2FE"/><rect x="78" y="108" width="36" height="12" rx="3" fill="#EEF2FE"/><circle cx="114" cy="82" r="6" fill="#9EB3F0"/></svg></div>
+    Logic
+  </div>
+  <nav class="sidebar-nav">
+    <button class="sidebar-nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </button>
+    <button class="sidebar-nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      Learn
+    </button>
+    <button class="sidebar-nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+      Challenges
+    </button>
+    <button class="sidebar-nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Community
+    </button>
+    <button class="sidebar-nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>
+      Profile
+    </button>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="sidebar-avatar">👤</div>
+    <div>
+      <div class="sidebar-user-name">Keita</div>
+      <div class="sidebar-user-meta">Lv.4</div>
+    </div>
+  </div>
+</aside>
+
+<main class="desktop-main">
+
+  <div class="page-head">
+    <h1>Profile</h1>
+    <button class="icon-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+
+  <div class="top-grid">
+    <section class="hero">
+      <div class="hero-inner">
+        <div class="avatar">👤</div>
+        <div>
+          <div class="hero-name">Keita</div>
+          <div class="hero-level">Lv.4 · 見習い探偵</div>
+        </div>
+      </div>
+      <div class="hero-xp-row">
+        <span class="hero-xp-label">LEVEL PROGRESS</span>
+        <span class="hero-xp-val">740 / 1,000 XP</span>
+      </div>
+      <div class="hero-xp-wrap"><div class="hero-xp-fill"></div></div>
+    </section>
+
+    <div class="stats-stack">
+      <div class="rank-card-big">
+        <div class="rk-eyebrow">NATIONAL RANKING</div>
+        <div class="rank-row-big">
+          <div class="rank-num-big">12<span>%</span></div>
+          <div>
+            <div class="rank-detail-label">偏差値 · Deviation</div>
+            <div class="rank-detail-val">62.4</div>
+            <div class="rank-detail-sub">1,248 / 10,432 users</div>
+          </div>
+        </div>
+        <div class="rank-bar-wrap-big"><div class="rank-bar-fill-big"></div></div>
+      </div>
+      <div class="stat">
+        <div class="stat-icon-box">⭐</div>
+        <div>
+          <div class="stat-value">1,240</div>
+          <div class="stat-label">Total points</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="top-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-bottom: 32px;">
+    <div class="stat">
+      <div class="stat-icon-box">🔥</div>
+      <div>
+        <div class="stat-value">7</div>
+        <div class="stat-label">Day streak</div>
+      </div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon-box">✓</div>
+      <div>
+        <div class="stat-value">23</div>
+        <div class="stat-label">Lessons done</div>
+      </div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon-box">⏱</div>
+      <div>
+        <div class="stat-value">4.2<span style="font-size:18px;">h</span></div>
+        <div class="stat-label">Total study</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-grid">
+    <section class="section-card">
+      <h2>Activity · 12 weeks</h2>
+      <div class="cal-grid" id="cal-grid"></div>
+      <div class="cal-legend">
+        Less
+        <div class="cal-legend-swatches">
+          <div style="background:var(--surface-2)"></div>
+          <div style="background:#E1E8F9"></div>
+          <div style="background:#B6C3E8"></div>
+          <div style="background:#6B85D6"></div>
+          <div style="background:var(--accent)"></div>
+        </div>
+        More
+      </div>
+    </section>
+
+    <section class="section-card">
+      <h2>Category progress</h2>
+      <div class="cat-row">
+        <div class="cat-row-name">Fermi</div>
+        <div class="cat-row-bar-wrap"><div class="cat-row-bar-fill" style="width:78%"></div></div>
+        <div class="cat-row-val">78%</div>
+      </div>
+      <div class="cat-row">
+        <div class="cat-row-name">Logic</div>
+        <div class="cat-row-bar-wrap"><div class="cat-row-bar-fill" style="width:42%"></div></div>
+        <div class="cat-row-val">42%</div>
+      </div>
+      <div class="cat-row">
+        <div class="cat-row-name">Case</div>
+        <div class="cat-row-bar-wrap"><div class="cat-row-bar-fill" style="width:20%"></div></div>
+        <div class="cat-row-val">20%</div>
+      </div>
+      <div class="cat-row">
+        <div class="cat-row-name">PM</div>
+        <div class="cat-row-bar-wrap"><div class="cat-row-bar-fill" style="width:42%"></div></div>
+        <div class="cat-row-val">42%</div>
+      </div>
+    </section>
+  </div>
+
+</main>
+
+<script>
+  const grid = document.getElementById('cal-grid');
+  const levels = [0,0,1,2,3,4,0,1,2,3,2,1,0,2,3,4,4,3,2,1,0,0,1,2,3,4,3,2,1,0,1,2,3,4,3,2,1,0,0,1,2,3,4,4,3,2,1,0,1,2,3,2,1,0,1,2,3,4,3,2,1,0,0,1,2,3,4,2,1,0,1,2,3,4,3,2,1,2,3,4,3,2,1,0];
+  for (let r = 0; r < 7; r++) {
+    for (let c = 0; c < 12; c++) {
+      const idx = c * 7 + r;
+      const lv = levels[idx] || 0;
+      const cell = document.createElement('div');
+      cell.className = 'cal-day' + (lv ? ' l' + lv : '');
+      grid.appendChild(cell);
+    }
+  }
+</script>
+</body>
+</html>

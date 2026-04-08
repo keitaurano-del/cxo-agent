@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Logic — Design Proposal v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Inter+Tight:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0F1424;
+    --surface: #1A2138;
+    --border: #2A3350;
+    --text: #F1F2F6;
+    --text-mute: #8B91A8;
+    --text-faint: #5B6178;
+    --accent: #6B85D6;       /* brand-mid for dark bg readability */
+    --brand: #3D5FC4;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", -apple-system, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1640px; margin: 0 auto; padding: 56px 40px 96px; }
+
+  header { margin-bottom: 56px; max-width: 800px; }
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+  h1 { font-family: "Inter Tight", "Inter", sans-serif; font-size: 56px; font-weight: 900; letter-spacing: -0.035em; margin: 0 0 16px; line-height: 1.05; }
+  .subtitle { font-size: 18px; color: var(--text-mute); line-height: 1.65; margin: 0 0 28px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-mute);
+  }
+  .chip.accent { background: rgba(107,133,214,0.14); border-color: rgba(107,133,214,0.4); color: var(--accent); }
+
+  .device-section { margin-bottom: 80px; }
+  .device-section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .device-section-head h2 {
+    font-family: "Inter Tight", "Inter", sans-serif;
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  .device-section-head .device-meta { font-size: 13px; color: var(--text-faint); font-family: "JetBrains Mono", monospace; }
+
+  /* Mobile phones row */
+  .phones {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 36px;
+    justify-items: center;
+  }
+  @media (max-width: 1100px) { .phones { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 760px) { .phones { grid-template-columns: 1fr; } }
+
+  .phone { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .phone-label {
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .phone-frame {
+    width: 430px;
+    max-width: 100%;
+    padding: 14px 12px 16px;
+    background: #050810;
+    border-radius: 48px;
+    box-shadow: 0 32px 88px rgba(0,0,0,0.55), 0 14px 28px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.06);
+    position: relative;
+  }
+  .phone-frame::before {
+    content: "";
+    position: absolute;
+    top: 24px; left: 50%; transform: translateX(-50%);
+    width: 110px; height: 26px;
+    background: #050810;
+    border-radius: 999px;
+    z-index: 2;
+  }
+  .phone-frame iframe { width: 100%; height: 880px; border: none; background: white; border-radius: 36px; display: block; }
+
+  /* Desktop screens row */
+  .desktops { display: flex; flex-direction: column; gap: 56px; }
+  .desktop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .desktop-label {
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    align-self: flex-start;
+    padding-left: 12px;
+  }
+  .desktop-frame {
+    width: 100%;
+    max-width: 1440px;
+    background: #0F1420;
+    border-radius: 16px;
+    padding: 14px;
+    box-shadow: 0 32px 88px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.06);
+  }
+  .desktop-frame-bar {
+    display: flex;
+    gap: 6px;
+    padding-bottom: 12px;
+  }
+  .desktop-frame-bar > div { width: 11px; height: 11px; border-radius: 50%; background: #2A3148; }
+  .desktop-frame-bar > div:first-child { background: #FF5C5C; }
+  .desktop-frame-bar > div:nth-child(2) { background: #FFBE3D; }
+  .desktop-frame-bar > div:nth-child(3) { background: #2ED058; }
+  .desktop-frame iframe {
+    width: 100%;
+    height: 900px;
+    border: none;
+    background: white;
+    border-radius: 8px;
+    display: block;
+  }
+
+  .tokens {
+    margin-top: 80px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px;
+  }
+  .tokens h2 { font-family: "Inter Tight", "Inter", sans-serif; font-size: 20px; font-weight: 800; margin: 0 0 24px; letter-spacing: -0.015em; }
+  .tokens-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+  .tok {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .tok-sw { width: 30px; height: 30px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; }
+  .tok-info { font-size: 12px; line-height: 1.4; }
+  .tok-name { color: var(--text); font-weight: 600; }
+  .tok-val { color: var(--text-faint); font-family: "JetBrains Mono", monospace; }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 32px;
+    border-top: 1px solid var(--border);
+    color: var(--text-faint);
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="logo-row" style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+      <div style="width:52px;height:52px;border-radius:12px;overflow:hidden;background:#FAFAFB;display:flex;align-items:center;justify-content:center;padding:4px;">
+        <svg width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+          <rect x="60" y="60" width="80" height="80" rx="20" fill="#3D5FC4"/>
+          <rect x="78" y="76" width="12" height="44" rx="3" fill="#EEF2FE"/>
+          <rect x="78" y="108" width="36" height="12" rx="3" fill="#EEF2FE"/>
+          <circle cx="114" cy="82" r="6" fill="#9EB3F0"/>
+        </svg>
+      </div>
+      <div class="eyebrow" style="margin-bottom:0;">Design Proposal v3 · Brand edition</div>
+    </div>
+    <h1>Logic — ロゴに沿った配色で再構築</h1>
+    <p class="subtitle">
+      Logic のブランドロゴ (indigo #3D5FC4) を起点に、Brilliant のクリーン構造と Linear のサイドバー設計を組み合わせた v3。
+      Speak 風の streak 保護機能（翌日までリカバリー可能）・ポイント・偏差値ランキングを搭載。
+      accent は単一 indigo、唯一の warm 色は streak 用 amber のみ。PC 版とスマホ版を別レイアウトで設計。
+    </p>
+    <div class="chips">
+      <span class="chip accent">Brand Indigo</span>
+      <span class="chip accent">Brilliant</span>
+      <span class="chip accent">Linear</span>
+      <span class="chip">Inter Tight</span>
+      <span class="chip">#3D5FC4</span>
+      <span class="chip">#EEF2FE</span>
+      <span class="chip">#9EB3F0</span>
+      <span class="chip">Mobile + Desktop</span>
+      <span class="chip accent">Streak recovery</span>
+      <span class="chip accent">Points</span>
+      <span class="chip accent">偏差値 ranking</span>
+    </div>
+  </header>
+
+  <section class="device-section">
+    <div class="device-section-head">
+      <h2>Mobile</h2>
+      <span class="device-meta">430 × 880 · iOS / Android</span>
+    </div>
+    <div class="phones">
+      <div class="phone">
+        <div class="phone-label">Home</div>
+        <div class="phone-frame"><iframe src="./mobile/home.html"></iframe></div>
+      </div>
+      <div class="phone">
+        <div class="phone-label">Lesson</div>
+        <div class="phone-frame"><iframe src="./mobile/lesson.html"></iframe></div>
+      </div>
+      <div class="phone">
+        <div class="phone-label">Profile</div>
+        <div class="phone-frame"><iframe src="./mobile/profile.html"></iframe></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="device-section">
+    <div class="device-section-head">
+      <h2>Desktop</h2>
+      <span class="device-meta">1440 × 900 · Web</span>
+    </div>
+    <div class="desktops">
+      <div class="desktop">
+        <div class="desktop-label">Home</div>
+        <div class="desktop-frame">
+          <div class="desktop-frame-bar"><div></div><div></div><div></div></div>
+          <iframe src="./desktop/home.html"></iframe>
+        </div>
+      </div>
+      <div class="desktop">
+        <div class="desktop-label">Lesson</div>
+        <div class="desktop-frame">
+          <div class="desktop-frame-bar"><div></div><div></div><div></div></div>
+          <iframe src="./desktop/lesson.html"></iframe>
+        </div>
+      </div>
+      <div class="desktop">
+        <div class="desktop-label">Profile</div>
+        <div class="desktop-frame">
+          <div class="desktop-frame-bar"><div></div><div></div><div></div></div>
+          <iframe src="./desktop/profile.html"></iframe>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tokens">
+    <h2>Brand-aligned Design Tokens</h2>
+    <div class="tokens-grid">
+      <div class="tok"><div class="tok-sw" style="background:#3D5FC4"></div><div class="tok-info"><div class="tok-name">--brand</div><div class="tok-val">#3D5FC4 ロゴ地色</div></div></div>
+      <div class="tok"><div class="tok-sw" style="background:#EEF2FE"></div><div class="tok-info"><div class="tok-name">--brand-soft</div><div class="tok-val">#EEF2FE ロゴ L</div></div></div>
+      <div class="tok"><div class="tok-sw" style="background:#9EB3F0"></div><div class="tok-info"><div class="tok-name">--brand-light</div><div class="tok-val">#9EB3F0 ロゴ dot</div></div></div>
+      <div class="tok"><div class="tok-sw" style="background:#6B85D6"></div><div class="tok-info"><div class="tok-name">--brand-mid</div><div class="tok-val">#6B85D6 interp</div></div></div>
+      <div class="tok"><div class="tok-sw" style="background:#1E2D5C"></div><div class="tok-info"><div class="tok-name">--brand-dark</div><div class="tok-val">#1E2D5C hero</div></div></div>
+      <div class="tok"><div class="tok-sw" style="background:#FAFAFB"></div><div class="tok-info"><div class="tok-name">--bg</div><div class="tok-val">#FAFAFB</div></div></div>
+      <div class="tok"><div class="tok-sw" style="background:#F4F5F9"></div><div class="tok-info"><div class="tok-name">--surface-2</div><div class="tok-val">#F4F5F9</div></div></div>
+      <div class="tok"><div class="tok-sw" style="background:#0F1424"></div><div class="tok-info"><div class="tok-name">--text</div><div class="tok-val">#0F1424</div></div></div>
+      <div class="tok"><div class="tok-sw" style="background:#5B6078"></div><div class="tok-info"><div class="tok-name">--text-mute</div><div class="tok-val">#5B6078</div></div></div>
+      <div class="tok"><div class="tok-sw" style="background:#F59E0B"></div><div class="tok-info"><div class="tok-name">--streak</div><div class="tok-val">#F59E0B amber</div></div></div>
+      <div class="tok"><div class="tok-sw" style="background:#10B981"></div><div class="tok-info"><div class="tok-name">--success</div><div class="tok-val">#10B981</div></div></div>
+    </div>
+  </section>
+
+  <footer>
+    <div>v3 = Brand-aligned indigo · PC / Mobile separate</div>
+    <div>承認後、harness 経由で実装 · <a href="https://logic-u5wn.onrender.com/" target="_blank">現行 Logic ↗</a></div>
+  </footer>
+
+</div>
+</body>
+</html>

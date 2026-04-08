@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Logic v2 — Profile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FAFAF7;
+    --surface: #FFFFFF;
+    --surface-2: #F4F3EE;
+    --border: #EDEDE9;
+    --text: #191918;
+    --text-mute: #6F6F6A;
+    --text-faint: #9B9A93;
+    --accent: #FF6B4A;
+    --accent-soft: #FFF1ED;
+    --streak: #F59E0B;
+    --success: #10B981;
+    --r-card: 16px;
+    --r-btn: 12px;
+    --r-hero: 24px;
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.04);
+    --font-ui: "Inter", "Noto Sans JP", -apple-system, system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .screen {
+    max-width: 390px;
+    min-height: 100vh;
+    margin: 0 auto;
+    padding: 24px 20px 100px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .topbar { display: flex; align-items: center; justify-content: space-between; }
+  .topbar h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+  .settings-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: var(--text-mute);
+  }
+  .settings-btn svg { width: 18px; height: 18px; }
+
+  .hero {
+    background: linear-gradient(135deg, #FFF1ED 0%, #FFE4D4 100%);
+    border-radius: var(--r-hero);
+    padding: 28px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 140px; height: 140px;
+    background: radial-gradient(circle, rgba(255,107,74,0.18) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .avatar {
+    width: 76px; height: 76px;
+    border-radius: 50%;
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 38px;
+    box-shadow: 0 4px 14px rgba(255,107,74,0.2);
+    border: 3px solid white;
+    z-index: 1;
+  }
+  .hero-name { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; z-index: 1; }
+  .hero-level { font-size: 13px; color: #9A3412; font-weight: 600; z-index: 1; }
+  .hero-xp-wrap {
+    width: 100%;
+    background: rgba(154,52,18,0.12);
+    height: 10px;
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 4px;
+    z-index: 1;
+  }
+  .hero-xp-fill {
+    background: var(--accent);
+    height: 100%;
+    width: 74%;
+    border-radius: 999px;
+    box-shadow: 0 2px 8px rgba(255,107,74,0.4);
+  }
+  .hero-xp-text {
+    font-size: 11px;
+    font-weight: 600;
+    color: #9A3412;
+    font-variant-numeric: tabular-nums;
+    z-index: 1;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 16px 12px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .stat-icon { font-size: 20px; line-height: 1; margin-bottom: 2px; }
+  .stat-value { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .stat-label { font-size: 11px; color: var(--text-mute); font-weight: 500; }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-mute);
+    margin: 0 0 12px;
+  }
+
+  .calendar-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 18px 16px;
+  }
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 3px;
+  }
+  .cal-day {
+    aspect-ratio: 1;
+    border-radius: 3px;
+    background: var(--surface-2);
+  }
+  .cal-day.l1 { background: #FFDFD1; }
+  .cal-day.l2 { background: #FFB89A; }
+  .cal-day.l3 { background: #FF8C63; }
+  .cal-day.l4 { background: var(--accent); }
+  .cal-legend {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+  .cal-legend-swatches { display: flex; gap: 3px; }
+  .cal-legend-swatches > div { width: 10px; height: 10px; border-radius: 2px; }
+
+  .cat-progress-list { display: flex; flex-direction: column; gap: 14px; }
+  .cat-row {
+    display: grid;
+    grid-template-columns: 80px 1fr 42px;
+    align-items: center;
+    gap: 12px;
+  }
+  .cat-row-name { font-size: 13px; font-weight: 600; }
+  .cat-row-bar-wrap { background: var(--surface-2); height: 8px; border-radius: 999px; overflow: hidden; }
+  .cat-row-bar-fill { background: var(--accent); height: 100%; border-radius: 999px; }
+  .cat-row-val { font-size: 12px; color: var(--text-mute); text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  .tabbar {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 390px;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    display: flex;
+    padding: 10px 0 28px;
+  }
+  .tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-faint);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-ui);
+    cursor: pointer;
+  }
+  .tab.active { color: var(--accent); }
+  .tab svg { width: 22px; height: 22px; }
+</style>
+</head>
+<body>
+<div class="screen">
+
+  <div class="topbar">
+    <h1>プロフィール</h1>
+    <button class="settings-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+
+  <div class="hero">
+    <div class="avatar">👤</div>
+    <div class="hero-name">Keita</div>
+    <div class="hero-level">Lv.4 · 見習い探偵</div>
+    <div class="hero-xp-wrap"><div class="hero-xp-fill"></div></div>
+    <div class="hero-xp-text">740 / 1000 XP</div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat">
+      <div class="stat-icon">🔥</div>
+      <div class="stat-value">7</div>
+      <div class="stat-label">連続日数</div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon">✓</div>
+      <div class="stat-value">23</div>
+      <div class="stat-label">完了</div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon">⏱</div>
+      <div class="stat-value">4.2h</div>
+      <div class="stat-label">学習時間</div>
+    </div>
+  </div>
+
+  <section>
+    <h3 class="section-title">学習カレンダー</h3>
+    <div class="calendar-card">
+      <div class="cal-grid" id="cal-grid"></div>
+      <div class="cal-legend">
+        少
+        <div class="cal-legend-swatches">
+          <div style="background:var(--surface-2)"></div>
+          <div style="background:#FFDFD1"></div>
+          <div style="background:#FFB89A"></div>
+          <div style="background:#FF8C63"></div>
+          <div style="background:var(--accent)"></div>
+        </div>
+        多
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h3 class="section-title">カテゴリ別進捗</h3>
+    <div class="cat-progress-list">
+      <div class="cat-row">
+        <div class="cat-row-name">Fermi</div>
+        <div class="cat-row-bar-wrap"><div class="cat-row-bar-fill" style="width:78%"></div></div>
+        <div class="cat-row-val">78%</div>
+      </div>
+      <div class="cat-row">
+        <div class="cat-row-name">Logic</div>
+        <div class="cat-row-bar-wrap"><div class="cat-row-bar-fill" style="width:42%"></div></div>
+        <div class="cat-row-val">42%</div>
+      </div>
+      <div class="cat-row">
+        <div class="cat-row-name">Case</div>
+        <div class="cat-row-bar-wrap"><div class="cat-row-bar-fill" style="width:20%"></div></div>
+        <div class="cat-row-val">20%</div>
+      </div>
+      <div class="cat-row">
+        <div class="cat-row-name">PM</div>
+        <div class="cat-row-bar-wrap"><div class="cat-row-bar-fill" style="width:42%"></div></div>
+        <div class="cat-row-val">42%</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<nav class="tabbar">
+  <button class="tab">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    Home
+  </button>
+  <button class="tab">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+    Lessons
+  </button>
+  <button class="tab active">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>
+    Profile
+  </button>
+</nav>
+
+<script>
+  // Generate a 12-week calendar grid (12 cols × 7 rows = 84 days)
+  const grid = document.getElementById('cal-grid');
+  const levels = [0,0,1,2,3,4,0,1,2,3,2,1,0,2,3,4,4,3,2,1,0,0,1,2,3,4,3,2,1,0,1,2,3,4,3,2,1,0,0,1,2,3,4,4,3,2,1,0,1,2,3,2,1,0,1,2,3,4,3,2,1,0,0,1,2,3,4,2,1,0,1,2,3,4,3,2,1,2,3,4,3,2,1,0];
+  for (let r = 0; r < 7; r++) {
+    for (let c = 0; c < 12; c++) {
+      const idx = c * 7 + r;
+      const lv = levels[idx] || 0;
+      const cell = document.createElement('div');
+      cell.className = 'cal-day' + (lv ? ' l' + lv : '');
+      grid.appendChild(cell);
+    }
+  }
+</script>
+</body>
+</html>

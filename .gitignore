@@ -4,3 +4,14 @@ __pycache__/
 output_*.md
 report_*.md
 cxo-agent/
+
+# Claude Code local config (contains API keys)
+.claude/
+.vscode/
+
+# Runtime state (may contain private data)
+conversations.json
+planner-tasks.json
+ui-versions.json
+tasks.json
+tickets.json

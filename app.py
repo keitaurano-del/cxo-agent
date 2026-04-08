@@ -4,12 +4,13 @@ import json
 import time
 import threading
 import re
-from flask import Flask, Response, request, jsonify
+from flask import Flask, Response, request, jsonify, send_from_directory
 from dotenv import load_dotenv
 
 load_dotenv()
 
-app = Flask(__name__)
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="/static")
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -439,7 +440,7 @@ for agent_id in AGENTS:
 
 @app.route("/")
 def index():
-    return HTML_CONTENT
+    return send_from_directory(STATIC_DIR, "index.html")
 
 
 @app.route("/history/<agent_id>")
@@ -970,931 +971,611 @@ def api_design_preview():
     return Response(generate(), mimetype="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-HTML_CONTENT = r"""<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Apollo Mansion - CXO Agent</title>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#EEEEF2;color:#3D3D4D}
 
-.header{background:#5B7FB8;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(91,127,184,0.3)}
-.logo{font-size:18px;font-weight:700;letter-spacing:-0.02em}
-.header-links{display:flex;gap:6px}
-.header-links a,.reset-btn{color:#fff;text-decoration:none;font-size:11px;padding:5px 12px;border:1px solid rgba(255,255,255,0.2);border-radius:20px;background:none;cursor:pointer;font-family:inherit;transition:all 0.2s ease}
+# ============================================================
+# Workflow tab — visualize harness Agent invocations
+# ============================================================
 
-.main{display:flex;height:calc(100vh - 42px)}
+import glob as _glob
 
-.ceo-panel{width:340px;min-width:340px;background:linear-gradient(180deg,#D6E4F5,#C2D6EE);color:#1A2E5C;display:flex;flex-direction:column;overflow-y:auto}
-.section{padding:14px 18px;border-bottom:1px solid rgba(0,0,0,0.08)}
-.ceo-title{font-size:17px;font-weight:700;color:#1A2E5C;margin-bottom:4px;letter-spacing:-0.02em}
-.ceo-sub{font-size:11px;color:rgba(26,46,92,0.6)}
+PROJECTS_DIR = os.path.expanduser("~/.claude/projects/-workspaces-cxo-agent")
+EDIT_LOG_PATH = os.path.expanduser("~/.claude/file-history/logic-edits.log")
+ACTIVE_SPRINT_PATH = "/workspaces/logic/.claude/sprints/active.md"
 
-.chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
-.chip{padding:5px 12px;border-radius:20px;font-size:11px;cursor:pointer;border:1px solid rgba(26,46,92,0.25);color:rgba(26,46,92,0.6);background:rgba(255,255,255,0.4);font-family:inherit;transition:all 0.2s ease}
-.chip.active{border-color:var(--c,#1976D2);color:var(--c,#1976D2);background:#fff}
-.chip-all{padding:5px 12px;border-radius:20px;font-size:11px;cursor:pointer;border:1px solid #1976D2;color:#1976D2;background:rgba(255,255,255,0.5);font-family:inherit;transition:all 0.2s ease}
-.label{font-size:10px;color:rgba(26,46,92,0.5);margin-right:4px}
+_workflow_cache = {}  # path -> (mtime, size, parsed_dict)
 
-textarea{width:100%;min-height:80px;background:rgba(255,255,255,0.7);border:1px solid rgba(26,46,92,0.2);border-radius:10px;color:#1A2E5C;padding:12px;font-size:13px;font-family:inherit;resize:vertical;transition:border-color 0.2s ease}
-textarea:focus{outline:none;border-color:#1976D2;background:#fff}
-textarea::placeholder{color:rgba(26,46,92,0.4)}
 
-.btn-row{display:flex;gap:6px;margin-top:8px;align-items:center;justify-content:space-between}
-.btn-pri{background:#FF4B4B;border:none;color:#fff;padding:10px 22px;border-radius:24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s ease;box-shadow:0 2px 8px rgba(255,75,75,0.3)}
-.btn-pri:disabled{opacity:0.4;cursor:not-allowed;box-shadow:none}
-.hint{font-size:11px;color:rgba(26,46,92,0.5)}
+def _list_jsonl_sessions():
+    if not os.path.isdir(PROJECTS_DIR):
+        return []
+    files = _glob.glob(os.path.join(PROJECTS_DIR, "*.jsonl"))
+    out = []
+    for p in files:
+        try:
+            st = os.stat(p)
+            out.append({
+                "session_id": os.path.basename(p).replace(".jsonl", ""),
+                "mtime": st.st_mtime,
+                "size": st.st_size,
+            })
+        except OSError:
+            continue
+    out.sort(key=lambda x: x["mtime"], reverse=True)
+    return out
 
-.hidden{display:none}
-.btn-out{width:100%;padding:10px;background:#FF4B4B;border:none;color:#fff;border-radius:24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s ease;box-shadow:0 2px 8px rgba(255,75,75,0.3)}
-.btn-out:disabled{opacity:0.4;cursor:not-allowed;box-shadow:none}
-.btn-fb{width:100%;padding:10px;background:none;border:1px solid rgba(0,150,214,0.4);color:#4FC3F7;border-radius:24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:6px;transition:all 0.2s ease}
-.btn-fb:disabled{opacity:0.4;cursor:not-allowed}
 
-.round-badge{display:inline-block;background:rgba(255,75,75,0.15);color:#FF6B6B;border:1px solid rgba(255,75,75,0.3);border-radius:20px;font-size:10px;padding:2px 8px;font-weight:bold;margin-bottom:6px}
+def _latest_jsonl():
+    sessions = _list_jsonl_sessions()
+    if not sessions:
+        return None
+    return os.path.join(PROJECTS_DIR, sessions[0]["session_id"] + ".jsonl")
 
-.ceo-log{max-height:140px;overflow-y:auto;margin-bottom:10px;scrollbar-width:thin}
-.ceo-log:empty{display:none}
-.ceo-log-item{padding:6px 8px;border-radius:8px;margin-bottom:4px;font-size:11px;line-height:1.5;color:#1A2E5C}
-.ceo-log-item.topic{background:rgba(255,193,7,0.15);border-left:3px solid #FFA000}
-.ceo-log-item.feedback{background:rgba(25,118,210,0.1);border-left:3px solid #1976D2}
-.ceo-log-round{font-size:9px;color:rgba(26,46,92,0.5);font-weight:600;margin-bottom:1px}
-.ceo-log-detail{display:none;margin-top:4px;padding-top:4px;border-top:1px solid rgba(26,46,92,0.15);font-size:10px;color:rgba(26,46,92,0.6);word-break:break-all}
-.ceo-log-item[onclick]:hover{background:rgba(255,255,255,0.04)}
 
-.mansion-tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:1px solid rgba(0,0,0,0.1)}
-.mansion-tab{padding:10px 20px;font-size:14px;font-weight:600;color:rgba(0,0,0,0.45);background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit;transition:all 0.2s}
-.mansion-tab.active{color:#1976D2;border-bottom-color:#1976D2}
-.mansion-tab:hover:not(.active){color:#444}
+def _trim(s, n=240):
+    if s is None:
+        return ""
+    s = str(s)
+    if len(s) <= n:
+        return s
+    return s[:n] + "…"
 
-.design-panel{display:flex;flex-direction:column;gap:14px}
-.design-controls{display:flex;align-items:center;gap:12px}
-.btn-design{background:#9C27B0;border:none;color:#fff;padding:10px 22px;border-radius:24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s;box-shadow:0 2px 8px rgba(156,39,176,0.3)}
-.btn-design:disabled{opacity:0.4;cursor:not-allowed;box-shadow:none}
-.btn-design:hover:not(:disabled){background:#7B1FA2;transform:translateY(-1px)}
-.design-ver{font-size:12px;color:#6B6B7B;font-weight:600}
-.design-preview{background:#FFFFFF;border:1px solid rgba(0,0,0,0.1);border-radius:16px;min-height:300px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
-.design-preview iframe{width:100%;height:500px;border:none;border-radius:16px}
-.design-empty{padding:60px 20px;text-align:center;color:rgba(0,0,0,0.35);font-size:14px}
-.design-fb textarea{background:#FFFFFF;border:1px solid rgba(0,0,0,0.1);border-radius:10px;color:#3D3D4D;padding:12px;font-size:13px;font-family:inherit;resize:vertical;min-height:50px;width:100%}
-.design-fb textarea:focus{outline:none;border-color:#9C27B0}
-.btn-design-fb{background:none;border:1px solid rgba(156,39,176,0.4);color:#9C27B0;padding:10px;border-radius:24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;margin-top:6px;transition:all 0.2s}
-.btn-design-fb:disabled{opacity:0.4;cursor:not-allowed}
-.design-hist{display:flex;gap:6px;flex-wrap:wrap}
-.design-chip{padding:4px 10px;border-radius:16px;font-size:11px;cursor:pointer;border:1px solid rgba(0,0,0,0.1);color:rgba(0,0,0,0.45);background:#FFFFFF;font-family:inherit}
-.design-chip.active{border-color:#9C27B0;color:#9C27B0;background:rgba(156,39,176,0.15)}
 
-/* Business Plan Tab */
-.biz-panel{display:flex;flex-direction:column;gap:24px}
-.biz-section{background:#FFFFFF;border:1px solid rgba(0,0,0,0.08);border-radius:14px;padding:18px}
-.biz-section-title{font-size:15px;font-weight:700;color:#1A2E5C;margin-bottom:14px;letter-spacing:-0.01em}
-.biz-note{font-size:11px;color:#9C27B0;background:rgba(156,39,176,0.08);border-left:3px solid #9C27B0;padding:8px 12px;border-radius:4px;margin-bottom:14px}
-.biz-project-grid{display:flex;flex-direction:column;gap:12px}
-.biz-project-card{background:#FAFBFC;border:1px solid rgba(0,0,0,0.06);border-radius:10px;padding:14px}
-.biz-project-card h4{font-size:14px;font-weight:700;color:#1A2E5C;margin-bottom:6px;display:flex;align-items:center;gap:8px}
-.biz-project-card a{color:#1976D2;font-size:11px;text-decoration:none;word-break:break-all}
-.biz-project-card a:hover{text-decoration:underline}
-.biz-project-meta{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
-.biz-project-tag{font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(25,118,210,0.1);color:#1976D2;font-weight:600}
-.biz-project-status{background:rgba(76,175,80,0.12);color:#2E7D32}
-.biz-project-tech{font-size:11px;color:rgba(0,0,0,0.55);line-height:1.5;margin-top:6px}
-.biz-project-money{display:flex;gap:14px;margin-top:8px;font-size:11px;color:rgba(0,0,0,0.6)}
-.biz-project-money strong{color:#1A2E5C;font-weight:700}
+def _parse_workflow(path):
+    """Parse a Claude Code session .jsonl and extract Agent tool_use/tool_result pairs."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    key = path
+    cached = _workflow_cache.get(key)
+    if cached and cached[0] == st.st_mtime and cached[1] == st.st_size:
+        return cached[2]
 
-.biz-sim{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
-.biz-sim-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;color:rgba(0,0,0,0.65)}
-.biz-sim-row label{flex:1;font-weight:600}
-.biz-sim-row input{width:100px;padding:6px 10px;border:1px solid rgba(0,0,0,0.15);border-radius:6px;font-size:13px;font-family:inherit;text-align:right;color:#1A2E5C;background:#fff}
-.biz-sim-row input:focus{outline:none;border-color:#1976D2}
+    agents_by_id = {}  # tool_use_id -> agent dict
+    order = []
 
-.biz-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:14px;background:#F0F4F8;border-radius:10px}
-.biz-stat{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
-.biz-stat-label{font-size:10px;color:rgba(0,0,0,0.5);font-weight:600;letter-spacing:0.05em}
-.biz-stat-value{font-size:18px;font-weight:800;color:#1A2E5C;letter-spacing:-0.02em}
-.biz-stat-value.profit{color:#2E7D32}
-.biz-stat-value.loss{color:#C62828}
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    continue
+                msg = obj.get("message") or {}
+                ts = obj.get("timestamp") or ""
+                content = msg.get("content")
+                if not isinstance(content, list):
+                    continue
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    btype = block.get("type")
+                    if btype == "tool_use" and block.get("name") == "Agent":
+                        tid = block.get("id")
+                        inp = block.get("input") or {}
+                        sub = inp.get("subagent_type") or "general-purpose"
+                        desc = inp.get("description") or ""
+                        prompt = inp.get("prompt") or ""
+                        if tid and tid not in agents_by_id:
+                            agents_by_id[tid] = {
+                                "id": tid,
+                                "subagent_type": sub,
+                                "description": desc,
+                                "prompt_preview": _trim(prompt, 260),
+                                "started_at": ts,
+                                "ended_at": None,
+                                "status": "running",
+                                "result_preview": "",
+                                "depth": 0,
+                            }
+                            order.append(tid)
+                    elif btype == "tool_result":
+                        tid = block.get("tool_use_id")
+                        if tid and tid in agents_by_id:
+                            a = agents_by_id[tid]
+                            a["ended_at"] = ts
+                            is_error = bool(block.get("is_error"))
+                            a["status"] = "error" if is_error else "done"
+                            rc = block.get("content")
+                            if isinstance(rc, list):
+                                parts = []
+                                for rb in rc:
+                                    if isinstance(rb, dict) and rb.get("type") == "text":
+                                        parts.append(rb.get("text", ""))
+                                a["result_preview"] = _trim("\n".join(parts), 260)
+                            elif isinstance(rc, str):
+                                a["result_preview"] = _trim(rc, 260)
+    except OSError:
+        return None
 
-.btn-biz{background:#1976D2;border:none;color:#fff;padding:11px 22px;border-radius:24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s ease;box-shadow:0 2px 8px rgba(25,118,210,0.25);margin-bottom:14px}
-.btn-biz:hover:not(:disabled){background:#1565C0;transform:translateY(-1px)}
-.btn-biz:disabled{opacity:0.5;cursor:not-allowed}
-.biz-summary{background:#FAFBFC;border:1px solid rgba(0,0,0,0.06);border-radius:10px;padding:16px;font-size:13px;line-height:1.7;color:#1A2E5C;min-height:80px}
-.biz-summary-empty{color:rgba(0,0,0,0.4);font-size:12px;text-align:center;padding:12px}
-.biz-summary h2{font-size:14px;color:#1976D2;margin:10px 0 6px}
-.biz-summary p{margin:4px 0}
-.biz-summary ul{padding-left:18px;margin:4px 0}
-
-.mansion{flex:1;overflow-y:auto;padding:20px 24px;background:#EEEEF2}
-.mansion-h{font-size:20px;font-weight:700;color:#1A1A2E;margin-bottom:20px;padding-bottom:10px;border-bottom:2px solid rgba(0,0,0,0.1);letter-spacing:-0.02em}
-
-.card{background:#FFFFFF;border:none;border-radius:16px;margin-bottom:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06),0 4px 12px rgba(0,0,0,0.04);transition:box-shadow 0.2s ease}
-.card-h{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid rgba(0,0,0,0.06);background:#F5F5F8}
-.card-floor{font-size:11px;font-weight:700;color:#fff;min-width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:#1976D2;border-radius:8px}
-.card-title{font-size:14px;font-weight:700;letter-spacing:-0.01em}
-.card-name{font-size:12px;color:rgba(0,0,0,0.5)}
-.card-st{margin-left:auto;font-size:10px;color:rgba(0,0,0,0.45);display:flex;align-items:center;gap:4px}
-.dot{width:6px;height:6px;border-radius:50%;background:#ccc}
-.dot.working{background:#0096D6;animation:pulse 1s infinite}
-.dot.done{background:#4CAF50}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
-
-.card-body{padding:14px 16px;font-size:12.5px;line-height:1.75;color:#3D3D4D;min-height:36px;max-height:300px;overflow-y:auto}
-.card-body h1,.card-body h2,.card-body h3{color:#1A1A2E;margin:8px 0 4px}
-.card-body h1{font-size:14px} .card-body h2{font-size:13px} .card-body h3{font-size:12px}
-.card-body p{margin:3px 0} .card-body ul,.card-body ol{padding-left:16px;margin:3px 0}
-.card-body table{border-collapse:collapse;width:100%;margin:4px 0;font-size:11px}
-.card-body th{background:#F5F5F8;padding:3px 6px;border:1px solid rgba(0,0,0,0.1);text-align:left}
-.card-body td{padding:3px 6px;border:1px solid rgba(0,0,0,0.1)}
-.card-body code{background:#F5F5F8;padding:1px 3px;border-radius:4px;font-size:11px}
-.card-body pre{background:#F5F5F8;padding:8px;border-radius:8px;overflow-x:auto;margin:4px 0}
-.card-body strong{color:#1A1A2E} .card-body hr{border:none;border-top:1px solid rgba(255,255,255,0.1);margin:6px 0}
-.typing{display:inline-block;width:2px;height:12px;background:#0096D6;animation:blink .8s infinite;vertical-align:middle;margin-left:2px}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
-.placeholder{color:rgba(0,0,0,0.25)}
-.rt-tag{display:inline-block;background:rgba(25,118,210,0.1);color:#1976D2;border:1px solid rgba(25,118,210,0.2);border-radius:10px;font-size:10px;padding:2px 8px;margin-bottom:4px;font-weight:600}
-
-.card-foot{padding:6px 16px 10px;font-size:10px;color:rgba(0,0,0,0.45);display:flex;gap:10px;position:relative}
-.kbtn{background:none;border:none;color:rgba(0,0,0,0.45);font-size:10px;cursor:pointer;font-family:inherit}
-.kbtn:hover{color:#1976D2}
-.kpop{position:absolute;bottom:calc(100% + 4px);right:14px;width:240px;background:#F5F5F8;border:1px solid rgba(0,0,0,0.1);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.08);padding:8px 10px;z-index:100;font-size:11px;line-height:1.5;color:#3D3D4D;max-height:200px;overflow-y:auto;display:none}
-.kpop-title{font-size:10px;font-weight:bold;color:#8B7355;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
-.kpop-item{padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06);display:flex;align-items:flex-start;gap:6px}
-.kpop-item:last-child{border-bottom:none}
-.kpop-pin{background:none;border:none;cursor:pointer;font-size:14px;padding:0;line-height:1;flex-shrink:0}
-.kpop-pin.pinned{color:#FFD700}
-.kpop-pin:not(.pinned){color:#ccc}
-.kpop-text{flex:1;font-size:11px;color:#444;line-height:1.4}
-.kpop-tags{display:flex;gap:3px;flex-wrap:wrap;margin-top:2px}
-.kpop-tag{font-size:9px;padding:1px 4px;border-radius:6px;background:rgba(25,118,210,0.1);color:#1976D2}
-.kpop-meta{font-size:9px;color:#bbb;margin-top:2px}
-.kpop-del{background:none;border:none;color:#ddd;cursor:pointer;font-size:11px;padding:0 2px;flex-shrink:0}
-.kpop-del:hover{color:#f44336}
-
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px)}
-.modal{background:#FFFFFF;border-radius:20px;width:700px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.12)}
-.modal-title{font-size:18px;font-weight:700;color:#1976D2;margin-bottom:14px;letter-spacing:-0.02em}
-.modal-body{background:#EEEEF2;border:1px solid rgba(0,0,0,0.1);border-radius:12px;padding:16px;font-size:12px;line-height:1.8;max-height:55vh;overflow-y:auto}
-.modal-body h1,.modal-body h2,.modal-body h3{color:#1976D2;margin:10px 0 4px}
-.modal-body h1{font-size:15px} .modal-body h2{font-size:13px} .modal-body h3{font-size:12px}
-.modal-body p{margin:3px 0} .modal-body ul,.modal-body ol{padding-left:16px;margin:3px 0}
-.modal-body table{border-collapse:collapse;width:100%;margin:6px 0;font-size:11px}
-.modal-body th{background:#F5F5F8;color:#1976D2;padding:3px 6px;border:1px solid rgba(0,0,0,0.1);text-align:left}
-.modal-body td{padding:3px 6px;border:1px solid rgba(0,0,0,0.1)}
-.modal-body code{background:#F5F5F8;padding:1px 3px;border-radius:4px;font-size:11px}
-.modal-body pre{background:#F0F0F4;color:#eee;padding:10px;border-radius:8px;overflow-x:auto;margin:6px 0}
-.modal-body pre code{background:none;color:inherit}
-.modal-body strong{color:#1A1A2E} .modal-body hr{border:none;border-top:1px solid rgba(255,255,255,0.1);margin:8px 0}
-.modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
-.btn-copy{background:#1976D2;color:#0F0F1A;border:none;padding:10px 22px;border-radius:24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s ease;box-shadow:0 2px 8px rgba(25,118,210,0.25)}
-.btn-close{background:none;border:1px solid rgba(0,0,0,0.15);color:rgba(0,0,0,0.5);padding:10px 18px;border-radius:24px;font-size:12px;cursor:pointer;font-family:inherit;transition:all 0.2s ease}
-
-@media(max-width:768px){
-  .main{flex-direction:column;height:auto;min-height:calc(100vh - 48px)}
-  .ceo-panel{width:100%;min-width:0;max-height:none}
-  .mansion{min-height:300px;padding:16px}
-  .header{padding:10px 14px;flex-wrap:wrap;gap:6px}
-  .logo{font-size:16px}
-  .header-links{gap:4px}
-  .header-links a,.reset-btn{font-size:10px;padding:4px 10px}
-  .card-body{max-height:200px}
-  .modal{max-width:96vw;max-height:90vh;padding:16px;border-radius:16px}
-  .modal-body{max-height:60vh}
-  .kpop{width:220px;right:0}
-  .btn-pri{width:100%;text-align:center}
-}
-
-.header-links a:hover,.reset-btn:hover{background:rgba(0,0,0,0.1);border-color:rgba(0,0,0,0.45)}
-.card:hover{box-shadow:0 2px 6px rgba(0,0,0,0.3),0 8px 20px rgba(0,0,0,0.2)}
-.chip:hover{border-color:var(--c,rgba(255,255,255,0.4))}
-.chip-all:hover{background:rgba(255,215,0,0.1)}
-.btn-pri:hover:not(:disabled){background:#E63E3E;box-shadow:0 4px 12px rgba(255,75,75,0.4);transform:translateY(-1px)}
-.btn-out:hover:not(:disabled){background:#E63E3E;transform:translateY(-1px)}
-.btn-fb:hover:not(:disabled){background:rgba(0,150,214,0.05)}
-.btn-copy:hover{background:#E63E3E;transform:translateY(-1px)}
-.btn-close:hover{background:rgba(255,255,255,0.05);color:#fff}
-.mansion::-webkit-scrollbar,.card-body::-webkit-scrollbar,.modal-body::-webkit-scrollbar{width:6px}
-.mansion::-webkit-scrollbar-track,.card-body::-webkit-scrollbar-track{background:transparent}
-.mansion::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.1);border-radius:3px}
-.mansion::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.2)}
-::selection{background:rgba(25,118,210,0.15);color:#fff}
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1976D2;color:#0F0F1A;padding:10px 24px;border-radius:24px;font-size:13px;font-weight:600;z-index:10000;animation:toast-in 0.3s ease}
-@keyframes toast-in{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-</style>
-</head>
-<body>
-
-<div class="header">
-  <div class="logo">&#127970; Apollo Mansion Inc.<span id="costDisplay" style="font-size:11px;color:rgba(255,255,255,0.5);margin-left:12px"></span></div>
-  <div class="header-links">
-    <a href="https://logic-u5wn.onrender.com" target="_blank">Logic</a>
-    <a href="https://sengoku-chakai.onrender.com/ja" target="_blank">&#21315;&#30707;&#33590;&#36947;</a>
-    <button class="reset-btn" onclick="resetAll()">&#12522;&#12475;&#12483;&#12488;</button>
-  </div>
-</div>
-
-<div class="main">
-  <div class="ceo-panel">
-    <div class="section">
-      <div class="ceo-title">&#128081; Keita</div>
-      <div class="ceo-sub">CEO / Founder &#8212; Penthouse</div>
-      <div class="chips">
-        <button class="chip-all" onclick="toggleAll()">ALL</button>
-        <button class="chip active" data-id="cso" style="--c:#FF9800" onclick="toggleTarget(this)">Nobita</button>
-        <button class="chip active" data-id="cfo" style="--c:#4CAF50" onclick="toggleTarget(this)">Suneo</button>
-        <button class="chip active" data-id="cmo" style="--c:#9C27B0" onclick="toggleTarget(this)">Dekisugi</button>
-        <button class="chip active" data-id="cto" style="--c:#0096D6" onclick="toggleTarget(this)">Doraemon</button>
-        <button class="chip active" data-id="cpo" style="--c:#FFD700" onclick="toggleTarget(this)">Dorami</button>
-      </div>
-      <div class="chips" style="margin-top:6px">
-        <span class="label">&#23550;&#35937;:</span>
-        <button class="chip" data-project="Logic" onclick="toggleProject(this)">Logic</button>
-        <button class="chip" data-project="&#21315;&#30707;&#33590;&#36947;" onclick="toggleProject(this)">&#21315;&#30707;&#33590;&#36947;</button>
-        <button class="chip" data-project="Apollo Mansion" onclick="toggleProject(this)">Apollo Mansion</button>
-      </div>
-    </div>
-    <div class="section">
-      <textarea id="ceoInput" placeholder="&#35696;&#35542;&#12486;&#12540;&#12510;&#12434;&#20837;&#21147;..."></textarea>
-      <div class="btn-row">
-        <span class="hint">Ctrl+Enter</span>
-        <button class="btn-pri" id="startBtn" onclick="startRoundtable()">&#128483; &#20870;&#21331;&#20250;&#35696;&#12434;&#38283;&#22987;</button>
-      </div>
-    </div>
-    <div class="section hidden" id="actionPanel">
-      <div class="round-badge" id="roundBadge">Round 1</div>
-      <div class="ceo-log" id="ceoLog"></div>
-      <button class="btn-out" id="outputGenBtn" onclick="generateOutput()">&#128203; &#12467;&#12500;&#12506;&#29992;&#20986;&#21147;&#12434;&#29983;&#25104;</button>
-      <div style="margin-top:10px">
-        <textarea id="feedbackInput" placeholder="&#12501;&#12451;&#12540;&#12489;&#12496;&#12483;&#12463;&#12434;&#20837;&#21147;... &#20363;: &#12467;&#12473;&#12488;&#38754;&#12434;&#12418;&#12387;&#12392;&#28145;&#25496;&#12426;&#12375;&#12390;&#12289;&#31478;&#21512;&#12392;&#12398;&#27604;&#36611;&#12434;&#36861;&#21152;&#12375;&#12390;" style="min-height:60px"></textarea>
-        <button class="btn-fb" id="feedbackBtn" onclick="submitFeedback()">&#128260; &#12501;&#12451;&#12540;&#12489;&#12496;&#12483;&#12463;&#12375;&#12390;&#20877;&#35696;&#35542;</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="mansion">
-    <div class="mansion-tabs">
-      <button class="mansion-tab active" id="tabFloor" onclick="switchTab('floor')">&#127970; &#12501;&#12525;&#12450;</button>
-      <button class="mansion-tab" id="tabDesign" onclick="switchTab('design')">&#127912; &#12487;&#12470;&#12452;&#12531;</button>
-      <button class="mansion-tab" id="tabBusiness" onclick="switchTab('business')">&#128188; &#20107;&#26989;&#35336;&#30011;</button>
-    </div>
-    <div id="tabFloor_c">
-      <div id="floors"></div>
-    </div>
-    <div id="tabBusiness_c" style="display:none">
-      <div class="biz-panel">
-        <div class="biz-section">
-          <h3 class="biz-section-title">&#128202; &#12503;&#12525;&#12472;&#12455;&#12463;&#12488;&#19968;&#35239;</h3>
-          <div class="biz-project-grid" id="bizProjects">
-            <div style="color:#888;font-size:12px">&#35501;&#12415;&#36796;&#12415;&#20013;...</div>
-          </div>
-        </div>
-
-        <div class="biz-section">
-          <h3 class="biz-section-title">&#128176; &#36001;&#21209;&#12471;&#12511;&#12517;&#12524;&#12540;&#12479;&#12540;</h3>
-          <div class="biz-note">⚠️ Keita 1人開発、人件費ゼロ (エンジニア人月コスト不考慮)</div>
-          <div class="biz-sim">
-            <div class="biz-sim-row">
-              <label>MAU (月間アクティブユーザー)</label>
-              <input type="number" id="bizMau" min="0" max="100000" step="10">
-            </div>
-            <div class="biz-sim-row">
-              <label>トライアル→有料転換率 (%)</label>
-              <input type="number" id="bizConv" min="0" max="100" step="1">
-            </div>
-            <div class="biz-sim-row">
-              <label>月額プラン価格 (¥)</label>
-              <input type="number" id="bizMonthly" min="0" step="100">
-            </div>
-            <div class="biz-sim-row">
-              <label>年額プラン価格 (¥)</label>
-              <input type="number" id="bizYearly" min="0" step="100">
-            </div>
-            <div class="biz-sim-row">
-              <label>月額ユーザー比率 (%)</label>
-              <input type="number" id="bizMonthlyRatio" min="0" max="100" step="5">
-            </div>
-            <div class="biz-sim-row">
-              <label>AI問題1問あたりのAPIコスト (¥)</label>
-              <input type="number" id="bizApiCost" min="0" step="0.1">
-            </div>
-            <div class="biz-sim-row">
-              <label>1ユーザー月間問題数 (有料)</label>
-              <input type="number" id="bizProblems" min="0" max="500" step="10">
-            </div>
-            <div class="biz-sim-row">
-              <label>Renderホスティング月額 (¥)</label>
-              <input type="number" id="bizHosting" min="0" step="100">
-            </div>
-          </div>
-          <div class="biz-stats" id="bizStats"></div>
-        </div>
-
-        <div class="biz-section">
-          <h3 class="biz-section-title">✨ AIサマリー</h3>
-          <button class="btn-biz" id="bizSummaryBtn" onclick="genBizSummary()">📊 今月のサマリーを生成</button>
-          <div class="biz-summary" id="bizSummary"><div class="biz-summary-empty">\u8caa\u52d9\u6307\u6a19\u3092\u5165\u529b\u3057\u3066\u300c\u30b5\u30de\u30ea\u30fc\u751f\u6210\u300d\u3092\u30af\u30ea\u30c3\u30af</div></div>
-        </div>
-      </div>
-    </div>
-    <div id="tabDesign_c" style="display:none">
-      <div class="design-panel">
-        <div class="design-controls">
-          <button class="btn-design" id="designGenBtn" onclick="genDesign()">&#127912; &#12487;&#12470;&#12452;&#12531;&#26696;&#12434;&#29983;&#25104;</button>
-          <span class="design-ver" id="designVer"></span>
-        </div>
-        <div class="design-hist" id="designHist"></div>
-        <div class="design-preview" id="designArea">
-          <div class="design-empty">CXO&#20870;&#21331;&#20250;&#35696;&#12398;&#24460;&#12289;&#12300;&#12487;&#12470;&#12452;&#12531;&#26696;&#12434;&#29983;&#25104;&#12301;&#12434;&#12463;&#12522;&#12483;&#12463;</div>
-        </div>
-        <div class="design-fb">
-          <textarea id="designFbInput" placeholder="&#12487;&#12470;&#12452;&#12531;&#12408;&#12398;&#12501;&#12451;&#12540;&#12489;&#12496;&#12483;&#12463;..."></textarea>
-          <button class="btn-design-fb" id="designFbBtn" onclick="submitDesignFb()">&#128260; &#20462;&#27491;&#12434;&#20381;&#38972;</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div id="outputModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeOutputModal()">
-  <div class="modal">
-    <div class="modal-title">&#128203; CXO&#35696;&#35542;&#12414;&#12392;&#12417; &#8212; &#12467;&#12500;&#12506;&#29992;&#20986;&#21147;</div>
-    <div class="modal-body" id="outputModalBody"></div>
-    <div class="modal-foot">
-      <button class="btn-close" onclick="closeOutputModal()">&#38281;&#12376;&#12427;</button>
-      <button class="btn-copy" onclick="copyOutput()">&#128203; &#12467;&#12500;&#12540;</button>
-    </div>
-  </div>
-</div>
-
-<script>
-const AGENTS={
-  cso:{title:"CSO",name:"Nobita",floor:"5F",color:"#FF9800",icon:"\uD83D\uDC66"},
-  cfo:{title:"CFO",name:"Suneo",floor:"4F",color:"#4CAF50",icon:"\uD83D\uDC68"},
-  cmo:{title:"CMO",name:"Dekisugi",floor:"3F",color:"#9C27B0",icon:"\uD83E\uDDD1\u200D\uD83C\uDF93"},
-  cto:{title:"CTO",name:"Doraemon",floor:"2F",color:"#0096D6",icon:"\uD83E\uDD16"},
-  cpo:{title:"CPO",name:"Dorami",floor:"1F",color:"#FFD700",icon:"\uD83D\uDC67"}
-};
-const ORDER=["cso","cfo","cmo","cto","cpo"];
-const rawTxt=JSON.parse(localStorage.getItem('apollo-rawTxt')||'{}');
-function saveRawTxt(){localStorage.setItem('apollo-rawTxt',JSON.stringify(rawTxt));}
-let currentTopic=localStorage.getItem('apollo-topic')||'';
-let roundNum=parseInt(localStorage.getItem('apollo-round')||'0');
-let outputRaw='';
-let roundHistory=JSON.parse(localStorage.getItem('apollo-rounds')||'[]');
-function saveRoundHistory(){localStorage.setItem('apollo-rounds',JSON.stringify(roundHistory));}
-let ceoLog=JSON.parse(localStorage.getItem('apollo-ceolog')||'[]');
-function saveCeoLog(){localStorage.setItem('apollo-ceolog',JSON.stringify(ceoLog));}
-function renderCeoLog(){
-  const el=document.getElementById('ceoLog');
-  if(!el)return;
-  el.innerHTML=ceoLog.map((e,i)=>{
-    const display=e.summary||e.text;
-    const hasDetail=e.summary&&e.summary!==e.text;
-    return `<div class="ceo-log-item ${e.type}"${hasDetail?` onclick="toggleLogDetail(${i})" style="cursor:pointer"`:''}>
-      <div class="ceo-log-round">Round ${e.round}${hasDetail?' ▾':''}</div>
-      ${esc(display)}
-      ${hasDetail?`<div class="ceo-log-detail" id="logd-${i}">${esc(e.text)}</div>`:''}
-    </div>`;
-  }).join('');
-  el.scrollTop=el.scrollHeight;
-}
-function toggleLogDetail(i){const el=document.getElementById('logd-'+i);if(el)el.style.display=el.style.display==='block'?'none':'block';}
-
-function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
-
-// Cost tracking
-const COST_CONFIG={name:'\u3069\u3089\u713C\u304D',emoji:'\uD83C\uDF69',priceYen:140,rate:150,inCost:3/1e6,outCost:15/1e6};
-let sessionCost=parseFloat(localStorage.getItem('apollo-cost')||'0');
-function addCost(outChars){const t=outChars*2;sessionCost+=t*COST_CONFIG.outCost;localStorage.setItem('apollo-cost',String(sessionCost));updateCostDisplay();}
-function updateCostDisplay(){const el=document.getElementById('costDisplay');if(!el)return;const y=sessionCost*COST_CONFIG.rate;const u=Math.round(y/COST_CONFIG.priceYen);el.textContent=u>0?`${COST_CONFIG.emoji} ${u}\u500B\u5206 (\u00A5${Math.round(y)})`:''}
-
-// Toast
-function showToast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2000);}
-
-// Quotes
-const QUOTES=['\u6226\u7565\u306A\u304D\u5B9F\u884C\u306F\u6697\u95C7\u306E\u4E2D\u3092\u8D70\u308B\u3053\u3068','\u901F\u304F\u52D5\u304D\u3001\u58CA\u305B \u2014 \u305F\u3060\u3057\u8CA1\u52D9\u8AF8\u8868\u306F\u58CA\u3059\u306A','\u30C7\u30FC\u30BF\u306F\u904E\u53BB\u3092\u8A9E\u308A\u3001\u76F4\u611F\u306F\u672A\u6765\u3092\u8A9E\u308B','\u6700\u826F\u306E\u5224\u65AD\u306F\u3001\u6700\u826F\u306E\u60C5\u5831\u304B\u3089\u751F\u307E\u308C\u308B','\u30A4\u30CE\u30D9\u30FC\u30B7\u30E7\u30F3\u306F\u5236\u7D04\u304B\u3089\u751F\u307E\u308C\u308B','\u9867\u5BA2\u306E\u58F0\u3092\u805E\u3051\u3001\u3060\u304C\u76F2\u5F93\u3059\u308B\u306A','\u5B8C\u74A7\u3092\u6C42\u3081\u305A\u3001\u5B8C\u4E86\u3092\u6C42\u3081\u3088'];
-function randomQuote(){return QUOTES[Math.floor(Math.random()*QUOTES.length)];}
-
-function createFloors(){
-  const el=document.getElementById('floors');
-  for(const id of ORDER){
-    const a=AGENTS[id];if(!rawTxt[id])rawTxt[id]='';
-    el.innerHTML+=`
-      <div class="card" id="card-${id}">
-        <div class="card-h">
-          <span class="card-floor">${a.floor}</span>
-          <span class="card-title" style="color:${a.color}">${a.icon} ${a.title}</span>
-          <span class="card-name">${a.name}</span>
-          <div class="card-st"><div class="dot" id="dot-${id}"></div><span id="st-${id}">\u5F85\u6A5F\u4E2D</span></div>
-        </div>
-        <div class="card-body" id="body-${id}"><span class="placeholder">\u2615 ${a.name}\u306F\u90E8\u5C4B\u3067\u5F85\u6A5F\u4E2D...</span></div>
-        <div class="card-foot"><span id="ch-${id}">0\u6587\u5B57</span><button class="kbtn" onclick="toggleK('${id}')">&#128218; \u30CA\u30EC\u30C3\u30B8</button><div class="kpop" id="kp-${id}"></div></div>
-      </div>`;
-  }
-}
-
-function getTargets(){return[...document.querySelectorAll('.chip.active[data-id]')].map(c=>c.dataset.id);}
-function toggleTarget(el){el.classList.toggle('active');}
-function toggleAll(){const c=document.querySelectorAll('.chip[data-id]');const all=[...c].every(x=>x.classList.contains('active'));c.forEach(x=>all?x.classList.remove('active'):x.classList.add('active'));}
-function toggleProject(el){el.classList.toggle('active');}
-function getProjects(){return[...document.querySelectorAll('.chip.active[data-project]')].map(c=>c.dataset.project);}
-
-function getPrevDiscussion(){
-  return ORDER.map(id=>{
-    const t=rawTxt[id];
-    return t?`【${AGENTS[id].title} ${AGENTS[id].name}】\n${t}`:'';
-  }).filter(Boolean).join('\n\n');
-}
-
-function startRoundtable(feedback){
-  const input=document.getElementById('ceoInput');
-  const topic=input.value.trim()||currentTopic;
-  if(!topic){alert('\u30C6\u30FC\u30DE\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044');return;}
-  const targets=getTargets();
-  if(!targets.length){alert('\u5BFE\u8C61CXO\u3092\u9078\u629E');return;}
-
-  currentTopic=topic;localStorage.setItem('apollo-topic',topic);
-  roundNum++;localStorage.setItem('apollo-round',String(roundNum));
-  // Log CEO instruction
-  if(!feedback){
-    ceoLog.push({round:roundNum,type:'topic',text:topic});
-  } else {
-    ceoLog.push({round:roundNum,type:'feedback',text:feedback});
-  }
-  saveCeoLog();renderCeoLog();
-  const _logIdx=ceoLog.length-1;
-  if(ceoLog[_logIdx].text.length>30){
-    fetch('/api/summarize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:ceoLog[_logIdx].text})})
-    .then(r=>r.json()).then(d=>{if(d.summary){ceoLog[_logIdx].summary=d.summary;saveCeoLog();renderCeoLog();}}).catch(()=>{});
-  }
-  document.getElementById('startBtn').disabled=true;
-  document.getElementById('actionPanel').classList.add('hidden');
-
-  const projects=getProjects();
-  const fullTopic=projects.length?`[${projects.join(', ')}] ${topic}`:topic;
-  const prevDisc=feedback?getPrevDiscussion():'';
-
-  for(const id of targets){
-    rawTxt[id]='';
-    document.getElementById(`body-${id}`).innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum} \u2014 \u5F85\u6A5F\u4E2D</span>`;
-    document.getElementById(`dot-${id}`).className='dot';
-    document.getElementById(`st-${id}`).textContent='\u5F85\u6A5F\u4E2D';
-  }
-  input.value='';
-
-  function handleSSE(line){
-    if(!line.startsWith('data: '))return;
-    try{
-      const d=JSON.parse(line.slice(6));
-      if(d.type==='agent_start'){
-        const id=d.agent_id;
-        document.getElementById(`dot-${id}`).className='dot working';
-        document.getElementById(`st-${id}`).textContent='\u767A\u8A00\u4E2D...';
-        rawTxt[id]='';
-        document.getElementById(`body-${id}`).innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum}</span><div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.25);font-style:italic">`+randomQuote()+`</div><span class="typing"></span>`;
-      }
-      if(d.type==='text'){
-        const id=d.agent_id;const body=document.getElementById(`body-${id}`);
-        rawTxt[id]+=d.content;
-        body.innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum}</span>`+marked.parse(rawTxt[id])+'<span class="typing"></span>';
-        body.scrollTop=body.scrollHeight;
-        document.getElementById(`ch-${id}`).textContent=`${rawTxt[id].length}\u6587\u5B57`;
-      }
-      if(d.type==='agent_done'){
-        const id=d.agent_id;
-        document.getElementById(`body-${id}`).innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum}</span>`+marked.parse(rawTxt[id]);
-        document.getElementById(`dot-${id}`).className='dot done';
-        document.getElementById(`st-${id}`).textContent='\u767A\u8A00\u6E08';
-        saveRawTxt();
-        addCost(rawTxt[id].length);
-      }
-      if(d.type==='done'){
-        // Save this round's discussions to history
-        const thisRound=ORDER.map(id=>({title:AGENTS[id].title,name:AGENTS[id].name,text:rawTxt[id]||''})).filter(d=>d.text);
-        roundHistory.push({round:roundNum,feedback:feedback||null,discussions:thisRound});saveRoundHistory();
-        document.getElementById('startBtn').disabled=false;
-        document.getElementById('feedbackBtn').disabled=false;
-        const panel=document.getElementById('actionPanel');
-        panel.classList.remove('hidden');
-        document.getElementById('roundBadge').textContent=`Round ${roundNum} \u5B8C\u4E86`;
-        document.getElementById('outputGenBtn').disabled=false;
-        document.getElementById('feedbackInput').value='';
-      }
-      if(d.type==='error'){
-        const id=d.agent_id;
-        document.getElementById(`body-${id}`).innerHTML+=`<div style="color:#f44336;font-size:11px">Error: ${esc(d.content)}</div>`;
-      }
-    }catch(e){}
-  }
-
-  let attempt=0;
-  let receivedAnyData=false;
-  let watchdog=null;
-  const maxAttempts=3;
-
-  function resetButtons(){
-    document.getElementById('startBtn').disabled=false;
-    document.getElementById('feedbackBtn').disabled=false;
-  }
-
-  function clearWatchdog(){if(watchdog){clearTimeout(watchdog);watchdog=null;}}
-
-  function startAttempt(){
-    attempt++;
-    receivedAnyData=false;
-    if(attempt>1)showToast(`\u63a5\u7d9a\u30ea\u30c8\u30e9\u30a4 (${attempt}/${maxAttempts})...`);
-
-    // Watchdog: if no data within 8 seconds, try health check + retry
-    clearWatchdog();
-    watchdog=setTimeout(async ()=>{
-      if(receivedAnyData)return;
-      try{
-        const r=await fetch('/api/health',{cache:'no-store'});
-        if(!r.ok)throw new Error('unhealthy');
-      }catch{
-        // server down — wait briefly and retry
-      }
-      if(attempt<maxAttempts){
-        startAttempt();
-      } else {
-        showToast('\u26a0\ufe0f \u30b5\u30fc\u30d0\u30fc\u306b\u63a5\u7d9a\u3067\u304d\u307e\u305b\u3093');
-        resetButtons();
-      }
-    },8000);
-
-    if(!feedback){
-      const url=`/roundtable?topic=${encodeURIComponent(fullTopic)}&order=${targets.join(',')}&projects=${encodeURIComponent(projects.join(','))}&round=${roundNum}`;
-      const es=new EventSource(url);
-      es.onmessage=(e)=>{receivedAnyData=true;clearWatchdog();handleSSE('data: '+e.data);};
-      es.addEventListener('done',()=>{clearWatchdog();es.close();});
-      es.onerror=()=>{
-        es.close();
-        if(!receivedAnyData&&attempt<maxAttempts){
-          clearWatchdog();
-          setTimeout(()=>startAttempt(),1500);
-        } else {
-          clearWatchdog();
-          if(!receivedAnyData)showToast('\u26a0\ufe0f \u63a5\u7d9a\u30a8\u30e9\u30fc');
-          resetButtons();
-        }
-      };
-    } else {
-      fetch('/roundtable',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({topic:fullTopic,order:targets.join(','),projects:projects.join(','),round:String(roundNum),feedback,prev_discussion:prevDisc})
-      }).then(res=>{
-        if(!res.ok)throw new Error('http '+res.status);
-        const reader=res.body.getReader();
-        const dec=new TextDecoder();
-        let buf='';
-        function read(){
-          reader.read().then(({done,value})=>{
-            if(done){clearWatchdog();return;}
-            receivedAnyData=true;clearWatchdog();
-            buf+=dec.decode(value);
-            const lines=buf.split('\n');
-            buf=lines.pop();
-            for(const line of lines)handleSSE(line);
-            read();
-          }).catch(()=>{
-            if(!receivedAnyData&&attempt<maxAttempts){
-              clearWatchdog();setTimeout(()=>startAttempt(),1500);
-            } else {clearWatchdog();resetButtons();}
-          });
-        }
-        read();
-      }).catch(()=>{
-        clearWatchdog();
-        if(attempt<maxAttempts){
-          setTimeout(()=>startAttempt(),1500);
-        } else {
-          showToast('\u26a0\ufe0f \u63a5\u7d9a\u30a8\u30e9\u30fc');
-          resetButtons();
-        }
-      });
+    agents = [agents_by_id[i] for i in order]
+    result = {
+        "session_id": os.path.basename(path).replace(".jsonl", ""),
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(st.st_mtime)),
+        "agents": agents,
     }
-  }
-  startAttempt();
-}
+    _workflow_cache[key] = (st.st_mtime, st.st_size, result)
+    return result
 
-function submitFeedback(){
-  const fb=document.getElementById('feedbackInput').value.trim();
-  if(!fb){alert('\u30D5\u30A3\u30FC\u30C9\u30D0\u30C3\u30AF\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044');return;}
-  document.getElementById('feedbackBtn').disabled=true;
-  startRoundtable(fb);
-}
 
-async function generateOutput(){
-  const btn=document.getElementById('outputGenBtn');
-  btn.disabled=true;btn.textContent='\u29D7 \u751F\u6210\u4E2D...';
-  if(!roundHistory.length){btn.textContent='\uD83D\uDCCB \u30B3\u30D4\u30DA\u7528\u51FA\u529B\u3092\u751F\u6210';btn.disabled=false;return;}
-  document.getElementById('outputModal').style.display='flex';
-  const body=document.getElementById('outputModalBody');
-  body.innerHTML='<span style="color:#aaa">\u29D7 \u751F\u6210\u4E2D...</span>';outputRaw='';
-  try{
-    const res=await fetch('/generate_output',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roundHistory,topic:currentTopic,projects:getProjects()})});
-    const reader=res.body.getReader();const dec=new TextDecoder();
-    function read(){reader.read().then(({done,value})=>{
-      if(done)return;
-      for(const line of dec.decode(value).split('\n')){
-        if(!line.startsWith('data: '))continue;
-        try{
-          const d=JSON.parse(line.slice(6));
-          if(d.type==='text'){outputRaw+=d.content;body.innerHTML=marked.parse(outputRaw);}
-          if(d.type==='done'){body.innerHTML=marked.parse(outputRaw);btn.textContent='\uD83D\uDCCB \u30B3\u30D4\u30DA\u7528\u51FA\u529B\u3092\u751F\u6210';btn.disabled=false;}
-          if(d.type==='error'){body.innerHTML+=`<div style="color:#f44336">Error: ${d.content}</div>`;btn.textContent='\uD83D\uDCCB \u30B3\u30D4\u30DA\u7528\u51FA\u529B\u3092\u751F\u6210';btn.disabled=false;}
-        }catch(e){}
-      }
-      body.scrollTop=body.scrollHeight;read();
-    });}
-    read();
-  }catch(e){body.innerHTML=`<div style="color:#f44336">Error: ${e.message}</div>`;btn.textContent='\uD83D\uDCCB \u30B3\u30D4\u30DA\u7528\u51FA\u529B\u3092\u751F\u6210';btn.disabled=false;}
-}
+def _read_edit_log(n=15):
+    if not os.path.isfile(EDIT_LOG_PATH):
+        return []
+    try:
+        with open(EDIT_LOG_PATH, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+    except OSError:
+        return []
+    out = []
+    for line in lines[-n:]:
+        parts = line.strip().split(None, 2)
+        if len(parts) >= 3:
+            out.append({"ts": parts[0], "tool": parts[1], "path": parts[2]})
+        elif parts:
+            out.append({"ts": "", "tool": "", "path": line.strip()})
+    return out
 
-function copyOutput(){
-  navigator.clipboard.writeText(outputRaw).then(()=>{
-    const b=document.querySelector('.btn-copy');const o=b.textContent;
-    b.textContent='\u2713 \u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F\uFF01';
-    setTimeout(()=>b.textContent=o,2000);
-    showToast('\u2705 \u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F');
-  });
-}
-function closeOutputModal(){document.getElementById('outputModal').style.display='none';}
 
-async function resetAll(){
-  if(!confirm('\u30EA\u30BB\u30C3\u30C8\u3057\u307E\u3059\u304B\uFF1F'))return;
-  await fetch('/reset',{method:'POST'});
-  for(const id of ORDER){
-    rawTxt[id]='';
-    document.getElementById(`body-${id}`).innerHTML=`<span class="placeholder">\u2615 ${AGENTS[id].name}\u306F\u90E8\u5C4B\u3067\u5F85\u6A5F\u4E2D...</span>`;
-    document.getElementById(`dot-${id}`).className='dot';
-    document.getElementById(`st-${id}`).textContent='\u5F85\u6A5F\u4E2D';
-    document.getElementById(`ch-${id}`).textContent='0\u6587\u5B57';
-  }
-  document.getElementById('actionPanel').classList.add('hidden');
-  currentTopic='';roundNum=0;roundHistory=[];saveRoundHistory();saveRawTxt();ceoLog=[];saveCeoLog();renderCeoLog();localStorage.removeItem('apollo-topic');localStorage.removeItem('apollo-round');
-  sessionCost=0;localStorage.removeItem('apollo-cost');updateCostDisplay();
-  designHist=[];designIdx=-1;saveDesignHist();
-  document.getElementById('designArea').innerHTML='<div class="design-empty">CXO\u5186\u5353\u4F1A\u8B70\u306E\u5F8C\u3001\u300C\u30C7\u30B6\u30A4\u30F3\u6848\u3092\u751F\u6210\u300D\u3092\u30AF\u30EA\u30C3\u30AF</div>';
-  document.getElementById('designHist').innerHTML='';
-  document.getElementById('designVer').textContent='';
-}
+def _read_active_sprint():
+    if not os.path.isfile(ACTIVE_SPRINT_PATH):
+        return {"exists": False, "title": None, "criteria_total": 0, "criteria_done": 0}
+    try:
+        with open(ACTIVE_SPRINT_PATH, "r", encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        return {"exists": False, "title": None, "criteria_total": 0, "criteria_done": 0}
+    if not text.strip():
+        return {"exists": False, "title": None, "criteria_total": 0, "criteria_done": 0}
+    title = None
+    m = re.search(r"^#\s*(?:Sprint:\s*)?(.+)$", text, re.MULTILINE)
+    if m:
+        title = m.group(1).strip()
+    total = len(re.findall(r"^\s*- \[[ x?]\]", text, re.MULTILINE))
+    done = len(re.findall(r"^\s*- \[x\]", text, re.MULTILINE))
+    return {"exists": True, "title": title, "criteria_total": total, "criteria_done": done}
 
-document.addEventListener('keydown',(e)=>{if(e.ctrlKey&&e.key==='Enter'){e.preventDefault();startRoundtable();}});
 
-async function toggleK(id){
-  const pop=document.getElementById(`kp-${id}`);
-  if(pop.style.display==='block'){pop.style.display='none';return;}
-  pop.innerHTML='<span style="color:#aaa">\u8AAD\u307F\u8FBC\u307F\u4E2D...</span>';
-  pop.style.display='block';
-  document.querySelectorAll('.kpop').forEach(p=>{if(p!==pop)p.style.display='none';});
-  const res=await fetch(`/api/knowledge/${id}`);
-  const items=await res.json();
-  if(!items.length){
-    pop.innerHTML='<div class="kpop-title">\u84C4\u7A4D\u30CA\u30EC\u30C3\u30B8</div><span style="color:#aaa">\u307E\u3060\u306A\u3044</span>';
-    return;
-  }
-  pop.innerHTML=`<div class="kpop-title">\u84C4\u7A4D\u30CA\u30EC\u30C3\u30B8 (${items.length})</div>`+
-    items.map(k=>`<div class="kpop-item">
-      <button class="kpop-pin ${k.is_pinned?'pinned':''}" onclick="pinK('${id}','${k.id}',this)">
-        ${k.is_pinned?'\u2605':'\u2606'}
-      </button>
-      <div>
-        <div class="kpop-text">${esc(k.text)}</div>
-        ${k.tags&&k.tags.length?`<div class="kpop-tags">${k.tags.map(t=>`<span class="kpop-tag">${esc(t)}</span>`).join('')}</div>`:''}
-        <div class="kpop-meta">\u6D3B\u7528${k.usage_count||0}\u56DE</div>
-      </div>
-      <button class="kpop-del" onclick="delK('${id}','${k.id}')">\u00D7</button>
-    </div>`).join('');
-}
+# ---------- Direct Planner / CXO task (bypass roundtable) ----------
 
-async function pinK(agentId, itemId, btn){
-  const res=await fetch(`/api/knowledge/${agentId}/pin/${itemId}`,{method:'POST'});
-  const item=await res.json();
-  btn.className='kpop-pin '+(item.is_pinned?'pinned':'');
-  btn.textContent=item.is_pinned?'\u2605':'\u2606';
-}
+PLANNER_TASKS_FILE = os.path.join(PROJECT_DIR, "planner-tasks.json")
+UI_VERSIONS_FILE = os.path.join(PROJECT_DIR, "ui-versions.json")
 
-async function delK(agentId, itemId){
-  await fetch(`/api/knowledge/${agentId}/items/${itemId}`,{method:'DELETE'});
-  toggleK(agentId);
-}
-document.addEventListener('click',(e)=>{if(!e.target.closest('.card-foot'))document.querySelectorAll('.kpop').forEach(p=>p.style.display='none');});
+PLANNER_SYSTEM_BASE = """あなたは Logic プロジェクトの Planner です。CEO Keita からの 1〜4 行の指示を受け、Logic ハーネスの sprint contract (active.md) 形式に落とし込みます。
 
-// === TAB SWITCHING ===
-function switchTab(t){
-  document.getElementById('tabFloor').classList.toggle('active',t==='floor');
-  document.getElementById('tabDesign').classList.toggle('active',t==='design');
-  document.getElementById('tabBusiness').classList.toggle('active',t==='business');
-  document.getElementById('tabFloor_c').style.display=t==='floor'?'block':'none';
-  document.getElementById('tabDesign_c').style.display=t==='design'?'block':'none';
-  document.getElementById('tabBusiness_c').style.display=t==='business'?'block':'none';
-  if(t==='floor'){setTimeout(()=>document.getElementById('ceoInput')?.focus(),100);}
-  if(t==='business'){loadBizProjects();initBizSim();}
-}
+# 責務
+- 指示の意図を汲み、実装可能な scope に分解する
+- 「何を作るか」だけを書く。「どう実装するか」には踏み込まない
+- Acceptance criteria を検証可能な checkbox 形式で列挙する（最低 5 項目、最大 15 項目）
+- Out of scope も必ず書く
 
-// === BUSINESS PLAN TAB ===
-const BIZ_DEFAULTS={mau:100,convRate:20,monthlyPrice:500,yearlyPrice:3500,monthlyRatio:70,apiCostPerProblem:1.5,problemsPerUser:50,hosting:0};
-let bizSim=Object.assign({},BIZ_DEFAULTS,JSON.parse(localStorage.getItem('apollo-biz-sim')||'{}'));
-function saveBizSim(){localStorage.setItem('apollo-biz-sim',JSON.stringify(bizSim));}
+# 出力フォーマット
+Markdown のみ。前置きなし。
 
-async function loadBizProjects(){
-  const el=document.getElementById('bizProjects');
-  if(!el)return;
-  try{
-    const res=await fetch('/api/projects');
-    const projects=await res.json();
-    el.innerHTML=projects.map(p=>`
-      <div class="biz-project-card">
-        <h4>\u{1F4E6} ${esc(p.name)}</h4>
-        <a href="${esc(p.url)}" target="_blank">${esc(p.url)}</a>
-        <div class="biz-project-meta">
-          <span class="biz-project-tag">${esc(p.category)}</span>
-          <span class="biz-project-tag biz-project-status">${esc(p.status)}</span>
-        </div>
-        <div class="biz-project-tech">${esc(p.tech)}</div>
-        <div class="biz-project-tech" style="margin-top:4px">\u{1F4B0} ${esc(p.monetization)}</div>
-        <div class="biz-project-money">
-          <span>MAU: <strong>${p.mau}</strong></span>
-          <span>\u6708\u30b3\u30b9\u30c8: <strong>\u00a5${p.monthly_cost.toLocaleString()}</strong></span>
-          <span>\u6708\u58f2\u4e0a: <strong>\u00a5${p.monthly_revenue.toLocaleString()}</strong></span>
-        </div>
-      </div>`).join('');
-  }catch(e){el.innerHTML='<div style="color:#c00;font-size:12px">\u8aad\u307f\u8fbc\u307f\u30a8\u30e9\u30fc</div>';}
-}
+```
+# Sprint: <タイトル>
+Date: YYYY-MM-DD
+Goal: <1 文>
 
-function initBizSim(){
-  const map={mau:'bizMau',convRate:'bizConv',monthlyPrice:'bizMonthly',yearlyPrice:'bizYearly',monthlyRatio:'bizMonthlyRatio',apiCostPerProblem:'bizApiCost',problemsPerUser:'bizProblems',hosting:'bizHosting'};
-  for(const[key,id]of Object.entries(map)){
-    const el=document.getElementById(id);
-    if(!el)continue;
-    el.value=bizSim[key];
-    el.oninput=()=>{bizSim[key]=parseFloat(el.value)||0;saveBizSim();recalcBiz();};
-  }
-  recalcBiz();
-}
+## Scope
+- ...
 
-function recalcBiz(){
-  const s=bizSim;
-  const paid=s.mau*s.convRate/100;
-  const monthlyU=paid*s.monthlyRatio/100;
-  const yearlyU=paid*(100-s.monthlyRatio)/100;
-  const revenue=(monthlyU*s.monthlyPrice)+(yearlyU*s.yearlyPrice/12);
-  const aiCost=paid*s.problemsPerUser*s.apiCostPerProblem;
-  const stripeFee=revenue*0.036;
-  const varCost=aiCost+stripeFee+s.hosting;
-  const profit=revenue-varCost;
-  // Break-even MAU: smallest MAU where revenue >= varCost
-  // Approximation: assume cost/user = problemsPerUser*apiCost*convRate, revenue/user = avgARPU*convRate
-  const arpuMonthly=(s.monthlyRatio/100)*s.monthlyPrice+((100-s.monthlyRatio)/100)*(s.yearlyPrice/12);
-  const profitPerPaidUser=arpuMonthly-(s.problemsPerUser*s.apiCostPerProblem)-(arpuMonthly*0.036);
-  const breakeven=profitPerPaidUser>0?Math.ceil(s.hosting/(profitPerPaidUser*s.convRate/100)):'\u221e';
+## Acceptance criteria
+### Type & build
+- [ ] `npx tsc -b --noEmit` exits 0
+- [ ] `npm run build` exits 0
+### <カテゴリ>
+- [ ] ...
 
-  const el=document.getElementById('bizStats');
-  if(!el)return;
-  el.innerHTML=`
-    <div class="biz-stat"><span class="biz-stat-label">\u6709\u6599\u30e6\u30fc\u30b6\u30fc</span><span class="biz-stat-value">${Math.round(paid)}\u4eba</span></div>
-    <div class="biz-stat"><span class="biz-stat-label">\u6708\u6b21\u58f2\u4e0a</span><span class="biz-stat-value">\u00a5${Math.round(revenue).toLocaleString()}</span></div>
-    <div class="biz-stat"><span class="biz-stat-label">\u6708\u6b21AI\u30b3\u30b9\u30c8</span><span class="biz-stat-value">\u00a5${Math.round(aiCost).toLocaleString()}</span></div>
-    <div class="biz-stat"><span class="biz-stat-label">\u6708\u6b21\u7c97\u5229</span><span class="biz-stat-value ${profit>=0?'profit':'loss'}">\u00a5${Math.round(profit).toLocaleString()}</span></div>
-    <div class="biz-stat" style="grid-column:1/-1"><span class="biz-stat-label">\u640d\u76ca\u5206\u5c90MAU</span><span class="biz-stat-value">${breakeven}\u4eba</span></div>
-  `;
-}
+## Out of scope
+- ...
+```
 
-async function genBizSummary(){
-  const btn=document.getElementById('bizSummaryBtn');
-  btn.disabled=true;btn.textContent='\u29D7 \u751F\u6210\u4E2D...';
-  const area=document.getElementById('bizSummary');
-  area.innerHTML='<div class="biz-summary-empty">\u29D7 \u751F\u6210\u4E2D...</div>';
-  let raw='';
-  try{
-    const res=await fetch('/api/business-summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(bizSim)});
-    const reader=res.body.getReader();const dec=new TextDecoder();let buf='';
-    function read(){reader.read().then(({done,value})=>{
-      if(done)return;
-      buf+=dec.decode(value);const lines=buf.split('\n');buf=lines.pop();
-      for(const line of lines){
-        if(!line.startsWith('data: '))continue;
-        try{
-          const d=JSON.parse(line.slice(6));
-          if(d.type==='text'){raw+=d.content;area.innerHTML=marked.parse(raw);}
-          if(d.type==='done'){btn.textContent='\uD83D\uDCCA \u4eca\u6708\u306e\u30b5\u30de\u30ea\u30fc\u3092\u751f\u6210';btn.disabled=false;}
-          if(d.type==='error'){area.innerHTML=`<div class="biz-summary-empty" style="color:#c00">Error: ${esc(d.content)}</div>`;btn.textContent='\uD83D\uDCCA \u4eca\u6708\u306e\u30b5\u30de\u30ea\u30fc\u3092\u751f\u6210';btn.disabled=false;}
-        }catch(e){}
-      }
-      read();
-    });}
-    read();
-  }catch(e){area.innerHTML=`<div class="biz-summary-empty" style="color:#c00">Error</div>`;btn.textContent='\uD83D\uDCCA \u4eca\u6708\u306e\u30b5\u30de\u30ea\u30fc\u3092\u751f\u6210';btn.disabled=false;}
-}
+日本語で書くこと。簡潔に。"""
 
-// === DESIGN PREVIEW ===
-let designHist=JSON.parse(localStorage.getItem('apollo-designs')||'[]');
-let designIdx=designHist.length-1;
-function saveDesignHist(){localStorage.setItem('apollo-designs',JSON.stringify(designHist));}
 
-function renderDesignHist(){
-  const el=document.getElementById('designHist');
-  if(!designHist.length){el.innerHTML='';document.getElementById('designVer').textContent='';return;}
-  el.innerHTML=designHist.map((d,i)=>`<button class="design-chip ${i===designIdx?'active':''}" onclick="showDesign(${i})">v${i+1}</button>`).join('');
-  document.getElementById('designVer').textContent=`v${designIdx+1} / ${designHist.length}`;
-}
+def _load_json_safe(path, default):
+    if not os.path.isfile(path):
+        return default
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return default
 
-function showDesign(i){
-  designIdx=i;
-  renderDesignIframe(designHist[i].html);
-  renderDesignHist();
-}
 
-function renderDesignIframe(html){
-  const area=document.getElementById('designArea');
-  area.innerHTML='';
-  const iframe=document.createElement('iframe');
-  iframe.style.width='100%';
-  iframe.style.border='none';
-  iframe.style.borderRadius='16px';
-  iframe.style.background='#fff';
-  iframe.srcdoc=html;
-  iframe.onload=()=>{try{const h=iframe.contentDocument.documentElement.scrollHeight;iframe.style.height=Math.max(300,Math.min(h+20,800))+'px';}catch(e){iframe.style.height='600px';}};
-  area.appendChild(iframe);
-}
+def _save_json_safe(path, data):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
 
-async function genDesign(fb){
-  const btn=document.getElementById('designGenBtn');
-  btn.disabled=true;btn.textContent='\u23F3 \u751F\u6210\u4E2D...';
-  let disc='';
-  for(const r of roundHistory){
-    disc+=`\nRound ${r.round}:\n`;
-    if(r.feedback)disc+=`CEO: ${r.feedback}\n`;
-    for(const d of r.discussions)if(d.text)disc+=`${d.title} ${d.name}: ${d.text.slice(0,500)}\n`;
-  }
-  const prevHtml=designHist.length?designHist[designHist.length-1].html:'';
-  const area=document.getElementById('designArea');
-  area.innerHTML='<div class="design-empty">\u23F3 \u30C7\u30B6\u30A4\u30F3\u751F\u6210\u4E2D...</div>';
-  let raw='';
-  try{
-    const res=await fetch('/api/design-preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({discussion:disc.slice(0,6000),feedback:fb||'',previous_html:fb?prevHtml:''})});
-    const reader=res.body.getReader();const dec=new TextDecoder();let buf='';
-    function read(){reader.read().then(({done,value})=>{
-      if(done)return;
-      buf+=dec.decode(value);const lines=buf.split('\n');buf=lines.pop();
-      for(const line of lines){
-        if(!line.startsWith('data: '))continue;
-        try{
-          const d=JSON.parse(line.slice(6));
-          if(d.type==='text'){raw+=d.content;area.innerHTML=`<div style="padding:12px;font-size:11px;color:#888;font-family:monospace;white-space:pre-wrap;max-height:500px;overflow:auto">${esc(raw)}</div>`;}
-          if(d.type==='done'){
-            let h=raw.trim();
-            // Strip markdown code fences if present
-            h=h.replace(/^```html\s*\n?/i,'').replace(/^```\s*\n?/,'').replace(/\n?```\s*$/,'');
-            designHist.push({html:h,feedback:fb||null});designIdx=designHist.length-1;
-            saveDesignHist();renderDesignIframe(h);renderDesignHist();
-            btn.textContent='\uD83C\uDFA8 \u30C7\u30B6\u30A4\u30F3\u6848\u3092\u751F\u6210';btn.disabled=false;
-          }
-          if(d.type==='error'){area.innerHTML=`<div class="design-empty" style="color:#f44336">Error: ${esc(d.content)}</div>`;btn.textContent='\uD83C\uDFA8 \u30C7\u30B6\u30A4\u30F3\u6848\u3092\u751F\u6210';btn.disabled=false;}
-        }catch(e){}
-      }
-      read();
-    });}
-    read();
-  }catch(e){area.innerHTML=`<div class="design-empty" style="color:#f44336">Error</div>`;btn.textContent='\uD83C\uDFA8 \u30C7\u30B6\u30A4\u30F3\u6848\u3092\u751F\u6210';btn.disabled=false;}
-}
 
-function submitDesignFb(){
-  const fb=document.getElementById('designFbInput').value.trim();
-  if(!fb){alert('\u30D5\u30A3\u30FC\u30C9\u30D0\u30C3\u30AF\u3092\u5165\u529B');return;}
-  document.getElementById('designFbBtn').disabled=true;
-  genDesign(fb).then(()=>{document.getElementById('designFbBtn').disabled=false;document.getElementById('designFbInput').value='';});
-}
+@app.route("/api/direct-task", methods=["POST"])
+def api_direct_task():
+    """User instructs Planner or a specific CXO directly, bypassing the full roundtable."""
+    data = request.json or {}
+    instruction = (data.get("instruction") or "").strip()
+    agent_id = data.get("agent_id") or "planner"
+    if not instruction:
+        return jsonify({"error": "instruction required"}), 400
 
-createFloors();
-updateCostDisplay();document.getElementById('ceoInput')?.focus();
-// Restore card content from localStorage on page load
-(function restoreCards(){
-  for(const id of ORDER){
-    if(rawTxt[id]){
-      document.getElementById(`body-${id}`).innerHTML=`<span class="rt-tag">\uD83D\uDDE3 Round ${roundNum}</span>`+marked.parse(rawTxt[id]);
-      document.getElementById(`dot-${id}`).className='dot done';
-      document.getElementById(`st-${id}`).textContent='\u5B8C\u4E86';
-      document.getElementById(`ch-${id}`).textContent=`${rawTxt[id].length}\u6587\u5B57`;
+    if agent_id == "planner":
+        system = PLANNER_SYSTEM_BASE + get_knowledge_prompt("planner", topic=instruction[:200])
+        display = "Planner"
+    elif agent_id in AGENTS:
+        a = AGENTS[agent_id]
+        system = (
+            a["system"]
+            + get_knowledge_prompt(agent_id, topic=instruction[:200])
+            + "\n\n# 今回のモード\nCEO Keita から直接タスクが割り当てられました。会議を経由せず、単独で具体的に回答してください。"
+        )
+        display = f"{a['title']} {a['name']}"
+    else:
+        return jsonify({"error": f"unknown agent: {agent_id}"}), 400
+
+    try:
+        resp = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2500,
+            system=system,
+            messages=[{"role": "user", "content": instruction}],
+        )
+        result = resp.content[0].text if resp.content else ""
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    task = {
+        "id": "t_" + str(int(time.time() * 1000)),
+        "agent_id": agent_id,
+        "display": display,
+        "instruction": instruction,
+        "result": result,
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-  }
-  if(roundHistory.length){
-    document.getElementById('actionPanel').classList.remove('hidden');
-    document.getElementById('roundBadge').textContent=`Round ${roundNum} \u5B8C\u4E86`;
-    document.getElementById('outputGenBtn').disabled=false;
-    renderCeoLog();
-  }
-  if(designHist.length){renderDesignIframe(designHist[designHist.length-1].html);renderDesignHist();}
-})();
-</script>
-</body>
-</html>"""
+    tasks = _load_json_safe(PLANNER_TASKS_FILE, [])
+    tasks.append(task)
+    tasks = tasks[-100:]
+    _save_json_safe(PLANNER_TASKS_FILE, tasks)
+
+    # 成長: 回答から学びを抽出して knowledge/{agent_id}.json に蓄積
+    threading.Thread(
+        target=summarize_and_learn,
+        args=(agent_id, result, instruction[:80]),
+        daemon=True,
+    ).start()
+    return jsonify(task)
+
+
+@app.route("/api/planner-tasks")
+def api_planner_tasks_list():
+    return jsonify(_load_json_safe(PLANNER_TASKS_FILE, []))
+
+
+@app.route("/api/planner-tasks/<task_id>", methods=["DELETE"])
+def api_planner_tasks_delete(task_id):
+    tasks = _load_json_safe(PLANNER_TASKS_FILE, [])
+    tasks = [t for t in tasks if t.get("id") != task_id]
+    _save_json_safe(PLANNER_TASKS_FILE, tasks)
+    return jsonify({"ok": True})
+
+
+# ---------- UI versions (Logic 画面の修正案を版管理) ----------
+
+@app.route("/api/ui-versions")
+def api_ui_versions_list():
+    return jsonify(_load_json_safe(UI_VERSIONS_FILE, []))
+
+
+@app.route("/api/ui-fix", methods=["POST"])
+def api_ui_fix():
+    """ドラミ (CPO/デザイナー) が指定箇所への修正案を生成し、自動でバージョンとして保存する。"""
+    data = request.json or {}
+    comment = (data.get("comment") or "").strip()
+    screen = (data.get("screen") or "").strip()
+    base_url = (data.get("url") or "").strip()
+    pin_x = data.get("x")
+    pin_y = data.get("y")
+    base_version_id = data.get("base_version_id")
+    if not comment:
+        return jsonify({"error": "comment required"}), 400
+
+    base_note = ""
+    if base_version_id:
+        base = next((v for v in _load_json_safe(UI_VERSIONS_FILE, []) if v.get("id") == base_version_id), None)
+        if base:
+            base_note = f"\n\n（前バージョン「{base['title']}」への追加修正として扱ってください。既存メモ: {base.get('notes', '')[:300]}）"
+
+    cpo = AGENTS.get("cpo", {})
+    system = cpo.get("system", "") + get_knowledge_prompt("cpo", topic=comment[:200]) + """
+
+# 今回のモード — UI デザイナーとしての修正指示
+CEO Keita が Apollo Mansion の UI プレビュー上でコメントピンを立て、特定箇所の修正を依頼しました。
+あなたは Logic アプリの UX / UI デザイナーとして、その箇所だけを直します。
+
+# 出力フォーマット（厳密な JSON。前後に説明文を付けない）
+{
+  "title": "20 文字以内の短いタイトル",
+  "description": "1 文で変更概要",
+  "notes": "修正の詳細メモ（箇条書き可、150 文字程度）。何を・どこを・なぜ変えるか",
+  "html_snippet": "変更後の該当部分の HTML/JSX 断片（短く。100-300 文字。実装の参考用）"
+}
+"""
+    coord_str = f"(x={pin_x}%, y={pin_y}%)" if pin_x is not None and pin_y is not None else "（座標情報なし）"
+    user_msg = f"""【対象画面】{screen or "/"}（{base_url or "Logic live"}）
+【コメント位置】{coord_str}
+【CEO のコメント】
+{comment}{base_note}
+
+上記コメントに対して、ドラミとして UX / UI 修正案を JSON で返してください。他の箇所は一切変更しないこと。"""
+
+    try:
+        resp = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1500,
+            system=system,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        raw = resp.content[0].text if resp.content else ""
+        m = re.search(r"\{[\s\S]*\}", raw)
+        if not m:
+            return jsonify({"error": "no JSON in response", "raw": raw}), 500
+        parsed = json.loads(m.group(0))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    notes_full = (parsed.get("notes") or "") + "\n\n---\n【元コメント】\n" + comment
+    if parsed.get("html_snippet"):
+        notes_full += "\n\n【修正スニペット】\n" + parsed["html_snippet"]
+
+    version = {
+        "id": "v_" + str(int(time.time() * 1000)),
+        "title": parsed.get("title") or "ドラミによる修正案",
+        "description": parsed.get("description") or "",
+        "notes": notes_full,
+        "screen": screen,
+        "url": "",  # 現行 URL を継承
+        "parent_id": base_version_id,
+        "pin": {"x": pin_x, "y": pin_y} if pin_x is not None else None,
+        "comment": comment,
+        "author": "ドラミ（CPO/デザイナー）",
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    versions = _load_json_safe(UI_VERSIONS_FILE, [])
+    versions.append(version)
+    _save_json_safe(UI_VERSIONS_FILE, versions)
+
+    # 成長: ドラミの UI 修正回答からも学びを蓄積
+    learn_text = f"【コメント】{comment}\n【修正案タイトル】{parsed.get('title', '')}\n【メモ】{parsed.get('notes', '')}"
+    threading.Thread(
+        target=summarize_and_learn,
+        args=("cpo", learn_text, comment[:80]),
+        daemon=True,
+    ).start()
+    return jsonify(version)
+
+
+@app.route("/api/ui-versions", methods=["POST"])
+def api_ui_versions_create():
+    data = request.json or {}
+    title = (data.get("title") or "").strip()
+    if not title:
+        return jsonify({"error": "title required"}), 400
+    version = {
+        "id": "v_" + str(int(time.time() * 1000)),
+        "title": title,
+        "description": (data.get("description") or "").strip(),
+        "notes": (data.get("notes") or "").strip(),
+        "screen": (data.get("screen") or "").strip(),
+        "url": (data.get("url") or "").strip(),
+        "parent_id": data.get("parent_id"),
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    versions = _load_json_safe(UI_VERSIONS_FILE, [])
+    versions.append(version)
+    _save_json_safe(UI_VERSIONS_FILE, versions)
+    return jsonify(version)
+
+
+@app.route("/api/ui-versions/<version_id>", methods=["PATCH"])
+def api_ui_versions_update(version_id):
+    data = request.json or {}
+    versions = _load_json_safe(UI_VERSIONS_FILE, [])
+    updated = None
+    for v in versions:
+        if v.get("id") == version_id:
+            for k in ("title", "description", "notes", "screen", "url"):
+                if k in data:
+                    v[k] = (data[k] or "").strip()
+            updated = v
+            break
+    if not updated:
+        return jsonify({"error": "not found"}), 404
+    _save_json_safe(UI_VERSIONS_FILE, versions)
+    return jsonify(updated)
+
+
+@app.route("/api/ui-versions/<version_id>", methods=["DELETE"])
+def api_ui_versions_delete(version_id):
+    versions = _load_json_safe(UI_VERSIONS_FILE, [])
+    versions = [v for v in versions if v.get("id") != version_id]
+    _save_json_safe(UI_VERSIONS_FILE, versions)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/consultant-review", methods=["POST"])
+def api_consultant_review():
+    """External consultant evaluates the 5 CXOs' performance in the just-finished discussion."""
+    data = request.json or {}
+    topic = data.get("topic", "")
+    discussion = data.get("discussion", {})  # { cso: "...", cfo: "...", ... }
+    if not topic or not discussion:
+        return jsonify({"error": "topic and discussion required"}), 400
+
+    discussion_text = "\n\n".join(
+        f"### {AGENTS[aid]['title']} {AGENTS[aid]['name']}\n{text}"
+        for aid, text in discussion.items()
+        if aid in AGENTS
+    )
+
+    system = """あなたは Apollo Mansion に外部委託された戦略コンサルタントです。社内の人間関係・忖度・過去の貢献は一切考慮せず、今回の会議での発言だけを冷徹に評価します。
+
+評価の 5 項目（各 0-5 点）:
+1. sharpness — 論点の鋭さ（本質を突いているか、抽象論で逃げていないか）
+2. originality — 独自性（他の CXO と差別化されているか、専門性が出ているか）
+3. evidence — 根拠の強さ（データ・数字・具体名で裏づけされているか）
+4. risk — リスク把握（盲点・副作用・コストへの言及があるか）
+5. feasibility — 実行可能性（実際に動かせる提案か）
+
+必ず差をつけること。全員 5 点満点は禁止。忖度禁止。
+"""
+    user_msg = f"""【議題】{topic}
+
+【各 CXO の発言】
+{discussion_text}
+
+上記発言だけを基に、各 CXO を評価してください。必ず以下の厳密な JSON フォーマットで出力してください（前後に説明文を付けない）:
+
+{{
+  "reviews": [
+    {{"agent_id": "cso", "scores": {{"sharpness": 0, "originality": 0, "evidence": 0, "risk": 0, "feasibility": 0}}, "total": 0, "strengths": "", "weaknesses": "", "advice": ""}},
+    {{"agent_id": "cfo", ...}},
+    {{"agent_id": "cmo", ...}},
+    {{"agent_id": "cto", ...}},
+    {{"agent_id": "cpo", ...}}
+  ],
+  "overall": ""
+}}
+
+strengths / weaknesses / advice はそれぞれ 1 文で具体的に日本語で書くこと。overall は 2-3 文。"""
+
+    try:
+        resp = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2500,
+            system=system,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        raw = resp.content[0].text if resp.content else ""
+        # strip any stray fences
+        m = re.search(r"\{[\s\S]*\}", raw)
+        if not m:
+            return jsonify({"error": "no JSON in response", "raw": raw}), 500
+        parsed = json.loads(m.group(0))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    # 成長: 外部コンサルの指摘を各 CXO の knowledge に書き戻す
+    try:
+        for rev in parsed.get("reviews", []):
+            aid = rev.get("agent_id")
+            if aid not in AGENTS:
+                continue
+            weakness = rev.get("weaknesses", "").strip()
+            advice = rev.get("advice", "").strip()
+            if not weakness and not advice:
+                continue
+            learn_text = f"外部コンサル指摘: {weakness} → 改善: {advice}"
+            k = load_knowledge(aid)
+            existing = {it.get("text") for it in k.get("learnings", []) if isinstance(it, dict)}
+            if learn_text not in existing:
+                k["learnings"].append({
+                    "id": _make_knowledge_id(),
+                    "text": learn_text,
+                    "tags": ["外部評価", "改善点"],
+                    "is_pinned": False,
+                    "usage_count": 0,
+                    "session_topic": topic[:80],
+                    "created_at": time.strftime("%Y-%m-%d %H:%M"),
+                })
+                k["learnings"] = k["learnings"][-30:]
+                save_knowledge(aid, k)
+                time.sleep(0.002)
+    except Exception:
+        pass
+    return jsonify(parsed)
+
+
+@app.route("/api/workflow/sessions")
+def api_workflow_sessions():
+    return jsonify(_list_jsonl_sessions())
+
+
+@app.route("/api/workflow")
+def api_workflow():
+    session_id = request.args.get("session")
+    if session_id:
+        path = os.path.join(PROJECTS_DIR, session_id + ".jsonl")
+        if not os.path.isfile(path):
+            return jsonify({"error": "session not found"}), 404
+    else:
+        path = _latest_jsonl()
+        if not path:
+            return jsonify({
+                "session_id": None,
+                "updated_at": None,
+                "agents": [],
+                "file_edits": _read_edit_log(),
+                "active_sprint": _read_active_sprint(),
+            })
+    parsed = _parse_workflow(path)
+    if parsed is None:
+        return jsonify({"error": "failed to parse"}), 500
+    parsed = dict(parsed)
+    parsed["file_edits"] = _read_edit_log()
+    parsed["active_sprint"] = _read_active_sprint()
+    return jsonify(parsed)
+
+
+# ---------- Logic spec data sync (1 day stale check) ----------
+
+LOGIC_SPEC_FILE = os.path.join(PROJECT_DIR, "static", "js", "logic-spec-data.js")
+LOGIC_SPEC_TTL_SEC = 24 * 3600  # 24 時間
+
+
+def _maybe_refresh_logic_spec():
+    """logic-spec-data.js が無いか 24h 以上古ければ sync_logic_spec を実行する。"""
+    try:
+        needs_refresh = True
+        if os.path.isfile(LOGIC_SPEC_FILE):
+            age = time.time() - os.path.getmtime(LOGIC_SPEC_FILE)
+            needs_refresh = age > LOGIC_SPEC_TTL_SEC
+        if not needs_refresh:
+            return
+        # スタンドアロンスクリプトを subprocess で叩く（import 衝突回避）
+        import subprocess
+        script = os.path.join(PROJECT_DIR, "scripts", "sync_logic_spec.py")
+        if os.path.isfile(script):
+            subprocess.run(["python", script], check=False, timeout=15)
+    except Exception as e:
+        print(f"[logic-spec sync] skipped: {e}")
+
+
+# 起動時に 1 度実行（バックグラウンドで、HTTP 起動はブロックしない）
+threading.Thread(target=_maybe_refresh_logic_spec, daemon=True).start()
+
+
+@app.route("/api/spec/refresh", methods=["POST"])
+def api_spec_refresh():
+    """手動再同期用エンドポイント。Logic 側を更新した直後に叩くと即反映される。"""
+    try:
+        import subprocess
+        script = os.path.join(PROJECT_DIR, "scripts", "sync_logic_spec.py")
+        result = subprocess.run(
+            ["python", script], capture_output=True, text=True, timeout=15
+        )
+        return jsonify({
+            "ok": result.returncode == 0,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 
 if __name__ == "__main__":
     print("\nApollo Mansion CXO Agent Office starting...")
     print("Open http://localhost:5000 in your browser\n")
-    app.run(debug=True, port=5000, threaded=True)
+    app.run(host="0.0.0.0", debug=True, port=5000, threaded=True)

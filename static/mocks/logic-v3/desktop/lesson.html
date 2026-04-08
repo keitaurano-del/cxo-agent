@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1440,initial-scale=1">
+<title>Logic v3 — Lesson (Desktop)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@700;800;900&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared.css">
+<style>
+  .lesson-main { max-width: 920px; margin: 0 auto; }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 32px;
+  }
+  .icon-btn {
+    width: 44px; height: 44px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .icon-btn svg { width: 18px; height: 18px; }
+  .progress-text {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-mute);
+  }
+  .progress-text b { color: var(--text); font-size: 16px; }
+
+  .progress-bar-wrap { background: var(--surface-2); height: 6px; border-radius: var(--r-full); overflow: hidden; margin-bottom: 56px; }
+  .progress-bar-fill { background: var(--accent); height: 100%; width: 30%; border-radius: var(--r-full); }
+
+  .question-block { margin-bottom: 40px; max-width: 760px; }
+  .question-block .eyebrow { color: var(--accent); display: block; margin-bottom: 16px; }
+  .question-block h1 {
+    font-family: var(--font-display);
+    font-size: 56px;
+    font-weight: 900;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+  }
+
+  .lesson-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 28px;
+    margin-bottom: 32px;
+  }
+  @media (max-width: 1100px) { .lesson-grid { grid-template-columns: 1fr; } }
+
+  .answer-card {
+    background: var(--surface);
+    border: 1.5px solid var(--border-2);
+    border-radius: var(--r-xl);
+    padding: 28px;
+    transition: border-color 120ms ease;
+  }
+  .answer-card:focus-within { border-color: var(--accent); }
+  .answer-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-mute);
+    margin-bottom: 14px;
+    display: block;
+  }
+  .answer-area textarea {
+    width: 100%;
+    border: none;
+    outline: none;
+    resize: vertical;
+    font-family: var(--font-ui);
+    font-size: 16px;
+    line-height: 1.7;
+    color: var(--text);
+    background: transparent;
+    min-height: 240px;
+  }
+  .answer-area textarea::placeholder { color: var(--text-faint); }
+
+  .hint-card {
+    background: var(--accent-soft);
+    border-radius: var(--r-xl);
+    padding: 26px 28px;
+    height: fit-content;
+  }
+  .hint-card .eyebrow { color: var(--accent); margin-bottom: 14px; display: block; }
+  .hint-card .hint-icon { font-size: 32px; margin-bottom: 12px; line-height: 1; }
+  .hint-card .hint-body { font-size: 14px; line-height: 1.75; color: var(--accent-deep); }
+
+  .submit-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 24px 0;
+    border-top: 1px solid var(--border);
+  }
+  .submit-meta { font-size: 13px; color: var(--text-mute); }
+  .submit-btn { padding: 16px 36px; font-size: 16px; }
+
+  .feedback-card {
+    background: #ECFDF5;
+    border: 1px solid #A7F3D0;
+    border-radius: var(--r-xl);
+    padding: 32px;
+    margin-top: 28px;
+  }
+  .feedback-head { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+  .feedback-check {
+    width: 40px; height: 40px;
+    border-radius: var(--r-full);
+    background: var(--success);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .feedback-check svg { width: 22px; height: 22px; }
+  .feedback-title { font-family: var(--font-display); font-size: 22px; font-weight: 800; color: #065F46; letter-spacing: -0.02em; }
+  .feedback-text { font-size: 14px; color: #047857; line-height: 1.75; max-width: 680px; }
+  .feedback-xp {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 18px;
+    padding: 8px 14px;
+    background: var(--success);
+    color: white;
+    border-radius: var(--r-full);
+    font-size: 13px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+  }
+</style>
+</head>
+<body>
+
+<aside class="sidebar-desktop">
+  <div class="sidebar-brand">
+    <div class="sidebar-brand-mark"><svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><rect x="60" y="60" width="80" height="80" rx="20" fill="#3D5FC4"/><rect x="78" y="76" width="12" height="44" rx="3" fill="#EEF2FE"/><rect x="78" y="108" width="36" height="12" rx="3" fill="#EEF2FE"/><circle cx="114" cy="82" r="6" fill="#9EB3F0"/></svg></div>
+    Logic
+  </div>
+  <nav class="sidebar-nav">
+    <button class="sidebar-nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </button>
+    <button class="sidebar-nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      Learn
+    </button>
+    <button class="sidebar-nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+      Challenges
+    </button>
+    <button class="sidebar-nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Community
+    </button>
+    <button class="sidebar-nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>
+      Profile
+    </button>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="sidebar-avatar">👤</div>
+    <div>
+      <div class="sidebar-user-name">Keita</div>
+      <div class="sidebar-user-meta">Lv.4</div>
+    </div>
+  </div>
+</aside>
+
+<main class="desktop-main">
+  <div class="lesson-main">
+
+    <div class="topbar">
+      <button class="icon-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      </button>
+      <div class="progress-text">Question <b>3</b> of 10</div>
+    </div>
+
+    <div class="progress-bar-wrap"><div class="progress-bar-fill"></div></div>
+
+    <div class="question-block">
+      <span class="eyebrow">FERMI ESTIMATE</span>
+      <h1>日本にある電柱の本数は<br>どれくらい?</h1>
+    </div>
+
+    <div class="lesson-grid">
+      <div class="answer-card">
+        <span class="answer-label">YOUR ANSWER</span>
+        <div class="answer-area">
+          <textarea placeholder="計算式や考え方を書いてみよう..."></textarea>
+        </div>
+      </div>
+
+      <aside class="hint-card">
+        <span class="eyebrow">HINT</span>
+        <div class="hint-icon">💡</div>
+        <div class="hint-body">国土面積と都市部の電柱密度から推定してみよう。住宅街では電柱は何 m 間隔だろう? 過疎地と都市部で密度の差を考慮するとより精度が上がります。</div>
+      </aside>
+    </div>
+
+    <div class="submit-row">
+      <div class="submit-meta">回答後に AI が採点します</div>
+      <button class="btn btn-primary submit-btn">
+        Submit answer
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+    </div>
+
+    <div class="feedback-card">
+      <div class="feedback-head">
+        <div class="feedback-check">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <div class="feedback-title">Nice approach!</div>
+      </div>
+      <div class="feedback-text">国土面積と密度から逆算するアプローチは正解です。実際の本数は約 3,600 万本。あなたの推定値は近い範囲に入っており、特に都市部と地方の密度差を考慮した点が評価できます。</div>
+      <div class="feedback-xp">+50 XP earned</div>
+    </div>
+
+  </div>
+</main>
+</body>
+</html>

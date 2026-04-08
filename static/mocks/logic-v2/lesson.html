@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Logic v2 — Lesson</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FAFAF7;
+    --surface: #FFFFFF;
+    --surface-2: #F4F3EE;
+    --border: #EDEDE9;
+    --text: #191918;
+    --text-mute: #6F6F6A;
+    --text-faint: #9B9A93;
+    --accent: #FF6B4A;
+    --accent-soft: #FFF1ED;
+    --success: #10B981;
+    --r-card: 16px;
+    --r-btn: 12px;
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.04);
+    --shadow-cta: 0 4px 14px rgba(255, 107, 74, 0.28);
+    --font-ui: "Inter", "Noto Sans JP", -apple-system, system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .screen {
+    max-width: 390px;
+    min-height: 100vh;
+    margin: 0 auto;
+    padding: 20px 20px 100px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .topbar { display: flex; align-items: center; justify-content: space-between; }
+  .back-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text);
+  }
+  .back-btn svg { width: 18px; height: 18px; }
+  .progress-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-mute);
+    font-variant-numeric: tabular-nums;
+  }
+  .progress-text b { color: var(--text); font-weight: 700; }
+
+  .progress-bar-wrap { background: var(--surface-2); height: 6px; border-radius: 999px; overflow: hidden; }
+  .progress-bar-fill { background: var(--accent); height: 100%; width: 30%; border-radius: 999px; transition: width 300ms ease; }
+
+  .category-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin: 8px 0 0;
+  }
+  .question {
+    font-size: 26px;
+    font-weight: 800;
+    line-height: 1.35;
+    letter-spacing: -0.02em;
+    margin: 6px 0 0;
+  }
+
+  .hint-card {
+    background: var(--accent-soft);
+    border-radius: var(--r-card);
+    padding: 16px 18px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .hint-icon { font-size: 20px; line-height: 1.2; }
+  .hint-body { font-size: 13px; line-height: 1.65; color: #7C2D12; }
+  .hint-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-bottom: 4px; }
+
+  .label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-mute);
+    margin: 8px 0 8px;
+  }
+
+  .answer-area {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 16px;
+    min-height: 180px;
+    box-shadow: var(--shadow-card);
+  }
+  .answer-area textarea {
+    width: 100%;
+    border: none;
+    outline: none;
+    resize: none;
+    font-family: var(--font-ui);
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--text);
+    background: transparent;
+    min-height: 150px;
+  }
+  .answer-area textarea::placeholder { color: var(--text-faint); }
+
+  .submit-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: var(--r-btn);
+    padding: 18px;
+    font-size: 16px;
+    font-weight: 700;
+    font-family: var(--font-ui);
+    cursor: pointer;
+    box-shadow: var(--shadow-cta);
+    margin-top: 8px;
+  }
+
+  .feedback-card {
+    background: #ECFDF5;
+    border: 1px solid #A7F3D0;
+    border-radius: var(--r-card);
+    padding: 18px;
+    margin-top: 12px;
+  }
+  .feedback-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .feedback-check {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: var(--success);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .feedback-check svg { width: 16px; height: 16px; }
+  .feedback-title { font-size: 15px; font-weight: 700; color: #065F46; }
+  .feedback-text { font-size: 13px; color: #047857; line-height: 1.7; }
+  .feedback-xp { display: inline-block; margin-top: 10px; padding: 4px 10px; background: var(--success); color: white; border-radius: 999px; font-size: 12px; font-weight: 700; }
+
+  .tabbar {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 390px;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    display: flex;
+    padding: 10px 0 28px;
+  }
+  .tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-faint);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-ui);
+    cursor: pointer;
+  }
+  .tab.active { color: var(--accent); }
+  .tab svg { width: 22px; height: 22px; }
+</style>
+</head>
+<body>
+<div class="screen">
+
+  <div class="topbar">
+    <button class="back-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </button>
+    <div class="progress-text"><b>3</b> / 10</div>
+  </div>
+
+  <div class="progress-bar-wrap"><div class="progress-bar-fill"></div></div>
+
+  <div>
+    <p class="category-label">Fermi 推定</p>
+    <h1 class="question">日本にある電柱の本数はどれくらい?</h1>
+  </div>
+
+  <div class="hint-card">
+    <div class="hint-icon">💡</div>
+    <div class="hint-body">
+      <div class="hint-title">ヒント</div>
+      国土面積と都市部の電柱密度から推定してみよう。住宅街では電柱は何m間隔だろう?
+    </div>
+  </div>
+
+  <div>
+    <div class="label">あなたの回答</div>
+    <div class="answer-area">
+      <textarea placeholder="計算式や考え方を書いてみよう..."></textarea>
+    </div>
+  </div>
+
+  <button class="submit-btn">送信する</button>
+
+  <div class="feedback-card">
+    <div class="feedback-head">
+      <div class="feedback-check">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="feedback-title">いい着眼点!</div>
+    </div>
+    <div class="feedback-text">
+      国土面積と密度から逆算するアプローチは正解です。実際の本数は約3,600万本。あなたの推定値は近い範囲に入っています。
+    </div>
+    <div class="feedback-xp">+50 XP</div>
+  </div>
+
+</div>
+
+<nav class="tabbar">
+  <button class="tab">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    Home
+  </button>
+  <button class="tab active">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+    Lessons
+  </button>
+  <button class="tab">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>
+    Profile
+  </button>
+</nav>
+</body>
+</html>
