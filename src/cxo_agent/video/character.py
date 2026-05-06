@@ -7,15 +7,17 @@ from ..config import CHARACTER_DIR, PROMPTS_DIR, ensure_dirs
 # キャラの一貫性は「アンカー文」を毎回先頭に貼ることで担保する。
 # Gemini Imagen は long-context の subject anchor が効きやすいので、
 # 同じ段落を 5 枚すべての先頭に置く。
+# Pixar/Disney 等の IP ワードは Gemini に蹴られるので使わない。
 CHARACTER_ANCHOR = (
     "Subject: Dr. Meera, a friendly anthropomorphic meerkat scientist standing "
     "upright on her hind legs, about three feet tall in proportion. Sandy-tan "
     "fur with the characteristic dark eye-mask of a meerkat. Round black "
     "curious eyes, expressive eyebrows, a small pink nose, and a gentle smile. "
     "She wears a slightly oversized crisp white lab coat and round gold-rimmed "
-    "glasses. Style: cinematic Pixar-style 3D render, subsurface scattering on "
-    "fur, soft warm rim lighting, shallow depth of field, children's-feature-"
-    "film polish, photorealistic everyday backgrounds. Aspect ratio 1:1."
+    "glasses. Style: high-quality stylized 3D animated character render, "
+    "feature-animation polish, soft subsurface scattering on fur, warm rim "
+    "lighting, shallow depth of field, photorealistic everyday backgrounds, "
+    "wholesome and friendly mood. Aspect ratio 1:1."
 )
 
 REFERENCE_SCENES: dict[str, str] = {
