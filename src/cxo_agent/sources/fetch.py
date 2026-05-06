@@ -2,23 +2,37 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import logging
 
 from ..config import PAPERS_DIR, SEARCH_QUERIES, ensure_dirs
 from . import nber, openalex, semantic_scholar, ssrn
 from .base import Paper
+
+log = logging.getLogger(__name__)
+
+
+def _safe(label: str, fn) -> list[Paper]:
+    try:
+        return fn()
+    except Exception as e:
+        log.warning("source %s failed: %s", label, e)
+        return []
 
 
 def fetch_all(since_days: int = 14) -> list[Paper]:
     ensure_dirs()
     bucket: dict[str, Paper] = {}
 
-    for p in openalex.search_many(SEARCH_QUERIES, since_days=since_days):
+    for p in _safe("openalex", lambda: openalex.search_many(SEARCH_QUERIES, since_days=since_days)):
         bucket.setdefault(p.id, p)
-    for p in semantic_scholar.search_many(SEARCH_QUERIES, since_days=since_days):
+    for p in _safe(
+        "semantic_scholar",
+        lambda: semantic_scholar.search_many(SEARCH_QUERIES, since_days=since_days),
+    ):
         bucket.setdefault(p.id, p)
-    for p in nber.search():
+    for p in _safe("nber", nber.search):
         bucket.setdefault(p.id, p)
-    for p in ssrn.search():
+    for p in _safe("iza", ssrn.search):
         bucket.setdefault(p.id, p)
 
     papers = list(bucket.values())

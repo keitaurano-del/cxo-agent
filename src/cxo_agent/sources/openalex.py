@@ -33,7 +33,12 @@ def search(query: str, since_days: int = 30, per_page: int = 25) -> list[Paper]:
     if settings.openalex_mailto:
         params["mailto"] = settings.openalex_mailto
 
-    with httpx.Client(timeout=30) as client:
+    # OpenAlex returns 403 to bare clients; their docs ask for a UA + mailto.
+    headers = {
+        "User-Agent": f"cxo-agent/0.1 (mailto:{settings.openalex_mailto or 'unknown@example.com'})",
+        "Accept": "application/json",
+    }
+    with httpx.Client(timeout=30, headers=headers) as client:
         r = client.get(OPENALEX_URL, params=params)
         r.raise_for_status()
         data = r.json()
