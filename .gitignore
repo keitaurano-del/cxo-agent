@@ -1,0 +1,22 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+
+# Generated artefacts (kept out of git, but the directory tree is preserved via .gitkeep)
+data/papers/*
+data/candidates/*
+data/scripts/*
+data/approved/*
+data/renders/*
+data/posted/*
+data/character/*
+!data/**/.gitkeep
+
+# Editor
+.idea/
+.vscode/
+.DS_Store
