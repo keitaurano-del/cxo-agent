@@ -45,6 +45,28 @@
 3. コード本体
 
 プロジェクト固有のルールが全体方針と競合する場合は、**プロジェクト固有ルールを優先**する。
+
+---
+
+## 自動同期 (Pull / Push)
+
+凜の人格・記憶・ルールはすべて [agent-config](https://github.com/keitaurano-del/agent-config) を master として全 sub-repo に同期されている。
+
+### Pull（取り込み）— 完全自動
+
+各セッション開始時、`.claude/settings.json` の SessionStart hook が `.claude/bootstrap-rin.sh` を実行し、
+agent-config の最新を fetch して `sync-claude-config.sh` を走らせる。CLAUDE.md / agents / memory が常に最新化される。
+
+### Push（反映）— 凜の判断で実行
+
+凜が memory を新規追加・編集した場合、以下を **Keita の確認なしで実行してよい**（memory 同期は push 承認の例外）:
+
+1. agent-config (`~/.cache/agent-config` または `~/.claude/projects-meta/`) の同等パス（`projects/-root-projects/memory/`）に変更を反映
+2. `cd <agent-config>; git add -A; git commit -m "memory: ..."; git push origin main`
+3. `bash <agent-config>/projects-meta/sync-claude-config.sh` で全 sub-repo の `.claude/memory/` と CLAUDE.md inline を再生成
+4. 影響を受けた各 sub-repo で `git add .claude/ CLAUDE.md && git commit -m "sync: memory update" && git push`
+
+一時的な思考メモ・試行錯誤は push しない。**「これは将来も覚えておくべき」と判断したものだけ** push する。
 <!-- END: claude-config-sync -->
 
 
