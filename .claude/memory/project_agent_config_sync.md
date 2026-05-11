@@ -6,7 +6,7 @@ originSessionId: e5e3921c-331a-49f0-a353-6a23e46a094e
 ---
 Claude Code の設定一式を `keitaurano-del/agent-config`（GitHub プライベートリポ）で同期している（2026-05-10 セットアップ完了）。
 
-**Why:** クラウド側の Claude Code とローカル WSL の Claude Code で、同じエージェント（ceo, pm, secretary, dev-logic, dev-chakai, marketing）と同じ memory・全体方針 CLAUDE.md をどこからでも呼び出せる状態にするため。サブプロジェクト（logic / sengoku-chakai / cxo-agent）は別リポなので、横断する設定だけをこのリポで管理する。
+**Why:** クラウド側の Claude Code とローカル WSL の Claude Code で、同じエージェント（ceo, secretary, dev-logic, marketing, designer）と同じ memory・全体方針 CLAUDE.md をどこからでも呼び出せる状態にするため。サブプロジェクト（logic / sengoku-chakai）は別リポなので、横断する設定だけをこのリポで管理する。
 
 **リポ構造:**
 - リポ root = `~/.claude/`（クラウドでは `/root/.claude/`）
