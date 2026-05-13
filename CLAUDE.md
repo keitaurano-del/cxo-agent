@@ -97,6 +97,8 @@ agent-config の `projects/-root-projects/memory/` から sync。個別ファイ
 - [subagent 整理](project_agent_cleanup_20260511.md) — pm / dev-chakai を削除して 5体構成（ceo, secretary, dev-logic, marketing, designer）に整理（2026-05-11）
 - [Pixa は使わない](feedback_no_pixa.md) — 画像生成ツールとして Pixa は今後一切不使用。Figma + 手書き素材 or 外部ツール経由で対応（2026-05-11）
 - [Figma ログイン](reference_figma_login.md) — Figma は keita.urano@gmail.com の Google アカウントでログイン済み
+- [本番デプロイコマンド](reference_deploy_commands.md) — logic / en-chakai の手動デプロイは `gh workflow run deploy-production.yml -f confirm=yes`
+- [Logic Android 内部配信フロー](project_logic_android_deploy.md) — main push で内部テスターへ自動 rollout。Production 初回公開済み（2026-05-13）
 
 ### feedback_assistant_name.md
 
@@ -278,6 +280,40 @@ originSessionId: 7d04e427-5324-4d34-9f8f-c78e879fb838
 - 当面は general-purpose に designer.md の内容を渡して代行させることも可
 - agent-config 同期リポ（keitaurano-del/agent-config）に commit して反映する必要あり
 
+### project_logic_android_deploy.md
+
+---
+name: logic-android
+description: "Logic Android アプリは main push で内部テスターへ自動 rollout される（status: completed）。Production track は初回公開済み。"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: 26e077ed-506b-4d4b-8de3-9fcbabcccd82
+---
+
+Logic Android の内部テスト配信は **main 自動配信** で動いている（2026-05-13 セットアップ完了）。
+
+**Why:** 元々 `.github/workflows/android-deploy.yml` は `status: completed` で組まれていたが、Play Console 上で Production track が未公開（draft app 状態）だったため「Only releases with status draft may be created on draft app.」エラーで連続失敗していた。Keita が Play Console で初回 Production リリースを公開して draft app 状態を解除、workflow を `status: completed` で再開。これで完全自動化された。
+
+**現状の挙動:**
+- `main` に push → `Android Deploy → Play Console (Internal Test, ...)` workflow 起動
+- AAB ビルド → Play Console `internal` track に `status: completed` でアップロード
+- 内部テスター（Keita 含む）の Play Store に数分〜1時間以内で更新通知
+- 手動 promote 不要
+
+**How to apply:**
+- 「Logic を内部テストに配信して」と言われたら、`main` への push（または対象ブランチを main に merge）で完結する。Play Console を開く必要はない。
+- versionCode は `GITHUB_RUN_NUMBER + 1000`、versionName は `1.5.<RUN_NUMBER>` で自動採番（手で触らない）
+- workflow は `push: main` と `workflow_dispatch` の両方をサポート。手動再実行は `gh workflow run android-deploy.yml`
+- **Alpha/Closed/Production track への配信は手動**: workflow が触るのは `internal` のみ。上位 track は Play Console UI で promote する設計（コメント参照）
+- iOS 用 workflow は未整備。TestFlight 配信が必要になったら別途構築
+
+**既知の workflow warning（要対応リスト）:**
+- `track` パラメータが r0adkll/upload-google-play で deprecated。将来 `tracks` への移行必要
+- Node.js 20 系の actions（checkout@v4, setup-node@v4, etc）が 2026-09 で動かなくなる。v5 系へバージョン更新必要
+
+関連: [[reference_deploy_commands]]
+
 ### project_openclaw_oauth.md
 
 ---
@@ -327,6 +363,46 @@ GitHub リポ `keitaurano-del/sengoku-chakai` → `keitaurano-del/en-chakai` に
 - まだ残ってる作業: (1) `render.yaml` の `name: sengoku-chakai` → `en-chakai`（Render サービス名は不可変なので新サービス作成 → 切り替え）、(2) ドメイン `en-chakai.com` の取得確認・DNS 設定・301 リダイレクト。これは [[task-en-chakai-domain]] / [[task-render-rename]] として個別判断。
 - 「千石」「Sengoku」が残っている12ファイルはほぼ全部が**地名としての文京区千石**（駅・所在地）なので保持して OK。
 - GitHub は古い URL から自動リダイレクトが効くので外部リンクは一定期間は動く。
+
+### reference_deploy_commands.md
+
+---
+name: reference-deploy-commands
+description: logic / en-chakai の本番デプロイトリガー方法。両方とも手動 workflow_dispatch。
+metadata: 
+  node_type: memory
+  type: reference
+  originSessionId: bd549927-9a7d-40e4-9987-84f4b3d4fde6
+---
+
+両プロジェクトとも main への push では自動デプロイされない。デプロイは GitHub Actions workflow を手動トリガーする。
+
+## logic
+
+```bash
+gh workflow run deploy-production.yml --repo keitaurano-del/logic -f confirm=yes
+```
+
+- Workflow: `.github/workflows/deploy-production.yml`
+- 仕組み: Render API (`RENDER_API_KEY` + `RENDER_PROD_SERVICE_ID` の repo secrets) で `/deploys` を叩く
+- 本番 URL: https://logic-u5wn.onrender.com
+
+## en-chakai
+
+```bash
+gh workflow run deploy-production.yml --repo keitaurano-del/en-chakai -f confirm=yes
+```
+
+- Workflow: `.github/workflows/deploy-production.yml`（2026-05-12 追加）
+- 仕組み: Deploy Hook URL（`RENDER_DEPLOY_HOOK_URL` repo secret）に POST
+- 本番 URL: https://www.en-chakai.com
+- Render service 名は `sengoku-chakai` のまま（リネーム不可）
+
+## 共通の注意
+
+- `confirm=yes` を渡さないとガード job で即終了する仕様
+- デプロイ前にローカルで型チェック + lint 通しておくこと（CLAUDE.md デプロイ前チェック）
+- Deploy Hook URL / API key は repo secrets に登録済み。メモリやリポ本体には書かない。再発行が必要になったら Render Dashboard → Settings から取得 → `gh secret set` で更新
 
 ### reference_figma_login.md
 
