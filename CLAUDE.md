@@ -99,6 +99,39 @@ agent-config の `projects/-root-projects/memory/` から sync。個別ファイ
 - [Figma ログイン](reference_figma_login.md) — Figma は keita.urano@gmail.com の Google アカウントでログイン済み
 - [本番デプロイコマンド](reference_deploy_commands.md) — logic / en-chakai の手動デプロイは `gh workflow run deploy-production.yml -f confirm=yes`
 - [Logic Android 内部配信フロー](project_logic_android_deploy.md) — main push で内部テスターへ自動 rollout。Production 初回公開済み（2026-05-13）
+- [アプリUI文言は中立的な丁寧体](feedback_app_copy_neutral.md) — アプリ内のi18n/ラベル/エラー文言は凛口調NG、「〜です/〜ます」で書く。凛トーンはKeitaとの会話のみ
+
+### feedback_app_copy_neutral.md
+
+---
+name: feedback-app-copy-neutral
+description: アプリ UI の文言は凛の口調を使わず、中立的な丁寧体（〜です/〜ます）にする。凛の口調は Keita との会話のみ。
+metadata:
+  type: feedback
+originSessionId: cb531aab-abab-48c7-9cf2-4c7ad52988e1
+---
+
+アプリ（Logic / 円茶会など）に**表示される UI 文言は凛の口調を使わない**。中立的な丁寧体で書く。
+
+**Why:** 2026-05-15 Keita からの明示指示。「アプリは凛のトーンにしないで。普通の感じにして」。エンドユーザー向けプロダクトは AI アシスタントのキャラクター性を引きずらない方が UX として読みやすく、誰が読んでも違和感のないコピーになるため。
+
+**How to apply:**
+- アプリ内の **i18n 文言・ボタンラベル・エラーメッセージ・ヒント・空状態テキスト** は中立的な丁寧体（「〜です」「〜ます」「〜してください」「〜できます」）で書く
+- 使わない語尾：「〜わ」「〜のよ」「〜かしら」「〜てね」「〜みたい」「〜必要よ」「〜なの」など凛トーン全般
+- 使う例：
+  - ❌「整理に失敗したわ。もう一度試して」 → ✅「整理に失敗しました。もう一度お試しください」
+  - ❌「マイクの許可が必要よ。〜許可して」 → ✅「マイクの許可が必要です。〜許可してください」
+  - ❌「ジャーナルを使うにはログインが必要よ」 → ✅「ジャーナルの利用にはログインが必要です」
+  - ❌「タスクは見つからなかったわ」 → ✅「タスクは見つかりませんでした」
+- **凛トーンを使う場面（変更なし）**: Keita との Claude Code セッション内の会話、コミットメッセージ・PR 説明文・Slack 等の社内テキスト。アプリのエンドユーザーに見えない範囲は今まで通り凛口調で OK
+- en 側はもともとニュートラルなので参照基準にしてよい（凛トーンが入り込んでいたら同様に直す）
+
+**注意点:**
+- 過度な丁寧（「〜くださいませ」「お願い申し上げます」）は不要。ビジネスアプリの一般的な丁寧体レベルで止める
+- カジュアル要素（「OK」「ヒント」など）は凛トーンとは別物なので維持して OK
+- 「〜してください」が連続して堅くなる箇所は「〜できます」など能動表現に置き換えて自然化する
+
+関連 memory: [[feedback-tone]]（凛との会話側の口調ルール、こちらは保持）
 
 ### feedback_assistant_name.md
 
@@ -122,20 +155,27 @@ originSessionId: e5e3921c-331a-49f0-a353-6a23e46a094e
 ### feedback_logic_course_thumbnails.md
 
 ---
-name: Logic コースサムネイルは手書きフォント+図解スタイル
-description: Logic アプリのコース一覧サムネイルは手書きフォント＋図解で統一する。ダーク背景の「シーン」構成は方針外。
+name: Logic コースサムネイルは手書きフォント+図解スタイル（v4 PNG / Figma 製）
+description: Logic アプリのコース一覧サムネイルは Figma 制作 → PNG 書き出し（手書きフォント＋図解）で統一。SVG への巻き戻し禁止。
 type: feedback
 originSessionId: 7d04e427-5324-4d34-9f8f-c78e879fb838
 ---
-Logic アプリ（`public/images/v3/course-*.svg`）のコースサムネイルは「手書きフォント + 図解」スタイルで統一する。
+Logic アプリのコースサムネイルは **`public/images/v3/course-*.png`（v4、Figma 製、26 コース分）** をマスターとする。「手書きフォント + 図解」スタイル。
 
-**Why:** 2026-05-05 にマージされた PR #93 / #95 で23コース分のサムネイルがダーク背景 + 暖色スポット光のシーン構成（人物シルエット、机上の小物、夜空など）で実装されたが、Keita の本来の方針は「手書きフォント＋図解」だった。方針共有が抜けて23枚まるごと作り直しになった。
+**Why:**
+- 2026-05-05 PR #93 / #95 で23コース分が方針外（ダーク背景 + 写実シーン構成）でマージ → 全件作り直し
+- 2026-05-13 PR #140 で v4 PNG（Figma 製、Caveat フォント + クリーム notebook + 23 種図解）を投入し、コースサムネを正式にこのスタイルに統一
+- 同日 PR #156 が「`docs/HANDDRAWN_ROLLOUT_PLAN.md` の旧前提（既存 SVG = handdrawn の正解）」を信じて `courseData.ts` の `.png → .svg` 巻き戻しを実行 → 26 枚デグレ事故（PR #157 で revert）
 
 **How to apply:**
-- コースサムネイル / コース内図版を新規生成・差し替えする際は、必ず手書きフォント + 線画ベースの図解スタイルを採用する
+- 現行マスターは **`course-*.png`（v4 PNG）**。`courseData.ts` / `lessonSlides.ts` / `RoadmapScreenV3.tsx` の参照は **必ず `.png`** にする
+- legacy `course-*.svg`（インライン SVG + turbulence filter で擬似手書き）は参照しない。**「.png → .svg に戻す」変更は基本デグレと疑う**
+- 新規コース追加・サムネ作り直しは **v4 Figma マスター（https://www.figma.com/design/2SJYbSyMbBlSOyd3DJzbUc）** から複製 → PNG 書き出しが標準パイプライン
 - ダーク背景・写実的シーン・人物シルエット中心の構図は採用しない
-- 生成ツール（Pixa Ideogram v3 等）に渡すプロンプトには「handwritten font」「sketch」「diagram」「light/paper background」を明示する
-- サンプル1枚で承認を取ってから全体展開する（クレジット節約のため）
+- Pixa は使わない（[[feedback-no-pixa]]）。Gemini も Phase 2 以降で要なら検討だが、v4 では未使用
+- レッスンサムネ（lesson-*.webp、49 枚）と home/hero（4 枚）は未対応。Phase 2-3 で同じ notebook トーンに揃える
+- 関連 docs: `docs/HANDDRAWN_ROLLOUT_PLAN.md` / `docs/HANDDRAWN_STYLE_GUIDE.md`
+- サンプル1枚で承認を取ってから全体展開する（過去事故の再発防止）
 
 ### feedback_logic_marketing.md
 
