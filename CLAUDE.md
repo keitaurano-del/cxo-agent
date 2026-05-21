@@ -510,18 +510,19 @@ Logic Android アプリの Google Play Billing 実装は 2026-05-18 時点で **
 
 5. **✅ `initBilling()` 起動時呼び出し実装済（2026-05-21）** — `src/billing/index.ts` に `isAndroidNative()` ガード追加 + `src/AppV3.tsx` の最上位 useEffect 内で `void initBilling()` を呼出。Web/iOS では no-op、Android native のみ BillingClient.initialize() が走る
 
-**残ギャップ（要修正、優先度高い順）:**
+3. **✅ `onBillingServiceDisconnected` 再接続実装済（2026-05-21）** — `InAppBillingPlugin.kt` に `Handler(Looper.getMainLooper())` ベースの exponential backoff (1s → 2s → 4s → 8s → 16s、最大 60s クランプ) リトライを実装。最大 5 回まで試行、`onBillingSetupFinished` 成功時に `reconnectAttempts = 0` リセット、`handleOnDestroy` で pending callback とクライアントをクリーンアップ。CI (GitHub Actions android-deploy.yml) で Kotlin compile / AAB ビルド検証
 
-2. **🟠 RTDN (Real Time Developer Notifications) 未対応** — 解約・更新・払い戻し・grace period 入りが反映されない。Play Console で Pub/Sub topic を設定 → Cloud Run / Express endpoint で受信 → Supabase の `subscriptions.status` を更新する仕組みが必要。
+2. **🟡 RTDN サーバー endpoint 実装済（2026-05-21）／ Play Console + GCP 設定残** — `server/routes/billing.ts` に `POST /api/billing/rtdn` を追加（commit `9aef074`）。Pub/Sub Push 形式の body を base64 デコード → notificationType (1〜13) に応じて Supabase `subscriptions.status` を更新（active/canceled/on_hold/in_grace_period/revoked/expired 等）。エラー時も常に 200 ack（Pub/Sub 再配信ループ回避）。`019_rtdn_columns.sql` で `notification_type_last`/`notification_received_at` カラム + `idx_subscriptions_gp_token` 部分インデックス追加。
+   - **残課題**: (a) JWT 署名検証は未実装（Pub/Sub Push の `Authorization: Bearer` ヘッダを `google-auth-library` で検証する必要あり）、(b) Keita 側で GCP Pub/Sub topic 作成 + `google-play-developer-notifications@system.gserviceaccount.com` に publish 権限付与 + Play Console > Monetization setup > RTDN に topic 指定 + Push subscription 作成 (endpoint: `https://logic-u5wn.onrender.com/api/billing/rtdn`)、(c) Supabase 本番に `019_rtdn_columns.sql` migration 適用
 
-3. **🟠 `onBillingServiceDisconnected` 再接続なし** — `InAppBillingPlugin.kt:50` 付近で warn log のみ。`startConnection` retry を実装すべき。Kotlin 側修正 = Android 再ビルド・再配信が必要。
+**残ギャップ:**
 
 4. **⚪ Play Console SKU 登録確認** — `logic_paid_monthly` / `logic_paid_yearly` が Play Console の "Subscriptions" で Active として登録され、Production 向け価格が設定されているか Keita 確認が必要。
 
 **How to apply:**
-- #1 acknowledge と #5 initBilling は完了。「3 日放置で返金」と「初回購入時の初期化漏れ」リスクは解消されている
-- 次の優先は **#2 RTDN**（解約・払い戻し追跡）— インフラ寄りで Pub/Sub 設定が必要、Keita 相談案件
-- **#3 native 再接続**は Kotlin 修正＋再配信なのでまとめてやるのが効率的
+- #1 acknowledge / #3 再接続 / #5 initBilling は完了済、リスク解消済
+- #2 RTDN はサーバー側完了、Play Console + GCP 設定 + Supabase migration 適用は Keita 作業（手順は #2 セクション参照）
+- #2 完了後、JWT 検証追加で完全クローズ
 - **#4 SKU 確認**は Keita が Play Console で確認するだけ
 - ASO・マーケ施策で課金 CTA を強調する前に #4 は必須確認
 
