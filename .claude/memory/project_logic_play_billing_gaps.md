@@ -20,7 +20,9 @@ Logic Android アプリの Google Play Billing 実装は 2026-05-18 時点で **
 
 **完了済みギャップ:**
 
-1. **✅ `acknowledgePurchase` 実装済（2026-05-18 PR #203 / commit `ac40f4d`）** — `server/routes/billing.ts` line 85-99 で `androidpublisher.purchases.subscriptions.acknowledge` をサーバー側実行。`acknowledgementState === 0` のときのみ呼ぶ冪等化付き。ack 失敗は `console.error` でログのみ、verify 結果は返す設計
+1. **✅ `acknowledgePurchase` 実装済（2026-05-18 PR #203 / commit `ac40f4d`）** — `server/routes/billing.ts` line 85-99 で `androidpublisher.purchases.subscriptions.acknowledge` をサーバー側実行。`acknowledgementState === 0` のときのみ呼ぶ冪等化付き
+
+5. **✅ `initBilling()` 起動時呼び出し実装済（2026-05-21）** — `src/billing/index.ts` に `isAndroidNative()` ガード追加 + `src/AppV3.tsx` の最上位 useEffect 内で `void initBilling()` を呼出。Web/iOS では no-op、Android native のみ BillingClient.initialize() が走る
 
 **残ギャップ（要修正、優先度高い順）:**
 
@@ -30,14 +32,11 @@ Logic Android アプリの Google Play Billing 実装は 2026-05-18 時点で **
 
 4. **⚪ Play Console SKU 登録確認** — `logic_paid_monthly` / `logic_paid_yearly` が Play Console の "Subscriptions" で Active として登録され、Production 向け価格が設定されているか Keita 確認が必要。
 
-5. **⚪ `initBilling()` の起動時呼び出し確認** — App エントリーポイント（AppV3.tsx もしくは Capacitor ready）で呼ばれているか未確認。
-
 **How to apply:**
-- #1 acknowledge は完了。これで「3 日放置で返金」リスクは解消されている
+- #1 acknowledge と #5 initBilling は完了。「3 日放置で返金」と「初回購入時の初期化漏れ」リスクは解消されている
 - 次の優先は **#2 RTDN**（解約・払い戻し追跡）— インフラ寄りで Pub/Sub 設定が必要、Keita 相談案件
 - **#3 native 再接続**は Kotlin 修正＋再配信なのでまとめてやるのが効率的
 - **#4 SKU 確認**は Keita が Play Console で確認するだけ
-- **#5 initBilling 呼出確認**はコードレビュー 5 分で済む（凜が単独で完結可）
 - ASO・マーケ施策で課金 CTA を強調する前に #4 は必須確認
 
 **関連:** [[project-logic-android-deploy]]、[[project-logic-mobile-only]]、[[feedback-logic-marketing]]
