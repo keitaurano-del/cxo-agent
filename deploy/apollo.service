@@ -1,0 +1,22 @@
+[Unit]
+Description=Apollo dashboard (cxo-agent) — origin server on :4317
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dev
+Group=dev
+WorkingDirectory=/home/dev/projects/cxo-agent/server
+# tsx を直接起動して node を main プロセスにする（アプリの SIGTERM graceful shutdown を効かせるため）
+ExecStart=/home/dev/projects/cxo-agent/server/node_modules/.bin/tsx src/index.ts
+EnvironmentFile=/home/dev/projects/cxo-agent/.mc.env
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+# 裏の作業エージェントが pkill で巻き添え kill しても自動復活させる
+Restart=always
+RestartSec=3
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

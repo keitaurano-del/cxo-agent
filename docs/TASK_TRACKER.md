@@ -1,0 +1,653 @@
+# TASK_TRACKER — cxo-agent / Apollo
+
+task-manager エージェントが管理するタスク台帳の正本。
+ステータス: TODO / IN_PROGRESS / BLOCKED / REVIEW / DONE / CANCELLED
+更新は必ずこのファイルに反映する。実装は dev-logic / designer に委譲（task-manager は実装しない）。
+
+承認済みプラン全文: `/home/dev/.claude/plans/snazzy-hopping-spindle.md`
+
+---
+
+## プロダクト概要 — Apollo（開発状況リアルタイム可視化ダッシュボード）
+
+> 製品名: **Apollo**（旧称 Mission Control）。`MC-xx` の ID プレフィックスは内部識別子としてそのまま維持。
+
+logic / en-chakai / 西丸町(nishimaru-chokai) / ai-pmo / cxo-agent / プライベート + 全14エージェントの
+「誰が今何をしてるか・誰が止まってるか・タスク進捗/滞留・エージェント同士の会話」を1画面で
+リアルタイム可視化する常駐ダッシュボード。Vultr サーバ常駐。
+
+- データ源泉（ハイブリッド）: markdown タスク台帳 + `~/.claude/projects/**/subagents/**/agent-*.jsonl` 解析
+- スタック: ai-pmo 流用。backend Node22 + Express5 + TS / frontend React18 + Vite5 + Tailwind3 + react-router-dom6 + react-markdown + remark-gfm / ライブ更新 chokidar watch → SSE（+ 12秒ポーリングfallback）
+- ホスティング: `web/dist` を server が静的配信、systemd 常駐、token/Basic 認証で保護。スマホ向けトンネルは follow-up。
+
+### 委譲・品質ゲート方針
+- 着手登録は task-manager に通し本ファイルを正本化。コード実装は dev-logic、ビジュアルは designer。
+- 各フェーズ後に **reviewer / test-smoke** で品質ゲート（生成→レビュー→統合）。
+- push・本番デプロイ・Vultr 常駐化判断は **Keita 承認必須**。
+
+---
+
+## バッチ: 2026-05-30 Apollo 新規構築（Phase 0〜4）
+
+ID 採番: **MC-0x（Phase0）/ MC-1x（Phase1）/ MC-2x（Phase2）/ MC-3x（Phase3）/ MC-4x（Phase4）/ MC-Gx（品質ゲート）**。
+
+> **実態反映（2026-05-30）**: server/src・web/ が実装済みで、サーバは :4317 で稼働中（systemd `apollo.service` 経由、node PID 確認）。web/dist もビルド済み（`index-sF0N5r2g.js`）。実ファイルの実在を根拠に、完了相当タスクを DONE、検証未完を REVIEW に更新。判断保留は REVIEW + 確認メモ。
+
+| ID | タイトル | 優先度 | フェーズ | ステータス | 担当 | 依存 |
+|----|---------|--------|---------|-----------|------|------|
+| MC-01 | server/web 雛形 scaffold（ai-pmo 流用） | P0 | Phase0 | DONE | dev-logic | なし |
+| MC-02 | config.ts（データパス・しきい値・projectMap 定数） | P0 | Phase0 | DONE | dev-logic | MC-01 |
+| MC-03 | lib/projectMap.ts（cwd/パス→プロジェクト写像） | P0 | Phase0 | DONE | dev-logic | MC-02 |
+| MC-G0 | Phase0 品質ゲート（scaffold ビルド通過・dev起動確認） | P0 | Phase0 | REVIEW | reviewer + test-smoke | MC-01〜03 |
+| MC-11 | collector: agents.ts（jsonl解析・稼働/会話） | P0 | Phase1 | DONE | dev-logic | MC-G0 |
+| MC-12 | lib: jsonl.ts + agentMap.ts（agentId↔subagent_type 解決） | P0 | Phase1 | REVIEW | dev-logic | MC-G0 |
+| MC-13 | lib: stall.ts（滞留判定・8分しきい値） | P0 | Phase1 | DONE | dev-logic | MC-G0 |
+| MC-14 | collector: tasks.ts（TASK_TRACKER/kanban/today パース正規化） | P0 | Phase1 | DONE | dev-logic | MC-G0 |
+| MC-15 | collector: narrative.ts（briefing/inspection/feedback 最新） | P1 | Phase1 | DONE | dev-logic | MC-G0 |
+| MC-16 | collector: roster.ts（60-Agents/*.md 役割×稼働マージ） | P1 | Phase1 | DONE | dev-logic | MC-11 |
+| MC-17 | REST API（/api/agents /tasks /narrative /roster） | P0 | Phase1 | DONE | dev-logic | MC-11〜16 |
+| MC-G1 | Phase1 品質ゲート（4 API が実データ JSON 返却・型/エラー検証） | P0 | Phase1 | REVIEW | reviewer + test-smoke | MC-17 |
+| MC-21 | frontend 基盤（App/routes/Tailwind/useLiveData 雛形） | P0 | Phase2 | DONE | dev-logic | MC-G1 |
+| MC-22 | views/Overview.tsx（KPI帯＋プロジェクトカード） | P0 | Phase2 | DONE | dev-logic + designer | MC-21 |
+| MC-23 | views/Agents.tsx（14体グリッド＋会話タイムライン） | P0 | Phase2 | DONE | dev-logic + designer | MC-21 |
+| MC-24 | views/Tasks.tsx（Kanban・色分け・滞留バッジ） | P0 | Phase2 | DONE | dev-logic + designer | MC-21 |
+| MC-25 | views/Narrative.tsx（react-markdown サマリ） | P1 | Phase2 | DONE | dev-logic | MC-21 |
+| MC-26 | デザインシステム（配色/状態ドット/タイポ/レスポンシブ） | P1 | Phase2 | REVIEW | designer | MC-21 |
+| MC-G2 | Phase2 品質ゲート（4ビュー描画・HTTP200・クラッシュ無し） | P0 | Phase2 | REVIEW | reviewer + test-smoke | MC-22〜26 |
+| MC-31 | watch.ts（chokidar watch → SSE broadcast） | P0 | Phase3 | DONE | dev-logic | MC-G2 |
+| MC-32 | /api/stream（SSE エンドポイント・接続管理） | P0 | Phase3 | DONE | dev-logic | MC-31 |
+| MC-33 | useLiveData.ts ライブ化（EventSource＋12秒ポーリングfallback） | P0 | Phase3 | DONE | dev-logic | MC-32 |
+| MC-34 | views/Feed.tsx（親Task→子作業→result 会話ストリーム） | P1 | Phase3 | DONE | dev-logic + designer | MC-33 |
+| MC-G3 | Phase3 品質ゲート（touch/追記→数秒で SSE 反映・再接続） | P0 | Phase3 | REVIEW | reviewer + test-smoke | MC-31〜34 |
+| MC-41 | web build→server 静的配信（同一オリジン /api・SSE） | P0 | Phase4 | DONE | dev-logic | MC-G3 |
+| MC-42 | 認証（token/Basic）でポート保護 | P0 | Phase4 | DONE | dev-logic | MC-41 |
+| MC-43 | deploy/apollo.service（systemd unit）＋README | P0 | Phase4 | REVIEW | dev-logic | MC-41 |
+| MC-44 | Vultr 常駐化実行 | P0 | Phase4 | REVIEW | dev-logic + Keita | MC-42, MC-43 |
+| MC-45 | スマホ向けトンネル（Caddy/cloudflared）— follow-up | P2 | Phase4 | TODO | dev-logic + Keita | MC-44 |
+| MC-G4 | Phase4 品質ゲート（常駐起動・認証・全画面 E2E smoke） | P0 | Phase4 | REVIEW | reviewer + test-smoke | MC-41〜44 |
+
+---
+
+## Phase 0 — scaffold（担当 dev-logic）
+
+### MC-01 — server/web 雛形 scaffold（ai-pmo 流用）　[P0 / Phase0]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `server/`（package.json/tsconfig/src 一式）・`web/`（package.json/vite.config/tsconfig/src 一式）が実在。両 tsbuildinfo あり、web/dist ビルド済み。
+- 詳細: `cxo-agent/server/`（Node22+Express5+TS, `ai-pmo/api/src/server.ts` 同型）と `cxo-agent/web/`（React18+Vite5+Tailwind3+react-router-dom6+react-markdown+remark-gfm, `ai-pmo/viewer/package.json` 依存踏襲）の雛形を作成。ディレクトリ構造はプラン記載のツリー通り。
+- 関連ファイル: `cxo-agent/server/`, `cxo-agent/web/`, `ai-pmo/api/src/server.ts`（参照元）, `ai-pmo/viewer/package.json`（参照元）
+- DoD: `server && npm run dev` で Express が起動しヘルスチェック応答／`web && npm run dev` で空の React アプリが描画／両 tsc green。
+- 依存: なし
+- 提言・抜けもれ:
+  - tsconfig / eslint config も ai-pmo から流用し、CI lint は `eslint .`（リポ全体）で確認（reference_logic_ci_lint_scope 準拠）。docs/samples を見逃さない。
+  - `.gitignore` に `node_modules` `web/dist` `*.log` を入れる（コミット汚染防止）。
+  - server の listen ポートは env で可変に（常駐時の競合回避）。
+
+### MC-02 — config.ts　[P0 / Phase0]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `server/src/config.ts` 実在。DATA_HOME/CLAUDE_PROJECTS_DIR/PROJECTS_DIR/VAULT_DIR/CXO_TRACKER/TASK_SOURCES/NARRATIVE_DIRS/ROSTER_DIR/VAULT_EXCLUDE_DIRS・STALL_MINUTES・PORT を集約、env override 対応。
+- 詳細: データパス（`~/.claude/projects`, `~/projects/*`, obsidian-vault パス）・滞留しきい値・cwd→プロジェクト写像の定数を集約。
+- 関連ファイル: `cxo-agent/server/src/config.ts`
+- DoD: 全パス・しきい値が1ファイルに集約され、collectors が参照。ハードコード散在なし。
+- 依存: MC-01
+- 提言・抜けもれ:
+  - **滞留しきい値は8分（active < 8分 / idle 8分〜）。8分未満で切らない**（reference_subagent_slow_not_dead 準拠）。定数にコメントで根拠明記。
+  - パスは `os.homedir()` ベースで解決（Vultr とローカルで $HOME 差を吸収）。
+  - obsidian-vault の絶対パスを env override 可能に（環境差吸収）。
+
+### MC-03 — lib/projectMap.ts　[P0 / Phase0]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `server/src/lib/projectMap.ts` 実在。
+- 詳細: cwd / ファイルパス / gitBranch → プロジェクト名（logic / en-chakai / 西丸町 / ai-pmo / cxo / private）の写像。プライベート/個人は obsidian 10-Tasks 等を private に割当。
+- 関連ファイル: `cxo-agent/server/src/lib/projectMap.ts`
+- DoD: 代表 cwd を渡すと正しいプロジェクト名が返る。未知 cwd は `unknown`（落ちない）。
+- 依存: MC-02
+- 提言・抜けもれ:
+  - 西丸町は `nishimaru-chokai` / `nishimarucho-flyer` 両表記があり得る → 両方マップ。
+  - **プライベート割当ルール**を明示（10-Tasks, 50-Daily の個人系 → private）。漏れると「unknown 多発」になる。
+
+---
+
+## Phase 1 — backend collectors + REST API（担当 dev-logic）
+
+### MC-11 — collector: agents.ts　[P0 / Phase1]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `server/src/collectors/agents.ts` 実在、`/api/agents` ルート稼働。`lib/jsonl.ts`/`lib/stall.ts`/`lib/redact.ts` 連携。
+- 詳細: `subagents/**/agent-*.jsonl`（101本）を列挙。最終行 timestamp（無ければ mtime）→最終活動。状態 active(<8分)/idle(8分〜)/done(result行/終了)/never。cwd・gitBranch→projectMap。message ストリーム→最新作業スニペット＋会話フィード。
+- 関連ファイル: `cxo-agent/server/src/collectors/agents.ts`, `lib/jsonl.ts`, `lib/projectMap.ts`, `lib/stall.ts`
+- DoD: `/api/agents` が101ファイル分の `{agentId,label,project,status,lastActivity,snippet}` を返す。空/壊れ jsonl で落ちない。
+- 依存: MC-G0
+- 提言・抜けもれ:
+  - 巨大 jsonl をフル読みせずストリーム/末尾読みで（メモリ・速度）。
+  - 壊れ行（JSON parse 失敗）はスキップしてログ、全体は落とさない。
+  - **per-server で本機の活動しか見えない**点を API レスポンスに `source: hostname` で明示（後述リスク）。
+
+### MC-12 — lib: jsonl.ts + agentMap.ts（最難所）　[P0 / Phase1]
+- ステータス: REVIEW / 担当: dev-logic
+- 実態根拠(2026-05-30): `server/src/lib/jsonl.ts`・`server/src/lib/agentMap.ts` 実在。**確認メモ**: 本タスクは台帳上「最大リスク」。マッチ率メトリクス（matched/total）と先頭 user message 照合の頑健性が実データで検証できているか未確認のため DONE 化せず REVIEW。reviewer でマッチ率を計測してから DONE 判定。
+- 詳細: jsonl.ts=ストリーム読み・最終 timestamp 抽出。agentMap.ts=親セッション jsonl の `Task` tool_use（subagent_type+description+prompt）を抽出し、subagent ファイル先頭 user message（=Task prompt と一致）でマッチングしてラベル付与。ワークフロー孫は `subagents/workflows/wf_*/` パスで判別。マッチ不能時は cwd ベース暫定ラベル。
+- 関連ファイル: `cxo-agent/server/src/lib/jsonl.ts`, `cxo-agent/server/src/lib/agentMap.ts`
+- DoD: 代表 subagent ファイルに正しい subagent_type ラベルが付く。マッチ不能でも `unknown(cwd)` で落ちない。
+- 依存: MC-G0
+- 提言・抜けもれ:
+  - ⚠ **本実装の一番の勘所＝最大リスク**。先頭 user message 完全一致が崩れるケース（prompt の前後トリム・改行差）を normalize して照合。
+  - マッチ率を内部メトリクスで出せると検証が楽（matched/total）。
+  - workflow 孫のパスパターンは実物 `subagents/workflows/wf_*/` を確認してから正規表現を組む。
+
+### MC-13 — lib: stall.ts（滞留判定）　[P0 / Phase1]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `server/src/lib/stall.ts` 実在、`STALL_MINUTES` を config 参照。境界値テストは MC-G1/test-smoke 側で確認。
+- 詳細: lastActivity と現在時刻の差・ステータスから stalled 判定。タスク側 updated 古さ＆IN_PROGRESS のまま→stalled。
+- 関連ファイル: `cxo-agent/server/src/lib/stall.ts`
+- DoD: 8分しきい値で active/idle を境界判定。タスク stalled バッジ判定が機能。
+- 依存: MC-G0
+- 提言・抜けもれ:
+  - **8分未満で stalled/dead と判定しない**（誤検知＝進行中エージェントを殺す事故、reference_subagent_slow_not_dead）。境界値テストを test-smoke に含める。
+
+### MC-14 — collector: tasks.ts　[P0 / Phase1]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `server/src/collectors/tasks.ts` 実在。logicTracker / nishimaruTracker / **cxoTracker（自台帳ドッグフーディング）** / kanban / today をパース。cxo は ID|タイトル|優先度|フェーズ|ステータス|担当|依存 の列構成に対応、列フォールバックも実装済。
+- 詳細: markdown パース。`logic/docs/TASK_TRACKER.md`（`| ID | タイトル | 優先度 | 区分 | 担当 |` テーブル＋ステータス語）／`kanban.md`（`## 🔥 Now / 📋 Next / ✅ Done` 下チェックボックス＋owner:/priority:）／`nishimarucho-flyer/TASK_TRACKER.md`／`today.md`。→ `{id,title,status,owner,priority,project,updated}` 統一→Kanban列＋滞留検知。
+- 関連ファイル: `cxo-agent/server/src/collectors/tasks.ts`, パース対象: `logic/docs/TASK_TRACKER.md`, `obsidian-vault/20-Projects/nishimarucho-flyer/TASK_TRACKER.md`, `obsidian-vault/10-Tasks/kanban.md`, `today.md`, **本ファイル `cxo-agent/docs/TASK_TRACKER.md`**
+- DoD: `/api/tasks` が全台帳の正規化タスク配列を返す。ステータス6語に正しくマップ。パース失敗台帳はスキップして他は返す。
+- 依存: MC-G0
+- 提言・抜けもれ:
+  - **本 Apollo 自身の台帳（cxo-agent/docs/TASK_TRACKER.md）もパース対象に含める**こと（ドッグフーディング＝自分のタスクも可視化）。プランのリスト外なので明示。
+  - logic 台帳は本ファイルと同じ MC 形式テーブル＋`### ID — ...` 見出し＋`- ステータス:` 行の2系統がある。両形式を拾えるパーサにする（見落とし防止）。
+  - 区分列とステータス語の混同に注意（区分=トリアージ、status=進行状態）。
+  - **永続化/再表示**: パースは read-only。書き戻しはしない（台帳の正本は人＝task-manager が管理）。
+
+### MC-15 — collector: narrative.ts　[P1 / Phase1]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `server/src/collectors/narrative.ts` 実在、`/api/narrative` 稼働、NARRATIVE_DIRS 参照。
+- 詳細: `50-Daily/briefings|inspections|feedback/*.md` の最新日付ファイルを読み要点返却。
+- 関連ファイル: `cxo-agent/server/src/collectors/narrative.ts`
+- DoD: `/api/narrative` が本日（無ければ直近）の briefing/inspection/feedback 要点を返す。
+- 依存: MC-G0
+- 提言・抜けもれ:
+  - 日付ソートは ISO ファイル名 or frontmatter date で。タイムゾーンずれで「昨日が最新」にならないよう JST 基準。
+  - ファイル不在時は空配列（落とさない）。
+
+### MC-16 — collector: roster.ts　[P1 / Phase1]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `server/src/collectors/roster.ts` 実在、`/api/roster` 稼働、ROSTER_DIR(60-Agents) 参照。
+- 詳細: `60-Agents/*.md`（14体）の役割定義を読み、agents collector の稼働状態をマージ。
+- 関連ファイル: `cxo-agent/server/src/collectors/roster.ts`
+- DoD: `/api/roster` が14体の `{name,role,status,project,lastActivity}` を返す。役割と稼働が結合。
+- 依存: MC-11
+- 提言・抜けもれ:
+  - **roster の14体 と agents collector の agentId のマッチング**は agentMap と同根の課題。名前マッピング表を config 化（subagent_type ↔ 60-Agents ファイル名）。
+  - 14体に満たない/超える場合（never 稼働の体）も roster には出す（「待機中」表示）。
+
+### MC-17 — REST API　[P0 / Phase1]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `server/src/index.ts` に `/api/agents` `/api/agents/:id/feed` `/api/tasks` `/api/narrative` `/api/roster` `/api/overview` `/api/health` 実装。:4317 で稼働中。
+- 詳細: `/api/agents` `/api/tasks` `/api/narrative` `/api/roster` を Express ルートで公開。
+- 関連ファイル: `cxo-agent/server/src/index.ts`
+- DoD: 4エンドポイント全てが 200＋正規化 JSON。1 collector が落ちても他は応答（部分劣化）。
+- 依存: MC-11〜16
+- 提言・抜けもれ:
+  - collector ごとに try/catch、エラーは `{error}` フィールドで返し 200 維持（1台帳の破損で全画面ダウンしない）。
+  - レスポンスに `generatedAt` と `source(hostname)` を付与。
+
+---
+
+## Phase 2 — frontend 4ビュー（担当 dev-logic + designer）
+
+### MC-21 — frontend 基盤　[P0 / Phase2]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `web/src/App.tsx`・`web/src/lib/useLiveData.ts`・`web/src/lib/liveContext.ts`・共通 `components/ui.tsx`/`PageHeader.tsx`・`web/src/index.css`/Tailwind config 実在。web/dist ビルド済み。
+- 詳細: App.tsx / routes / Tailwind 設定 / `lib/useLiveData.ts` 雛形（Phase2 は静的 fetch、Phase3 でライブ化）。
+- 関連ファイル: `cxo-agent/web/src/App.tsx`, `web/src/routes`, `web/src/lib/useLiveData.ts`
+- DoD: 4ルート（/overview /agents /tasks /narrative）がナビゲートでき、各 API を fetch して描画。
+- 依存: MC-G1
+- 提言・抜けもれ:
+  - Feed は Phase3 で追加するルートだが、ルーター構造を先に拡張余地ありにしておく。
+  - loading/error 状態の共通コンポーネントを最初に作る（各ビューで使い回し）。
+
+### MC-22 — views/Overview.tsx（司令塔）　[P0 / Phase2]
+- ステータス: DONE / 担当: dev-logic + designer
+- 実態根拠(2026-05-30): `web/src/views/Overview.tsx` 実在、`/api/overview` 連携。
+- 詳細: 上部 KPI 帯（active N / idle N / 進行中タスク / 滞留タスク）。下にプロジェクトカード（logic/en-chakai/西丸町/ai-pmo/cxo/private）。各カードにタスク件数・最終活動・状態ドット。
+- 関連ファイル: `cxo-agent/web/src/views/Overview.tsx`
+- DoD: KPI 4指標が API から算出表示、6プロジェクトカードが状態ドット付きで並ぶ。
+- 依存: MC-21
+- 提言・抜けもれ:
+  - **状態ドットの色は意味を担う**ので語ラベル/aria 併記（🟢active/🟡idle 等は色だけに頼らない＝アクセシビリティ）。
+  - **ハードコード hex 禁止・CSS 変数/Tailwind トークン使用・UI chrome の emoji 不可（SVG のみ）**（デザイン制約。本文の絵文字ハイブリッドは UI chrome には適用しない）。
+
+### MC-23 — views/Agents.tsx　[P0 / Phase2]
+- ステータス: DONE / 担当: dev-logic + designer
+- 実態根拠(2026-05-30): `web/src/views/Agents.tsx` + `web/src/components/AgentFeed.tsx` 実在。
+- 詳細: 14体カードグリッド（active/idle/never/stalled・現プロジェクト・最終活動・最新行動）。クリックでその子エージェント会話タイムライン。
+- 関連ファイル: `cxo-agent/web/src/views/Agents.tsx`
+- DoD: 14体が状態色付きで並び、クリックで会話タイムラインが開く。never 稼働も「待機中」で表示。
+- 依存: MC-21
+- 提言・抜けもれ:
+  - 状態は色＋語ラベル併記（アクセシビリティ）。
+  - 会話タイムラインの長文は仮想化 or ページングを検討（101本×多メッセージで重くなる）。
+
+### MC-24 — views/Tasks.tsx（Kanban）　[P0 / Phase2]
+- ステータス: DONE / 担当: dev-logic + designer
+- 実態根拠(2026-05-30): `web/src/views/Tasks.tsx` 実在。CANCELLED の Kanban 置き場方針は reviewer 確認推奨（要確認点として継続）。
+- 詳細: TODO/IN_PROGRESS/BLOCKED/REVIEW/DONE の Kanban。プロジェクト色分け・滞留バッジ。
+- 関連ファイル: `cxo-agent/web/src/views/Tasks.tsx`
+- DoD: 5列 Kanban にタスクが配置、プロジェクト色＋滞留バッジ表示。CANCELLED の扱いを決めて表示。
+- 依存: MC-21
+- 提言・抜けもれ:
+  - ステータスは6語（CANCELLED 含む）。Kanban 5列＋CANCELLED の置き場を決める（折りたたみ列 or 非表示トグル）。プランは5列記載なので要確認点として注記。
+  - プロジェクト色分けは projectMap の色を config 一元化（Overview と統一、ハードコード散在禁止）。
+  - 滞留バッジのしきい値は stall.ts と同一基準（二重定義しない）。
+
+### MC-25 — views/Narrative.tsx　[P1 / Phase2]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `web/src/views/Narrative.tsx` + `web/src/components/ObsidianMarkdown.tsx`（react-markdown レンダラ）実在。
+- 詳細: briefing + inspection + feedback 最新を react-markdown（remark-gfm）表示。
+- 関連ファイル: `cxo-agent/web/src/views/Narrative.tsx`
+- DoD: 本日サマリが markdown レンダリングで表示。table/checkbox（gfm）が崩れない。
+- 依存: MC-21
+- 提言・抜けもれ:
+  - react-markdown のリンク/画像は同一オリジン外を新規タブ＋rel 付与（安全側）。
+
+### MC-26 — デザインシステム　[P1 / Phase2]
+- ステータス: REVIEW / 担当: designer
+- 実態根拠(2026-05-30): `web/src/index.css`・Tailwind config・`components/icons.tsx`（SVG）実在で実装はある。**確認メモ**: ハードコード hex 禁止・CSS変数/トークン統一・UI chrome SVG 限定（emoji 不可）・状態色の語ラベル/aria 併記、の制約遵守を designer/reviewer が目視確認してから DONE。
+- 詳細: 配色トークン・状態ドット意匠（SVG）・タイポ・レスポンシブ（PC 常駐＋スマホチラ見）の指針を1セット。
+- 関連ファイル: `cxo-agent/web/src/index.css`, Tailwind config, designer 指示書
+- DoD: 全ビューが共通トークンで統一、状態色が一意、スマホ幅で破綻しない。
+- 依存: MC-21
+- 提言・抜けもれ:
+  - **ハードコード hex 禁止・CSS 変数/Tailwind トークン・UI chrome は SVG のみ（emoji 不可）**。
+  - スマホ向けトンネル（MC-45）を見据え最初からレスポンシブ前提で。
+
+---
+
+## Phase 3 — SSE + chokidar watch + Feed ライブ化（担当 dev-logic）
+
+### MC-31 — watch.ts（chokidar → SSE broadcast）　[P0 / Phase3]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `server/src/watch.ts` 実在。chokidar watcher 1本・WATCH_DEBOUNCE_MS で間引き・ignored で .git/node_modules 除外・エラー握り潰しでクラッシュ耐性。
+- 詳細: データディレクトリ（subagents jsonl・台帳 md・narrative md）を chokidar watch、変更で該当 collector 再計算→SSE broadcast。
+- 関連ファイル: `cxo-agent/server/src/watch.ts`
+- DoD: 監視対象の touch/追記で broadcast イベントが飛ぶ。
+- 依存: MC-G2
+- 提言・抜けもれ:
+  - jsonl は高頻度追記。debounce/throttle で broadcast を間引く（過剰再計算防止）。
+  - watch 対象が101本＋台帳＋narrative で多い。`usePolling` 回避しネイティブ watch、ignore で node_modules/.git 除外。
+
+### MC-32 — /api/stream（SSE）　[P0 / Phase3]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `server/src/index.ts:254` に `/api/stream`（text/event-stream・ping ハートビート）実装。
+- 詳細: SSE エンドポイント。接続管理・ハートbeat・切断検知。
+- 関連ファイル: `cxo-agent/server/src/index.ts`
+- DoD: 複数クライアント接続で broadcast が全員に届く。切断でリーク無し。
+- 依存: MC-31
+- 提言・抜けもれ:
+  - ハートビート（コメント行）で proxy/トンネルのアイドル切断を防ぐ（MC-45 トンネル時に効く）。
+
+### MC-33 — useLiveData.ts ライブ化　[P0 / Phase3]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `web/src/lib/useLiveData.ts` 実在。EventSource(`/api/stream`)購読 + POLL_INTERVAL_MS=12000 のポーリング fallback + 明示再接続制御。
+- 詳細: EventSource 購読＋12秒ポーリング fallback。SSE 切断時はポーリングへ自動フォールバック・再接続。
+- 関連ファイル: `cxo-agent/web/src/lib/useLiveData.ts`
+- DoD: SSE 受信で画面更新、SSE 不通時もポーリングで更新継続。再接続で復帰。
+- 依存: MC-32
+- 提言・抜けもれ:
+  - 二重更新（SSE＋ポーリング同時）でちらつかないよう dedupe。
+
+### MC-34 — views/Feed.tsx（会話ストリーム）　[P1 / Phase3]
+- ステータス: DONE / 担当: dev-logic + designer
+- 実態根拠(2026-05-30): `web/src/views/Feed.tsx` 実在。
+- 詳細: 親 Task 指示→子作業→result を時系列マージしたストリーム。プロジェクト/エージェントで絞り込み。
+- 関連ファイル: `cxo-agent/web/src/views/Feed.tsx`, `web/src/App.tsx`（ルート追加）
+- DoD: 時系列マージされた会話がライブ流入、フィルタが効く。
+- 依存: MC-33
+- 提言・抜けもれ:
+  - **agentId↔subagent_type マッチング（MC-12）に全面依存**。マッチ不能分は「unknown」レーンに落とし、欠落で固まらない。
+  - 長尺ストリームの仮想化（パフォーマンス）。
+
+---
+
+## Phase 4 — Vultr systemd 常駐 + 認証（担当 dev-logic + Keita 承認）
+
+### MC-41 — web build → server 静的配信　[P0 / Phase4]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `web/dist`（index.html + index-sF0N5r2g.js + index-w14wJSY9.css）ビルド済み。`server/src/index.ts:295` で `express.static(WEB_DIST)` + SPA fallback `/*splat`。同一オリジンで /api・SSE・UI 配信。
+- 詳細: `web && npm run build`→`web/dist` を server が静的配信。同一オリジンで /api と SSE。
+- 関連ファイル: `cxo-agent/server/src/index.ts`, `cxo-agent/web`（build）
+- DoD: server 単体起動で UI＋/api＋SSE が同一オリジンで動く。
+- 依存: MC-G3
+- 提言・抜けもれ: build artifact（web/dist）は gitignore、デプロイ時ビルド。
+
+### MC-42 — 認証（token/Basic）　[P0 / Phase4]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `server/src/lib/auth.ts` 実装。MC_TOKEN(env) 設定時に Bearer / `?token=` / Cookie(mc_token, httpOnly+SameSite=Lax) のいずれかで認証、未認証は 401。`/api/*`・SSE・静的配信・SPA fallback すべてに適用（`/api/healthz` のみ公開）。EventSource 用にクエリ token 受けあり。トークンは env 管理（ハードコードなし）。
+- 詳細: ポートを token または Basic 認証で保護。/api・SSE・静的配信すべてに適用。
+- 関連ファイル: `cxo-agent/server/src/index.ts`（auth middleware）, env
+- DoD: 認証無しアクセスは 401。トークンは env 管理（ハードコード禁止）。
+- 依存: MC-41
+- 提言・抜けもれ:
+  - **シークレットをリポにコミットしない**（env/secret manager）。誤コミット時の rotate 手順を README に。
+  - SSE にも認証を効かせる（EventSource はカスタムヘッダ不可→クエリトークン or Cookie で）。
+
+### MC-43 — deploy/apollo.service ＋ README　[P0 / Phase4]
+- ステータス: REVIEW / 担当: dev-logic
+- 詳細: systemd unit ＋ Vultr 常駐手順 README。
+- 関連ファイル: `cxo-agent/deploy/apollo.service`, `cxo-agent/deploy/README.md`, `cxo-agent/README.md`
+- 実態根拠(2026-05-30): `deploy/apollo.service` 実在（tsx 直起動・EnvironmentFile=.mc.env・Restart=always・WantedBy=multi-user.target）。**確認メモ**: `deploy/README.md` が見当たらない（install/start/logs/rotate 手順）。README 整備が確認できるまで DONE 化せず REVIEW。
+- DoD: unit でサービス定義、README に install/start/logs/rotate 手順が揃う。
+- 依存: MC-41
+- 提言・抜けもれ:
+  - 対象は Vultr 2台目（本機, 167.179.64.231）か要確認（project_vultr_second_server 参照）。**どのサーバに常駐させるか Keita 確認点**。
+  - 再起動時自動起動（WantedBy=multi-user.target）・ログローテ・ポート env を unit に。
+
+### MC-44 — Vultr 常駐化実行　[P0 / Phase4]
+- ステータス: REVIEW（常駐は稼働中・E2E/再起動検証待ち）/ 担当: dev-logic + Keita
+- 詳細: systemd 登録・起動・常駐確認を本機（Vultr）上で実行。
+- 関連ファイル: deploy 一式
+- DoD: サービスが常駐起動、再起動後も自動復帰、認証越しに全画面 E2E が通る。
+- 依存: MC-42, MC-43
+- 実態根拠(2026-05-30): server が :4317 で **稼働中**（node PID 106131 が LISTEN）。`apollo.service` の Restart=always 経由で常駐している模様。
+- 提言・抜けもれ:
+  - **確認メモ**: 「再起動後の自動復帰（enable 済みか）」「認証越しの全画面 E2E（MC-G4）通過」が未確認のため DONE 化せず REVIEW。`systemctl is-enabled apollo.service` と再起動復帰・E2E smoke を確認してから DONE。
+  - 本番反映＝Keita 承認必須（CLAUDE.md）。既に常駐済みのため、常駐自体の追認を Keita に確認。
+
+### MC-45 — スマホ向けトンネル（follow-up）　[P2 / Phase4]
+- ステータス: TODO / 担当: dev-logic + Keita
+- 詳細: Caddy or cloudflared で逆プロキシ/トンネル＋token。deploy/README に手順。
+- 関連ファイル: `cxo-agent/deploy/README.md`
+- DoD: スマホから token 付き URL でチラ見できる。
+- 依存: MC-44
+- 提言・抜けもれ:
+  - **明示的に follow-up（まず常駐を立てる）**。Phase4 本体完了前に着手しない。
+  - トンネル経由は認証を二重に（トンネル token＋アプリ認証）。
+
+---
+
+## 品質ゲート（reviewer + test-smoke）
+
+各フェーズ完了時に必ず通す。生成しっぱなしにしない（生成→レビュー→統合）。
+
+> **実態(2026-05-30)**: 実装は全フェーズ揃って稼働中だが、各ゲートの **検証エビデンス（tsc/eslint/Playwright smoke の実行ログ）** が台帳に残っていないため、ゲートは全て **REVIEW** 据え置き。reviewer + test-smoke を回して green を確認した時点で各ゲートを DONE 化する。
+
+- **MC-G0（Phase0）** [REVIEW]: scaffold が両 tsc green・dev 起動・eslint . green。
+- **MC-G1（Phase1）** [REVIEW]: 4 API が実データ JSON 返却・collector 単体の壊れ入力耐性・型検証。
+- **MC-G2（Phase2）** [REVIEW]: 4ビュー HTTP200・描画・クラッシュ無し（Playwright smoke）。
+- **MC-G3（Phase3）** [REVIEW]: touch/追記→数秒で SSE 反映・SSE 切断→ポーリング fallback・再接続。
+- **MC-G4（Phase4）** [REVIEW]: 常駐起動・認証 401 動作・全画面 E2E smoke。
+
+各ゲート未通過のフェーズは次フェーズへ進めない（依存で表現済み）。実装先行で稼働済みのため、ゲートは「後追い検証」として回す。
+
+---
+
+## リスク・留意（台帳注記）
+
+1. **agentId↔subagent_type マッチング（MC-12）が最難所**。親セッション Task tool_use の先頭 user message 照合＋cwd フォールバックで頑健化。マッチ率を内部メトリクス化して検証。Feed（MC-34）と roster（MC-16）がこれに依存するため、ここが崩れると複数画面が劣化する。
+2. **per-server で本機の活動しか見えない**。jsonl は走っているサーバ単位。Vultr 2台目（本機）以外のセッションは映らない。API レスポンスに `source(hostname)` を明示し「全社ではなく本機ビュー」と誤読させない。将来は各サーバから集約 push する拡張余地（今回スコープ外）。
+3. **滞留しきい値は8分未満で切らない**（reference_subagent_slow_not_dead）。short kill は進行中エージェントの誤検知＝事故。stall.ts の境界値テストを必須化。
+4. **プライベート/個人の projectMap 割当**（obsidian 10-Tasks 等→private）。漏れると unknown 多発。
+5. **シークレット管理**（MC-42）。認証トークンを env 管理、誤コミット防止＋rotate 手順。
+6. **CANCELLED の Kanban 表示方針**（MC-24）。プランは5列だが status は6語。置き場を決める要確認点。
+7. **本台帳自身もパース対象**（MC-14）。Apollo が自分のタスクを映すドッグフーディング。プラン明記外なので注記。
+
+---
+
+## 抜けもれ提言サマリ
+
+プランに明示されていなかったがサブタスク/注記として台帳化したもの:
+
+- **MC-14**: tasks collector のパース対象に **本ファイル（cxo-agent/docs/TASK_TRACKER.md）自身**を追加（ドッグフーディング）。logic 台帳の2系統フォーマット（テーブル＋見出し）両対応。
+- **MC-12 / MC-16**: agentMap のマッチ不能時の `unknown` フォールバックを各画面で「固まらない」設計に（Feed/roster の連鎖劣化防止）。マッチ率メトリクス。
+- **MC-22/23/24/26**: アクセシビリティ＝状態色は語ラベル/aria 併記（色のみ依存禁止）。デザイン制約＝ハードコード hex 禁止・CSS変数/トークン・UI chrome は SVG のみ（emoji 不可）。
+- **MC-24**: CANCELLED の Kanban 置き場（5列 vs 6 status）を要確認点として明示。
+- **MC-13 / リスク3**: 8分しきい値の境界値テストを test-smoke 必須項目に。
+- **MC-17**: collector 部分劣化設計（1台帳破損で全 API ダウンしない、try/catch＋`{error}`）。
+- **MC-42**: SSE への認証適用（EventSource のヘッダ制約→クエリトークン/Cookie）。シークレット rotate 手順。
+- **MC-43**: 常駐先サーバ（Vultr 2台目 167.179.64.231 か）の確定が Keita 確認点。
+- **i18n**: 本プロダクトは内部ツール（Keita のみ）想定のため i18n 両言語化は対象外と判断（必要なら追加）。← Keita 確認点。
+- **両OS**: 本プロダクトは Web ダッシュボード（Capacitor/ネイティブ無し）→両OS確認は非該当。スマホは MC-45 のブラウザ閲覧のみ。
+
+---
+
+## 次アクション
+
+> **2026-05-30 実態整合更新**: Phase0〜4 は実装が出揃い、Apollo は :4317 で稼働中。残りは「検証エビデンスの後追い」と「Keita 追認」。
+
+1. **品質ゲートの後追い検証**（最優先）: MC-G0〜G4・MC-G5 を reviewer + test-smoke で実行し green を確認 → 各ゲートと REVIEW タスク（MC-12/26/43/44/51）を DONE に昇格。
+   - MC-12: agentMap マッチ率メトリクス（matched/total）を実データで計測。
+   - MC-51/MC-G5: パストラバーサル境界値 smoke（`..%2f`/二重エンコード/NULL/symlink）。
+   - MC-44: `systemctl is-enabled apollo.service` と再起動復帰・認証越し全画面 E2E。
+2. **MC-43**: `deploy/README.md`（install/start/logs/rotate/token rotate 手順）の整備を確認 → DONE。
+3. **Keita 追認点**:
+   - (a) 常駐先＝本機（Vultr）で確定でよいか（既に稼働中、追認）。
+   - (b) 製品名 Apollo 表記の最終確認（本台帳は Apollo に統一済み）。
+   - (c) i18n 両言語化は不要（内部ツール）でよいか。
+4. **MC-45（スマホ向けトンネル）** は follow-up のまま。常駐の安定確認後に着手。
+
+---
+
+## バッチ: 2026-05-30 Obsidian Vault 一元化ビュー（MC-5x / MVP=読む専用）
+
+承認済みプラン全文: `/home/dev/.claude/plans/snazzy-hopping-spindle.md`
+
+### 背景・目的
+現状ダッシュボードは obsidian-vault の一部（10-Tasks のタスク、50-Daily の briefing/inspection/feedback、60-Agents 台帳）しか取り込んでいない。Keita の要望で「Obsidian の内容もこっちで一元化」＝**Vault 全体**（00-Inbox / 10-Tasks / 20-Knowledge / 20-Projects / 40-Resources / 50-Daily / 60-Agents / 90-Templates 等）をダッシュボード上で**閲覧**できる新ビュー「Vault」を追加する。
+
+### スコープ（MVP）
+- **読む専用**（read-only）。編集は今回スコープ外（MC-58 で follow-up 起票・BLOCKED）。
+- backend: vault collector ＋ 4 API（tree / note / search / attachment）＋ wikilink→パス解決。**パストラバーサル防止が最重要セキュリティ要件**。
+- frontend: 新ビュー「Vault」（左フォルダツリー / 中央ノート本文レンダリング / 上部全文検索）。Obsidian 記法対応。
+- 既存 token 認証が全体（/api/vault/* 含む）に効くこと（追加認証は不要、MC-42 の延長）。
+
+ID 採番: **MC-5x（Vault 一元化）/ MC-G5（品質ゲート）**。Phase 1（backend）→ Phase 2（frontend）に概ね対応するが、既存 Phase 完了を待たず独立バッチとして管理（依存は下表参照）。
+
+> **実態反映(2026-05-30)**: Vault バックエンド（`server/src/collectors/vault.ts` + `server/src/lib/vaultPath.ts`）と 4 API（tree/note/search/attachment、`/api/vault/*` 稼働）、frontend（`web/src/views/Vault.tsx` + `components/ObsidianMarkdown.tsx` + `components/VaultTree.tsx` + `lib/obsidian.ts`）が実装済み。wikilink 解決（MC-54）は独立 `wikilink.ts` ではなく `vault.ts` 内に集約されている（タイトル索引キャッシュ + `resolveWikilink` 相当）。
+
+| ID | タイトル | 優先度 | 層 | ステータス | 担当 | 依存 |
+|----|---------|--------|-----|-----------|------|------|
+| MC-51 | vault collector: lib/vaultPath.ts（realpath 限定・パストラバーサル防止） | P0 | backend | REVIEW | dev-logic | MC-02, MC-G0 |
+| MC-52 | collector: vaultTree.ts ＋ GET /api/vault/tree（フォルダツリー・遅延ロード） | P0 | backend | DONE | dev-logic | MC-51 |
+| MC-53 | collector: vaultNote.ts ＋ GET /api/vault/note?path=（本文・frontmatter 分離） | P0 | backend | DONE | dev-logic | MC-51 |
+| MC-54 | wikilink 解決（[[wikilink]]/![[embed]]→パス解決・曖昧名解決） ※vault.ts に集約 | P0 | backend | DONE | dev-logic | MC-51, MC-52 |
+| MC-55 | GET /api/vault/search?q=（全文検索・インデックス/キャッシュ要否判断） | P1 | backend | DONE | dev-logic | MC-51 |
+| MC-56 | GET /api/vault/attachment?path=（添付/画像配信・MIME・realpath 限定） | P1 | backend | DONE | dev-logic | MC-51 |
+| MC-57 | views/Vault.tsx（左ツリー/中央レンダリング/上部検索・Obsidian 記法対応） | P0 | frontend | DONE | dev-logic + designer | MC-52〜56, MC-21 |
+| MC-58 | follow-up: Vault ノート編集機能（obsidian-git 同期競合リスク） | P2 | follow-up | **BLOCKED** | dev-logic + Keita | MC-57 |
+| MC-G5 | Vault 品質ゲート（パストラバーサル防御・4 API・記法レンダリング smoke） | P0 | gate | REVIEW | reviewer + test-smoke | MC-51〜57 |
+
+---
+
+### MC-51 — lib/vaultPath.ts（パストラバーサル防止）　[P0 / backend]
+- ステータス: REVIEW / 担当: dev-logic
+- 実態根拠(2026-05-30): `server/src/lib/vaultPath.ts` 実在。lexical 正規化 + path.resolve + 境界文字付き prefix 検証 + `realpathSync` で symlink 実体再検証 + FORBIDDEN_SEGMENTS（.git/.obsidian/.claude/node_modules/.trash）拒否。SafePathError を 400/403 にマップ。**確認メモ**: 本バッチ最重要のセキュリティ要件のため、`..%2f`/二重エンコード/NULL バイト/symlink 脱出の境界値 smoke（MC-G5）通過を確認してから DONE 化。
+- 詳細: 全 vault API が受け取る `path` クエリを vault root 配下に限定するガード。`path.resolve` で正規化後、`fs.realpathSync` で symlink を解決し、**vault root を realpath 化したものの配下に収まること**を検証。外れたら 400/403。`..` ／絶対パス ／ symlink 経由の脱出を全て封じる。
+- 関連ファイル: `cxo-agent/server/src/lib/vaultPath.ts`, `cxo-agent/server/src/config.ts`（vault root 参照）
+- DoD: `../`, 絶対パス, symlink 経由の脱出 path を渡すと拒否（403）。正規 path のみ通す。境界（root 直下・root 自身・存在しない path）で落ちない。
+- 依存: MC-02（config の vault root 定数）, MC-G0
+- 提言・抜けもれ:
+  - ⚠ **本バッチ最重要のセキュリティ要件**。realpath ベースで判定（文字列 prefix 比較だけだと `vault-evil/` のような prefix 一致で破られる → 末尾セパレータ込みで判定）。
+  - 全 vault API（tree/note/search/attachment）が**例外なくこのガードを通す**こと。1 本でも素通しがあると穴になる。
+  - 拒否時はパス内容をエラーレスポンスにエコーしない（情報漏洩・反射回避）。
+  - **境界値テストを MC-G5 の test-smoke 必須項目**に（`..%2f` URL エンコード・二重エンコード・NULL バイトも）。
+
+### MC-52 — vaultTree.ts ＋ GET /api/vault/tree　[P0 / backend]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `vault.ts` の `buildTree()` + `/api/vault/tree`（index.ts:135）実在。VAULT_EXCLUDE_DIRS で隠しフォルダ除外。
+- 詳細: vault root 配下のフォルダ/ノートをツリー構造（`{name,path,type:dir|note,children?}`）で返す。トップ階層（00-Inbox 〜 90-Templates）を起点に、深い階層は**遅延ロード**（`?path=` で部分ツリー取得）対応。`.obsidian/` ／ `.git/` ／ node_modules は除外。
+- 関連ファイル: `cxo-agent/server/src/collectors/vaultTree.ts`, `cxo-agent/server/src/index.ts`（ルート）
+- DoD: `/api/vault/tree` がルート階層のツリーを返す。`?path=20-Projects` で部分ツリーを返す。隠しフォルダ除外。空/巨大フォルダで落ちない。全 path が MC-51 ガード経由。
+- 依存: MC-51
+- 提言・抜けもれ:
+  - **Vault が大きいとツリーが重い（リスク2）** → 既定は1〜2階層だけ返し、展開時に遅延ロード。全展開を初回に返さない。
+  - ソート順を定義（フォルダ先頭・番号プレフィクス昇順）。Obsidian の表示順に寄せる。
+  - `.md` 以外（画像・PDF 等）も type 区別して返す（添付ナビ用、MC-56 と連動）。
+
+### MC-53 — vaultNote.ts ＋ GET /api/vault/note?path=　[P0 / backend]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `vault.ts` の `readNote()` + `parseFrontmatter()`（gray-matter 相当の自前実装）+ `/api/vault/note`（index.ts:139）実在。frontmatter/body 分離・title 導出・outgoing/backlinks 付き。
+- 詳細: 指定ノートの raw markdown を返す。frontmatter（YAML）を分離して `{frontmatter, body, path, title}` で返却。レンダリング自体は frontend（MC-57）だが、frontmatter のパースはここで実施（gray-matter 等）。
+- 関連ファイル: `cxo-agent/server/src/collectors/vaultNote.ts`
+- DoD: `/api/vault/note?path=...` が frontmatter 分離済み JSON を返す。frontmatter 無しノートも `frontmatter:{}` で正常。存在しない path は 404、ガード外は 403。
+- 依存: MC-51
+- 提言・抜けもれ:
+  - 巨大ノートのサイズ上限を設ける（極端に大きいファイルで OOM しない）。
+  - 文字コードは UTF-8 前提。BOM 除去。
+  - frontmatter パース失敗時は body 全体を本文扱いにフォールバック（落とさない）。
+
+### MC-54 — wikilink/embed→パス解決（vault.ts に集約）　[P0 / backend]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): 独立 `wikilink.ts` ではなく `vault.ts` に集約実装。タイトル索引（短期キャッシュ）+ wikilink ターゲット→vault 相対パス解決関数 + コードフェンス除外の抽出ロジックあり。未解決は null（壊れリンク扱い）。frontend `ObsidianMarkdown.tsx` の `resolveLink` がこの解決結果でクリック遷移。
+- 詳細: `[[Note Name]]` ／ `[[Note Name#heading]]` ／ `[[Note Name|alias]]` ／ `![[image.png]]` ／ `![[Note Name]]`（埋め込み）を vault 内の実パスに解決するユーティリティ。Obsidian は basename ベースのリンク（フォルダ跨ぎでも名前だけ）なので、**vault 全体のノート名 index** を持って解決。同名衝突時は最短パス or フォルダ近接で決定（Obsidian 準拠の優先順）。
+- 関連ファイル: `cxo-agent/server/src/lib/wikilink.ts`
+- DoD: 代表的な wikilink/embed 記法が正しい path に解決される。未解決リンク（存在しないノート）は `null`（壊れリンク扱い）で落ちない。解決結果も MC-51 ガード配下に収まる。
+- 依存: MC-51, MC-52（ツリー/ノート index を共有）
+- 提言・抜けもれ:
+  - **同名ノートの曖昧解決**が地雷。Obsidian の解決ルール（同フォルダ優先→最短パス）を踏襲。解決ログ/メトリクスを出せると検証が楽。
+  - index は起動時 or キャッシュ構築（毎リクエスト全 scan しない、リスク2）。watch（MC-31）で更新があれば再構築 hook を将来検討（今回は再起動 or TTL でも可）。
+  - frontend（MC-57）はこの解決結果でクリック遷移する → API レスポンスに解決済み path を含めるか、専用解決エンドポイントを切るか設計を1つに決める。
+
+### MC-55 — GET /api/vault/search?q=（全文検索）　[P1 / backend]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `vault.ts` の `searchVault()`（Node 読み・シェル grep 非依存）+ `/api/vault/search`（index.ts:150）実在。ファイル名＋本文検索、frontmatter/title 込み。
+- 詳細: vault 内 `.md` 全文に対するクエリ検索。`{path,title,snippet,matchCount}` の配列を返す。MVP は naive grep でも可だが、**Vault が大きいと重い（リスク2）** ため、インメモリインデックス or キャッシュの要否を判断して実装。
+- 関連ファイル: `cxo-agent/server/src/collectors/vaultSearch.ts`, `cxo-agent/server/src/index.ts`
+- DoD: `/api/vault/search?q=foo` がヒットノートと前後スニペットを返す。空クエリ・0 件・巨大 vault で破綻しない。全 path がガード配下。
+- 依存: MC-51
+- 提言・抜けもれ:
+  - **キャッシュ/インデックス要否判断を明記**（リスク2）。まず計測（vault サイズ・grep レイテンシ）→ 遅ければ index 化。生成しっぱなしにせず計測で裏取り。
+  - 検索結果はノート本文の機微情報を含む → 認証必須（MC-42）の確認を MC-G5 に含める（リスク3）。
+  - frontmatter/タグも検索対象に含めるか定義（タグ検索 #tag は便利）。
+
+### MC-56 — GET /api/vault/attachment?path=（添付/画像配信）　[P1 / backend]
+- ステータス: DONE / 担当: dev-logic
+- 実態根拠(2026-05-30): `vault.ts` の `resolveAttachment()` + `/api/vault/attachment`（index.ts:157）実在。MC-51 ガード経由・MIME 解決。SVG XSS 配信ヘッダ（Content-Disposition/CSP）と拡張子 allowlist の実装詳細は MC-G5 で確認推奨。
+- 詳細: vault 内の画像・PDF 等の添付を MIME 付きで配信（`![[image.png]]` 表示用）。バイナリストリーム返却、Content-Type を拡張子から解決。
+- 関連ファイル: `cxo-agent/server/src/index.ts`（ルート）, `cxo-agent/server/src/lib/vaultPath.ts`（ガード共用）
+- DoD: 画像 path で正しい MIME＋バイナリを返す。非添付/危険拡張子は拒否。ガード外 path は 403。
+- 依存: MC-51
+- 提言・抜けもれ:
+  - **MC-51 ガードを必ず通す**（画像配信は素通しになりがちな脱出経路）。
+  - 配信許可する拡張子を allowlist 化（png/jpg/gif/webp/svg/pdf 等）。`.md` や任意ファイル素配信を許さない。
+  - SVG 配信は XSS リスク（インライン script）→ `Content-Disposition`/CSP or sanitize 検討。
+  - 大きい添付はストリーミング配信（全読みしない）。
+
+### MC-57 — views/Vault.tsx（新ビュー）　[P0 / frontend]
+- ステータス: DONE / 担当: dev-logic + designer
+- 実態根拠(2026-05-30): `web/src/views/Vault.tsx` + `components/VaultTree.tsx` + `components/ObsidianMarkdown.tsx` + `lib/obsidian.ts` 実在。wikilink クリック遷移（未解決は淡色・非クリック）・embed 画像（/api/vault/attachment 経由）・callout（> [!info] 種別色）対応。
+- 詳細: 3 ペイン構成 ＝ 左フォルダツリー（MC-52、展開で遅延ロード）/ 中央ノート本文レンダリング（MC-53）/ 上部全文検索バー（MC-55）。**Obsidian 記法対応**: `[[wikilink]]` クリックで該当ノートへ遷移（MC-54 解決）・frontmatter をメタ表示・`#tag` 表示・`> [!callout]` 装飾・`![[embed]]` 画像表示（MC-56 経由）。react-markdown + remark-gfm ＋ Obsidian 拡張プラグイン/カスタムレンダラ。`/vault` ルート追加。
+- 関連ファイル: `cxo-agent/web/src/views/Vault.tsx`, `cxo-agent/web/src/App.tsx`（ルート追加）, `web/src/lib/useLiveData.ts`（fetch）
+- DoD: /vault でツリー・ノート・検索が機能。[[wikilink]] クリックで遷移、frontmatter 表示、#tag・callout・embed 画像が描画。ガード外 path をリクエストしない（解決済み path のみ辿る）。
+- 依存: MC-52〜56, MC-21（frontend 基盤）
+- 提言・抜けもれ:
+  - **ハードコード hex 禁止・CSS 変数/Tailwind トークン使用・UI chrome は SVG のみ（emoji 不可）**（既存デザイン制約）。callout のアイコンも SVG。
+  - 状態色/タグ色は意味を担うなら**語ラベル/aria 併記**（アクセシビリティ）。
+  - react-markdown の **HTML/画像/リンクは同一オリジン外を新規タブ＋rel 付与**、生 HTML は sanitize（MC-25 と同方針）。XSS 対策。
+  - 巨大ノート/長いツリーは仮想化 or ページング検討（MC-23/34 と同じパフォーマンス観点）。
+  - **未解決 wikilink（壊れリンク）は無効スタイルで表示**して固まらない（MC-54 の null を受ける）。
+  - レスポンシブ（PC 常駐＋スマホチラ見、MC-26/MC-45 見据え）。3 ペインはスマホ幅で段組み崩れしないよう折りたたみ。
+
+### MC-58 — follow-up: Vault ノート編集機能　[P2 / follow-up]
+- ステータス: **BLOCKED**（保留・今回スコープ外）/ 担当: dev-logic + Keita
+- 詳細: ダッシュボード上から vault ノートを編集・保存する機能。今回 MVP は read-only のため**着手しない**。1 件だけ起票して保留。
+- 関連ファイル: （未着手）
+- DoD: （保留中。着手判断が出てから DoD 定義）
+- 依存: MC-57
+- 提言・抜けもれ:
+  - ⚠ **obsidian-git 同期競合リスク**: Keita のローカル Obsidian が obsidian-git で自動 commit/pull している場合、ダッシュボードからの書き込みと衝突（コンフリクト・上書き・データ消失）し得る。編集を入れるなら (a) 楽観ロック/競合検知、(b) 書き込み先の git 状態確認、(c) 同期戦略の合意が前提。
+  - read 専用の今回は無害だが、編集解禁は**Keita の明示判断が必須**。BLOCKED 据え置き、勝手に IN_PROGRESS にしない。
+
+### MC-G5 — Vault 品質ゲート　[P0 / gate]
+- ステータス: REVIEW / 担当: reviewer + test-smoke
+- 実態(2026-05-30): MC-51〜57 実装済み・稼働中だが、パストラバーサル境界値 smoke・4 API 実データ検証・401 認証カバレッジ・記法レンダリング Playwright smoke の **エビデンスが台帳に未記録**。reviewer + test-smoke を回して green を確認した時点で DONE 化。
+- 詳細: MC-51〜57 完了時に通す品質ゲート（生成→レビュー→統合）。
+- DoD:
+  - **パストラバーサル防御 smoke**（`../` ／絶対パス ／ symlink ／ `..%2f` ／二重エンコード ／ NULL バイトを全 vault API に投げて 403/400・脱出無し）← 最重要。
+  - 4 API（tree/note/search/attachment）が実データで 200＋正規化レスポンス。壊れ入力耐性。
+  - **未認証アクセスは 401**（既存 token 認証が /api/vault/* に効く、MC-42 連動・リスク3）。
+  - frontend smoke: /vault 描画・wikilink クリック遷移・embed 画像表示・frontmatter/#tag/callout レンダリング・クラッシュ無し（Playwright）。
+  - 巨大 vault でツリー/検索が許容レイテンシ内（リスク2、計測値を記録）。
+- 依存: MC-51〜57
+- 提言・抜けもれ: パストラバーサル境界値テストは MC-51 単体テストと MC-G5 統合 smoke の**両方**に置く（防御の二重化検証）。
+
+---
+
+## リスク・留意（MC-5x 追記）
+
+1. **パストラバーサル＝最重要セキュリティ（MC-51）**。realpath ベースで vault root 配下限定、文字列 prefix 一致だけに頼らない。全 4 API（tree/note/search/attachment）が例外なくガードを通す。URL エンコード/二重エンコード/NULL バイト/symlink 脱出を境界値テストで封じる。1 本でも素通しがあると穴。
+2. **Vault が大きいとツリー/検索が重い（MC-52/55）**。ツリーは遅延ロード（初回1〜2階層）、検索はまず計測→必要なら index/キャッシュ化。wikilink 解決 index も起動時/キャッシュ構築で毎リクエスト全 scan しない。
+3. **機微情報（Vault は Keita 本人の内容）**。認証必須で保護＝既存 token 認証（MC-42）が /api/vault/* 全体に効くことを MC-G5 で 401 確認。検索結果・添付配信も認証配下。
+4. **wikilink 同名衝突解決（MC-54）**。Obsidian の basename リンク解決ルール（同フォルダ優先→最短パス）を踏襲。未解決は null＝壊れリンク表示で固まらせない。
+5. **編集スコープ外・obsidian-git 競合（MC-58）**。MVP は read-only。編集解禁は同期競合リスクのため Keita 明示判断必須、BLOCKED 据え置き。
+
+---
+
+## 抜けもれ提言サマリ（MC-5x 追記）
+
+プランに明示されていたものを台帳化＋暗黙タスクを先回りで起票したもの:
+
+- **MC-51 を独立タスク化**: パストラバーサル防御を「各 API に書く注意」ではなく**共用ガード lib として1本に集約**（全 API が必ず通す。素通し穴防止）。最重要セキュリティとして P0 単独起票。
+- **MC-54 wikilink 解決を独立タスク化**: `[[wikilink]]` クリック遷移は同名衝突解決が地雷。Obsidian 準拠ルール＋index キャッシュを明記。frontend と backend どちらで解決するか設計を1つに決める要確認点。
+- **MC-56 SVG 添付の XSS 注記**: 画像配信で SVG はインライン script リスク → sanitize/CSP/Content-Disposition を検討項目に。
+- **MC-57 react-markdown の sanitize/外部リンク rel**: 既存 MC-25 と同方針で XSS・外部遷移を安全側に。callout/embed のカスタムレンダラ実装が必要（react-markdown 素では Obsidian 記法非対応）。
+- **MC-G5 にパストラバーサル境界値 smoke を必須化**: 単体テスト（MC-51）＋統合 smoke（MC-G5）の二重化。URL エンコード/二重エンコード/NULL バイト/symlink を網羅。
+- **遅延ロード/キャッシュ要否を計測で裏取り**（MC-52/55）: 「重そう」で勝手に作り込まず、まず計測→必要なら index 化（efficiency 観点）。
+- **認証カバレッジ確認**（MC-G5）: 新 /api/vault/* が既存 token 認証配下に確実に入るか 401 テストで担保（追加認証は不要＝MC-42 の延長で OK の前提を検証）。
+- **i18n / 両OS**: 本ビューも内部ツール（Keita のみ）想定のため i18n 両言語化は対象外、Web ダッシュボードなので両OS非該当（既存バッチと同方針）。
+- **編集 follow-up を1件だけ起票・BLOCKED**（MC-58）: スコープ拡大防止。obsidian-git 競合を注記し Keita 判断待ちで保留。
+
+---
+
+## 次アクション（MC-5x）
+
+1. **着手前の Keita 確認点**:
+   - (a) MVP = read-only でよいか（編集 MC-58 は BLOCKED 保留の方針確認）。
+   - (b) wikilink 解決を backend 集中（解決済み path を返す）か frontend 解決（index を渡す）か — 設計を1つに寄せたい。
+   - (c) vault root の絶対パス（env override）確定（MC-02 の vault root 定数と一致させる）。
+2. 確認後 **MC-51（パストラバーサル防御 lib）から着手**。これが全 API の前提なので最初。dev-logic に委譲、workflow で生成→reviewer→統合。
+3. backend（MC-51〜56）→ MC-G5 のうち API 部分通過 → frontend（MC-57）→ MC-G5 統合 smoke の順。各段で品質ゲート。
+4. MC-58 は **BLOCKED 据え置き**。Keita 承認が出るまで IN_PROGRESS にしない。
+5. task-manager は各完了報告を受けて DoD 検証→DONE/REVIEW 差し戻し＋本台帳更新。
+
+---
+
+## バッチ: 2026-05-30 自律林ドライバ（autonomous-rin）
+
+### 概要・目的
+駆動役（対話セッションの林）がいなくてもタスクが**自律前進**する仕組み。30 分毎の cron で headless 林（`claude --print`）を起動し、着手可能タスクを「1ティック1タスク」だけ前進させる。green ゲート（テスト/型/lint 通過）を満たす限り **deploy まで全自律**（Keita 承認済み 2026-05-30）。
+
+ID 採番: **AR-0x**。
+
+| ID | タイトル | 優先度 | ステータス | 担当 | 依存 |
+|----|---------|--------|-----------|------|------|
+| AR-01 | autonomous-rin.sh（ティック駆動スクリプト・ガードレール） | P0 | REVIEW | 林 + Keita | なし |
+| AR-02 | cron 登録（*/30 で常時駆動） | P0 | TODO | 林 + Keita | AR-01 |
+| AR-G0 | dry-run 検証（DRY_RUN=1 で選定→1歩・push/deploy 無し） | P0 | TODO | 林 | AR-01 |
+
+### AR-01 — autonomous-rin.sh　[P0]
+- ステータス: REVIEW（スクリプト実在・dry-run 検証待ち）/ 担当: 林 + Keita
+- 詳細: 30 分毎 cron で headless 林を起動し1ティック1タスク前進。deploy まで全自律（Keita 承認済 2026-05-30）。
+- 関連ファイル: `/home/dev/cron-scripts/autonomous-rin.sh`、kill-switch `~/.autonomous-rin.disabled`、ロック `/tmp/autonomous-rin.lock`、ログ `~/logs/autonomous-rin.log`
+- 実態根拠(2026-05-30): `/home/dev/cron-scripts/autonomous-rin.sh` 実在（実行権限あり）。ガードレール実装確認: flock 排他（前ティック走行中は skip）・kill-switch（`~/.autonomous-rin.disabled` があれば即終了）・`DRY_RUN=1`（選定と1歩のみ・push/deploy 無し）・green ゲート/1ティック1タスク/deploy 最大1回はプロンプト側で厳守・`--print`(headless) で session-cleanup reap 対象外。
+- DoD: dry-run（DRY_RUN=1）で「タスク選定→1歩前進・push/deploy 無し」が確認でき、kill-switch で即停止できる。本番ティックで green ゲートを破らず deploy する。
+- 依存: なし
+- 提言・抜けもれ:
+  - **本番駆動の前に AR-G0（dry-run）を必ず通す**。いきなり cron 常時駆動にしない。
+  - kill-switch（`~/.autonomous-rin.disabled`）の存在・即停止を Keita がいつでも使える状態に（README/手順を残す）。
+  - green ゲート（test/型/lint）未通過時に push/deploy しないことをプロンプト側で厳守 — ここが破れると無人で赤デプロイの事故。logic は CI lint が `eslint .`（リポ全体）なので scoped lint で済ませない（reference_logic_ci_lint_scope）。
+  - ログローテ（`~/logs/autonomous-rin.log`）肥大化対策を検討。
+
+### AR-02 — cron 登録　[P0]
+- ステータス: TODO / 担当: 林 + Keita
+- 詳細: `*/30 * * * * bash -lc "$HOME/cron-scripts/autonomous-rin.sh >> $HOME/logs/autonomous-rin.log 2>&1"` を crontab に登録。
+- 実態根拠(2026-05-30): 現状 `crontab -l` に rin エントリ **無し**（未登録）。AR-G0 の dry-run 検証通過後に登録する。
+- DoD: crontab に登録され、30 分毎にティックが起動する（ログに tick start が刻まれる）。
+- 依存: AR-01（＋AR-G0 通過が前提）
+
+### AR-G0 — dry-run 検証　[P0]
+- ステータス: TODO / 担当: 林
+- 詳細: `DRY_RUN=1 bash ~/cron-scripts/autonomous-rin.sh` を1回実行し、(1) タスク選定が走る (2) 1歩だけ前進 (3) push/deploy が一切走らない (4) kill-switch で即終了する、を確認。
+- DoD: 上記4点を満たすログが取れる。問題なければ AR-01 を DONE、AR-02（cron 登録）へ。
+- 依存: AR-01
+
+---
+
+最終更新: 2026-05-30 / 管理: task-manager（実態整合: Apollo リネーム＋MC-0x〜MC-5x 実装反映＋autonomous-rin 追記）

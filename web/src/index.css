@@ -1,0 +1,287 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Apollo — デザイントークン（CSS 変数で一元化）
+ * ハードコード hex はここだけ。各コンポーネントは var(--mc-*) または
+ * tailwind theme トークン（tailwind.config.js が同じ変数を参照）を使う。
+ * designer が後から差し替えやすいよう、配色は全てここに集約する。
+ */
+:root {
+  /* surface（管制室風ダーク基調・AA コントラスト確保） */
+  --mc-bg: #0b1120;
+  --mc-surface: #131b2e;
+  --mc-surface-2: #1b2540;
+  --mc-surface-3: #243152;
+  --mc-border: #2c3a5a;
+  --mc-border-strong: #3b4d75;
+
+  /* text */
+  --mc-text: #e8edf7;
+  --mc-text-muted: #9fb0cc;
+  --mc-text-faint: #6b7da0;
+
+  /* brand / accent */
+  --mc-accent: #5b9dff;
+  --mc-accent-strong: #357bff;
+
+  /* status（状態色。語ラベル/aria を必ず併記し色のみ依存にしない） */
+  --mc-active: #2fd27a;
+  --mc-active-bg: #11341f;
+  --mc-idle: #f3c14b;
+  --mc-idle-bg: #38300f;
+  --mc-done: #7f8db0;
+  --mc-done-bg: #232c44;
+  --mc-never: #cdd6ea;
+  --mc-never-bg: #1b2236;
+  --mc-stalled: #ff5d5d;
+  --mc-stalled-bg: #3a1620;
+  --mc-blocked: #ff8a3d;
+  --mc-blocked-bg: #3a2413;
+  --mc-review: #b07dff;
+  --mc-review-bg: #2a1f44;
+
+  /* Obsidian callout 種別色 */
+  --mc-callout-info: #5b9dff;
+  --mc-callout-info-bg: #15233f;
+  --mc-callout-tip: #2fd27a;
+  --mc-callout-tip-bg: #11341f;
+  --mc-callout-warning: #f3c14b;
+  --mc-callout-warning-bg: #38300f;
+  --mc-callout-danger: #ff5d5d;
+  --mc-callout-danger-bg: #3a1620;
+  --mc-callout-note: #b07dff;
+  --mc-callout-note-bg: #2a1f44;
+  --mc-callout-quote: #9fb0cc;
+  --mc-callout-quote-bg: #1b2540;
+
+  /* project 色分け（Overview / Tasks / Feed 共通） */
+  --mc-proj-logic: #5b9dff;
+  --mc-proj-en-chakai: #2fb6a8;
+  --mc-proj-nishimaru: #e0935b;
+  --mc-proj-ai-pmo: #b07dff;
+  --mc-proj-cxo: #f3c14b;
+  --mc-proj-private: #8aa0c8;
+  --mc-proj-other: #6b7da0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  min-height: 100dvh;
+}
+
+/* フィルタ帯・カンバン用：横スクロールするがバーは隠す */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* active 状態ドットの脈動（情報密度を保ちつつ「動いている」ことを示す） */
+@keyframes mc-pulse-kf {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+.mc-pulse {
+  animation: mc-pulse-kf 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mc-pulse {
+    animation: none;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--mc-bg);
+  color: var(--mc-text);
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  font-feature-settings: 'palt';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* scrollbar（管制室トーンに馴染ませる） */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--mc-border);
+  border-radius: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* react-markdown レンダリングの最低限のタイポ */
+.mc-markdown {
+  line-height: 1.7;
+  font-size: 0.92rem;
+  color: var(--mc-text);
+  word-break: break-word;
+}
+.mc-markdown h1,
+.mc-markdown h2,
+.mc-markdown h3 {
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 1.2em 0 0.5em;
+}
+.mc-markdown h1 {
+  font-size: 1.35rem;
+}
+.mc-markdown h2 {
+  font-size: 1.15rem;
+  border-bottom: 1px solid var(--mc-border);
+  padding-bottom: 0.3em;
+}
+.mc-markdown h3 {
+  font-size: 1.02rem;
+}
+.mc-markdown p {
+  margin: 0.6em 0;
+}
+.mc-markdown ul,
+.mc-markdown ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+.mc-markdown li {
+  margin: 0.25em 0;
+}
+.mc-markdown code {
+  background: var(--mc-surface-3);
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+.mc-markdown pre {
+  background: var(--mc-surface);
+  border: 1px solid var(--mc-border);
+  padding: 0.9em;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.mc-markdown pre code {
+  background: none;
+  padding: 0;
+}
+.mc-markdown a {
+  color: var(--mc-accent);
+  text-decoration: underline;
+}
+.mc-markdown blockquote {
+  border-left: 3px solid var(--mc-border-strong);
+  margin: 0.8em 0;
+  padding: 0.2em 0 0.2em 1em;
+  color: var(--mc-text-muted);
+}
+.mc-markdown table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.8em 0;
+  font-size: 0.85rem;
+}
+.mc-markdown th,
+.mc-markdown td {
+  border: 1px solid var(--mc-border);
+  padding: 0.4em 0.6em;
+  text-align: left;
+}
+.mc-markdown th {
+  background: var(--mc-surface-2);
+}
+.mc-markdown hr {
+  border: none;
+  border-top: 1px solid var(--mc-border);
+  margin: 1.2em 0;
+}
+.mc-markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--mc-border);
+  margin: 0.6em 0;
+}
+.mc-markdown input[type='checkbox'] {
+  margin-right: 0.5em;
+  accent-color: var(--mc-accent);
+}
+
+/* Obsidian callout（> [!info] 等）— 種別色付きブロック */
+.mc-callout {
+  border-left: 4px solid var(--mc-callout-color, var(--mc-accent));
+  background: var(--mc-callout-bg, var(--mc-surface-2));
+  border-radius: 6px;
+  margin: 0.9em 0;
+  padding: 0.7em 0.9em;
+}
+.mc-callout-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--mc-callout-color, var(--mc-accent));
+  text-transform: capitalize;
+}
+.mc-callout-body {
+  margin-top: 0.3em;
+}
+.mc-callout-body > :first-child {
+  margin-top: 0;
+}
+.mc-callout-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* wikilink */
+.mc-wikilink {
+  color: var(--mc-accent);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--mc-accent);
+  cursor: pointer;
+  background: none;
+  padding: 0;
+  font: inherit;
+}
+.mc-wikilink:hover {
+  text-decoration: none;
+  border-bottom-style: solid;
+}
+.mc-wikilink-unresolved {
+  color: var(--mc-text-faint);
+  border-bottom: 1px dashed var(--mc-text-faint);
+  cursor: default;
+}
+
+/* inline #tag バッジ */
+.mc-tag {
+  display: inline-block;
+  font-size: 0.78em;
+  line-height: 1.2;
+  padding: 0.05em 0.45em;
+  margin: 0 0.1em;
+  border-radius: 999px;
+  background: var(--mc-surface-3);
+  color: var(--mc-accent);
+  white-space: nowrap;
+}

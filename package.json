@@ -1,0 +1,26 @@
+{
+  "name": "cxo-agent",
+  "version": "1.0.0",
+  "description": "CXO 向けエージェントリポジトリ。現在の主プロダクトは **Apollo**。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keitaurano-del/cxo-agent.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/keitaurano-del/cxo-agent/issues"
+  },
+  "homepage": "https://github.com/keitaurano-del/cxo-agent#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}

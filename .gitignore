@@ -1,0 +1,14 @@
+# secrets — never commit
+.mc_token
+.env
+.env.*
+
+# deps / build (per-package gitignores also cover these)
+node_modules/
+dist/
+*.log
+.mc.env
+
+# runtime state — inbox 投入データ/添付画像、テスト一時出力（ソースではない）
+data/
+test-results/
