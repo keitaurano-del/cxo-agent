@@ -650,4 +650,30 @@ ID 採番: **AR-0x**。
 
 ---
 
-最終更新: 2026-05-30 / 管理: task-manager（実態整合: Apollo リネーム＋MC-0x〜MC-5x 実装反映＋autonomous-rin 追記）
+## バッチ: 2026-05-31 ドッグフーディング feedback トリアージ（運用ミス1件）
+
+ソース: 社内ドッグフーディング(dogfood)で投入した feedback 全20件のトリアージ中に検出した Apollo 運用上の不整合1件。logic 系の actionable は `logic/docs/TASK_TRACKER.md` のバッチ「2026-05-31 ドッグフーディング feedback トリアージ」（FB-01〜FB-10＋既存 DF-F 系への dedup 寄せ）に登録済み。本ファイルには Apollo 運用ミス1件のみ。ID は既存 MC-01〜58/G0〜G5・AR-0x と衝突しない **MC-59**。
+
+### MC-59 — inbox.jsonl の消し込み漏れ修正（フェルミCTA件）
+- 優先度: P2（重大度: 低）/ ステータス: TODO / 担当案: dev-logic
+- 詳細: フェルミCTA件（inbox id `2026-05-30T22-51-15...`）は logic 側で UI-14 として実装・push（commit `d05e454`）・本番 deploy まで完了済みなのに、`cxo-agent/data/inbox.jsonl` 側の当該レコードが `status: pending` のまま残っている。実体は consumed 済み（自律林が `inbox-consumed.jsonl` に id 追記する運用＝project_autonomous_rin）なので台帳と実態が乖離している。
+- DoD: 当該 inbox レコードの status が consumed 済み実態と整合する（`status: pending` 解消、または `inbox-consumed.jsonl` との突き合わせで pending 表示が消える）。さらに、実装・deploy 完了時に inbox 側を自動で消し込む処理が入っていれば再発しない。
+- 関連: `cxo-agent/data/inbox.jsonl`、`cxo-agent/data/inbox-consumed.jsonl`、logic UI-14（実装済 commit `d05e454`）、自律林の消費ロジック（project_autonomous_rin）
+- 依存: なし
+- 提言・抜けもれ:
+  - 単発の手動 status 更新で済ませると同種の漏れが再発する。実装完了/deploy フックで inbox を consumed に落とす自動消し込みをセットで検討（恒久対策）。
+  - 過去の inbox 全体に同様の取り残し（実装済みなのに pending）が他にないか棚卸しすると良い。
+  - 回帰: 自動消し込みを入れる場合、まだ実装中の pending を誤って消さないこと（consumed 判定の根拠を明確に）。
+  - 破壊的編集に注意（data/ は自律林・Apollo が書く共有ファイル。名指し編集で）。
+- note: 2026-05-31 ドッグフーディング(dogfood)で検出。社内ドッグフーディング投入データ（source=dogfood）由来の運用上の不整合であり、外部実ユーザ起票ではない。
+- 更新日: 2026-05-31
+
+#### 抜けもれ提言サマリ（MC-59）
+- inbox.jsonl の status 管理は手動消し込み運用だと乖離が再発する。実装/deploy 完了と連動した自動消し込みを恒久対策として検討すべき。
+
+#### 次アクション（MC-59）
+- dev-logic が当該レコードの status 整合を修正。自動消し込み化の要否は Keita 判断。
+
+---
+
+最終更新: 2026-05-31 / 管理: task-manager（2026-05-31 ドッグフーディング feedback トリアージで MC-59 追記。旧: Apollo リネーム＋MC-0x〜MC-5x 実装反映＋autonomous-rin 追記）
