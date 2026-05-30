@@ -38,7 +38,7 @@ ID 採番: **MC-0x（Phase0）/ MC-1x（Phase1）/ MC-2x（Phase2）/ MC-3x（Ph
 | MC-01 | server/web 雛形 scaffold（ai-pmo 流用） | P0 | Phase0 | DONE | dev-logic | なし |
 | MC-02 | config.ts（データパス・しきい値・projectMap 定数） | P0 | Phase0 | DONE | dev-logic | MC-01 |
 | MC-03 | lib/projectMap.ts（cwd/パス→プロジェクト写像） | P0 | Phase0 | DONE | dev-logic | MC-02 |
-| MC-G0 | Phase0 品質ゲート（scaffold ビルド通過・dev起動確認） | P0 | Phase0 | REVIEW | reviewer + test-smoke | MC-01〜03 |
+| MC-G0 | Phase0 品質ゲート（scaffold ビルド通過・dev起動確認） | P0 | Phase0 | DONE（2026-05-31 後追い検証○。server `tsc --noEmit` EXIT0／web `tsc -b` EXIT0＝両 tsc green、`/api/healthz`→`{"ok":true}`＋systemd mission-control.service active＝稼働確認、web/dist ビルド成果物在。eslint は本リポ未設定〔root/server/web に config 無し〕＝ lint 対象なしで N/A、型ゲートは tsc で担保） | reviewer + test-smoke | MC-01〜03 |
 | MC-11 | collector: agents.ts（jsonl解析・稼働/会話） | P0 | Phase1 | DONE | dev-logic | MC-G0 |
 | MC-12 | lib: jsonl.ts + agentMap.ts（agentId↔subagent_type 解決） | P0 | Phase1 | REVIEW | dev-logic | MC-G0 |
 | MC-13 | lib: stall.ts（滞留判定・8分しきい値） | P0 | Phase1 | DONE | dev-logic | MC-G0 |
@@ -369,7 +369,7 @@ ID 採番: **MC-0x（Phase0）/ MC-1x（Phase1）/ MC-2x（Phase2）/ MC-3x（Ph
 
 > **実態(2026-05-30)**: 実装は全フェーズ揃って稼働中だが、各ゲートの **検証エビデンス（tsc/eslint/Playwright smoke の実行ログ）** が台帳に残っていないため、ゲートは全て **REVIEW** 据え置き。reviewer + test-smoke を回して green を確認した時点で各ゲートを DONE 化する。
 
-- **MC-G0（Phase0）** [REVIEW]: scaffold が両 tsc green・dev 起動・eslint . green。
+- **MC-G0（Phase0）** [DONE 2026-05-31]: scaffold が両 tsc green（server `tsc --noEmit` EXIT0／web `tsc -b` EXIT0）・dev 起動（`/api/healthz`→`{"ok":true}`・systemd active）。eslint は本リポ未設定で N/A（型ゲートは tsc が担保）。
 - **MC-G1（Phase1）** [REVIEW]: 4 API が実データ JSON 返却・collector 単体の壊れ入力耐性・型検証。
 - **MC-G2（Phase2）** [REVIEW]: 4ビュー HTTP200・描画・クラッシュ無し（Playwright smoke）。
 - **MC-G3（Phase3）** [REVIEW]: touch/追記→数秒で SSE 反映・SSE 切断→ポーリング fallback・再接続。
