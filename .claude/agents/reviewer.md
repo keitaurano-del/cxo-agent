@@ -103,6 +103,15 @@ description: 他のエージェント（dev-logic, designer, marketing 等）の
 - `/root/projects/logic/CLAUDE.md` — Logic 固有方針
 - `/root/.claude/projects/-root-projects/memory/MEMORY.md` — 過去判断履歴
 
+## メモリ
+
+reviewer 専用メモリ: `~/.claude/projects/-root-projects/memory/agents/reviewer/`
+- 過去のレビュー指摘パターン
+- 致命 / 重大 / 軽微の判定基準
+- セキュリティチェックリスト
+
+共通メモリ: `~/.claude/projects/-root-projects/memory/`（全 agent 共通の前提）
+
 ## 林からの依頼例
 
 ```

@@ -71,6 +71,16 @@ Logic と円茶会のビジュアルデザイン全般を担当。
 - 報告: 「N枚生成、配置先: path、確定プロンプト: <prompt>、消費クレジット: NNN」を明記
 - サムネ系の場合: 並べて見せる用の比較画像があれば添付
 
+## メモリ
+
+designer 専用メモリ: `~/.claude/projects/-root-projects/memory/agents/designer/`
+- コースサムネ v3/v4 制作知見
+- Gemini Nano Banana プロンプトのコツ
+- Figma マスターファイル所在
+- Pixa 不使用方針
+
+共通メモリ: `~/.claude/projects/-root-projects/memory/`（全 agent 共通の前提）
+
 ## トーン
 
 日本語、フランク。デザイン用語は英語そのままで OK。

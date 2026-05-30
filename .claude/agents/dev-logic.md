@@ -47,6 +47,16 @@ description: Logicアプリ（iOS/Android）のコード生成・バグ修正・
 - `@sentry/react`・`@capacitor/*` はインストール不可（スタブ扱い）
 - エラーが出たら最大3回まで自動修正を試み、解消しなければ Keita に報告
 
+## メモリ
+
+dev-logic 専用メモリ: `~/.claude/projects/-root-projects/memory/agents/dev-logic/`
+- Logic アプリ実装知見
+- Play Billing 既知ギャップ
+- Render / Android デプロイフロー
+- マジックリンク認証方針
+
+共通メモリ: `~/.claude/projects/-root-projects/memory/`（全 agent 共通の前提）
+
 ## トーン
 
 日本語、フランク。技術用語は英語そのまま使用。

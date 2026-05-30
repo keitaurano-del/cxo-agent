@@ -3,6 +3,11 @@
 - [cxo-agentリポジトリを使わない](feedback_no_cxo_agent.md) — GitHub Issue起票等でcxo-agentリポジトリは使用しない（logicかen-chakaiを使う）
 - [sengoku-chakai → en-chakai リネーム](project_rename_en_chakai.md) — GitHub リポ・ローカルディレクトリを sengoku-chakai → en-chakai に rename 完了（2026-05-11）。ブランド名は円茶会
 - [口調スタイル](feedback_tone.md) — おじいちゃん口調：「〜じゃ」「〜のう」「ほっほっ」を自然に混ぜる（2026-05-22 更新）
+- [呼称はKeita](feedback_address_keita.md) — オーナーへの呼びかけは「Keita」。「君」「あなた」で呼ばない（2026-05-30）
+- [開発は開発担当に委譲](feedback_delegate_dev.md) — コード実装は dev-logic 等に委譲。林が自分で実装を巻き取らない（2026-05-30）
+- [規模ある作業はworkflowで可視化](feedback_default_workflows.md) — 多段作業は毎回 /workflows でラベル付き孫エージェントをツリー可視化して回すのを標準に（2026-05-30）
+- [効率・正確さ・クオリティ最適化](feedback_quality_efficiency_accuracy.md) — workflowは生成→検証/レビュー→統合を基本形に。生成しっぱなしにせず品質ゲートを必ず置く（2026-05-30）
+- [サブエージェントは遅いだけで死んでない](reference_subagent_slow_not_dead.md) — 数分沈黙してから動く。stall監視は8分未満で切らない。短く殺すと進行中を誤kill（2026-05-30）
 - [Logic マーケティング方針](feedback_logic_marketing.md) — 「コーヒー1杯」系の安さアピールNG。高い代替手段との比較か価値直接訴求にする
 - [openclaw Anthropic OAuth](project_openclaw_oauth.md) — Claude.ai プラン OAuth で認証済み、env var の API キーは削除。default は sonnet-4-6
 - [agent-config 同期リポ](project_agent_config_sync.md) — Claude設定を keitaurano-del/agent-config で同期。projects-meta/ が実体、~/projects は symlink
@@ -23,3 +28,18 @@
 - [Gemini プロンプトのコツ](feedback_gemini_prompt_tricks.md) — Nano Banana の長英単語スペル崩し対策。短縮タイトル化と spell 強調が効く
 - [Metabase Phase 1 セットアップ](project_metabase_setup.md) — Supabase 側自動完了済（2026-05-23）。Render Blueprint deploy + Metabase 初回ログイン + 5 Question 登録は Keita 手動操作待ち
 - [Hermes ローカルツール](reference_hermes_local.md) — Keita ローカル WSL の Nous Research 製 AI エージェント。config 壊れた時は `~/.hermes/config.yaml.bak.*` から復旧
+- [Markdown 太字記法を多用しない](feedback_no_markdown_emphasis.md) — `**word**` 等の強調記号は Hermes 等で記号が見えて読みづらい。装飾なしで素直に書く
+- [コース/レッスン title は Doing 形維持](feedback_logic_title_doing.md) — title は「〜する」動詞句で維持。category 名は名詞句でOK（別レイヤー）
+- [Logic 全コンテンツ監査キャンペーン(2026-05-25)](project_logic_content_audit_20260525.md) — カテゴリ再編+全レッスン監査。成果物 logic/docs/CONTENT_AUDIT_20260525.md、triage は Bucket 仕分け
+- [監査triageはcorrectness優先で即修正](feedback_audit_triage_correctness_first.md) — 内容と図/計算の食い違い等の誤り修正はサンプル承認待ちにせず即Bucket1。承認待ちは新規生成系のみ
+- [報告はパス参照でなく内容を直接書く](feedback_direct_content_not_path.md) — Obsidian sync 差で Keita がファイルを開けない場合があるため、重要内容は会話本文に直接展開する（パス案内は補足）
+- [レッスン本文の視覚化はハイブリッド](feedback_logic_lesson_visual_hybrid.md) — 図解(SVG diagram)に加え、体系的=SVGアイコン/話題物=絵文字 のハイブリッドで読みやすく。本文限定、UI chromeはアイコンのみ。図解カバレッジは約30%
+- [Logic CI lint は eslint . で全体](reference_logic_ci_lint_scope.md) — CI は `eslint .` でリポ全体を lint。ローカル scoped lint だと docs/samples-src を見逃し push 後に赤くなる。デプロイ前は `eslint .` で確認
+- [task-manager subagent 新設](project_task_manager.md) — タスク管理専任 subagent を 2026-05-27 新設。ステータス管理・抜けもれ提言・完了検証の調整役、実装はせず委譲。正本は各プロジェクト docs/TASK_TRACKER.md
+- [やることは全部 task-manager に渡す](feedback_route_all_to_task_manager.md) — Keita の依頼・調査で判明した修正・思いついた施策、全部着手前に一旦 task-manager に通して TASK_TRACKER に登録・構造化させる（2026-05-28）
+- [Vultr 2台目サーバ](project_vultr_second_server.md) — 「Claude Code Server 2」167.179.64.231 vhf-4c-16gb を現行複製として構築（2026-05-29）。SSH 鍵 ~/.ssh/vultr_claude2、API キー ~/.vultr_key
+- [Logic 本番 Supabase プロジェクトID](reference_logic_supabase_project_id.md) — 正しくは `yctlelmlwjwlcpcxvmgx`。台帳の `refyctlelmlwjwlcpcxvmgx` は誤記（ref 無しが正）
+- [自律林ドライバ](project_autonomous_rin.md) — 駆動役なしでもタスク自律前進。30分毎 cron で headless 林、1ティック1タスク、deploy まで全自律（Keita承認2026-05-30）。kill-switch ~/.autonomous-rin.disabled、Logic優先
+- [Apolloダッシュボード](project_apollo_dashboard.md) — 旧Mission Control。cxo-agent配下の稼働可視化ダッシュボード、port 4317、トークン認証、Vultr常駐。自己修復(systemd+watchdog)・モバイル対応・消費量/受信箱。スマホは cloudflared 名前付きトンネル予定
+- [ナレッジはVaultへ](feedback_knowledge_to_vault.md) — ナレッジ系成果物は全部 obsidian-vault の 20-Knowledge/ に入れる（Apolloの Vault ビューで閲覧）。2026-05-30 Keita指示
+- [Vaultで破壊的git禁止](feedback_vault_no_destructive_git.md) — 共有 obsidian-vault では git reset --hard / clean -f 禁止、add は名指し。2026-05-30 未コミット編集消失事故の再発防止
