@@ -1045,7 +1045,7 @@ ID 採番: **AR-0x**。
 | ID | MC-77 |
 | タイトル | inbox の kind(task/instruction)区別を廃止し全て task 化、投入即タスクボード反映 |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | DONE（2026-05-31 inbox区別廃止・全タスク化＋投入で即タスクボード反映を実装(taskTrackerAppend.ts fail-closed即追記・二重登録防止・後方互換)・本番反映済 5e81322・MC-66統合） |
 | 担当 | dev-logic |
 | 詳細 | Keita「タスクと指示でわかれてるけど、指示はいらない。全部タスクでいい。タスクを上げたら即タスクボードに反映させて」。(1) Apollo 投入の kind(task/instruction)区別を廃止し、全て task として扱う（投入 UI から指示トグルを除去、既存 instruction エントリは task として扱う後方互換）。(2) 投入したら即 TASK_TRACKER 化してタスクボードに出す（autonomous-rin/林の手動消化を待たない）。inbox 投入→自動で TASK_TRACKER に行追加する仕組み。MC-66(inbox 即時反映)を本タスクに集約。 |
 | 関連 | Apollo dashboard（FAB/ボトムシート投入 UI, タスクボード）, `cxo-agent/data/inbox.jsonl`, `POST /api/inbox`, autonomous-rin の inbox 消費ロジック（[[project-autonomous-rin]]）, 各 docs/TASK_TRACKER.md。MC-72(投入時優先度指定)・MC-71(編集の md 書き戻し層)と機構共有 |
@@ -1063,7 +1063,7 @@ ID 採番: **AR-0x**。
 | ID | MC-78 |
 | タイトル | タスクを優先度の高い順にピックアップ（autonomous-rin 着手順＋Apollo ボード表示順） |
 | 優先度 | P2 |
-| ステータス | TODO |
+| ステータス | DONE（2026-05-31 優先度順ピックアップ実装(autonomous-rin選定強化＋ボード列内ソートpriorityRank・4形式吸収)・本番反映済） |
 | 担当 | dev-logic |
 | 詳細 | Keita「優先順位つけたら早いやつからピックアップして」。autonomous-rin / 実装エージェントがタスクを拾うとき、優先度(P0>P1>P2>P3)の高い順に着手する。autonomous-rin の選定ロジックは既に「TODO/IN_PROGRESS/REVIEW・BLOCKED 除外・依存充足・logic 最優先」（[[project-autonomous-rin]]）だが、同条件内の並びを優先度降順（同位は ID 昇順）に徹底する。加えて Apollo ボードでも優先度順ソート表示にして、Keita 視点でも「次に拾われる順」が分かるようにする。 |
 | 関連 | `/home/dev/cron-scripts/autonomous-rin.sh`（選定ロジック）, Apollo dashboard（タスクボードのソート/表示順）, /api/tasks collector |
