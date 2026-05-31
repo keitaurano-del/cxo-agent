@@ -932,3 +932,24 @@ ID 採番: **AR-0x**。
 | 関連 | Apollo dashboard（web TaskDetail / server 書き戻し層）, 各プロジェクト docs/TASK_TRACKER.md。MC-69（包含）, MC-68（書き戻し層を共有）, MC-61（ドリルダウン基盤） |
 | 受け入れ条件 | TaskDetail で 編集→保存すると正本 TASK_TRACKER.md の該当タスクの該当フィールドが書き換わり、次回読込で保持される。楽観ロック衝突時は 409＋再読込促し。read-back 検証に失敗する書き換えは実行されない。モバイル390px横溢れ0・中立文言・ハードコード hex 禁止/CSS変数・UI chrome は SVG のみ。 |
 | 更新日 | 2026-05-31 |
+
+## バッチ: 2026-05-31 Apollo 投入時の優先度指定（MC-72）
+
+> ⚠ 採番訂正: 林から「MC-71」で渡された投入時優先度指定の件は、別セッション/autonomous-rin が先に MC-71（Apollo タスク手動 編集/削除）を消費済みで衝突していたため、next-task-id.sh の実在最大+1＝MC-72 で起票し直した（MC-64/65 衝突と同型、reference-task-id-numbering 参照）。重複起票は回避済み。
+
+### MC-72: Apollo 投入時に優先度を指定できる
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-72 |
+| タイトル | Apollo 投入時に優先度を指定できる |
+| 優先度 | P2 |
+| ステータス | TODO |
+| 担当 | dev-logic + designer(UX) |
+| 詳細 | Keita 依頼（Apollo inbox d52a5d71）。Apollo の受信箱（FAB/ボトムシート）からタスク/指示を投入する時に、優先度（P0/P1/P2/P3）を選んで送れるようにする。inbox 投入 UI に優先度セレクタを追加し、`inbox.jsonl` のエントリに `priority` フィールドを持たせる。autonomous-rin / 林が TASK_TRACKER 化する際に、その優先度を引き継ぐ。 |
+| 関連 | Apollo dashboard（FAB/ボトムシート投入 UI）, `cxo-agent/data/inbox.jsonl`, `POST /api/inbox`, autonomous-rin の inbox 消費ロジック（project_autonomous_rin）, TASK_TRACKER.md |
+| 受け入れ条件 | Apollo の投入 UI から優先度（P0/P1/P2/P3）を選んで送信でき、`inbox.jsonl` エントリに priority が記録され、タスク化（TASK_TRACKER 登録）時にその優先度が保持される |
+| 依存 | 既存 inbox 機構（`POST /api/inbox`）。MC-66(inbox 即時反映)・MC-69(優先度手動変更／MC-71 edit に包含) と機構が重なる（priority フィールド・タスク化フロー・md 書き戻し層）ため、統合設計で重複実装を避ける。MC-71/MC-69 の優先度概念・書き戻し層を再利用可。 |
+| 提言・抜けもれ | (1) priority 未指定時のデフォルト（P2 想定）を定義する。(2) 既存 inbox エントリ（priority フィールド無し）の後方互換＝未定義は欠落として扱い既定値にフォールバック、既存レコードを壊さない。(3) server は既存 `POST /api/inbox` を非破壊で拡張（フィールド追加のみ、既存レスポンス型を変えない）・既存 token/Basic 認証配下に置く。(4) モバイル対応（FAB/ボトムシートのセレクタがスマホで操作しやすい）。(5) UI chrome 制約: 中立的丁寧体（〜です/〜ます）、ハードコード hex 禁止・CSS 変数使用、UI chrome の emoji 不可（SVG のみ）。(6) autonomous-rin/林のタスク化時に priority を確実に引き継ぐ結線（消費ロジックの読み取り対応）。 |
+| 次アクション | dev-logic + designer が MC-66/MC-69(MC-71) と統合した priority 機構を設計 → 投入 UI セレクタ + inbox.jsonl priority フィールド + タスク化時の引き継ぎを実装 → 後方互換・デフォルト値・認証配下を検証 |
+| 更新日 | 2026-05-31 |
