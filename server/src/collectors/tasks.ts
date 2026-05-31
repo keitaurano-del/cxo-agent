@@ -81,6 +81,33 @@ const STATUS_WORDS: TaskStatus[] = [
 ];
 
 /**
+ * status セル文字列の「先頭ステータストークン」を取り出して正規化する。
+ *
+ * 旧実装は `raw.toUpperCase()` 全体を STATUS_WORDS 順に includes 走査していたため、
+ * `DONE（…承認1タップ→TODO/却下→CANCELLED…）` のように注記（全角/半角カッコ・コロン・
+ * 改行以降）に他ステータス語が混ざると、STATUS_WORDS で先に並ぶ語（CANCELLED/REVIEW 等）を
+ * 誤って拾い、実態 DONE のタスクを CANCELLED と誤読していた（MC-81 / 実例 MC-79・MC-76）。
+ *
+ * 本関数はセル先頭から「最初の英単語の連なり（スペース/アンダースコア/ハイフン区切り）」を
+ * 1 トークンとして切り出す。全角カッコ（）・半角カッコ ()・コロン（: ：）・スペース・改行・
+ * その他の非英字に当たった時点でトークンは終わる。
+ *   - 「DONE（…REVIEW…CANCELLED…）」→ 先頭トークン "DONE" → DONE
+ *   - 「REVIEW（実装○）」→ "REVIEW" → REVIEW
+ *   - 「IN_PROGRESS」/「IN PROGRESS」→ "IN_PROGRESS" → IN_PROGRESS
+ * 先頭が日本語等で英字トークンが取れない場合は undefined を返し、呼び出し側で
+ * 従来の日本語キーワード fallback に委ねる。
+ */
+function leadingStatusToken(raw: string): TaskStatus | undefined {
+  // 先頭の空白を除いた後、英字（A-Za-z）で始まる連なりだけを1トークンとして取る。
+  // 区切りはスペース/アンダースコア/ハイフン。全角カッコ・コロン等の非英字で停止する。
+  const m = raw.replace(/^[\s　]+/, '').match(/^[A-Za-z]+(?:[ _-][A-Za-z]+)*/);
+  if (!m) return undefined;
+  const tok = m[0].toUpperCase().replace(/[\s-]/g, '_');
+  // 正準ステータス語に完全一致したものだけ採用（部分一致はしない＝注記混入を弾く）。
+  return (STATUS_WORDS as string[]).includes(tok) ? (tok as TaskStatus) : undefined;
+}
+
+/**
  * ステータスの「確定度」ランク。重複 ID が複数形式（summary table / `### ID` セクション /
  * `| フィールド | 値 |` カード）で出たとき、確定方向（DONE/CANCELLED）にしか上書きしないための順序。
  * 同一 ID で表行が DONE なのにセクション本文が古い REVIEW/TODO のままという食い違いがあるため、
@@ -108,8 +135,23 @@ function mergeStatus(cur: TaskStatus, cand: TaskStatus): TaskStatus {
   return STATUS_RANK[cand] >= STATUS_RANK[cur] ? cand : cur;
 }
 
-function normStatus(raw?: string | null): TaskStatus {
+/**
+ * status セル文字列をステータス enum に正規化する。テスト・他 collector から再利用するため export。
+ */
+export function normStatus(raw?: string | null): TaskStatus {
   if (!raw) return 'UNKNOWN';
+
+  // 1) セル先頭のステータストークンを最優先で見る（注記に混ざった他ステータス語を無視）。
+  //    これが MC-81 の本丸: `DONE（…承認1タップ→TODO/却下→CANCELLED…）` から先頭 DONE を取る。
+  //    先頭が正準ステータス語のときだけ確定する。先頭トークンが取れない/ステータス語でない
+  //    （記号始まり・日本語始まりの長文セル等）場合は、以降の従来 fallback に委ねる。
+  const lead = leadingStatusToken(raw);
+  if (lead) return lead;
+
+  // 2) 以降は旧実装と同一の挙動（英語 includes → 日本語キーワードの順序）を維持する。
+  //    先頭トークンで確定できなかった異常表記のみここに来るため、旧来のステータス表示を
+  //    回帰させないことを最優先する（MC-81 は「先頭トークン解決」を足すだけで、注記混入の
+  //    無い従来セルの読み取り結果は一切変えない方針）。
   const u = raw.toUpperCase().replace(/[\s-]/g, '_');
   for (const s of STATUS_WORDS) {
     if (u.includes(s)) return s;
