@@ -987,3 +987,119 @@ ID 採番: **AR-0x**。
 | 担当 | dev-logic |
 | 詳細 | Keita「タスクボード更新されてる？」起点で発覚。実ファイル台帳は正しいのに /api/tasks が古いステータス（REVIEW）を返し、縦型カード形式の MC-70/73 がボード未表示だった。server/src/collectors/tasks.ts parseTrackerString() の2バグ。 |
 | 更新日 | 2026-05-31 |
+
+---
+
+## バッチ: 2026-05-31 Apollo 要望6件（MC-75〜MC-80 / Keita 2026-05-31）
+
+> Keita 2026-05-31 の Apollo 6 要望をまとめて起票。MC-66↔MC-77（inbox 即時タスク化）と MC-68↔MC-79（承認ビュー）は本バッチで発展統合する関係（旧票は集約先へ相互参照、二重実装を避ける）。採番は next-task-id.sh で MC-75〜MC-80 を一括予約済み（目視数えなし、pull --rebase 後採番）。
+
+### MC-75: roster 表示を絞る（人格ありエージェント＋主要のみ、バックグラウンド系は非表示）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-75 |
+| タイトル | Apollo の roster 表示を人格保有＋主要エージェントに限定（バックグラウンド系を非表示） |
+| 優先度 | P2 |
+| ステータス | TODO |
+| 担当 | dev-logic |
+| 詳細 | Keita「アポロのエージェントに表示するのは人格があるエージェントとその他主要エージェントだけでいい。その他バックグラウンドで動いているのはここには表示しなくていい」。Apollo の roster(/api/roster)表示を、人格保有の開発9体（dev-logic/task-manager/designer/content-creator/reviewer/logic-coach/test-functional/night-patrol/feedback-watcher、[[project-agent-roster-20260531]]）＋その他主要エージェントに限定する。バックグラウンドの細かいプロセス系（cron 派生・一時 subagent 等）は roster に出さない。 |
+| 関連 | Apollo dashboard（roster ビュー / server `/api/roster` collector）, `obsidian-vault/60-Agents/*.md`（roster ソース候補） |
+| 受け入れ条件 | Apollo の roster/エージェント一覧に表示されるのが「人格を持つ主要エージェントのみ」になり、バックグラウンドの細かいプロセス系が出ない。表示対象の定義が明文化され再現可能。 |
+| 依存 | なし（独立着手可）。MC-73(全文検索)のエージェント検索対象とも整合を取る（検索ヒット対象から除外するか表示のみ絞るか方針一致させる） |
+| 提言・抜けもれ | (1) 「主要エージェント」の判定基準を着手前に確定する必要あり（案: 人格セクションを持つ9体を allowlist 化＝ハードコード/設定で持つ vs roster ソース `60-Agents/*.md` 側の取捨）。基準が曖昧だと拾い漏れ・将来エージェント追加時のメンテ漏れ。allowlist を設定/定数に一元化し、新エージェント追加時にそこだけ直せば済む形を推奨。(2) collector フィルタで絞る場合 server 非破壊追加・認証配下。(3) 既存の会話(Feed)/検索が roster を参照しているなら、非表示にしたエージェントの会話まで消えないか回帰確認（表示を絞るだけで feed/検索は残すのか、完全除外かを Keita 方針確認）。(4) モバイル対応・中立文言・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
+| 次アクション | 「主要エージェント」allowlist 基準を Keita/林と確定 → roster ソース取捨 or collector フィルタで実装（allowlist 一元化）→ Feed/検索への波及を回帰確認 |
+| 更新日 | 2026-05-31 |
+
+### MC-76: 「司令塔」→「ダッシュボード」改名＋ナビ再編（今日/会話/エージェント/消費量をダッシュボード配下へ）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-76 |
+| タイトル | ナビ「司令塔」を「ダッシュボード」に改名し、今日/会話/エージェント/消費量をその配下に移動 |
+| 優先度 | P1 |
+| ステータス | TODO |
+| 担当 | dev-logic + designer(UX) |
+| 詳細 | Keita「アポロのボードの司令塔はダッシュボードに変更して、今日、会話、エージェント、消費量はダッシュボードに移動して」。(1) トップナビの「司令塔」を「ダッシュボード」にリネーム。(2) 現在トップレベルにある「今日」「会話」「エージェント」「消費量(Usage)」をダッシュボード配下（タブ or セクション）に移動し、トップナビをすっきりさせる。残すトップレベル想定: ダッシュボード / タスクボード / Vault 等（＋本バッチ MC-79 の「承認フロー」も新トップレベル候補）。具体的なナビ構成は designer が UX 検討。 |
+| 関連 | Apollo dashboard（ナビ/ルーティング: web のサイドバー＋モバイル BottomNav、各 view コンポーネント）。[[project-apollo-dashboard]] のナビ定義（司令塔/エージェント/会話/タスクボード/今日/Vault） |
+| 受け入れ条件 | トップナビの「司令塔」表記が「ダッシュボード」になり、今日/会話/エージェント/消費量がダッシュボード配下のタブ/セクションから辿れ、トップナビ項目数が減ってすっきりする。PC サイドバー・モバイル BottomNav 両方で破綻しない。 |
+| 依存 | なし（独立着手可）。ただし MC-79（承認フロー新メニュー）とトップナビ構成が干渉するので、ナビ最終構成は MC-79 と合わせて designer が1枚で設計（バラバラに足さない） |
+| 提言・抜けもれ | (1) 「司令塔」表記は server narrative/ラベル・既存 memory・ドキュメントにも散在する可能性。UI 表示文言の変更が主目的で、内部識別子(route key 等)まで一括 rename すると検索/ディープリンク/既存ブックマークが壊れるので、表示ラベルのみ変更し内部キーは温存推奨（要 grep 確認）。(2) モバイル BottomNav は項目数が増えると破綻しやすい→トップレベルを減らす本変更はモバイルに好都合だが、ダッシュボード配下タブの横スクロール/段組みを 390px で確認。(3) 4 ビューを配下に移すと既存のディープリンク/SSE/各 collector 参照が切れないか回帰確認（今日=narrative、会話=agents feed、エージェント=roster、消費量=usage の API はそのまま、ルーティング階層だけ変える）。(4) 中立文言・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
+| サブタスク | - [ ] designer: 新ナビ構成（トップレベル＋ダッシュボード配下タブ）を MC-79 込みで1枚設計<br>- [ ] 「司令塔」→「ダッシュボード」表示ラベル変更（内部キー温存）<br>- [ ] 今日/会話/エージェント/消費量をダッシュボード配下へルーティング移動<br>- [ ] PC サイドバー＋モバイル BottomNav の両対応・390px 検証<br>- [ ] ディープリンク/SSE/各 collector 参照の回帰確認 |
+| 次アクション | designer に MC-79 込みの新ナビ構成を依頼 → dev-logic でラベル変更＋ルーティング再編 → 両レイアウト・回帰を検証 |
+| 更新日 | 2026-05-31 |
+
+### MC-77: inbox の「タスク/指示」区別を廃止し全てタスク化＋即タスクボード反映（MC-66 を集約）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-77 |
+| タイトル | inbox の kind(task/instruction)区別を廃止し全て task 化、投入即タスクボード反映 |
+| 優先度 | P1 |
+| ステータス | TODO |
+| 担当 | dev-logic |
+| 詳細 | Keita「タスクと指示でわかれてるけど、指示はいらない。全部タスクでいい。タスクを上げたら即タスクボードに反映させて」。(1) Apollo 投入の kind(task/instruction)区別を廃止し、全て task として扱う（投入 UI から指示トグルを除去、既存 instruction エントリは task として扱う後方互換）。(2) 投入したら即 TASK_TRACKER 化してタスクボードに出す（autonomous-rin/林の手動消化を待たない）。inbox 投入→自動で TASK_TRACKER に行追加する仕組み。MC-66(inbox 即時反映)を本タスクに集約。 |
+| 関連 | Apollo dashboard（FAB/ボトムシート投入 UI, タスクボード）, `cxo-agent/data/inbox.jsonl`, `POST /api/inbox`, autonomous-rin の inbox 消費ロジック（[[project-autonomous-rin]]）, 各 docs/TASK_TRACKER.md。MC-72(投入時優先度指定)・MC-71(編集の md 書き戻し層)と機構共有 |
+| 受け入れ条件 | Apollo の投入 UI に「タスク/指示」区別が無く全て task として送れ、投入したエントリが手動消化を待たず即タスクボード（TASK_TRACKER の行 or pending レーン）に現れる。既存 instruction エントリも壊れず task 表示される。 |
+| 依存 | MC-66（本タスクに集約＝MC-66 は CLOSE/相互参照）。MC-72(投入時優先度)・MC-71(md 安全書き戻し層) と priority フィールド・自動タスク化フロー・md 書き戻し層が重なるため統合設計で重複実装回避。採番は next-task-id.sh、即タスク化する場合の自動採番もこのスクリプト経由に統一（[[reference-task-id-numbering]]、重複起票防止） |
+| 提言・抜けもれ（重要） | (1) 「即 TASK_TRACKER 化」は採番衝突・自動分解という task-manager 領域に踏み込む。MC-66 提言どおり、まず安全な「未消化 inbox を read-only の pending レーンで可視化」から着手し、自動 .md 書き込みは段階導入が安全（fail-closed）。即書き込みする場合は採番を next-task-id.sh 経由に固定し、共有 .md への追記は MC-71 の楽観ロック書き戻し層を再利用（フルファイル再生成禁止・read-back 検証）。(2) どの TASK_TRACKER に登録するか（cxo-agent か logic か）の振り分けルールが要る。投入時にプロジェクト選択 or デフォルト cxo-agent。(3) 自動タスク化は受け入れ条件(DoD)・担当・優先度が空のまま増える＝抜けもれ温床。最低限「即ボード可視化（pending）」と「task-manager/林が構造化（DoD・担当付与）」を分離し、構造化前タスクが識別できる状態にする。(4) 既存 instruction エントリの後方互換（kind 欠落/instruction を task 扱い）。(5) server 非破壊拡張・認証配下・監査ログ。(6) モバイル対応・中立文言・ハードコード hex 禁止/CSS 変数・emoji 不可（SVG のみ）。 |
+| サブタスク | - [ ] 投入 UI から「指示」トグル除去（全て task）<br>- [ ] 既存 instruction エントリの後方互換（task 扱い）<br>- [ ] 即ボード反映（pending レーン可視化を第一段）<br>- [ ] 自動 TASK_TRACKER 化（採番=next-task-id.sh、書き戻し=MC-71 楽観ロック層、段階導入）<br>- [ ] 登録先プロジェクトの振り分けルール<br>- [ ] 監査ログ |
+| 次アクション | MC-66 を本タスクに集約（相互参照記入）→ 第一段=pending レーン即可視化を実装 → 第二段=自動タスク化（next-task-id.sh採番＋MC-71書き戻し層）を fail-closed で段階導入 |
+| 更新日 | 2026-05-31 |
+
+### MC-78: 優先順位順にタスクをピックアップ（着手＋ボード表示の両面）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-78 |
+| タイトル | タスクを優先度の高い順にピックアップ（autonomous-rin 着手順＋Apollo ボード表示順） |
+| 優先度 | P2 |
+| ステータス | TODO |
+| 担当 | dev-logic |
+| 詳細 | Keita「優先順位つけたら早いやつからピックアップして」。autonomous-rin / 実装エージェントがタスクを拾うとき、優先度(P0>P1>P2>P3)の高い順に着手する。autonomous-rin の選定ロジックは既に「TODO/IN_PROGRESS/REVIEW・BLOCKED 除外・依存充足・logic 最優先」（[[project-autonomous-rin]]）だが、同条件内の並びを優先度降順（同位は ID 昇順）に徹底する。加えて Apollo ボードでも優先度順ソート表示にして、Keita 視点でも「次に拾われる順」が分かるようにする。 |
+| 関連 | `/home/dev/cron-scripts/autonomous-rin.sh`（選定ロジック）, Apollo dashboard（タスクボードのソート/表示順）, /api/tasks collector |
+| 受け入れ条件 | (1) autonomous-rin が着手可能タスクを優先度降順（P0>P1>P2>P3、同位は ID 昇順）で拾う。(2) Apollo タスクボードが優先度順でソート表示され、次に着手される順が一目で分かる。 |
+| 依存 | MC-72(投入時優先度指定)・MC-71(優先度の手動編集) で優先度が正しく設定/編集できることが前提（優先度の入力経路）。MC-74(collector ステータス修正) 済みの parse 結果を利用 |
+| 提言・抜けもれ | (1) 優先度未設定タスクのデフォルト順位を定義（案: P2 相当として中位に置く）。表記揺れ（P0/P1 と「優先度: 高/中/低」混在）に耐えるソートキー正規化が要る（本台帳は P0〜P3 表記だが将来揺れ得る）。(2) logic 最優先ルール（autonomous-rin）と優先度降順の優先関係を明確化＝「プロジェクト優先(logic) → その中で優先度降順」の二段ソートか、全プロジェクト横断で優先度降順かを Keita 確認。現行は logic 優先なので二段ソート維持を推奨。(3) ボードソートは表示のみ非破壊。(4) 同位多数時の安定ソート（ID 昇順 tiebreak）。(5) モバイル対応・中立文言・CSS 変数・emoji 不可（SVG のみ）。 |
+| 次アクション | logic 優先と優先度降順の二段関係を Keita 確認 → autonomous-rin 選定ロジックに優先度降順 tiebreak を明示実装 → Apollo ボードに優先度ソート表示（非破壊）→ 表記揺れ正規化を検証 |
+| 更新日 | 2026-05-31 |
+
+### MC-79: 「承認フロー」メニュー追加（Keita 承認が要るものを集約・承認/却下）（MC-68 を集約）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-79 |
+| タイトル | Apollo に「承認フロー」メニュー新設（Keita 承認要項目を集約し承認/却下） |
+| 優先度 | P1 |
+| ステータス | TODO |
+| 担当 | dev-logic + designer(UX) |
+| 詳細 | Keita「何かKeitaの承認が必要なものは『承認フロー』というメニューを追加して、そこでやるようにして」。Apollo に「承認フロー」メニュー/ビューを新設し、Keita の承認が要る項目（デプロイ可否・設計判断・仕様未確定・BLOCKED で Keita 待ち・「Keita承認待ち」タグ等）を集約する。Keita がそこで承認/却下（＋コメント）できる。MC-68(承認待ち一覧)の発展形＝MC-68 を本タスクに集約。可視化(MC-68 のMVP)に加え、承認/却下アクション（書き込み API＋監査ログ）まで含む。 |
+| 関連 | Apollo dashboard（新トップレベルメニュー「承認フロー」, server 書き込み API）, 各 docs/TASK_TRACKER.md。MC-68（集約元）, MC-71(md 安全書き戻し層を承認アクションで再利用), MC-61(ドリルダウン基盤), MC-76(トップナビ構成と整合) |
+| 受け入れ条件 | Apollo の「承認フロー」メニューに Keita の承認/確認が要る項目が一覧表示され、Keita が各項目を承認/却下でき、その結果が正本 TASK_TRACKER.md（ステータス/タグ）に反映され監査ログに残る。放置中の承認待ちが一目で分かる。 |
+| 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
+| 提言・抜けもれ（重要） | (1) 「承認が要る項目」の判定基準を着手前に確定（拾う対象: status=BLOCKED で Keita 待ち、「設計判断」「Keita承認待ち」明示タグ、デプロイ可否など）。MC-80 で「REVIEW は Keita 承認不要・内部レビューで DONE」が確定するため、REVIEW は承認フローの対象に含めない（含めると MC-80 と矛盾）。基準が曖昧だと拾い漏れ・誤集約。(2) 承認/却下は書き込み操作＝MC-71 の楽観ロック書き戻し層を必須再利用（フルファイル再生成禁止・read-back 検証・data/task-edits.jsonl 監査ログ）。承認アクションの監査（誰がいつ何を承認/却下したか）を別途記録。(3) 段階導入: MVP=可視化（MC-68 相当）→ 承認/却下アクション、と分離して着地。(4) server 非破壊・認証配下。(5) MC-76 とナビ構成を1枚で設計（トップレベルに足す）。(6) モバイル対応・中立文言・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
+| サブタスク | - [ ] 「承認が要る項目」判定基準の確定（REVIEW は除外＝MC-80 整合）<br>- [ ] designer: 「承認フロー」ビュー UX＋MC-76 ナビ統合設計<br>- [ ] 集約一覧の実装（/api/tasks フィルタ、非破壊）<br>- [ ] 承認/却下 書き込み API（MC-71 楽観ロック層再利用＋承認監査ログ）<br>- [ ] MC-61 詳細ドリルダウンへの導線<br>- [ ] 放置(stale)表示 |
+| 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
+| 更新日 | 2026-05-31 |
+
+### MC-80: REVIEW の最終ゲートから Keita レビューを外す（内部レビュー完了で即 DONE）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-80 |
+| タイトル | REVIEW は Keita 待ちにしない運用へ＋現状 REVIEW 滞留タスクを内部検証して DONE 化する棚卸し |
+| 優先度 | P1 |
+| ステータス | TODO |
+| 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
+| 詳細 | Keita「レビューに止まってるのは、Keitaのレビュー待ちだと思うけど、Keitaのレビューはいらないから、内部のレビューが完了したら、完了にしちゃっていい」。これは運用ルール（reviewer/test 系の内部検証完了＝即 DONE、Keita の最終目視を最終ゲートにしない）。タスクとしては (1) 現状 REVIEW で止まっている全タスクを内部検証(test-functional/reviewer)→DoD 充足を確認して DONE 化する棚卸し、(2) 今後 REVIEW を Keita 待ちにしない運用の徹底（REVIEW=内部レビュー待ちのみ、Keita 目視は不要）。cxo-agent 側の REVIEW 滞留も内部検証→DONE 化する。 |
+| 関連 | 各 docs/TASK_TRACKER.md の REVIEW 状態タスク全般。MC-79（承認フローに REVIEW を含めない方針＝本タスクと整合）。memory（REVIEW→内部検証→DONE の運用方針を別途 memory 化検討） |
+| 受け入れ条件 | (1) 現状 REVIEW で滞留しているタスクが、内部検証(DoD/テスト/型/lint 突き合わせ)を経て DONE または差し戻し(TODO/IN_PROGRESS)に整理され、「Keita 待ちで宙吊り」の REVIEW がゼロになる。(2) 以後 REVIEW は内部レビュー待ちのみを意味し、Keita 目視を最終ゲートにしない運用が徹底される（push/デプロイ可否は引き続き Keita 専権、これは別レイヤー）。 |
+| 依存 | MC-74(collector ステータス修正済)＝ボードの REVIEW 表示が正確になった上で棚卸し。MC-79 と方針整合（承認フローから REVIEW を除外） |
+| 提言・抜けもれ（重要） | (1) cxo-agent 側の REVIEW 滞留を実 grep で棚卸し対象として列挙する（依頼文の MC-02/12/17/21/22/26/31/41/42/43/44/51/61/69 等は要実ファイル確認＝憶測で DONE 化しない。各タスクの DoD を逆引きし、テスト/型/lint/本番疎通の実エビデンスと突き合わせてから DONE）。logic 側 TASK_TRACKER の REVIEW も同様に棚卸し。(2) 「内部レビュー完了＝DONE」の線引き: DoD 充足＋reviewer/test green が揃ったものだけ DONE。DoD 未充足や未検証は DONE にせず TODO/IN_PROGRESS へ差し戻し（[[feedback-quality-efficiency-accuracy]] の品質ゲート維持＝Keita 目視を外すだけで検証は外さない）。(3) 「push/デプロイ判断は Keita 専権」は不変。DONE 化＝即デプロイではない。(4) 運用ルールは memory 化して autonomous-rin/林/各 subagent に徹底（REVIEW を Keita 待ちにしない）。 |
+| サブタスク | - [ ] cxo-agent TASK_TRACKER の REVIEW 状態を実 grep で全列挙<br>- [ ] logic TASK_TRACKER の REVIEW 状態を実 grep で全列挙<br>- [ ] 各 REVIEW タスクの DoD 逆引き＋test-functional/reviewer で内部検証<br>- [ ] DoD 充足＋green は DONE、未充足は差し戻し<br>- [ ] 「REVIEW を Keita 待ちにしない」運用を memory 化 |
+| 次アクション | cxo-agent/logic の REVIEW 滞留を実 grep で列挙 → test-functional/reviewer で各 DoD を内部検証 → green は DONE・未充足は差し戻し → 運用ルールを memory 化 |
+| 更新日 | 2026-05-31 |
+
+---
+
+最終更新: 2026-05-31 / 管理: task-manager（2026-05-31 Apollo 要望6件 MC-75〜80 起票。MC-77←MC-66集約、MC-79←MC-68集約。旧: tasks collector 修正 MC-74、全文検索 MC-73、投入時優先度 MC-72、手動編集 MC-71、カイロUI MC-70(CANCELLED)、承認ビュー MC-68・優先度手動 MC-69、inbox MC-66/67）
