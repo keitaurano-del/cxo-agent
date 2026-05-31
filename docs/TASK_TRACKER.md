@@ -694,7 +694,7 @@ ID 採番: **AR-0x**。
 | MC-60 | Workflow コレクタ＋API 新規（/api/workflows・/api/workflows/:runId） | P0 | コア | DONE（2026-05-31 本番反映済 commit 6362562。restart後 本番4317で /api/workflows が20run返却確認） | dev-logic | なし（既存 collectors/lib 流用） |
 | MC-61 | タスク詳細ドリルダウン（フロント＋API、既存 Tasks/Feed 拡張） | P0 | コア | DONE（2026-05-31 本番反映済 commit 6362562。TaskDetail.tsx 561行・web build→restart 済） | dev-logic + designer | MC-60 |
 | MC-62 | タスク↔workflow↔会話 紐付け（堅い案＝明示ログ data/task-links.jsonl） | P1 | コア | DONE（2026-05-31 本番反映済 commit f0bfb52。link-task.sh で MC-60↔wf_880723a6-991 を実紐付け→API hasExplicitLinks:true でrun summary返却をE2E実証） | dev-logic（運用ルールは林） | MC-60 |
-| MC-63 | 通知/アラート（ERROR・BLOCKED 長期滞留・deploy 失敗のバッジ） | P2 | おまけ | TODO | dev-logic | MC-60, MC-61 |
+| MC-63 | 通知/アラート（ERROR・BLOCKED 長期滞留・deploy 失敗のバッジ） | P2 | おまけ | DONE（2026-05-31 本番反映済 commit 8f3e2c1。/api/alerts 新規＋司令塔 AlertBanner。restart 後 本番4317 で counts/byCategory 返却＝blocked-stalled 2件(T-G2 等)を実データ確認、無トークン401・healthz ok 検証済） | dev-logic | MC-60, MC-61 |
 | MC-64 | deploy 連動（GitHub Actions run 状態をタスク詳細に表示） | P2 | おまけ | TODO | dev-logic | MC-61 |
 | MC-65 | autonomous-rin 可視化（30分毎ティックの選択タスク×結果レーン） | P2 | おまけ | TODO | dev-logic | MC-61 |
 
@@ -750,7 +750,10 @@ ID 採番: **AR-0x**。
 - 更新日: 2026-05-31
 
 ### MC-63 — 通知/アラート（バッジ表示）　[P2 / おまけ]
-- ステータス: TODO / 担当: dev-logic
+- ステータス: DONE（2026-05-31 本番反映済 commit 8f3e2c1）/ 担当: dev-logic
+- 確定スコープ（DoD 対応）: ERROR=workflow error run、長期 BLOCKED=BLOCKED かつ最終更新が BLOCKED_STALL_DAYS（既定5日）超、deploy 失敗=MC-64 連携のため MVP は常に空（偽失敗を出さない）。3カテゴリを既存 collector（workflows/tasks）から集計する軽量 `/api/alerts` を新規追加し、司令塔（Overview）に `AlertBanner` を常設。解消すると次回集計で自動的に消える（永続/既読なし＝MVP）。誤検知ゼロ方針（構造化済みデータのみ参照、night-patrol 生ログや systemd は拾わず多重通知回避）。
+- 実装ファイル: 新規 `server/src/collectors/alerts.ts`・`web/src/components/AlertBanner.tsx`、変更 `server/src/config.ts`（BLOCKED_STALL_DAYS 追加）・`server/src/index.ts`（GET /api/alerts 追加）・`web/src/lib/types.ts`（AlertsResponse 型）・`web/src/views/Overview.tsx`（AlertBanner 設置）。
+- 本番反映確認: `sudo systemctl restart mission-control.service` 後 active。`/api/healthz`=200 `{"ok":true}`、`/api/alerts` 無トークン=401（認証バイパス無し）、Bearer 付き=200 で `counts:{error:0,warning:2,total:2}` / `byCategory:{error:0,"blocked-stalled":2,"deploy-failed":0}`＝T-G2 等の長期 BLOCKED を実データ検出。server tsc / web tsc / web build いずれも green。
 - 詳細: night-patrol の ERROR 検出・BLOCKED 長期滞留・deploy 失敗を Apollo 上でバッジ表示する。該当タスク/エージェント/グローバルヘッダにアラートを出し、放置を見逃さない。
 - 関連ファイル: `cxo-agent/server/src/collectors/`（narrative.ts の night-patrol/inspection 解析を流用してアラート抽出）, タスク側は /api/tasks の BLOCKED 滞留判定（stall.ts）, deploy 失敗は MC-64 の GitHub Actions 連携と重なる, フロントは共通バッジ component
 - DoD: ERROR / 長期 BLOCKED / deploy 失敗が発生したとき Apollo にバッジが出る。解消すると消える。誤検知（正常を ERROR 表示）が出ない。
