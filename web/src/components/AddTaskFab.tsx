@@ -3,6 +3,7 @@
 // MC-77: タスク/指示の区別は廃止。投入は全て「タスク」として送り、サーバ側で
 // 即タスクボード（TASK_TRACKER）に反映される。文言は中立的な丁寧体。
 import { useEffect, useRef, useState } from 'react';
+import type { RosterEntry } from '../lib/types';
 import { PlusIcon, CloseIcon, ImageFileIcon } from './icons';
 
 type ProjectChoice = 'logic' | 'cxo' | 'en-chakai' | '';
@@ -13,6 +14,11 @@ const PROJECT_OPTIONS: { value: ProjectChoice; label: string }[] = [
   { value: 'cxo', label: 'cxo' },
   { value: 'en-chakai', label: 'en-chakai' },
 ];
+
+// MC-86: 指令を委譲できない（指令の担当にならない）エージェント。
+// 林（main assistant）と apollo（インフラ番人）は roster には出るが委譲先ではないため、
+// 担当セレクタの選択肢からは除外する。サーバ側 INBOX_AGENTS ホワイトリストと整合させる。
+const NON_DELEGATABLE_AGENTS = new Set(['hayashi-rin', 'apollo']);
 
 const MAX_IMAGES = 5;
 const MAX_BYTES = 10 * 1024 * 1024; // 10MB / 枚
@@ -26,12 +32,36 @@ interface PickedImage {
 export default function AddTaskFab() {
   const [open, setOpen] = useState(false);
   const [project, setProject] = useState<ProjectChoice>('');
+  const [agent, setAgent] = useState('');
   const [text, setText] = useState('');
   const [images, setImages] = useState<PickedImage[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // MC-86: 担当エージェント候補（roster から取得・委譲可能な subagent のみ）。
+  const [agents, setAgents] = useState<RosterEntry[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // シートを開いた時に roster を読み、担当エージェントの選択肢を用意する。
+  // 失敗時は黙って「指定なし」のみにフォールバックする（投入自体は agent 無しで通る）。
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch('/api/roster');
+        if (!res.ok) return;
+        const body = (await res.json()) as { roster?: RosterEntry[] };
+        if (cancelled || !Array.isArray(body.roster)) return;
+        setAgents(body.roster.filter((r) => !NON_DELEGATABLE_AGENTS.has(r.name)));
+      } catch {
+        // roster 取得失敗は無視（担当未指定で投入できる）。
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   // object URL の cleanup（アンマウント時・画像差し替え時に漏れないよう）。
   useEffect(() => {
@@ -54,6 +84,7 @@ export default function AddTaskFab() {
   const resetForm = () => {
     images.forEach((img) => URL.revokeObjectURL(img.url));
     setProject('');
+    setAgent('');
     setText('');
     setImages([]);
     setError(null);
@@ -156,6 +187,8 @@ export default function AddTaskFab() {
       // MC-77: kind は廃止。サーバは送られても task に正規化するが、ここでは送らない。
       fd.append('text', text.trim());
       fd.append('project', project);
+      // MC-86: 担当エージェント（任意）。未指定なら送らない＝自動割当。
+      if (agent) fd.append('agent', agent);
       images.forEach((img) => fd.append('images', img.file, img.file.name));
       // Content-Type は指定しない（FormData が boundary 付きで自動設定）。
       const res = await fetch('/api/inbox', { method: 'POST', body: fd });
@@ -250,6 +283,30 @@ export default function AddTaskFab() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* MC-86: 担当エージェント（任意・未指定なら自動割当） */}
+            <div className="mb-3">
+              <label className="mb-1 block text-xs text-text-muted" htmlFor="inbox-agent">
+                担当エージェント
+              </label>
+              <select
+                id="inbox-agent"
+                value={agent}
+                onChange={(e) => setAgent(e.target.value)}
+                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text focus:border-accent focus:outline-none"
+              >
+                <option value="">自動割当（指定なし）</option>
+                {agents.map((a) => (
+                  <option key={a.name} value={a.name}>
+                    {a.role ? `${a.name}（${a.role}）` : a.name}
+                    {a.liveStatus === 'active' ? ' ・稼働中' : ' ・待機中'}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-[11px] text-text-faint">
+                指定すると、その担当としてタスク化され、自律処理時に該当エージェントへ委譲されます。
+              </p>
             </div>
 
             {/* text */}

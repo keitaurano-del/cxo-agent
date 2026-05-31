@@ -36,6 +36,7 @@ import {
   INBOX_ATTACHMENTS_DIR,
   INBOX_MAX_FILE_BYTES,
   INBOX_MAX_FILES,
+  INBOX_AGENTS,
 } from './config.js';
 import {
   sanitizeFilename,
@@ -72,6 +73,12 @@ export interface InboxEntry {
   taskId?: string;
   /** MC-77: taskId を書いた台帳（例 cxo/TASK_TRACKER）。 */
   trackerSource?: string;
+  /**
+   * MC-86: 指令の担当として明示指定された subagent（例 'dev-logic'）。
+   * 指定時のみ付与し、即タスク化した場合はその担当（owner）にも反映する。
+   * autonomous-rin はこの値があれば該当 subagent に委譲する。
+   */
+  agent?: string;
 }
 
 // ─── ディレクトリ準備 ────────────────────────────────────
@@ -120,6 +127,22 @@ function parseText(v: unknown): string | { error: string } {
     return { error: 'text is required and must be non-empty' };
   }
   return v;
+}
+
+// MC-86: 担当エージェント指定（任意）。指定があればホワイトリスト（INBOX_AGENTS）の
+// 既知 subagentType のみ受理する。未知の agent 名は 400 で拒否し、任意プロンプト実行の
+// 踏み台にされないようにする。未指定（'' / 'null' / 省略）は自動割当 = null を返す。
+function parseAgent(v: unknown): string | null | { error: string } {
+  if (v === undefined || v === null || v === '') return null;
+  if (typeof v !== 'string') return { error: 'agent must be a string' };
+  const a = v.trim();
+  if (a === '' || a === 'null') return null;
+  if (!INBOX_AGENTS.has(a)) {
+    return {
+      error: `agent must be one of: ${[...INBOX_AGENTS].join(', ')} (or omitted for auto-assign)`,
+    };
+  }
+  return a;
 }
 
 // ─── multer（メモリ保存）──────────────────────────────────
@@ -243,6 +266,14 @@ async function handlePost(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  // MC-86: 担当エージェント（任意・ホワイトリスト検証）。
+  const agent = parseAgent(body.agent);
+  if (agent !== null && typeof agent === 'object') {
+    res.status(400).json({ error: agent.error });
+    return;
+  }
+  const agentVal = agent as string | null;
+
   const files = (req.files as Express.Multer.File[] | undefined) ?? [];
 
   const now = new Date();
@@ -291,7 +322,8 @@ async function handlePost(req: Request, res: Response): Promise<void> {
         id: newId,
         title,
         status: 'TODO',
-        owner: '未定',
+        // MC-86: 担当エージェント指定があれば台帳の担当（owner）に反映。未指定は従来どおり未定。
+        owner: agentVal ?? '未定',
         priority: 'P2',
         detail: text.trim(),
         source: 'Apollo投入',
@@ -314,6 +346,7 @@ async function handlePost(req: Request, res: Response): Promise<void> {
     text,
     status: 'pending',
     attachments,
+    ...(agentVal ? { agent: agentVal } : {}),
     ...(taskId ? { taskId, trackerSource } : {}),
   };
 

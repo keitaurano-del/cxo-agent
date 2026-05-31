@@ -133,6 +133,41 @@ function parseRosterVisible(): Set<string> {
 export const ROSTER_VISIBLE = parseRosterVisible();
 
 /**
+ * 受信箱（Apollo 投入）から指令を委譲できる subagent のホワイトリスト（MC-86）。
+ * Apollo で「このエージェントにこの指令」を投入する際、未知の agent 名で任意プロンプト
+ * 実行を仕掛けられないよう、ここに列挙した既知の subagentType のみを受理する。
+ * roster の表示対象（ROSTER_VISIBLE 11 体）のうち、林（hayashi-rin・main assistant）と
+ * apollo（インフラ番人）は「指令の委譲先」ではないため除外し、実装/検証を担う 9 体に限定する。
+ * 新規に委譲可能な subagent を足したら、ここに名前（= subagent_type）を追記する。
+ * env INBOX_AGENTS（カンマ区切り）で差し替え可能。空指定なら下記デフォルト。
+ */
+function parseInboxAgents(): Set<string> {
+  const raw = process.env.INBOX_AGENTS;
+  if (raw && raw.trim() !== '') {
+    return new Set(
+      raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s !== ''),
+    );
+  }
+  return new Set<string>([
+    'dev-logic',
+    'task-manager',
+    'designer',
+    'content-creator',
+    'reviewer',
+    'logic-coach',
+    'test-functional',
+    'night-patrol',
+    'feedback-watcher',
+  ]);
+}
+
+/** 受信箱から指令を委譲できる subagent のホワイトリスト（MC-86）。 */
+export const INBOX_AGENTS = parseInboxAgents();
+
+/**
  * Vault ツリー / 検索で除外するディレクトリ名（セグメント完全一致）。
  * VCS・Obsidian メタ・依存・ゴミ箱を見せない。
  */
