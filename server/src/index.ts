@@ -31,6 +31,7 @@ import { makeAuthMiddleware, authEnabled } from './lib/auth.js';
 import { inboxRouter } from './inbox.js';
 import { vaultWriteRouter } from './vaultWriteRouter.js';
 import { taskEditRouter } from './taskEditRouter.js';
+import { approvalRouter } from './approvalRouter.js';
 import { startWatch } from './watch.js';
 
 const HEALTHZ_PATH = '/api/healthz';
@@ -160,6 +161,14 @@ app.get('/api/overview', (_req, res) => {
 app.get('/api/alerts', (_req, res) => {
   safeJson(res, () => collectAlerts());
 });
+
+// ─── 承認フロー（MC-79）──────────────────────────────────────
+// GET /api/approvals で Keita の承認/確認が要る項目を集約（BLOCKED 設計判断・デプロイ可否・
+// 設計判断/承認待ち/要確認タグ）。REVIEW/DONE/CANCELLED は常に除外。
+// POST /api/approvals/:taskId/approve・/reject は MC-71 の安全書き戻し層を再利用して
+// 正本 .md へ status 遷移（approve→TODO / reject→CANCELLED）＋承認決定を監査 JSONL に記録。
+// 認証ミドルウェア配下。alerts(blocked-stalled) とは別軸の独立集計（二重集計しない）。
+app.use('/api/approvals', approvalRouter());
 
 app.get('/api/usage', (_req, res) => {
   safeJson(res, () => collectUsage());

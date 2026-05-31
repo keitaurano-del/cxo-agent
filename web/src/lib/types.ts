@@ -56,6 +56,26 @@ export interface Task {
   source: string;
   updated?: string;
   stalled: boolean;
+  // ─── 承認フロー（MC-79）の追加フィールド（既存 UI 非影響）──────────
+  needsKeita?: boolean;
+  approvalTags?: ApprovalKind[];
+}
+
+// ─── 承認フロー（MC-79 / GET /api/approvals）──────────────────────
+// server/src/collectors/approvals.ts のレスポンス形と一致させる。
+
+export type ApprovalKind = 'blocked' | 'deploy' | 'design' | 'approval' | 'confirm';
+
+export interface ApprovalItem extends Task {
+  categories: ApprovalKind[];
+  primaryCategory: ApprovalKind;
+}
+
+export interface ApprovalsResponse {
+  generatedAt: string;
+  byCategory: Record<ApprovalKind, number>;
+  total: number;
+  items: ApprovalItem[];
 }
 
 export interface NarrativeDoc {

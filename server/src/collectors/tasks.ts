@@ -7,7 +7,12 @@
 //   - nishimarucho-flyer/TASK_TRACKER.md : 同様のテーブル/チェックボックス
 
 import { readFileSync, existsSync, statSync } from 'node:fs';
-import { TASK_SOURCES, TASK_STALL_DAYS } from '../config.js';
+import {
+  TASK_SOURCES,
+  TASK_STALL_DAYS,
+  APPROVAL_TAG_WORDS,
+  type ApprovalKind,
+} from '../config.js';
 import { projectFromPath, type ProjectName } from '../lib/projectMap.js';
 
 export type TaskStatus =
@@ -29,6 +34,41 @@ export interface Task {
   source: string; // どの台帳由来か
   updated?: string; // ISO 日付（取れれば）
   stalled: boolean;
+  /**
+   * 担当に「Keita」を含む（owner に Keita が入っている）か（MC-79 承認フロー判定の素材）。
+   * 既存 UI には影響しない追加フィールド（非破壊）。
+   */
+  needsKeita?: boolean;
+  /**
+   * 承認フロー（MC-79）の区分タグ。区分/フェーズ列・本文の whitelist 語マッチで付く。
+   * 例: 'design'（設計判断/仕様未確定）, 'deploy'（デプロイ可否/承認）, 'approval'（承認待ち）, 'confirm'（要確認）。
+   * 該当なしなら空配列。承認フローの集約・誤検知ゼロ判定にのみ使う追加フィールド（非破壊）。
+   */
+  approvalTags?: ApprovalKind[];
+}
+
+/**
+ * owner に「Keita」を含むか（表記ゆれ吸収: Keita / keita）。
+ * 「dev-logic + Keita」「Keita 待ち」等の複合 owner でも拾う。
+ */
+function ownerHasKeita(owner?: string): boolean {
+  if (!owner) return false;
+  return /keita/i.test(owner);
+}
+
+/**
+ * 区分/フェーズ列の値・本文テキストから承認区分タグ（whitelist 語マッチ）を抽出する。
+ * 完全一致ではなく includes。誤検知ゼロのため Keita 確定語のみ（config の APPROVAL_TAG_WORDS）。
+ */
+function extractApprovalTags(texts: (string | undefined)[]): ApprovalKind[] {
+  const hay = texts.filter((t): t is string => !!t).join('\n');
+  if (!hay) return [];
+  const tags: ApprovalKind[] = [];
+  (Object.keys(APPROVAL_TAG_WORDS) as (keyof typeof APPROVAL_TAG_WORDS)[]).forEach((kind) => {
+    const words = APPROVAL_TAG_WORDS[kind];
+    if (words.some((w) => hay.includes(w))) tags.push(kind);
+  });
+  return tags;
 }
 
 const STATUS_WORDS: TaskStatus[] = [
@@ -158,8 +198,31 @@ export function parseTrackerString(
     const key = `${source}:${id}`;
     if (seen.has(key)) return;
     seen.add(key);
+    // 承認フロー（MC-79）素材: カードの全フィールド値を本文相当として whitelist マッチ。
+    const approvalTags = extractApprovalTags([
+      c['区分'],
+      c['フェーズ'],
+      c['層'],
+      c['ステータス'] || c['status'],
+      c['詳細'],
+      c['受け入れ条件'],
+      c['提言・抜けもれ'],
+      c['提言・抜けもれ（重要）'],
+      c['関連'],
+    ]);
     out.push(
-      markStalled({ id, title, status, owner, priority, project, source, updated }),
+      markStalled({
+        id,
+        title,
+        status,
+        owner,
+        priority,
+        project,
+        source,
+        updated,
+        needsKeita: ownerHasKeita(owner),
+        approvalTags,
+      }),
     );
   };
 
@@ -242,8 +305,27 @@ export function parseTrackerString(
     const key = `${source}:${id}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    // 承認フロー（MC-79）素材:
+    //   - 区分/フェーズ列セル（cells のうち status/priority/owner 列以外の中間セル）
+    //   - 詳細セクション本文（sec[0]）。ここに「設計判断」「デプロイ可否」等の whitelist 語が載る。
+    // owner は表行 or セクションの 担当: を反映済み。
+    const phaseCells = cells.filter(
+      (_c, i) => i !== 0 && i !== 1 && i !== (col?.status ?? -1) && i !== (col?.owner ?? -1),
+    );
+    const approvalTags = extractApprovalTags([...phaseCells, sec?.[0]]);
     out.push(
-      markStalled({ id, title, status, owner, priority, project, source, updated }),
+      markStalled({
+        id,
+        title,
+        status,
+        owner,
+        priority,
+        project,
+        source,
+        updated,
+        needsKeita: ownerHasKeita(owner),
+        approvalTags,
+      }),
     );
   }
   // ファイル末尾がカードで終わる場合の取りこぼし防止。

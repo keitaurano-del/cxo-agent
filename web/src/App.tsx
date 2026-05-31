@@ -5,8 +5,9 @@
 // 横断検索からの遷移に影響を出さない。
 import { NavLink, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { useLiveStream } from './lib/useLiveData';
+import { useLiveStream, useLiveResource } from './lib/useLiveData';
 import { LiveContext } from './lib/liveContext';
+import type { ApprovalsResponse } from './lib/types';
 import {
   BoardIcon,
   GridIcon,
@@ -41,7 +42,27 @@ const NAV: NavItem[] = [
   { to: '/vault', label: 'Vault', shortLabel: 'Vault', icon: <VaultIcon /> },
 ];
 
-function Sidebar({ connected }: { connected: boolean }) {
+/** ナビ項目の件数バッジ（0 なら非表示）。承認フロー（/approvals）で使う。 */
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none tabular-nums"
+      style={{ color: 'var(--mc-bg)', background: 'var(--mc-blocked)' }}
+      aria-label={`要承認 ${count} 件`}
+    >
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
+
+function Sidebar({
+  connected,
+  badges,
+}: {
+  connected: boolean;
+  badges: Partial<Record<string, number>>;
+}) {
   const { pathname } = useLocation();
   const dashActive = isDashboardPath(pathname);
   return (
@@ -58,6 +79,7 @@ function Sidebar({ connected }: { connected: boolean }) {
       <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
         {NAV.map((item) => {
           const forceActive = item.to === '/' && dashActive;
+          const badge = badges[item.to] ?? 0;
           return (
             <NavLink
               key={item.to}
@@ -73,6 +95,7 @@ function Sidebar({ connected }: { connected: boolean }) {
             >
               <span aria-hidden>{item.icon}</span>
               {item.label}
+              <NavBadge count={badge} />
             </NavLink>
           );
         })}
@@ -102,10 +125,14 @@ function Sidebar({ connected }: { connected: boolean }) {
 
 export default function App() {
   const { ticks, connected } = useLiveStream();
+  // 承認フローの総件数（ナビバッジ用）。tasks 由来なので tasks tick で再フェッチ。
+  const { data: approvals } = useLiveResource<ApprovalsResponse>('/api/approvals', ticks.tasks);
+  const approvalCount = approvals?.total ?? 0;
+  const badges: Partial<Record<string, number>> = { '/approvals': approvalCount };
   return (
     <LiveContext.Provider value={{ ticks }}>
       <div className="flex h-screen overflow-hidden bg-bg text-text">
-        <Sidebar connected={connected} />
+        <Sidebar connected={connected} badges={badges} />
         <main className="flex-1 overflow-y-auto pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
           <Routes>
             {/* ダッシュボード（/）配下に 5 タブを入れ子。各子ビューの URL は従来どおり。 */}
@@ -123,7 +150,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
-        <BottomNav items={NAV} />
+        <BottomNav items={NAV} badges={badges} />
         <AddTaskFab />
       </div>
     </LiveContext.Provider>

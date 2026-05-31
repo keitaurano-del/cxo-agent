@@ -5,7 +5,7 @@
 
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROSTER_DIR } from '../config.js';
+import { ROSTER_DIR, ROSTER_VISIBLE } from '../config.js';
 import { collectAgents, type AgentSummary } from './agents.js';
 import type { AgentStatus } from '../lib/stall.js';
 
@@ -96,6 +96,9 @@ export function collectRoster(): RosterEntry[] {
       continue;
     }
     const name = f.replace(/\.md$/, '');
+    // 表示対象 allowlist（MC-75）。人格保有＋主要エージェントのみ出し、
+    // バックグラウンドの非主要 md が 60-Agents/ に増えても自動で隠す。
+    if (!ROSTER_VISIBLE.has(name)) continue;
     const fm = parseFrontmatter(md);
     const live = mergeLive(name, agents);
     out.push({

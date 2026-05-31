@@ -61,6 +61,16 @@ export const TASK_LINKS_FILE = join(INBOX_DATA_DIR, 'task-links.jsonl');
  */
 export const TASK_EDITS_FILE = join(INBOX_DATA_DIR, 'task-edits.jsonl');
 
+/**
+ * 承認/却下の監査ログ + デプロイ承認フラグ台帳（MC-79。追記専用 JSONL・1 行 1 決定）。
+ * Apollo の承認フローで Keita が承認/却下した決定をここに記録する。
+ * 1 行 = `{ ts, source, id, decision: 'approve'|'reject', categories, fromStatus, toStatus, deployApproved?, comment? }`。
+ * デプロイ承認は status を TODO に進めつつ、ここに deployApproved:true を立てて
+ * autonomous-rin / 林 が「デプロイ承認済み」として拾えるようにする（.md 本文は MC-71 層の
+ * status 遷移のみで安全に動かし、自由記述の本文書き換えはしない）。
+ */
+export const APPROVAL_DECISIONS_FILE = join(INBOX_DATA_DIR, 'approval-decisions.jsonl');
+
 /** 添付画像の 1 枚あたり最大バイト数（10MB）。 */
 export const INBOX_MAX_FILE_BYTES = envNum('INBOX_MAX_FILE_BYTES', 10 * 1024 * 1024);
 
@@ -85,6 +95,42 @@ export const NARRATIVE_DIRS = {
 
 /** エージェント台帳のディレクトリ（60-Agents/*.md）。 */
 export const ROSTER_DIR = join(VAULT_DIR, '60-Agents');
+
+/**
+ * roster に表示するエージェント名の allowlist（MC-75）。
+ * Keita 方針: Apollo の roster には「人格を持つエージェント」と「その他の主要エージェント」だけを出す。
+ * cron 常駐のバックグラウンド系含め、ここに列挙したものだけ表示し、
+ * 将来 60-Agents/ に非主要 md が増えても自動で隠れる（denylist だと追加し忘れて漏れるため allowlist 採用）。
+ * 新規に主要エージェントを足したら、ここに名前（= md ファイル名 = subagent_type）を追記する。
+ * env ROSTER_VISIBLE（カンマ区切り）で差し替え可能。空指定なら下記デフォルト。
+ */
+function parseRosterVisible(): Set<string> {
+  const raw = process.env.ROSTER_VISIBLE;
+  if (raw && raw.trim() !== '') {
+    return new Set(
+      raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s !== ''),
+    );
+  }
+  // 人格保有 9 体 ＋ 林（main assistant）＋ apollo（番人）の現 11 体。
+  return new Set<string>([
+    'dev-logic',
+    'task-manager',
+    'designer',
+    'content-creator',
+    'reviewer',
+    'logic-coach',
+    'test-functional',
+    'night-patrol',
+    'feedback-watcher',
+    'hayashi-rin',
+    'apollo',
+  ]);
+}
+
+export const ROSTER_VISIBLE = parseRosterVisible();
 
 /**
  * Vault ツリー / 検索で除外するディレクトリ名（セグメント完全一致）。
@@ -183,3 +229,28 @@ export const USAGE_TTL_MS = envNum('USAGE_TTL_MS', 300000);
  * jsonl は高頻度追記されるため、短時間の連続変更を1イベントにまとめて broadcast する。
  */
 export const WATCH_DEBOUNCE_MS = envNum('WATCH_DEBOUNCE_MS', 600);
+
+// ─── 承認フロー（MC-79）──────────────────────────────────
+
+/**
+ * 承認フロー判定の語彙 whitelist（MC-79）。
+ * タスクの「区分／フェーズ」列および本文（詳細セクション）にこれらの語が現れたら、
+ * Keita の承認/確認が要る項目として承認フローに集約する。曖昧語を増やすと誤検知の元なので、
+ * Keita 確定（2026-05-31）の語のみを厳密に列挙する（誤検知ゼロ方針）。
+ *
+ *  - design   : 設計判断・仕様未確定（BLOCKED 設計判断 → 承認で TODO 化）
+ *  - approval : Keita承認待ち・承認待ち（汎用の承認待ち）
+ *  - deploy   : デプロイ可否・デプロイ承認（承認で deploy フラグ/note を立てて autonomous-rin/林が実行）
+ *  - confirm  : 要確認（Keita 確認が要る論点）
+ *
+ * すべて完全一致ではなく部分一致（includes）で拾う。日本語のため単語境界は使わない。
+ */
+export const APPROVAL_TAG_WORDS = {
+  design: ['設計判断', '仕様未確定'],
+  approval: ['Keita承認待ち', '承認待ち'],
+  deploy: ['デプロイ可否', 'デプロイ承認'],
+  confirm: ['要確認'],
+} as const;
+
+/** 承認区分（バッジ用カテゴリ）。design/approval/deploy/confirm + blocked(BLOCKED かつ Keita 待ち)。 */
+export type ApprovalKind = 'blocked' | 'design' | 'deploy' | 'approval' | 'confirm';

@@ -12,7 +12,13 @@ export interface BottomNavItem {
   icon: ReactNode;
 }
 
-export default function BottomNav({ items }: { items: BottomNavItem[] }) {
+export default function BottomNav({
+  items,
+  badges = {},
+}: {
+  items: BottomNavItem[];
+  badges?: Partial<Record<string, number>>;
+}) {
   const { pathname } = useLocation();
   // ダッシュボード配下のタブ（/today 等）にいる間も「ダッシュボード」をアクティブ表示にする。
   const dashActive = isDashboardPath(pathname);
@@ -28,6 +34,7 @@ export default function BottomNav({ items }: { items: BottomNavItem[] }) {
       >
         {items.map((item) => {
           const forceActive = item.to === '/' && dashActive;
+          const badge = badges[item.to] ?? 0;
           return (
           <li key={item.to}>
             <NavLink
@@ -39,8 +46,21 @@ export default function BottomNav({ items }: { items: BottomNavItem[] }) {
                 }`
               }
             >
-              <span aria-hidden>{item.icon}</span>
-              <span className="leading-none">{item.shortLabel}</span>
+              <span className="relative" aria-hidden>
+                {item.icon}
+                {badge > 0 && (
+                  <span
+                    className="absolute -right-2 -top-1.5 inline-flex min-w-[1rem] items-center justify-center rounded-full px-1 py-0.5 text-[9px] font-bold leading-none tabular-nums"
+                    style={{ color: 'var(--mc-bg)', background: 'var(--mc-blocked)' }}
+                  >
+                    {badge > 99 ? '99+' : badge}
+                  </span>
+                )}
+              </span>
+              <span className="leading-none">
+                {item.shortLabel}
+                {badge > 0 && <span className="sr-only">（要承認 {badge} 件）</span>}
+              </span>
             </NavLink>
           </li>
           );
