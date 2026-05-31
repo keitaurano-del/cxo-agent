@@ -1118,7 +1118,7 @@ ID 採番: **AR-0x**。
 | ID | MC-81 |
 | タイトル | tasks collector の normStatus 堅牢化（statusセル全体 includes 走査をやめ、先頭トークンで正規化） |
 | 優先度 | P2 |
-| ステータス | TODO |
+| ステータス | DONE（2026-05-31 normStatus先頭トークン優先で誤読根治・実台帳213件diff変化2件回帰ゼロ・単体テスト31・本番反映済） |
 | 担当 | dev-logic |
 | 詳細 | reviewer が MC-71 検証中に発見した副産物バグ。`server/src/collectors/tasks.ts:71-83` の `normStatus` が `STATUS_WORDS` 順（REVIEW が DONE より先）にセル文字列全体を `includes` で走査するため、縦型カードの status セル本文に「REVIEW」の文字が混ざると、実態が DONE でも REVIEW と誤読する。MC-71 で実際に踏んだ（回避策として status セルを素の DONE にし、検証文を別行に分離した）。恒久対策として「status セルの先頭トークン（区切り前の最初のステータス語）だけを見る」方式へ直す。`DONE（…注記…）` のように注記内に他ステータス語が混ざっても、先頭の DONE を正しく取れるようにする。 |
 | 関連ファイル | `server/src/collectors/tasks.ts`（normStatus 71-83 行付近、STATUS_WORDS / mergeStatus 周辺）。表行/縦型カード両形式のパース経路。 |
