@@ -1,18 +1,21 @@
 // Apollo — アプリシェル（左ナビ + ヘッダ + ルート）。
-import { NavLink, Route, Routes, Navigate } from 'react-router-dom';
+// トップナビは 4 項目に集約（MC-76）: ダッシュボード / タスクボード / 承認フロー / Vault。
+// ダッシュボード（/）配下に俯瞰・今日・会話・エージェント・消費量の 5 タブを入れ子で持つ。
+// 子ビューの URL（/today /feed /agents /usage /agents/:id）は温存し、deep link・SSE・
+// 横断検索からの遷移に影響を出さない。
+import { NavLink, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useLiveStream } from './lib/useLiveData';
 import { LiveContext } from './lib/liveContext';
 import {
   BoardIcon,
   GridIcon,
-  NoteIcon,
-  StreamIcon,
-  UsersIcon,
+  ApprovalIcon,
   DotIcon,
   VaultIcon,
-  UsageIcon,
 } from './components/icons';
+import DashboardLayout from './components/DashboardLayout';
+import { isDashboardPath } from './lib/nav';
 import Overview from './views/Overview';
 import Agents from './views/Agents';
 import Feed from './views/Feed';
@@ -20,6 +23,7 @@ import Tasks from './views/Tasks';
 import Narrative from './views/Narrative';
 import Vault from './views/Vault';
 import Usage from './views/Usage';
+import Approvals from './views/Approvals';
 import BottomNav from './components/BottomNav';
 import AddTaskFab from './components/AddTaskFab';
 
@@ -31,16 +35,15 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { to: '/', label: '司令塔', shortLabel: '司令塔', icon: <GridIcon /> },
-  { to: '/agents', label: 'エージェント', shortLabel: '体', icon: <UsersIcon /> },
-  { to: '/feed', label: '会話', shortLabel: '会話', icon: <StreamIcon /> },
+  { to: '/', label: 'ダッシュボード', shortLabel: 'ダッシュ', icon: <GridIcon /> },
   { to: '/tasks', label: 'タスクボード', shortLabel: 'ボード', icon: <BoardIcon /> },
-  { to: '/today', label: '今日', shortLabel: '今日', icon: <NoteIcon /> },
-  { to: '/usage', label: '消費量', shortLabel: '消費', icon: <UsageIcon /> },
+  { to: '/approvals', label: '承認フロー', shortLabel: '承認', icon: <ApprovalIcon /> },
   { to: '/vault', label: 'Vault', shortLabel: 'Vault', icon: <VaultIcon /> },
 ];
 
 function Sidebar({ connected }: { connected: boolean }) {
+  const { pathname } = useLocation();
+  const dashActive = isDashboardPath(pathname);
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-surface md:flex">
       <div className="flex items-center gap-2 px-5 py-4">
@@ -53,23 +56,26 @@ function Sidebar({ connected }: { connected: boolean }) {
         </div>
       </div>
       <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
-        {NAV.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            className={({ isActive }) =>
-              `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-                isActive
-                  ? 'bg-surface-3 font-semibold text-text'
-                  : 'text-text-muted hover:bg-surface-2 hover:text-text'
-              }`
-            }
-          >
-            <span aria-hidden>{item.icon}</span>
-            {item.label}
-          </NavLink>
-        ))}
+        {NAV.map((item) => {
+          const forceActive = item.to === '/' && dashActive;
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === '/'}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                  isActive || forceActive
+                    ? 'bg-surface-3 font-semibold text-text'
+                    : 'text-text-muted hover:bg-surface-2 hover:text-text'
+                }`
+              }
+            >
+              <span aria-hidden>{item.icon}</span>
+              {item.label}
+            </NavLink>
+          );
+        })}
       </nav>
       <div className="border-t border-border px-5 py-3">
         <div
@@ -102,13 +108,17 @@ export default function App() {
         <Sidebar connected={connected} />
         <main className="flex-1 overflow-y-auto pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
           <Routes>
-            <Route path="/" element={<Overview />} />
-            <Route path="/agents" element={<Agents />} />
-            <Route path="/agents/:agentId" element={<Agents />} />
-            <Route path="/feed" element={<Feed />} />
+            {/* ダッシュボード（/）配下に 5 タブを入れ子。各子ビューの URL は従来どおり。 */}
+            <Route element={<DashboardLayout />}>
+              <Route path="/" element={<Overview />} />
+              <Route path="/agents" element={<Agents />} />
+              <Route path="/agents/:agentId" element={<Agents />} />
+              <Route path="/feed" element={<Feed />} />
+              <Route path="/today" element={<Narrative />} />
+              <Route path="/usage" element={<Usage />} />
+            </Route>
             <Route path="/tasks" element={<Tasks />} />
-            <Route path="/today" element={<Narrative />} />
-            <Route path="/usage" element={<Usage />} />
+            <Route path="/approvals" element={<Approvals />} />
             <Route path="/vault" element={<Vault />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

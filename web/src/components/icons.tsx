@@ -208,6 +208,15 @@ export function EditIcon(props: IconProps) {
   );
 }
 
+export function ApprovalIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12 2.3 2.3 4.7-4.7" />
+    </svg>
+  );
+}
+
 export function TagIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
