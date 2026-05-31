@@ -704,7 +704,7 @@ ID 採番: **AR-0x**。
 | MC-63 | 通知/アラート（ERROR・BLOCKED 長期滞留・deploy 失敗のバッジ） | P2 | おまけ | DONE（2026-05-31 本番反映済 commit 37ad6ed。/api/alerts 新規＋司令塔 AlertBanner。restart 後 本番4317 で `counts:{error:0,warning:0,total:0}` / `byCategory` / `thresholds.blockedStallDays:5` を返却＝現在アラート0件で正常、無トークン401・healthz ok 検証済） | dev-logic | MC-60, MC-61 |
 | MC-64 | deploy 連動（GitHub Actions run 状態をタスク詳細に表示） | P2 | おまけ | TODO | dev-logic | MC-61 |
 | MC-65 | autonomous-rin 可視化（30分毎ティックの選択タスク×結果レーン） | P2 | おまけ | TODO | dev-logic | MC-61 |
-| MC-81 | tasks collector の normStatus 堅牢化（statusセル先頭トークンで正規化） | P2 | 品質 | TODO | dev-logic | MC-80（棚卸し中に副産物として発見） |
+| MC-81 | tasks collector の normStatus 堅牢化（statusセル先頭トークンで正規化） | P2 | 品質 | DONE | dev-logic | MC-80（棚卸し中に副産物として発見） |
 
 ---
 
@@ -1027,7 +1027,7 @@ ID 採番: **AR-0x**。
 | ID | MC-76 |
 | タイトル | ナビ「司令塔」を「ダッシュボード」に改名し、今日/会話/エージェント/消費量をその配下に移動 |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | DONE（2026-05-31 本番反映済。司令塔→ダッシュボード改名＋配下5タブ＋トップ4項目化、DashboardLayout/Outlet、既存URL温存で非破壊。承認フロー枠もMC-79で実装完了。9ルート390px横溢れ0検証） |
 | 担当 | dev-logic + designer(UX) |
 | 詳細 | Keita「アポロのボードの司令塔はダッシュボードに変更して、今日、会話、エージェント、消費量はダッシュボードに移動して」。(1) トップナビの「司令塔」を「ダッシュボード」にリネーム。(2) 現在トップレベルにある「今日」「会話」「エージェント」「消費量(Usage)」をダッシュボード配下（タブ or セクション）に移動し、トップナビをすっきりさせる。残すトップレベル想定: ダッシュボード / タスクボード / Vault 等（＋本バッチ MC-79 の「承認フロー」も新トップレベル候補）。具体的なナビ構成は designer が UX 検討。 |
 | 関連 | Apollo dashboard（ナビ/ルーティング: web のサイドバー＋モバイル BottomNav、各 view コンポーネント）。[[project-apollo-dashboard]] のナビ定義（司令塔/エージェント/会話/タスクボード/今日/Vault） |
@@ -1098,7 +1098,7 @@ ID 採番: **AR-0x**。
 | ID | MC-80 |
 | タイトル | REVIEW は Keita 待ちにしない運用へ＋現状 REVIEW 滞留タスクを内部検証して DONE 化する棚卸し |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | DONE（2026-05-31 完了。REVIEW21件を内部検証→18件DONE化、残4件は妥当な保留(AM-N法務push承認/NF-2/UI-28/MC-43は後にDONE)。運用ルールは memory feedback_review_agent_verify_then_done に確定。今後REVIEWはKeita確認不要・内部検証でDONE） |
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 詳細 | Keita「レビューに止まってるのは、Keitaのレビュー待ちだと思うけど、Keitaのレビューはいらないから、内部のレビューが完了したら、完了にしちゃっていい」。これは運用ルール（reviewer/test 系の内部検証完了＝即 DONE、Keita の最終目視を最終ゲートにしない）。タスクとしては (1) 現状 REVIEW で止まっている全タスクを内部検証(test-functional/reviewer)→DoD 充足を確認して DONE 化する棚卸し、(2) 今後 REVIEW を Keita 待ちにしない運用の徹底（REVIEW=内部レビュー待ちのみ、Keita 目視は不要）。cxo-agent 側の REVIEW 滞留も内部検証→DONE 化する。 |
 | 関連 | 各 docs/TASK_TRACKER.md の REVIEW 状態タスク全般。MC-79（承認フローに REVIEW を含めない方針＝本タスクと整合）。memory（REVIEW→内部検証→DONE の運用方針を別途 memory 化検討） |
