@@ -1010,7 +1010,7 @@ ID 採番: **AR-0x**。
 | ID | MC-75 |
 | タイトル | Apollo の roster 表示を人格保有＋主要エージェントに限定（バックグラウンド系を非表示） |
 | 優先度 | P2 |
-| ステータス | TODO |
+| ステータス | DONE（2026-05-31 roster allowlist で人格保有9＋林＋apolloの11体のみ表示・本番反映済 66283a0・/api/roster 11件確認） |
 | 担当 | dev-logic |
 | 詳細 | Keita「アポロのエージェントに表示するのは人格があるエージェントとその他主要エージェントだけでいい。その他バックグラウンドで動いているのはここには表示しなくていい」。Apollo の roster(/api/roster)表示を、人格保有の開発9体（dev-logic/task-manager/designer/content-creator/reviewer/logic-coach/test-functional/night-patrol/feedback-watcher、[[project-agent-roster-20260531]]）＋その他主要エージェントに限定する。バックグラウンドの細かいプロセス系（cron 派生・一時 subagent 等）は roster に出さない。 |
 | 関連 | Apollo dashboard（roster ビュー / server `/api/roster` collector）, `obsidian-vault/60-Agents/*.md`（roster ソース候補） |
@@ -1080,7 +1080,7 @@ ID 採番: **AR-0x**。
 | ID | MC-79 |
 | タイトル | Apollo に「承認フロー」メニュー新設（Keita 承認要項目を集約し承認/却下） |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | DONE（2026-05-31 承認フロー実装(GET /api/approvals＋承認1タップ→TODO/却下→CANCELLED・MC-71書き戻し層再利用・件数バッジ)・本番反映済 commit 66283a0・/api/approvals 12件返却確認） |
 | 担当 | dev-logic + designer(UX) |
 | 詳細 | Keita「何かKeitaの承認が必要なものは『承認フロー』というメニューを追加して、そこでやるようにして」。Apollo に「承認フロー」メニュー/ビューを新設し、Keita の承認が要る項目（デプロイ可否・設計判断・仕様未確定・BLOCKED で Keita 待ち・「Keita承認待ち」タグ等）を集約する。Keita がそこで承認/却下（＋コメント）できる。MC-68(承認待ち一覧)の発展形＝MC-68 を本タスクに集約。可視化(MC-68 のMVP)に加え、承認/却下アクション（書き込み API＋監査ログ）まで含む。 |
 | 関連 | Apollo dashboard（新トップレベルメニュー「承認フロー」, server 書き込み API）, 各 docs/TASK_TRACKER.md。MC-68（集約元）, MC-71(md 安全書き戻し層を承認アクションで再利用), MC-61(ドリルダウン基盤), MC-76(トップナビ構成と整合) |
