@@ -15,6 +15,7 @@ import { collectTasks } from './collectors/tasks.js';
 import { collectNarrative } from './collectors/narrative.js';
 import { collectRoster } from './collectors/roster.js';
 import { collectUsage } from './collectors/usage.js';
+import { collectWorkflows, collectWorkflowDetail } from './collectors/workflows.js';
 import {
   buildTree,
   readNote,
@@ -115,6 +116,24 @@ app.get('/api/overview', (_req, res) => {
 
 app.get('/api/usage', (_req, res) => {
   safeJson(res, () => collectUsage());
+});
+
+// ─── Workflows（MC-60）────────────────────────────────────
+// /workflows ツールが作る wf_* run を解析して run 一覧 / 1 run 詳細を返す。
+// 認証ミドルウェア（makeAuthMiddleware）配下。run 0 件でも空配列で 200。
+app.get('/api/workflows', (_req, res) => {
+  safeJson(res, () => ({ workflows: collectWorkflows() }));
+});
+
+app.get('/api/workflows/:runId', (req, res) => {
+  safeJson(res, () => {
+    const detail = collectWorkflowDetail(req.params.runId);
+    if (!detail) {
+      res.status(404).json({ error: 'workflow run not found' });
+      return undefined;
+    }
+    return detail;
+  });
 });
 
 // ─── Inbox（非同期 指示受信箱）──────────────────────────────

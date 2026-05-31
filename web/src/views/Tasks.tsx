@@ -13,12 +13,16 @@ import {
 } from '../lib/meta';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, StalledBadge, Badge } from '../components/ui';
+import { TaskDetail } from '../components/TaskDetail';
 
-function TaskCard({ t }: { t: Task }) {
+function TaskCard({ t, onOpen }: { t: Task; onOpen: (t: Task) => void }) {
   return (
-    <div
-      className="rounded-lg border border-border bg-surface p-3"
+    <button
+      type="button"
+      onClick={() => onOpen(t)}
+      className="w-full rounded-lg border border-border bg-surface p-3 text-left hover:bg-surface-2"
       style={{ borderLeft: `3px solid ${projectColor(t.project)}` }}
+      aria-label={`タスク詳細を開く: ${t.title}`}
     >
       <div className="flex items-start justify-between gap-2">
         <span className="font-mono text-[10px] text-text-faint">{t.id}</span>
@@ -47,11 +51,19 @@ function TaskCard({ t }: { t: Task }) {
       <div className="mt-1 text-[10px] text-text-faint" title={`出典: ${t.source}`}>
         {t.source}
       </div>
-    </div>
+    </button>
   );
 }
 
-function Column({ status, tasks }: { status: TaskStatus; tasks: Task[] }) {
+function Column({
+  status,
+  tasks,
+  onOpen,
+}: {
+  status: TaskStatus;
+  tasks: Task[];
+  onOpen: (t: Task) => void;
+}) {
   const meta = taskStatusMeta(status);
   return (
     <div className="flex w-full shrink-0 flex-col rounded-xl border border-border bg-surface/40 md:w-72">
@@ -70,7 +82,7 @@ function Column({ status, tasks }: { status: TaskStatus; tasks: Task[] }) {
       </div>
       <div className="flex flex-col gap-2 overflow-y-auto p-2 md:max-h-[calc(100dvh-12rem)]">
         {tasks.map((t) => (
-          <TaskCard key={`${t.source}:${t.id}`} t={t} />
+          <TaskCard key={`${t.source}:${t.id}`} t={t} onOpen={onOpen} />
         ))}
         {tasks.length === 0 && (
           <p className="px-2 py-4 text-center text-[11px] text-text-faint">なし</p>
@@ -89,6 +101,8 @@ export default function Tasks() {
   const [project, setProject] = useState<ProjectName | 'all'>('all');
   // モバイルでは横スクロールカンバンの代わりに、選択した 1 列のみ全幅縦積みで表示する。
   const [activeColumn, setActiveColumn] = useState<TaskStatus>('IN_PROGRESS');
+  // カードクリックで開くタスク詳細（MC-61）。null は閉じている状態。
+  const [selected, setSelected] = useState<Task | null>(null);
 
   const tasks = data?.tasks ?? [];
 
@@ -207,16 +221,17 @@ export default function Tasks() {
         <ResourceState loading={loading} error={error} hasData={!!data}>
           {/* モバイル: 選択列のみ全幅縦積み */}
           <div className="md:hidden">
-            <Column status={activeColumn} tasks={byColumn[activeColumn]} />
+            <Column status={activeColumn} tasks={byColumn[activeColumn]} onOpen={setSelected} />
           </div>
           {/* md 以上: 横並びカンバン */}
           <div className="hidden gap-3 md:flex">
             {TASK_COLUMNS.map((status) => (
-              <Column key={status} status={status} tasks={byColumn[status]} />
+              <Column key={status} status={status} tasks={byColumn[status]} onOpen={setSelected} />
             ))}
           </div>
         </ResourceState>
       </div>
+      <TaskDetail task={selected} onClose={() => setSelected(null)} />
     </div>
   );
 }
