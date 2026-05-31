@@ -676,4 +676,140 @@ ID 採番: **AR-0x**。
 
 ---
 
-最終更新: 2026-05-31 / 管理: task-manager（2026-05-31 ドッグフーディング feedback トリアージで MC-59 追記。旧: Apollo リネーム＋MC-0x〜MC-5x 実装反映＋autonomous-rin 追記）
+## バッチ: 2026-05-31 Apollo タスク中心ドリルダウン強化（MC-6x）
+
+ソース: Keita 2026-05-31 決定。Apollo を「タスク中心のドリルダウン」に強化する。タスクをクリックしたら、その詳細の中で「進捗・workflow・エージェント会話」が一望できるようにする。スコープは「フル」。タスク↔workflow↔会話の紐付けは「軽い案＝ID 文字列マッチ」を採用。
+
+採番: 既存 MC-01〜59 / MC-G0〜G5 / AR-0x と衝突しない **MC-60〜MC-65**。MC-60〜62 がコア（優先度 高〜中）、MC-63〜65 がおまけ（優先度 中〜低）。
+
+> **実装着手タイミング（全件共通）**: 着手は「人格 workflow 着地後」。それまでは全件 TODO で起票のみ（今回は登録・構造化が目的、実装はしない）。実装は dev-logic に委譲（UX 検討は designer 併走）。
+
+> **既存実装との関係（重複回避の整理）**:
+> - 会話 Feed は既に `web/src/views/Feed.tsx`（MC-34）＋ `/api/agents/:id/feed`（agent-*.jsonl を user/assistant/tool_use で時系列化）で実装済み。MC-61 のタスク詳細内「紐づくエージェント会話」は**この既存 Feed の該当スレッドを埋め込む＝既存拡張**であり、会話解析を新規実装しない。
+> - タスクボードは既に `web/src/views/Tasks.tsx`（MC-24、5列 Kanban）で実装済み。MC-61 のカードクリック→ドロワー/詳細は**既存 Tasks ビューへのドリルダウン追加＝既存拡張**。Kanban 自体を作り直さない。
+> - workflow 実行ログ（`subagents/workflows/wf_*/`）は現状どの API でも拾われていない＝ MC-60 でコレクタ新規。
+
+| ID | タイトル | 優先度 | 区分 | ステータス | 担当 | 依存 |
+|----|---------|--------|------|-----------|------|------|
+| MC-60 | Workflow コレクタ＋API 新規（/api/workflows・/api/workflows/:runId） | P0 | コア | TODO | dev-logic | なし（既存 collectors/lib 流用） |
+| MC-61 | タスク詳細ドリルダウン（フロント＋API、既存 Tasks/Feed 拡張） | P0 | コア | TODO | dev-logic + designer | MC-60 |
+| MC-62 | タスク↔workflow↔会話 紐付け（軽い案＝ID 文字列マッチ＋運用ルール） | P1 | コア | TODO | dev-logic（運用ルールは林） | MC-60 |
+| MC-63 | 通知/アラート（ERROR・BLOCKED 長期滞留・deploy 失敗のバッジ） | P2 | おまけ | TODO | dev-logic | MC-60, MC-61 |
+| MC-64 | deploy 連動（GitHub Actions run 状態をタスク詳細に表示） | P2 | おまけ | TODO | dev-logic | MC-61 |
+| MC-65 | autonomous-rin 可視化（30分毎ティックの選択タスク×結果レーン） | P2 | おまけ | TODO | dev-logic | MC-61 |
+
+---
+
+### MC-60 — Workflow コレクタ＋API 新規　[P0 / コア]
+- ステータス: TODO / 担当: dev-logic
+- 詳細: `~/.claude/projects/**/subagents/workflows/wf_*/` 配下の各 run（フェーズ・孫エージェント jsonl）を解析する collector を新規実装。返すもの: workflow run 一覧 / 各 run のフェーズ進捗 / 孫エージェントのツリー（親 workflow→phase→孫 agent）/ 各ノードの状態（active/idle/done/error）/ トークン消費。新エンドポイント `GET /api/workflows`（run 一覧）と `GET /api/workflows/:runId`（1 run のフェーズ・孫ツリー詳細）。
+- 関連ファイル: `cxo-agent/server/src/collectors/`（新規 workflows.ts）, 既存 `lib/jsonl.ts`（末尾読み・空/壊れ耐性を流用）, `lib/stall.ts`（8分しきい値を流用）, `lib/projectMap.ts`, `lib/redact.ts`, `server/src/index.ts`（ルート追加）
+- DoD: `/api/workflows` が wf_* run の `{runId, label, project, status, phases[], lastActivity, tokens}` を配列で返す。`/api/workflows/:runId` がフェーズ進捗＋孫エージェントツリー＋トークンを返す。wf_* が0件でも空配列で 200（落ちない）。壊れ/空 jsonl で例外を吐かない。
+- 依存: なし（Phase1 collectors / lib は実装済みなので流用前提）
+- 提言・抜けもれ:
+  - server コード変更なので反映に `sudo systemctl restart mission-control.service` が必要（生 tsx 起動は禁止、ポート 4317 競合。project_apollo_dashboard 準拠）。
+  - 既存 API（/api/agents /tasks /narrative /roster /usage /inbox, SSE /api/stream）を**非破壊**で追加すること。既存ルートのレスポンス型を変えない。
+  - 巨大 jsonl はフル読みせず末尾/ストリーム読み（メモリ・速度。MC-11 と同方針）。
+  - 滞留・状態判定は stall.ts の8分しきい値を再利用（二重定義しない。reference_subagent_slow_not_dead 準拠で短く切らない）。
+  - SSE 反映: workflow も chokidar watch（MC-31）対象に含め、wf_* 追記で `/api/stream` に乗るか確認（タスク詳細をライブ更新させたいなら必須）。watch 対象拡張は MC-60 か MC-61 のどちらで持つか実装時に決める。
+  - PII/シークレット混入対策に redact.ts を通す（孫 agent の prompt にトークン等が出る可能性）。
+  - 認証: 既存 token/Basic（MC-42）配下に新 API も入れる（認証バイパスの新口を作らない）。
+- note: 着手は人格 workflow 着地後。今回は起票のみ。
+- 更新日: 2026-05-31
+
+### MC-61 — タスク詳細ドリルダウン（既存 Tasks/Feed 拡張）　[P0 / コア]
+- ステータス: TODO / 担当: dev-logic + designer（UX）
+- 詳細: 既存タスクボード（MC-24 `views/Tasks.tsx`）のカードをクリックでドロワー/詳細を開く。詳細の中に (a) 概要・ステータス・担当・note（TASK_TRACKER 由来＝既存 /api/tasks）、(b) 進捗タイムライン、(c) 紐づく workflow run のフェーズ進捗（MC-60 の /api/workflows）、(d) 紐づくエージェント会話（既存 Feed の該当スレッド＝/api/agents/:id/feed の埋め込み）を一望表示。会話解析・Kanban 本体は**既存を再利用**し新規重複しない。
+- 関連ファイル: `cxo-agent/web/src/views/Tasks.tsx`（カード→クリックハンドラ追加）, 新規 詳細ドロワー component（`web/src/components/`）, `web/src/views/Feed.tsx`（該当スレッド埋め込み再利用）, 必要なら `server` 側にタスク詳細集約エンドポイント（既存 /api/tasks /api/workflows /api/agents feed を束ねる薄い層、要否は実装時判断）
+- DoD: Kanban のカードクリックで詳細が開き、概要＋進捗タイムライン＋紐づく workflow run（フェーズ進捗）＋紐づく会話スレッドが1画面で見える。紐付けが無いタスクでも詳細は開ける（空状態を明示表示、クラッシュしない）。モバイル（390px）でドロワーが横溢れ0。
+- 依存: MC-60（workflow 表示のため）。会話埋め込みは既存 Feed なので MC-34 既存実装に依存。
+- 提言・抜けもれ:
+  - web 変更は `cd web && npm run build` で dist 更新→静的配信に反映（project_apollo_dashboard 準拠）。
+  - **モバイルレスポンシブ維持**（既存 Apollo は md 未満で BottomNav・単一カラム化済み）。ドロワーはモバイルでボトムシート/フルスクリーン化を検討（designer UX）。
+  - デザイン制約: ハードコード hex 禁止・既存配色/状態ドット/タイポ（MC-26 デザインシステム）に追従。UI chrome は emoji 不可・SVG アイコンのみ（feedback_logic_lesson_visual_hybrid の UI ルール）。
+  - 文言は中立的丁寧体（feedback_app_copy_neutral）。「データがありません」等の空状態文言もニュートラルに。
+  - SSE ライブ反映: 詳細を開いたまま該当 workflow/会話が進んだら自動更新されるのが理想（useLiveData/EventSource、MC-33 流用）。最低でも再フェッチで追従。
+  - アクセシビリティ: ドロワーのフォーカストラップ・Esc クローズ・状態ドットに語ラベル併記。
+  - 既存 Tasks ビューの Kanban 挙動（色分け・滞留バッジ）を壊さない（回帰）。カードクリックがドラッグ等の既存操作と競合しないか確認。
+- note: 着手は人格 workflow 着地後。今回は起票のみ。会話 Feed・Kanban は既存拡張（新規重複しない）。
+- 更新日: 2026-05-31
+
+### MC-62 — タスク↔workflow↔会話 紐付け（軽い案＝ID 文字列マッチ）　[P1 / コア]
+- ステータス: TODO / 担当: dev-logic（運用ルール側は林も関与）
+- 詳細: タスク（FB-06 / MC-xx / UI-xx 等の ID）と、それを動かした workflow run / agent 会話を機械的に繋ぐ鍵を持たせる。採用方式は「軽い案＝ID 文字列マッチ」: (1) 運用ルール — 林が agent/workflow 起動時に prompt・label へ対象タスク ID を必ず入れる。(2) コレクタ側 — workflow run / agent 会話の label・prompt 本文から既知タスク ID パターンを正規表現で拾い、タスクに紐づける。精度不足時に「堅い案（`data/task-links.jsonl` に明示マッピングを書く）」へ拡張できる設計余地を残す。
+- 関連ファイル: `cxo-agent/server/src/collectors/`（workflows.ts / agents.ts に ID 抽出ロジック）, 新規 `lib/taskLink.ts`（ID パターン抽出・突き合わせの集約）, 将来拡張用 `cxo-agent/data/task-links.jsonl`（堅い案、今回は未作成）, 運用ルールは林の workflow 起動手順（memory 化候補）
+- DoD: prompt/label にタスク ID を含む workflow run・agent 会話が、対応タスクの詳細（MC-61）に紐づいて表示される。ID 表記ゆれ（MC-60 / mc-60 / MC60 等）を吸収。マッチしないものは「未紐付け」として扱い、誤紐付け（別タスク ID への取り違え）を出さない。
+- 依存: MC-60（紐付け対象の workflow データ）。表示先は MC-61。
+- 提言・抜けもれ:
+  - ID パターンは複数プレフィックス対応（MC- / FB- / UI- / AR- / T- / NF- 等、各プロジェクト台帳の採番）。プロジェクト跨ぎの誤マッチを projectMap で抑止。
+  - **運用ルールの徹底が肝**: prompt/label に ID を入れ忘れると紐付かない。林側の workflow 起動手順に組み込み、memory（feedback 系）化を検討。task-manager 側でも「workflow に流すタスクは ID を必ず prompt に明記」を運用に追加。
+  - 堅い案への拡張余地: 軽い案で精度が出ない場合 `data/task-links.jsonl`（taskId↔runId↔agentId の明示マップ）に切替/併用できるよう、抽出層をインターフェース化しておく。
+  - 1タスクに複数 run/会話が紐づく多対多を許容（配列で持つ）。
+  - 誤紐付け回避を優先（再現率より適合率重視。間違って別タスクに会話がぶら下がる方が混乱が大きい）。
+- note: 着手は人格 workflow 着地後。今回は起票のみ。軽い案採用は Keita 決定。堅い案は将来オプション。
+- 更新日: 2026-05-31
+
+### MC-63 — 通知/アラート（バッジ表示）　[P2 / おまけ]
+- ステータス: TODO / 担当: dev-logic
+- 詳細: night-patrol の ERROR 検出・BLOCKED 長期滞留・deploy 失敗を Apollo 上でバッジ表示する。該当タスク/エージェント/グローバルヘッダにアラートを出し、放置を見逃さない。
+- 関連ファイル: `cxo-agent/server/src/collectors/`（narrative.ts の night-patrol/inspection 解析を流用してアラート抽出）, タスク側は /api/tasks の BLOCKED 滞留判定（stall.ts）, deploy 失敗は MC-64 の GitHub Actions 連携と重なる, フロントは共通バッジ component
+- DoD: ERROR / 長期 BLOCKED / deploy 失敗が発生したとき Apollo にバッジが出る。解消すると消える。誤検知（正常を ERROR 表示）が出ない。
+- 依存: MC-60, MC-61（タスク詳細に出すため）。deploy 失敗は MC-64 と連携。
+- 提言・抜けもれ:
+  - BLOCKED「長期滞留」のしきい値定義が必要（stall.ts の8分とは別軸＝日単位の停滞か。要件定義してから実装。曖昧なら BLOCKED）。
+  - ERROR ソースの確定: night-patrol ログ／agent jsonl の error 行／systemd 失敗のどれを拾うか。多重通知を避ける。
+  - server restart 要・既存 API 非破壊・モバイルでバッジが潰れない・文言は中立的丁寧体。
+  - 通知の永続化（既読/未読）まで持つかは要件次第。MVP は表示のみで可。
+- note: おまけ（優先度 中〜低）。着手は人格 workflow 着地後。要件（しきい値・ERROR ソース）の確定が前提。
+- 更新日: 2026-05-31
+
+### MC-64 — deploy 連動（GitHub Actions run 状態表示）　[P2 / おまけ]
+- ステータス: TODO / 担当: dev-logic
+- 詳細: GitHub Actions の deploy 系 workflow（logic: deploy-production / android-deploy、en-chakai: deploy-production 等）の run 状態（queued/in_progress/success/failure）をタスク詳細（MC-61）に表示する。「このタスクの実装が本番に出たか」を Apollo から把握できるようにする。
+- 関連ファイル: `cxo-agent/server/src/collectors/`（新規 deploys.ts、`gh` CLI or GitHub API で run 取得）, server に新エンドポイント（/api/deploys 等）, フロントはタスク詳細内セクション
+- DoD: タスク詳細に直近の deploy run 状態が出る。run が無いタスクは空状態。GitHub API レート/認証エラーで Apollo 全体が落ちない（フォールバック表示）。
+- 依存: MC-61（表示先）。MC-62（タスク↔deploy 紐付けに ID マッチが要る場合）。
+- 提言・抜けもれ:
+  - 認証: `gh` の GH_TOKEN/既存トークンを使う（新箱は GH_TOKEN env 方式。project_vultr_second_server）。トークンを台帳・コードに直書きしない。
+  - レート制限・タイムアウト時のキャッシュ（usage の5分キャッシュ方式を流用）。
+  - 対象 repo は logic / en-chakai（cxo-agent リポは Issue/deploy 用途に使わない＝feedback_no_cxo_agent。Apollo 可視化対象としての参照は別レイヤーだが、deploy 連動対象は logic/en-chakai に絞る）。
+  - server restart 要・既存 API 非破壊・モバイル表示・中立文言。
+  - タスクと deploy run の紐付けは commit/PR 番号 or ブランチ名ベースになる可能性。ID 文字列マッチ（MC-62）だけで足りるか実装時に検証。
+- note: おまけ（優先度 中〜低）。着手は人格 workflow 着地後。
+- 更新日: 2026-05-31
+
+### MC-65 — autonomous-rin 可視化（ティック×結果レーン）　[P2 / おまけ]
+- ステータス: TODO / 担当: dev-logic
+- 詳細: 自律林（autonomous-rin、30分毎 cron ティック）が各ティックで「どのタスクを選び、何をして、結果どうなったか（commit/push/deploy/skip/失敗）」を専用レーンで時系列表示する。`~/logs/autonomous-rin.log` と inbox 消費（inbox-consumed.jsonl）を可視化ソースにする。
+- 関連ファイル: `cxo-agent/server/src/collectors/`（新規 autonomousRin.ts、`~/logs/autonomous-rin.log` 解析）, `cxo-agent/data/inbox-consumed.jsonl`, server 新エンドポイント, フロントは専用レーン view or タスク詳細内セクション
+- DoD: ティックごとの「選択タスク・アクション・結果」が時系列レーンで見える。ログが空でも落ちない。直近 N ティックを表示。
+- 依存: MC-61（タスク詳細に出すなら）。スタンドアロンのレーン view なら依存は薄い。
+- 提言・抜けもれ:
+  - ログフォーマット依存になるので、autonomous-rin.sh のログ出力形式（tick start/選定/結果）と密結合。フォーマット変更時に壊れない緩いパースに。
+  - DRY_RUN ティックと本番ティックを区別表示（push/deploy 有無）。
+  - ログファイルのパスは config.ts に集約（ハードコード散在禁止）。$HOME ベース解決（Vultr/ローカル差吸収）。
+  - server restart 要・既存 API 非破壊・モバイル表示・中立文言。
+  - 大きくなるログの末尾読み（メモリ）。
+- note: おまけ（優先度 中〜低）。着手は人格 workflow 着地後。関連: project_autonomous_rin。
+- 更新日: 2026-05-31
+
+---
+
+## 抜けもれ提言サマリ（MC-6x）
+- 全件 server コード変更を伴うため反映に `sudo systemctl restart mission-control.service` が必要（生 tsx 起動禁止・ポート4317 単一 bind）。web 変更は `npm run build`。各タスクの DoD に「restart/build で実反映」を含めること。
+- 既存 API（agents/tasks/narrative/roster/usage/inbox + SSE）は**全て非破壊で追加**。既存レスポンス型を変えない。新 API も既存 token/Basic 認証配下に入れる（認証バイパスの新口を作らない）。
+- 会話 Feed（MC-34）とタスク Kanban（MC-24）は**既存を拡張**。新規で会話解析や Kanban を作り直さない（重複回避）。MC-61 はこの2つの上に詳細ドリルダウンを乗せるだけ。
+- モバイルレスポンシブ維持（390px 横溢れ0）・ハードコード hex 禁止・UI chrome は SVG アイコンのみ（emoji 不可）・文言は中立的丁寧体 — Apollo 既存方針を全 UI 追加で踏襲。
+- SSE ライブ反映を活かすなら、workflow（wf_*）も chokidar watch（MC-31）対象に含める検討が要る。MC-60/61 の実装時に watch 対象拡張の所在を決める。
+- MC-62 の紐付けは「運用ルール（prompt/label に ID 必須）」が成否を握る。林の workflow 起動手順への組み込み＋ memory 化が必要。task-manager 側も「workflow 流すタスクは ID を prompt 明記」を運用化。
+- MC-63（しきい値・ERROR ソース）と MC-64（deploy↔タスク紐付けの鍵）は要件が曖昧なまま着手しない。確定してから IN_PROGRESS。曖昧なら BLOCKED + 確認。
+
+## 次アクション（MC-6x）
+- 今回は起票のみ完了（全件 TODO）。実装着手は「人格 workflow 着地後」。それまで凍結。
+- 着手解禁後の順序: MC-60（workflow コレクタ＋API）→ MC-61（タスク詳細ドリルダウン）→ MC-62（紐付け）。MC-63〜65 はコア完了後におまけとして優先度判断。
+- MC-62 着手前に「workflow/agent 起動時の prompt/label に対象タスク ID を必ず入れる」運用ルールを林・task-manager で確定（紐付け精度の前提）。
+- 実装は dev-logic に委譲（designer は MC-61 の UX 併走）。各フェーズ後に reviewer / test-smoke で品質ゲート。
+
+---
+
+最終更新: 2026-05-31 / 管理: task-manager（2026-05-31 Apollo タスク中心ドリルダウン強化 MC-60〜65 起票。旧: ドッグフーディング MC-59 追記、Apollo リネーム＋MC-0x〜MC-5x 実装反映＋autonomous-rin 追記）
