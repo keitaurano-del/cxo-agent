@@ -973,3 +973,17 @@ ID 採番: **AR-0x**。
 | 依存 | 既存 collector(/api/tasks,roster,agents,workflows,vault)を横断する新 /api/search、or フロント側で各APIを叩いて集約。MC-61(ドリルダウン)に結果から飛べると理想。 |
 | 抜けもれ | server非破壊追加・既存token認証配下・中立文言・ハードコードhex禁止・SVGアイコン。Vault全文は既存 /api/vault の検索(VAULT_SEARCH_LIMIT)流用。大量ヒット時の上限・デバウンス。日本語検索(部分一致)。 |
 | 更新日 | 2026-05-31 |
+
+## バッチ: 2026-05-31 Apollo tasks collector バグ修正（MC-74）
+
+### MC-74 — tasks collector のステータス誤表示＋縦型カード非対応を修正
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-74 |
+| タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
+| 優先度 | P1 |
+| ステータス | DONE（2026-05-31 本番反映済 commit c69a534・restart済。バグ1=同一ID重複時に古いステータスで巻き戻り→STATUS_RANK+mergeStatusで確定方向のみ上書き・表行を一次値に。バグ2=縦型カード| ID |MC-70|非対応→状態機械で対応。実測 AF-01/FB-02/FB-03→DONE・MC-70→CANCELLED・MC-73→DONE・総数196→204回帰なし） |
+| 担当 | dev-logic |
+| 詳細 | Keita「タスクボード更新されてる？」起点で発覚。実ファイル台帳は正しいのに /api/tasks が古いステータス（REVIEW）を返し、縦型カード形式の MC-70/73 がボード未表示だった。server/src/collectors/tasks.ts parseTrackerString() の2バグ。 |
+| 更新日 | 2026-05-31 |
