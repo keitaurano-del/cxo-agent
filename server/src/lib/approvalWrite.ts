@@ -27,7 +27,13 @@ export type ApprovalDecision = 'approve' | 'reject';
 export interface ApproveArgs {
   source: string;
   id: string;
-  /** 楽観ロック用ハッシュ（任意。UI は GET /api/tasks/hash で取得して渡す）。 */
+  /**
+   * 楽観ロック用ハッシュ（任意・後方互換のため受けるが、承認フローでは使わない）。
+   * 承認は Keita の明示意図なので whole-file ハッシュ照合で弾くのではなく、サーバが
+   * 「最新を読んで→検証して→書き戻す」アトミック方式を取る（editTask 内 read→write、
+   * 他プロセスとの競合時は editWithRetry で最大 RETRY_MAX 回リトライ）。MC-71 の read-back
+   * 安全層（他タスク行の不変 assert）は維持される。
+   */
   baseHash?: string;
   /** この承認がどのカテゴリに対するものか（監査・デプロイ判定に使用）。 */
   categories?: ApprovalKind[];
@@ -44,6 +50,41 @@ export interface ApprovalResult {
   decision: ApprovalDecision;
   toStatus: 'TODO' | 'CANCELLED';
   deployApproved: boolean;
+}
+
+// 並行書き込み（autonomous-rin / apollo-keeper 等が 10〜30 分毎に台帳へ書く）と競合した
+// 場合のリトライ上限。RACE_RETRY（書込直前に下地が変わった）と、念のため CONFLICT（baseHash
+// 不一致＝ここでは baseHash を渡さないので原則発生しない）を再試行対象にする。
+const RETRY_MAX = 3;
+
+/**
+ * editTask を「サーバが最新を読んで書き戻す」前提でリトライ付き実行する。
+ * baseHash は渡さない（楽観ロックで弾かない）ので、editTask は毎回その時点の最新 .md を
+ * 読み、patch を当て、書込直前 TOCTOU ガードに引っかかった（RACE_RETRY）ときだけ読み直して
+ * 再試行する。read-back 検証（他タスク不変・対象適用）は editTask 内で毎回走るので安全層は維持。
+ */
+function editWithRetry(args: { source: string; id: string; patch: Parameters<typeof editTask>[0]['patch'] }) {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < RETRY_MAX; attempt += 1) {
+    try {
+      // baseHash は意図的に渡さない（サーバが最新を読む = 承認は弾かず確実に通す）。
+      return editTask({ source: args.source, id: args.id, patch: args.patch });
+    } catch (e) {
+      lastErr = e;
+      if (e instanceof TaskEditError && (e.code === 'RACE_RETRY' || e.code === 'CONFLICT')) {
+        continue; // 並行書き込みと競合 → 最新を読み直して再試行。
+      }
+      throw e; // NOT_FOUND / AMBIGUOUS / VALIDATION_FAILED 等は再試行しても無意味。
+    }
+  }
+  // RETRY_MAX 回連続で競合 → さすがに諦めて CONFLICT を投げる（呼び出し側で 409 へマップ）。
+  if (lastErr instanceof TaskEditError && lastErr.code === 'RACE_RETRY') {
+    throw new TaskEditError(
+      'CONFLICT',
+      '台帳が他の処理により連続して更新されているため確定できませんでした。少し時間をおいて再試行してください。',
+    );
+  }
+  throw lastErr;
 }
 
 /** 決定 1 件を監査 JSONL に追記（失敗しても本処理は巻き戻さない＝ベストエフォート）。 */
@@ -74,9 +115,9 @@ function recordDecision(rec: {
  * 承認: status を TODO に進める。categories に 'deploy' が含まれればデプロイ承認フラグも立てる。
  * 既に TODO のタスクでも editTask は冪等に成功する（read-back で TODO を再確認するだけ）。
  */
-export function approveTask({ source, id, baseHash, categories = [] }: ApproveArgs): ApprovalResult {
+export function approveTask({ source, id, categories = [] }: ApproveArgs): ApprovalResult {
   const deployApproved = categories.includes('deploy');
-  const { task, hash } = editTask({ source, id, patch: { status: 'TODO' }, baseHash });
+  const { task, hash } = editWithRetry({ source, id, patch: { status: 'TODO' } });
   recordDecision({
     decision: 'approve',
     source,
@@ -84,7 +125,6 @@ export function approveTask({ source, id, baseHash, categories = [] }: ApproveAr
     categories,
     fromStatus: 'approve',
     toStatus: 'TODO',
-    prevHash: baseHash,
     newHash: hash,
     deployApproved,
   });
@@ -94,8 +134,8 @@ export function approveTask({ source, id, baseHash, categories = [] }: ApproveAr
 /**
  * 却下: status を CANCELLED にする。comment は監査 JSONL に保存（.md 本文には書かない）。
  */
-export function rejectTask({ source, id, baseHash, categories = [], comment }: RejectArgs): ApprovalResult {
-  const { task, hash } = editTask({ source, id, patch: { status: 'CANCELLED' }, baseHash });
+export function rejectTask({ source, id, categories = [], comment }: RejectArgs): ApprovalResult {
+  const { task, hash } = editWithRetry({ source, id, patch: { status: 'CANCELLED' } });
   recordDecision({
     decision: 'reject',
     source,
@@ -103,7 +143,6 @@ export function rejectTask({ source, id, baseHash, categories = [], comment }: R
     categories,
     fromStatus: 'reject',
     toStatus: 'CANCELLED',
-    prevHash: baseHash,
     newHash: hash,
     comment: comment && comment.trim() !== '' ? comment.trim() : undefined,
   });

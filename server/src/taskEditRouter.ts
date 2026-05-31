@@ -36,6 +36,7 @@ function statusForCode(code: string): number {
   switch (code) {
     case 'CONFLICT':
     case 'AMBIGUOUS':
+    case 'RACE_RETRY':
       return 409;
     case 'VALIDATION_FAILED':
       return 422;

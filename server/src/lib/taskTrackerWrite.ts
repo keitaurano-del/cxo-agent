@@ -45,7 +45,10 @@ export type TaskEditCode =
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'AMBIGUOUS'
-  | 'VALIDATION_FAILED';
+  | 'VALIDATION_FAILED'
+  // 読込〜書込の間に別プロセス（autonomous-rin 等）が同じ台帳を書き換えた（TOCTOU）。
+  // patch 適用は成功していたが書込直前に下地が変わったので中断した状態。再読込してリトライ可能。
+  | 'RACE_RETRY';
 
 export class TaskEditError extends Error {
   constructor(
@@ -575,6 +578,18 @@ export function editTask({ source, id, patch, baseHash }: EditTaskArgs): EditTas
   assertTargetApplied(newMd, id, patch);
 
   // e. atomic write + 監査ログ。
+  // TOCTOU ガード: 読込（a）から書込までの間に別プロセス（autonomous-rin / apollo-keeper /
+  // task-manager 等が並行で同じ台帳に書く）がファイルを変えていないか、書込直前に再確認する。
+  // 変わっていたら今回の patch は古い下地に対して適用したものなので、上書きすると他者の
+  // 変更を握り潰す。RACE_RETRY を投げて呼び出し側（承認フロー）に「最新を読み直して再試行」
+  // させる。これにより baseHash 楽観ロックに頼らずとも他者の変更を保護できる。
+  const beforeWriteMd = existsSync(path) ? readFileSync(path, 'utf-8') : '';
+  if (sha256(beforeWriteMd) !== currentHash) {
+    throw new TaskEditError(
+      'RACE_RETRY',
+      '書き込み直前に台帳が別プロセスにより更新されました（再読み込みして再試行します）。',
+    );
+  }
   const newHash = sha256(newMd);
   const tmp = `${path}.tmp`;
   writeFileSync(tmp, newMd, 'utf-8');

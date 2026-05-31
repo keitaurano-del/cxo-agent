@@ -1,11 +1,13 @@
 // approvalRouter — 承認フロー API（MC-79。auth ミドルウェア配下）。
 //
 //  GET  /api/approvals                       : 承認/確認が要る項目を集約（カテゴリ別件数つき）。
-//  POST /api/approvals/:taskId/approve (JSON): { source, baseHash?, categories? } で承認 → status=TODO。
-//  POST /api/approvals/:taskId/reject  (JSON): { source, baseHash?, categories?, comment? } で却下 → CANCELLED。
+//  POST /api/approvals/:taskId/approve (JSON): { source, categories? } で承認 → status=TODO。
+//  POST /api/approvals/:taskId/reject  (JSON): { source, categories?, comment? } で却下 → CANCELLED。
 //
-// 書き戻しは MC-71 の安全層（editTask）を approvalWrite 経由で再利用する（楽観ロック・read-back・
-// 監査ログ・該当行のみ置換）。エラーマッピングは taskEditRouter と同一方針:
+// 書き戻しは MC-71 の安全層（editTask）を approvalWrite 経由で再利用する（read-back 検証・
+// 監査ログ・該当行のみ置換）。承認/却下は baseHash 楽観ロックを使わず、サーバが最新を読んで
+// 書き戻すアトミック方式＋競合時リトライ（approvalWrite.editWithRetry）で確実に通す。
+// baseHash を body に積んでも無視する（後方互換）。エラーマッピングは taskEditRouter と同一方針:
 //   CONFLICT/AMBIGUOUS→409, VALIDATION_FAILED→422, NOT_FOUND→404, UNSUPPORTED_SOURCE/不正→400。
 
 import { Router, type Request, type Response } from 'express';
@@ -29,6 +31,7 @@ function statusForCode(code: string): number {
   switch (code) {
     case 'CONFLICT':
     case 'AMBIGUOUS':
+    case 'RACE_RETRY':
       return 409;
     case 'VALIDATION_FAILED':
       return 422;
@@ -65,7 +68,7 @@ function handleList(_req: Request, res: Response): void {
 function readCommon(
   req: Request,
   res: Response,
-): { source: string; id: string; baseHash?: string; categories: ApprovalKind[] } | null {
+): { source: string; id: string; categories: ApprovalKind[] } | null {
   const id = req.params.taskId;
   if (typeof id !== 'string' || id.trim() === '') {
     res.status(400).json({ error: 'taskId is required' });
@@ -77,12 +80,9 @@ function readCommon(
     res.status(400).json({ error: 'source is required' });
     return null;
   }
-  const baseHash =
-    typeof body.baseHash === 'string' && body.baseHash.trim() !== ''
-      ? body.baseHash.trim()
-      : undefined;
+  // baseHash は受け取らない（承認はサーバが最新を読んで書き戻すため不要）。body に積まれていても無視。
   const categories = parseCategories(body.categories);
-  return { source: source.trim(), id: id.trim(), baseHash, categories };
+  return { source: source.trim(), id: id.trim(), categories };
 }
 
 function handleApprove(req: Request, res: Response): void {

@@ -64,20 +64,17 @@ async function readApiError(res: Response, fallback: string): Promise<string> {
   }
 }
 
-/** 承認/却下の共通 POST。楽観ロック用に編集直前のハッシュを取得してから送る。 */
+/**
+ * 承認/却下の共通 POST。
+ * baseHash（楽観ロック）は送らない。承認はサーバ側が「最新を読んで→検証して→書き戻す」
+ * アトミック方式で確定し、並行書き込み（autonomous-rin 等）と競合してもサーバ内で
+ * リトライする。これにより whole-file ハッシュ不一致による「競合しました」連発を解消する。
+ */
 async function postDecision(
   item: ApprovalItem,
   decision: 'approve' | 'reject',
   comment?: string,
 ): Promise<void> {
-  // baseHash を取得（MC-71 の楽観ロック）。取得失敗時は baseHash なしで続行（server は省略可）。
-  let baseHash: string | undefined;
-  try {
-    const hashRes = await fetch(`/api/tasks/hash?source=${encodeURIComponent(item.source)}`);
-    if (hashRes.ok) baseHash = ((await hashRes.json()) as { hash?: string }).hash;
-  } catch {
-    baseHash = undefined;
-  }
   const res = await fetch(
     `/api/approvals/${encodeURIComponent(item.id)}/${decision}`,
     {
@@ -85,14 +82,14 @@ async function postDecision(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         source: item.source,
-        baseHash,
         categories: item.categories,
         ...(decision === 'reject' ? { comment } : {}),
       }),
     },
   );
   if (res.status === 409) {
-    throw new Error('他の更新と競合しました。再読み込みしてください。');
+    // サーバ側で最大 3 回リトライしても並行書き込みが収まらなかった例外的ケース。
+    throw new Error('台帳が連続して更新されています。少し時間をおいて再度お試しください。');
   }
   if (!res.ok) {
     throw new Error(await readApiError(res, decision === 'approve' ? '承認に失敗しました' : '却下に失敗しました'));
