@@ -923,7 +923,7 @@ ID 採番: **AR-0x**。
 | ID | MC-71 |
 | タイトル | Apollo タスクボードからタスクを手動で 編集（タイトル/ステータス/担当/優先度）・削除できる |
 | 優先度 | P1 |
-| ステータス | IN_PROGRESS（2026-05-31 林ティック着手。inbox 927c2b6d 起票。edit スライスを実装中、delete は Keita 設計判断待ちで分離） |
+| ステータス | REVIEW（2026-05-31 edit スライス 本番反映済。server tsc0/web build0/self-test24 green、push d3dc792、mission-control.service 再起動→/api/tasks/hash・/edit 本番疎通確認。Keita 実機での編集→保持の確認待ち。delete は Keita 設計判断待ちで分離） |
 | 担当 | dev-logic + designer(UX) |
 | 詳細 | Keita 依頼（2026-05-31 Apollo inbox `927c2b6d`「アポロのタスクは手動で編集、修正、削除等できるようにしたい」）。Apollo の TaskDetail（MC-61 ドリルダウン）からタスクの タイトル/ステータス/担当/優先度 を編集し、正本 TASK_TRACKER.md に安全に書き戻す。MC-69（優先度の手動変更）は本タスクの「優先度」フィールド編集に包含され、MC-68（承認ビュー）と同じ「md 安全書き戻し層」を共有する。 |
 | 設計方針（確定済） | overlay 方式は不採用（Apollo だけで消えても .md には残り autonomous-rin が拾い続ける＝偽の二重正本になるため）。MC-69 の通り「正本 .md への書き戻し＋楽観ロック」を採る。書き戻しは fail-closed: ①対象は task.id で一意特定できる場合のみ（曖昧なら 409 で拒否し「.md を直接編集して」と促す）②該当タスクのブロック内 該当行のみ置換（フルファイル再生成禁止）③mtime+sha256 の楽観ロック（読込後に変わっていたら 409）④書き込み前に同パーサで read-back 検証（対象タスクが意図値になり、かつ他タスクのパース結果が不変であることを assert、崩れたら abort）⑤監査ログ data/task-edits.jsonl。台帳は summary table / `### MC-xx` セクション / `\| フィールド \| 値 \|` カードの3形式が併存する点に対応。 |
