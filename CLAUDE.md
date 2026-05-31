@@ -130,6 +130,7 @@ agent-config の `projects/-root-projects/memory/` から sync。個別ファイ
 - [Vaultで破壊的git禁止](feedback_vault_no_destructive_git.md) — 共有 obsidian-vault では git reset --hard / clean -f 禁止、add は名指し。2026-05-30 未コミット編集消失事故の再発防止
 - [エージェント9体厳選+人格付与](project_agent_roster_20260531.md) — 2026-05-31 未使用6体削除し開発9体へ。全9体に技術的気質ベースの人格付与（蓮/棚町/紺野/編/関/論堂/試野/夜目/耳塚）。会話はApollo Feedに出る
 - [TODO残してる時に勝手に終わらない](feedback_never_stop_with_open_todos.md) — 着手可能TODOがある限り「締める」判断をせず自律前進。24時間継続が基本。停止は全消化orKeita明示or BLOCKEDのみ残った時だけ（2026-05-31）
+- [タスクID採番はスクリプトで](reference_task_id_numbering.md) — 目視で数えず next-task-id.sh を使う。起票は直列化＋pull後採番。MC-64/65衝突の再発防止（2026-05-31）
 
 ### feedback_address_keita.md
 
@@ -1487,5 +1488,33 @@ metadata:
 - 判定は「全 agent の最新 jsonl mtime」で見る。1体でも最近更新があれば生きている＝resume しない（稼働中を殺すことになる）。
 - 本当に死んでいたら `resumeFromRunId` で resume すれば完了済み agent はキャッシュから即返り、止まった所だけ再実行できる。まず生死を正しく見極めてから resume。
 - 関連: [[feedback-default-workflows]] / [[feedback-quality-efficiency-accuracy]]。
+
+### reference_task_id_numbering.md
+
+---
+name: reference-task-id-numbering
+description: TASK_TRACKER のタスクID採番は目視で数えず next-task-id.sh を使う。重複事故（MC-64/65衝突等）の再発防止。
+metadata:
+  type: reference
+  originSessionId: 2026-05-31
+---
+
+TASK_TRACKER.md に新タスクIDを採番するときは、目視で最大値を数えず、必ず採番ヘルパーを使う。
+
+```
+bash /home/dev/cron-scripts/next-task-id.sh <PREFIX> [個数]
+#   MC  → MC-68     FB 2 → FB-11 FB-12     UI → UI-28     AF → AF-03
+```
+
+**Why:** 2026-05-31、task-manager が古い台帳状態を見て MC-64/65 を採番し、林が直前に起票した MC-64(deploy連動)/MC-65(autonomous-rin可視化) と衝突した。原因は3つ重なる: (1) 台帳が60〜85KBと巨大で末尾を見落とす、(2) 並行起票のレース（先行起票を知らずに採番）、(3) ツール出力注入で Read 結果が汚染される。「目視で数えて+1」方式が構造的に弱い。
+
+**How to apply:**
+- スクリプト `/home/dev/cron-scripts/next-task-id.sh` は全 TASK_TRACKER（logic/cxo-agent/en-chakai/西丸町）を bash で直接 grep し、指定プレフィックスの実在最大連番+1 を返す。複数要るときは個数指定で一括予約。bash 実ファイル読みなので注入の影響を受けない。
+- 起票は **直列化** する。複数の task-manager を同時に走らせない（オーケストレーターの林が1件ずつ投げる）。並行で投げると採番がレースする。
+- 起票直前に `git pull --rebase` で最新を取り込んでから採番。
+- このスクリプトは Vultr 新箱（実運用の主機）固有。autonomous-rin / headless 林 / 対話林すべてこのマシンで動くので実害なし。別マシンで採番が要るときはパスを読み替える。
+- 新プレフィックスを足すとき（例 新プロジェクト）は next-task-id.sh の TRACKERS 配列に台帳パスを追加する。
+
+**関連:** [[project-task-manager]]、[[feedback-route-all-to-task-manager]]、[[reference-tool-output-injection-incident]]
 
 <!-- END: claude-config-memory -->
