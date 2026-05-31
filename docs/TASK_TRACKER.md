@@ -1236,3 +1236,20 @@ ID 採番: **AR-0x**。
 | 詳細 | 【Apollo投入】 止まってる進行中のタスク再開して |
 | 更新日 | 2026-05-31 |
 
+
+### MC-88 — autonomous-rin が BLOCKED タスクを TODO に書き戻す疑い（選定ロジックの BLOCKED 誤認）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-88 |
+| タイトル | autonomous-rin が BLOCKED タスクを TODO に書き戻す疑い（選定ロジックの BLOCKED 誤認） |
+| 優先度 | P1 |
+| ステータス | TODO |
+| 担当 | dev-logic（autonomous-rin.sh / プロンプトの選定ロジック点検） |
+| 背景 | 2026-05-31 の台帳整合作業中、AM-O（BLOCKED／SKU 登録待ち）が autonomous-rin と思われる外部プロセスにより複数回 TODO に書き戻される現象を観測。HEAD `8925c39` で BLOCKED 復元済みの後、未コミット編集で再び TODO 化された。autonomous-rin は本来「設計判断」「Keita 承認待ち」「BLOCKED」タグのタスクのステータスを触らない設計（project-autonomous-rin の選定基準）なのに、BLOCKED タスクのステータスを TODO に変えている。 |
+| 影響 | 台帳が静かに汚れ、Keita ゲート（承認待ち・設計判断・BLOCKED）のタスクが誤って着手対象に見える事故につながる。ボードの信頼性に直結。 |
+| 詳細 | autonomous-rin.sh とそのプロンプトの (a) 台帳編集指示、(b) 着手可能タスクの選定判定ロジックを点検し、BLOCKED/Keita 承認待ち/設計判断タグを持つタスクのステータスを書き換える経路を特定する。プロンプト側で「該当タグのステータスは保持し、書き換えない」を明示する／選定判定で BLOCKED を正しく除外できているか確認する。 |
+| DoD | autonomous-rin が BLOCKED／Keita 承認待ち／設計判断タグのタスクのステータスを書き換えないことを確認。原因（プロンプトの台帳編集指示 or 選定判定）を特定し修正。修正後、BLOCKED タスクが TODO に書き戻されないことを再現確認（ログ or 試走で検証）。 |
+| 関連 | `/home/dev/cron-scripts/autonomous-rin.sh`、project-autonomous-rin（選定基準＝「設計判断」「Keita承認待ち」タグは触らない）、AM-O（観測対象・logic TASK_TRACKER）、HEAD `8925c39`（BLOCKED 復元コミット） |
+| 更新日 | 2026-05-31 |
+
