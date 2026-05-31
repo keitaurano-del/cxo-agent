@@ -4,6 +4,7 @@
 // 検索・wikilink 遷移・画像埋め込み・callout・frontmatter 表示に対応。
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useLiveResource } from '../lib/useLiveData';
 import type {
   VaultTreeResponse,
@@ -293,6 +294,8 @@ export default function Vault() {
   const [mobilePane, setMobilePane] = useState<'tree' | 'note'>('tree');
   const [addOpen, setAddOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // 横断検索（MC-73）からの deep link: ?path=<vault相対パス> で該当ノートを自動で開く。
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const onCreated = useCallback(
     (message: string) => {
@@ -314,13 +317,25 @@ export default function Vault() {
     if (node.type === 'file') setMobilePane('note');
   }, []);
 
-  // 初期表示: 直近更新の briefing 等が無ければ未選択のまま（中央は案内）。
+  // deep link（?path=...）があれば最優先でそのノートを開く。一度開いたら URL から除去。
+  const deepLinkPath = searchParams.get('path');
   useEffect(() => {
-    if (selected || !data) return;
+    if (!deepLinkPath) return;
+    setSelected(deepLinkPath);
+    setMobilePane('note');
+    const next = new URLSearchParams(searchParams);
+    next.delete('path');
+    setSearchParams(next, { replace: true });
+  }, [deepLinkPath, searchParams, setSearchParams]);
+
+  // 初期表示: 直近更新の briefing 等が無ければ未選択のまま（中央は案内）。
+  // deep link 指定がある間は自動オープンを抑止する（指定ノートを優先）。
+  useEffect(() => {
+    if (selected || !data || deepLinkPath) return;
     // 何も選ばれていない場合は最初の md を自動で開く（任意の体験向上）。
     const firstMd = findFirstMd(data.tree);
     if (firstMd) setSelected(firstMd);
-  }, [data, selected]);
+  }, [data, selected, deepLinkPath]);
 
   return (
     <div className="flex h-full flex-col">

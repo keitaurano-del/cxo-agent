@@ -164,3 +164,74 @@ export interface VaultSearchResponse {
   query: string;
   results: VaultSearchHit[];
 }
+
+// ─── 横断検索（MC-73 / GET /api/search）──────────────────────
+// server/src/collectors/search.ts のレスポンス形と一致させる。
+
+export interface SearchTaskResult {
+  type: 'task';
+  id: string;
+  label: string;
+  sublabel?: string;
+  snippet?: string;
+  source: string;
+  status: string;
+  project: ProjectName;
+}
+
+export interface SearchAgentResult {
+  type: 'agent';
+  id: string;
+  name: string;
+  label: string;
+  sublabel?: string;
+  snippet?: string;
+}
+
+export interface SearchConversationResult {
+  type: 'conversation';
+  id: string;
+  agentId: string;
+  label: string;
+  sublabel?: string;
+  snippet?: string;
+  projectLabel: string;
+}
+
+export interface SearchWorkflowResult {
+  type: 'workflow';
+  id: string;
+  runId: string;
+  agentId: string | null;
+  label: string;
+  sublabel?: string;
+  snippet?: string;
+  projectLabel: string;
+}
+
+export interface SearchVaultResult {
+  type: 'vault';
+  id: string;
+  path: string;
+  label: string;
+  sublabel?: string;
+  snippet?: string;
+}
+
+export interface SearchResponse {
+  query: string;
+  tasks: SearchTaskResult[];
+  agents: SearchAgentResult[];
+  conversations: SearchConversationResult[];
+  workflows: SearchWorkflowResult[];
+  vault: SearchVaultResult[];
+  totals: {
+    tasks: number;
+    agents: number;
+    conversations: number;
+    workflows: number;
+    vault: number;
+    all: number;
+  };
+  generatedAt: string;
+}

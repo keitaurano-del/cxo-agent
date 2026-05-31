@@ -1,4 +1,5 @@
-// Overview（司令塔）— 上部 KPI 帯 + プロジェクトカード。
+// Overview（司令塔）— 上部 KPI 帯 + プロジェクトカード + 横断検索（MC-73）。
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLiveResource } from '../lib/useLiveData';
 import { useLiveTick } from '../lib/liveContext';
@@ -7,6 +8,8 @@ import { PROJECT_ORDER, projectColor, projectLabel } from '../lib/meta';
 import { relativeTime } from '../lib/time';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, StalledBadge } from '../components/ui';
+import { GlobalSearch } from '../components/GlobalSearch';
+import { SearchIcon } from '../components/icons';
 
 interface KpiCardProps {
   label: string;
@@ -92,6 +95,8 @@ export default function Overview() {
   );
 
   const kpi = data?.kpi;
+  // 横断検索モーダル（MC-73）の開閉。
+  const [searchOpen, setSearchOpen] = useState(false);
   // 表示順を PROJECT_ORDER に揃える。
   const projects = data
     ? [...data.projects].sort(
@@ -106,12 +111,23 @@ export default function Overview() {
         subtitle="エージェント稼働とタスク進捗の俯瞰"
         fetchedAt={fetchedAt}
         right={
-          <Link
-            to="/agents"
-            className="rounded-lg border border-border px-3 py-1.5 text-xs text-text-muted hover:bg-surface-2 hover:text-text"
-          >
-            エージェント一覧
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-text-muted hover:bg-surface-2 hover:text-text"
+              aria-label="横断検索を開く"
+            >
+              <SearchIcon width={14} height={14} />
+              検索
+            </button>
+            <Link
+              to="/agents"
+              className="rounded-lg border border-border px-3 py-1.5 text-xs text-text-muted hover:bg-surface-2 hover:text-text"
+            >
+              エージェント一覧
+            </Link>
+          </div>
         }
       />
       <div className="p-4 md:p-6">
@@ -156,6 +172,7 @@ export default function Overview() {
           </section>
         </ResourceState>
       </div>
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

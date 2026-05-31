@@ -1,6 +1,7 @@
 // Tasks（Kanban）— TODO/IN_PROGRESS/BLOCKED/REVIEW/DONE/CANCELLED の列。
 // カードはプロジェクト色分け、stalled は赤バッジ。プロジェクトでフィルタ。
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useLiveResource } from '../lib/useLiveData';
 import { useLiveTick } from '../lib/liveContext';
 import type { ProjectName, Task, TaskStatus } from '../lib/types';
@@ -103,8 +104,29 @@ export default function Tasks() {
   const [activeColumn, setActiveColumn] = useState<TaskStatus>('IN_PROGRESS');
   // カードクリックで開くタスク詳細（MC-61）。null は閉じている状態。
   const [selected, setSelected] = useState<Task | null>(null);
+  // 横断検索（MC-73）からの deep link: ?task=<id>&source=<source> で該当タスクを自動で開く。
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const tasks = data?.tasks ?? [];
+
+  // deep link パラメータが付いていて、対象タスクが読み込めたら TaskDetail を自動で開く。
+  // 一度開いたら URL から消費パラメータを除去し、再フェッチで再オープンしないようにする。
+  const deepLinkId = searchParams.get('task');
+  const deepLinkSource = searchParams.get('source');
+  useEffect(() => {
+    if (!deepLinkId || tasks.length === 0) return;
+    const match =
+      tasks.find(
+        (t) => t.id === deepLinkId && (!deepLinkSource || t.source === deepLinkSource),
+      ) ?? tasks.find((t) => t.id === deepLinkId);
+    if (match) {
+      setSelected(match);
+      const next = new URLSearchParams(searchParams);
+      next.delete('task');
+      next.delete('source');
+      setSearchParams(next, { replace: true });
+    }
+  }, [deepLinkId, deepLinkSource, tasks, searchParams, setSearchParams]);
 
   const presentProjects = useMemo(() => {
     const set = new Set(tasks.map((t) => t.project));

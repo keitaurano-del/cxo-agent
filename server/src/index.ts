@@ -17,6 +17,7 @@ import { collectRoster } from './collectors/roster.js';
 import { collectUsage } from './collectors/usage.js';
 import { collectWorkflows, collectWorkflowDetail } from './collectors/workflows.js';
 import { linksForTask } from './collectors/taskLinks.js';
+import { search } from './collectors/search.js';
 import {
   buildTree,
   readNote,
@@ -153,6 +154,15 @@ app.get('/api/overview', (_req, res) => {
 
 app.get('/api/usage', (_req, res) => {
   safeJson(res, () => collectUsage());
+});
+
+// ─── 横断検索（MC-73）──────────────────────────────────────
+// GET /api/search?q=... で タスク / エージェント / 会話 / workflow / Vault を横断検索する。
+// 認証ミドルウェア（makeAuthMiddleware）配下。既存 collector を流用し二重定義しない。
+// 空クエリ・0 ヒットでもクラッシュせずカテゴリ別に空配列を返す。
+// 大量ヒットは各カテゴリ上限（SEARCH_CATEGORY_LIMIT）+ totals で保護する。
+app.get('/api/search', (req, res) => {
+  safeJson(res, () => search(String(req.query.q ?? '')));
 });
 
 // ─── Workflows（MC-60）────────────────────────────────────
