@@ -61,7 +61,7 @@ ID 採番: **MC-0x（Phase0）/ MC-1x（Phase1）/ MC-2x（Phase2）/ MC-3x（Ph
 | MC-G3 | Phase3 品質ゲート（touch/追記→数秒で SSE 反映・再接続） | P0 | Phase3 | DONE | reviewer + test-smoke | MC-31〜34 |
 | MC-41 | web build→server 静的配信（同一オリジン /api・SSE） | P0 | Phase4 | DONE | dev-logic | MC-G3 |
 | MC-42 | 認証（token/Basic）でポート保護 | P0 | Phase4 | DONE | dev-logic | MC-41 |
-| MC-43 | deploy/apollo.service（systemd unit）＋README | P0 | Phase4 | REVIEW | dev-logic | MC-41 |
+| MC-43 | deploy/apollo.service（systemd unit）＋README | P0 | Phase4 | DONE | dev-logic | MC-41 |
 | MC-44 | Vultr 常駐化実行 | P0 | Phase4 | DONE | dev-logic + Keita | MC-42, MC-43 |
 | MC-45 | スマホ向けトンネル（Caddy/cloudflared）— follow-up | P2 | Phase4 | TODO | dev-logic + Keita | MC-44 |
 | MC-G4 | Phase4 品質ゲート（常駐起動・認証・全画面 E2E smoke） | P0 | Phase4 | DONE | reviewer + test-smoke | MC-41〜44 |
@@ -332,8 +332,9 @@ ID 採番: **MC-0x（Phase0）/ MC-1x（Phase1）/ MC-2x（Phase2）/ MC-3x（Ph
   - SSE にも認証を効かせる（EventSource はカスタムヘッダ不可→クエリトークン or Cookie で）。
 
 ### MC-43 — deploy/apollo.service ＋ README　[P0 / Phase4]
-- ステータス: REVIEW（継続）/ 担当: dev-logic
-- 検証(2026-05-31 reviewer 関): **DoD 未充足のため REVIEW 継続**。`deploy/apollo.service` は実在し内容も妥当（tsx 直起動・EnvironmentFile=.mc.env・Restart=always・WantedBy=multi-user.target。`systemctl cat mission-control.service` の実 install 内容と一致）。だが DoD「README に install/start/logs/rotate 手順が揃う」が **未達**: `deploy/README.md` は不在、`README.md` は Phase0/1 仕様＋`npm run dev` 開発起動のみで、systemd install/enable・journalctl ログ確認・MC_TOKEN rotate の常駐ランブックが無い（`grep -rE "rotate|journalctl|systemctl enable"` で該当 runbook ヒット 0）。→ dev-logic に「deploy/README.md（install/start/logs/rotate 手順）」追記を戻す。それが入れば DONE 化可。
+- ステータス: DONE / 担当: dev-logic
+- 完了(2026-05-31 dev-logic 蓮): DoD の残課題だった `deploy/README.md` を新規作成し充足。章立て=0.前提/1.install(daemon-reload・enable・start)/2.start・stop・restart/3.logs(journalctl -u mission-control.service＋~/logs/apollo-watchdog.log・apollo-keeper.log)/4.rotate(journald SystemMaxUse・vacuum＋~/logs の logrotate 例)/5.health(systemd Restart=always＋watchdog cron */3＋keeper cron 15,45＋/api/healthz)/6.troubleshoot(ポート4317競合=生tsx禁止・systemctl経由/web は npm run build/server は restart)。実態に忠実に記載（install 済み unit 名は旧称 `mission-control.service` のままなのでコマンドは全てその名前で記載、リネームは別件 MC-44 関連として明記）。実態確認: `systemctl status mission-control.service`=active/enabled・Restart=always、`ss -ltnp` で node が :4317 LISTEN、`/api/healthz`→200、cron は watchdog `*/3`・keeper `15,45`、ログは `~/logs/apollo-{watchdog,keeper}.log` を実機で確認済み。
+- 検証(2026-05-31 reviewer 関): **DoD 未充足のため REVIEW 継続**。`deploy/apollo.service` は実在し内容も妥当（tsx 直起動・EnvironmentFile=.mc.env・Restart=always・WantedBy=multi-user.target。`systemctl cat mission-control.service` の実 install 内容と一致）。だが DoD「README に install/start/logs/rotate 手順が揃う」が **未達**: `deploy/README.md` は不在、`README.md` は Phase0/1 仕様＋`npm run dev` 開発起動のみで、systemd install/enable・journalctl ログ確認・MC_TOKEN rotate の常駐ランブックが無い（`grep -rE "rotate|journalctl|systemctl enable"` で該当 runbook ヒット 0）。→ dev-logic に「deploy/README.md（install/start/logs/rotate 手順）」追記を戻す。それが入れば DONE 化可。【2026-05-31 解消済: deploy/README.md 作成で充足、上記完了メモ参照】
 - 詳細: systemd unit ＋ Vultr 常駐手順 README。
 - 関連ファイル: `cxo-agent/deploy/apollo.service`, `cxo-agent/deploy/README.md`, `cxo-agent/README.md`
 - 実態根拠(2026-05-30): `deploy/apollo.service` 実在（tsx 直起動・EnvironmentFile=.mc.env・Restart=always・WantedBy=multi-user.target）。**確認メモ**: `deploy/README.md` が見当たらない（install/start/logs/rotate 手順）。README 整備が確認できるまで DONE 化せず REVIEW。
@@ -703,6 +704,7 @@ ID 採番: **AR-0x**。
 | MC-63 | 通知/アラート（ERROR・BLOCKED 長期滞留・deploy 失敗のバッジ） | P2 | おまけ | DONE（2026-05-31 本番反映済 commit 37ad6ed。/api/alerts 新規＋司令塔 AlertBanner。restart 後 本番4317 で `counts:{error:0,warning:0,total:0}` / `byCategory` / `thresholds.blockedStallDays:5` を返却＝現在アラート0件で正常、無トークン401・healthz ok 検証済） | dev-logic | MC-60, MC-61 |
 | MC-64 | deploy 連動（GitHub Actions run 状態をタスク詳細に表示） | P2 | おまけ | TODO | dev-logic | MC-61 |
 | MC-65 | autonomous-rin 可視化（30分毎ティックの選択タスク×結果レーン） | P2 | おまけ | TODO | dev-logic | MC-61 |
+| MC-81 | tasks collector の normStatus 堅牢化（statusセル先頭トークンで正規化） | P2 | 品質 | TODO | dev-logic | MC-80（棚卸し中に副産物として発見） |
 
 ---
 
@@ -1105,6 +1107,26 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ（重要） | (1) cxo-agent 側の REVIEW 滞留を実 grep で棚卸し対象として列挙する（依頼文の MC-02/12/17/21/22/26/31/41/42/43/44/51/61/69 等は要実ファイル確認＝憶測で DONE 化しない。各タスクの DoD を逆引きし、テスト/型/lint/本番疎通の実エビデンスと突き合わせてから DONE）。logic 側 TASK_TRACKER の REVIEW も同様に棚卸し。(2) 「内部レビュー完了＝DONE」の線引き: DoD 充足＋reviewer/test green が揃ったものだけ DONE。DoD 未充足や未検証は DONE にせず TODO/IN_PROGRESS へ差し戻し（[[feedback-quality-efficiency-accuracy]] の品質ゲート維持＝Keita 目視を外すだけで検証は外さない）。(3) 「push/デプロイ判断は Keita 専権」は不変。DONE 化＝即デプロイではない。(4) 運用ルールは memory 化して autonomous-rin/林/各 subagent に徹底（REVIEW を Keita 待ちにしない）。 |
 | サブタスク | - [ ] cxo-agent TASK_TRACKER の REVIEW 状態を実 grep で全列挙<br>- [ ] logic TASK_TRACKER の REVIEW 状態を実 grep で全列挙<br>- [ ] 各 REVIEW タスクの DoD 逆引き＋test-functional/reviewer で内部検証<br>- [ ] DoD 充足＋green は DONE、未充足は差し戻し<br>- [ ] 「REVIEW を Keita 待ちにしない」運用を memory 化 |
 | 次アクション | cxo-agent/logic の REVIEW 滞留を実 grep で列挙 → test-functional/reviewer で各 DoD を内部検証 → green は DONE・未充足は差し戻し → 運用ルールを memory 化 |
+| 更新日 | 2026-05-31 |
+
+---
+
+### MC-81: tasks collector の normStatus 堅牢化（statusセル先頭トークンで正規化）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-81 |
+| タイトル | tasks collector の normStatus 堅牢化（statusセル全体 includes 走査をやめ、先頭トークンで正規化） |
+| 優先度 | P2 |
+| ステータス | TODO |
+| 担当 | dev-logic |
+| 詳細 | reviewer が MC-71 検証中に発見した副産物バグ。`server/src/collectors/tasks.ts:71-83` の `normStatus` が `STATUS_WORDS` 順（REVIEW が DONE より先）にセル文字列全体を `includes` で走査するため、縦型カードの status セル本文に「REVIEW」の文字が混ざると、実態が DONE でも REVIEW と誤読する。MC-71 で実際に踏んだ（回避策として status セルを素の DONE にし、検証文を別行に分離した）。恒久対策として「status セルの先頭トークン（区切り前の最初のステータス語）だけを見る」方式へ直す。`DONE（…注記…）` のように注記内に他ステータス語が混ざっても、先頭の DONE を正しく取れるようにする。 |
+| 関連ファイル | `server/src/collectors/tasks.ts`（normStatus 71-83 行付近、STATUS_WORDS / mergeStatus 周辺）。表行/縦型カード両形式のパース経路。 |
+| 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
+| 依存 | なし（MC-80 の棚卸し中に副産物として発見。棚卸し完了は待たず着手可） |
+| 提言・抜けもれ | (1) テスト: normStatus の単体テストを足せると堅い（`DONE（…REVIEW…）` 入力→DONE 期待、`REVIEW`→REVIEW、日本語「完了」「進行」「ブロック」分岐も）。cxo-agent server にテスト基盤が無ければ最小の検証スクリプトで代替。(2) 回帰: 「先頭トークン」の区切り定義（全角/半角括弧・スペース・改行・コロン）を明確にし、既存台帳の実データ（`DONE（commit …）` 等の表記ゆれ）で誤分類が出ないか実 grep サンプルで確認。(3) collector 反映は restart 必須（watch 無し、tsx 起動）。dist 再ビルドは web 側だけで server には不要。(4) MC-71 の回避を将来戻す場合は本タスク DONE 後に。 |
+| サブタスク | - [ ] normStatus を先頭トークン抽出方式に書き換え<br>- [ ] 区切り定義（括弧/スペース/改行/コロン）を決めて実装<br>- [ ] 表行・縦型カード両形式の実データで回帰確認<br>- [ ] 可能なら normStatus 単体テスト追加<br>- [ ] systemctl restart → 本番 /api/tasks でステータス正常確認 |
+| 次アクション | dev-logic が tasks.ts:71-83 を先頭トークン正規化に修正 → 両形式で回帰確認 → restart → /api/tasks 検証 |
 | 更新日 | 2026-05-31 |
 
 ---
