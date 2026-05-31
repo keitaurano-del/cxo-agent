@@ -40,6 +40,34 @@ const STATUS_WORDS: TaskStatus[] = [
   'TODO',
 ];
 
+/**
+ * ステータスの「確定度」ランク。重複 ID が複数形式（summary table / `### ID` セクション /
+ * `| フィールド | 値 |` カード）で出たとき、確定方向（DONE/CANCELLED）にしか上書きしないための順序。
+ * 同一 ID で表行が DONE なのにセクション本文が古い REVIEW/TODO のままという食い違いがあるため、
+ * 表行を一次値にしつつ、セクション値は「確定方向に進める」ときだけ採用する。
+ */
+const STATUS_RANK: Record<TaskStatus, number> = {
+  UNKNOWN: 0,
+  TODO: 1,
+  IN_PROGRESS: 2,
+  BLOCKED: 2,
+  REVIEW: 3,
+  DONE: 4,
+  CANCELLED: 4,
+};
+
+/**
+ * 現状ステータス cur に候補 cand をマージする。
+ * - cur が UNKNOWN なら無条件で cand を採用（情報ゼロからの初期化）。
+ * - それ以外は cand のランクが cur 以上のときだけ採用（確定方向にのみ動かす）。
+ *   これで「表行 DONE をセクションの古い REVIEW で巻き戻す」事故を防ぐ。
+ */
+function mergeStatus(cur: TaskStatus, cand: TaskStatus): TaskStatus {
+  if (cand === 'UNKNOWN') return cur;
+  if (cur === 'UNKNOWN') return cand;
+  return STATUS_RANK[cand] >= STATUS_RANK[cur] ? cand : cur;
+}
+
 function normStatus(raw?: string | null): TaskStatus {
   if (!raw) return 'UNKNOWN';
   const u = raw.toUpperCase().replace(/[\s-]/g, '_');
@@ -113,14 +141,57 @@ export function parseTrackerString(
   const lines = md.split('\n');
   let col: { priority?: number; owner?: number; status?: number } | null = null;
 
+  // 縦型カード（`| フィールド | 値 |` ヘッダ + `| key | value |` 行の連なり）の集約状態。
+  // 1 カード = 1 タスク。次のカードヘッダ / `### ` 見出し / 非テーブル行で確定する。
+  let card: Record<string, string> | null = null;
+  const flushCard = () => {
+    if (!card) return;
+    const c = card;
+    card = null;
+    const id = c['ID'] || c['id'];
+    if (!id) return;
+    const title = c['タイトル'] || c['title'] || c['タスク'] || '';
+    if (!title) return;
+    const status = normStatus(c['ステータス'] || c['status']);
+    const priority = c['優先度'] || c['priority'] || undefined;
+    const owner = c['担当'] || c['owner'] || c['assignee'] || undefined;
+    const key = `${source}:${id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(
+      markStalled({ id, title, status, owner, priority, project, source, updated }),
+    );
+  };
+
   for (const line of lines) {
-    if (!line.startsWith('|')) continue;
+    if (!line.startsWith('|')) {
+      // テーブルが途切れたらカードを確定（`### ` 見出しや空行・本文行で区切る）。
+      flushCard();
+      continue;
+    }
     const cells = line
       .split('|')
       .slice(1, -1)
       .map((c) => c.trim());
-    if (cells.length < 2) continue;
+    if (cells.length < 2) {
+      flushCard();
+      continue;
+    }
     const id = cells[0];
+
+    // 縦型カードヘッダ `| フィールド | 値 |`（または英語 field/value）を検出したら
+    // カードモードを開始。直前のカードがあれば確定してから新カードを開く。
+    if (/^(フィールド|項目|field|key)$/i.test(id) && /^(値|value)$/i.test(cells[1] ?? '')) {
+      flushCard();
+      card = {};
+      continue;
+    }
+    // カードモード中: `| key | value |` を集約。区切り行（|---|---|）は無視。
+    if (card) {
+      if (/^[-:]+$/.test(id) || id.includes('---')) continue;
+      card[id] = cells[1] ?? '';
+      continue;
+    }
 
     // ヘッダ行を検出して列マッピングを確定（最初の `| ID |` 行）。
     if (id === 'ID') {
@@ -141,11 +212,20 @@ export function parseTrackerString(
     // owner: ヘッダで担当列が分かればそれを、無ければ末尾セル（logic 互換）。
     let owner = cells[col?.owner ?? cells.length - 1] || undefined;
 
-    // 本文から該当 ID のステータス・担当を探す（### <ID> セクション内の「ステータス:」「担当:」）。
-    // 台帳によってテーブルの列構成が違う（logic は ID|タイトル|優先度|区分|担当、
-    // cxo は ID|タイトル|優先度|フェーズ|ステータス|担当|依存）ため、
-    // セクション本文の `- ステータス: ... / 担当: ...` を一次ソースにする。
+    // ステータスは「表行（summary table の status 列）を一次値」とし、
+    // `### <ID>` セクション本文の `- ステータス:` は確定方向にのみ上書きする（mergeStatus）。
+    // 同一 ID が表行＋詳細セクションの両方に出るとき、表行が DONE なのにセクションが
+    // 古い REVIEW/TODO のまま残っているケースがあり、旧実装はセクションを一次ソースに
+    // していたため確定済みタスクを巻き戻していた（このバグの修正点）。
     let status: TaskStatus = 'UNKNOWN';
+    // 1) 表行のステータス列を一次値に。
+    //    列が特定できない場合は cells[4]（cxo）→ cells[3]（logic 区分）の順でフォールバック。
+    const statusIdx = col?.status;
+    if (statusIdx !== undefined) status = normStatus(cells[statusIdx]);
+    if (status === 'UNKNOWN') {
+      status = normStatus(cells[4]) !== 'UNKNOWN' ? normStatus(cells[4]) : normStatus(cells[3]);
+    }
+    // 2) 詳細セクションの `- ステータス:` / 担当: を見る。ステータスは確定方向のみ反映。
     let sectionOwner: string | undefined;
     const secRe = new RegExp(
       `###?[^\\n]*${escapeReg(id)}[\\s\\S]*?(?=\\n###?\\s|$)`,
@@ -153,18 +233,9 @@ export function parseTrackerString(
     const sec = md.match(secRe);
     if (sec) {
       const sm = sec[0].match(/ステータス[:：*\s]*([A-Za-z_/ ]+)/);
-      if (sm) status = normStatus(sm[1]);
+      if (sm) status = mergeStatus(status, normStatus(sm[1]));
       const om = sec[0].match(/担当[:：]\s*([^\n/]+)/);
       if (om) sectionOwner = om[1].replace(/\*/g, '').trim() || undefined;
-    }
-    if (status === 'UNKNOWN') {
-      // セクションが無い台帳向け（gate 行など）: ヘッダ由来のステータス列から拾う。
-      // 列が特定できない場合は cells[4]（cxo）→ cells[3]（logic 区分）の順でフォールバック。
-      const statusIdx = col?.status;
-      if (statusIdx !== undefined) status = normStatus(cells[statusIdx]);
-      if (status === 'UNKNOWN') {
-        status = normStatus(cells[4]) !== 'UNKNOWN' ? normStatus(cells[4]) : normStatus(cells[3]);
-      }
     }
     if (sectionOwner) owner = sectionOwner;
 
@@ -175,6 +246,8 @@ export function parseTrackerString(
       markStalled({ id, title, status, owner, priority, project, source, updated }),
     );
   }
+  // ファイル末尾がカードで終わる場合の取りこぼし防止。
+  flushCard();
   return out;
 }
 
