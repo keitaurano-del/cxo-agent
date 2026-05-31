@@ -165,6 +165,13 @@ export const STALL_MINUTES = envNum('STALL_MINUTES', 8);
 export const TASK_STALL_DAYS = envNum('TASK_STALL_DAYS', 3);
 
 /**
+ * BLOCKED 長期滞留しきい値（日）。BLOCKED のまま更新がこの日数を超えたらアラート対象（MC-63）。
+ * agent の 8 分（STALL_MINUTES）・IN_PROGRESS の 3 日（TASK_STALL_DAYS）とは別軸の「長期 BLOCKED」。
+ * 短く切るとブロック直後の正常待ちを誤検知するため、日単位で余裕を持たせる（default 5 日）。
+ */
+export const BLOCKED_STALL_DAYS = envNum('BLOCKED_STALL_DAYS', 5);
+
+/**
  * Token 消費量集計のキャッシュ TTL（ミリ秒）。default 5 分。
  * 全 jsonl のフルスキャンは重いのでリアルタイム不要のこの集計は 5 分粒度で十分。
  * 連続要求は最後の集計結果をそのまま返し、重い再走査を 5 分に 1 回へ抑える。

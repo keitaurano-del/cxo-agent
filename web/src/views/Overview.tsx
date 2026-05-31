@@ -9,6 +9,7 @@ import { relativeTime } from '../lib/time';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, StalledBadge } from '../components/ui';
 import { GlobalSearch } from '../components/GlobalSearch';
+import { AlertBanner } from '../components/AlertBanner';
 import { SearchIcon } from '../components/icons';
 
 interface KpiCardProps {
@@ -131,6 +132,8 @@ export default function Overview() {
         }
       />
       <div className="p-4 md:p-6">
+        {/* アラートバッジ（MC-63）。0 件なら自身で非表示。KPI 帯の手前に常設。 */}
+        <AlertBanner />
         <ResourceState loading={loading} error={error} hasData={!!data}>
           {kpi && (
             <section className="mb-8">

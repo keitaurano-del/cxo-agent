@@ -235,3 +235,41 @@ export interface SearchResponse {
   };
   generatedAt: string;
 }
+
+// ─── アラート（通知/アラート バッジ MC-63 / GET /api/alerts）──────────────
+// server/src/collectors/alerts.ts のレスポンス形と一致させる。
+
+export type AlertSeverity = 'error' | 'warning';
+
+export type AlertCategory = 'error' | 'blocked-stalled' | 'deploy-failed';
+
+export interface AlertItem {
+  id: string;
+  category: AlertCategory;
+  severity: AlertSeverity;
+  title: string;
+  detail?: string;
+  project?: ProjectName;
+  taskId?: string;
+  source?: string;
+  runId?: string;
+  since?: string;
+}
+
+export interface AlertsResponse {
+  generatedAt: string;
+  counts: {
+    error: number;
+    warning: number;
+    total: number;
+  };
+  byCategory: {
+    error: number;
+    'blocked-stalled': number;
+    'deploy-failed': number;
+  };
+  alerts: AlertItem[];
+  thresholds: {
+    blockedStallDays: number;
+  };
+}

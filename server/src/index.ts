@@ -16,6 +16,7 @@ import { collectNarrative } from './collectors/narrative.js';
 import { collectRoster } from './collectors/roster.js';
 import { collectUsage } from './collectors/usage.js';
 import { collectWorkflows, collectWorkflowDetail } from './collectors/workflows.js';
+import { collectAlerts } from './collectors/alerts.js';
 import { linksForTask } from './collectors/taskLinks.js';
 import { search } from './collectors/search.js';
 import {
@@ -150,6 +151,14 @@ app.get('/api/roster', (_req, res) => {
 
 app.get('/api/overview', (_req, res) => {
   safeJson(res, () => buildOverview());
+});
+
+// ─── Alerts（通知/アラート バッジ MC-63）──────────────────────────
+// ERROR（workflow error run）・長期 BLOCKED（BLOCKED_STALL_DAYS 超）・deploy 失敗（MC-64 連携・現状空）
+// を既存 collector（workflows / tasks）から集計して返す。新規ログ解析を足さず二重通知を避ける。
+// 認証ミドルウェア（makeAuthMiddleware）配下。0 件でも 200・解消すると次回集計で消える（永続なし）。
+app.get('/api/alerts', (_req, res) => {
+  safeJson(res, () => collectAlerts());
 });
 
 app.get('/api/usage', (_req, res) => {
