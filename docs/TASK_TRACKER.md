@@ -963,7 +963,7 @@ ID 採番: **AR-0x**。
 | ID | MC-73 |
 | タイトル | Apollo 司令塔に全文検索（タスク・エージェント・会話・Vault を横断検索） |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | DONE（2026-05-31 本番反映済 commit 9a4e3df。/api/search＋GlobalSearchモーダルをOverviewに実装、restart後 本番4317で q=MC→tasks45/conv18/wf2/vault11 返却確認。server tsc0/web build0。※workflow結果のクリック先は単体ビュー無くTasksボード止まり＝別タスク余地） |
 | 担当 | dev-logic + designer(UX) |
 | 詳細 | Keita 依頼（2026-05-31）「アポロに検索機能作って。タスクとか含めて全部検索できる機能。司令塔にほしい」。司令塔(Overview)に検索バー/モーダルを置き、横断検索する。対象: タスク(/api/tasks の全TASK_TRACKER)・エージェント(/api/roster)・会話(/api/agents feed)・Vault(/api/vault 既存の検索があれば流用)・workflow(/api/workflows)。 |
 | 受け入れ条件 | 司令塔から1つの検索窓でタスクID/タイトル/担当・エージェント名・会話本文・Vaultノートを横断検索でき、結果カテゴリ別表示＋クリックで該当詳細(MC-61ドリルダウン等)に飛べる。モバイル390px対応。 |
