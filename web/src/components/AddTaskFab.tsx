@@ -1,16 +1,11 @@
 // 受信箱 FAB + ボトムシート（md+ は中央モーダル）。
-// タスク / 指示を text + 画像付きで POST /api/inbox（multipart/form-data）に投入する。
-// 文言は中立的な丁寧体。
+// タスクを text + 画像付きで POST /api/inbox（multipart/form-data）に投入する。
+// MC-77: タスク/指示の区別は廃止。投入は全て「タスク」として送り、サーバ側で
+// 即タスクボード（TASK_TRACKER）に反映される。文言は中立的な丁寧体。
 import { useEffect, useRef, useState } from 'react';
 import { PlusIcon, CloseIcon, ImageFileIcon } from './icons';
 
-type Kind = 'task' | 'instruction';
 type ProjectChoice = 'logic' | 'cxo' | 'en-chakai' | '';
-
-const KIND_TABS: { key: Kind; label: string }[] = [
-  { key: 'task', label: 'タスク' },
-  { key: 'instruction', label: '指示' },
-];
 
 const PROJECT_OPTIONS: { value: ProjectChoice; label: string }[] = [
   { value: '', label: '指定なし' },
@@ -30,7 +25,6 @@ interface PickedImage {
 
 export default function AddTaskFab() {
   const [open, setOpen] = useState(false);
-  const [kind, setKind] = useState<Kind>('task');
   const [project, setProject] = useState<ProjectChoice>('');
   const [text, setText] = useState('');
   const [images, setImages] = useState<PickedImage[]>([]);
@@ -59,7 +53,6 @@ export default function AddTaskFab() {
 
   const resetForm = () => {
     images.forEach((img) => URL.revokeObjectURL(img.url));
-    setKind('task');
     setProject('');
     setText('');
     setImages([]);
@@ -160,7 +153,7 @@ export default function AddTaskFab() {
     setError(null);
     try {
       const fd = new FormData();
-      fd.append('kind', kind);
+      // MC-77: kind は廃止。サーバは送られても task に正規化するが、ここでは送らない。
       fd.append('text', text.trim());
       fd.append('project', project);
       images.forEach((img) => fd.append('images', img.file, img.file.name));
@@ -179,7 +172,7 @@ export default function AddTaskFab() {
       }
       resetForm();
       setOpen(false);
-      setSuccess(kind === 'task' ? 'タスクを追加しました。' : '指示を追加しました。');
+      setSuccess('タスクを追加しました。');
       window.setTimeout(() => setSuccess(null), 3000);
     } catch (e) {
       setError(e instanceof Error ? `送信に失敗しました。${e.message}` : '送信に失敗しました。');
@@ -240,32 +233,6 @@ export default function AddTaskFab() {
               </button>
             </div>
 
-            {/* kind トグル */}
-            <div className="mb-3">
-              <div
-                className="inline-flex rounded-lg border border-border bg-surface-2 p-0.5"
-                role="group"
-                aria-label="種別"
-              >
-                {KIND_TABS.map((t) => {
-                  const active = kind === t.key;
-                  return (
-                    <button
-                      key={t.key}
-                      type="button"
-                      onClick={() => setKind(t.key)}
-                      aria-pressed={active}
-                      className={`rounded-md px-4 py-1.5 text-xs ${
-                        active ? 'bg-surface-3 font-semibold text-text' : 'text-text-muted'
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
             {/* project セレクト */}
             <div className="mb-3">
               <label className="mb-1 block text-xs text-text-muted" htmlFor="inbox-project">
@@ -295,7 +262,7 @@ export default function AddTaskFab() {
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 rows={4}
-                placeholder="タスクや指示の内容を入力してください"
+                placeholder="タスクの内容を入力してください"
                 className="w-full resize-y rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
               />
             </div>

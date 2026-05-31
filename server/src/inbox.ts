@@ -1,16 +1,22 @@
-// inbox — 非同期 指示受信箱（Apollo サーバ側）。
+// inbox — 非同期 タスク受信箱（Apollo サーバ側）。
 //
-// Keita がスマホから Apollo 経由でタスク/指示を投入し、画像も添付できる。
-// 投入分は別プロセスの自律林が次ティックで拾う（このサーバは書き込み + 一覧 + 配信のみ）。
+// Keita がスマホから Apollo 経由でタスクを投入し、画像も添付できる。
+// MC-77: 「タスク/指示」の区別は廃止し、投入は全て task として扱う。
+// 投入時にその場で正本 TASK_TRACKER.md へ 1 タスク追記し（taskTrackerAppend）、
+// 手動消化（autonomous-rin）を待たず即タスクボードに出す。inbox.jsonl は監査・
+// 添付画像のため引き続き残す。自律林は taskId 済みエントリを二重登録しない。
 //
 // ストレージ契約（自律林側と一致。厳守）:
 //  - 受信箱本体:   data/inbox.jsonl           （追記専用・1 行 1 エントリ JSON）
 //  - 消費記録:     data/inbox-consumed.jsonl  （自律林が処理後に id を追記。サーバは読むだけ）
 //  - 添付画像:     data/inbox-attachments/<id>/<安全なファイル名>
 //
-// エントリ構造:
-//  { id, ts, kind:"task"|"instruction", project:"logic"|"cxo"|"en-chakai"|null,
-//    text, status:"pending", attachments:[ "data/inbox-attachments/<id>/a.png", ... ] }
+// エントリ構造（MC-77 以降）:
+//  { id, ts, kind:"task", project:"logic"|"cxo"|"en-chakai"|null,
+//    text, status:"pending", attachments:[ ... ],
+//    taskId?:"MC-82", trackerSource?:"cxo/TASK_TRACKER" }   // 即タスク化できた場合のみ
+//  後方互換: 旧エントリの kind:"instruction" は task として扱う。taskId が無い旧エントリは
+//  従来どおり autonomous-rin が拾って TASK_TRACKER 登録する。
 
 import { randomBytes } from 'node:crypto';
 import {
@@ -38,6 +44,12 @@ import {
   contentTypeFor,
   InboxPathError,
 } from './lib/inboxPath.js';
+import {
+  appendTask,
+  nextTaskId,
+  prefixForProject,
+  TaskAppendError,
+} from './lib/taskTrackerAppend.js';
 
 // ─── 型 ────────────────────────────────────────────────
 
@@ -45,8 +57,8 @@ import {
 const ALLOWED_PROJECTS = ['logic', 'cxo', 'en-chakai'] as const;
 type InboxProject = (typeof ALLOWED_PROJECTS)[number];
 
-const ALLOWED_KINDS = ['task', 'instruction'] as const;
-type InboxKind = (typeof ALLOWED_KINDS)[number];
+// MC-77: kind は内部的に 'task' 固定。旧 'instruction' は受理しても task に正規化する。
+type InboxKind = 'task';
 
 export interface InboxEntry {
   id: string;
@@ -56,6 +68,10 @@ export interface InboxEntry {
   text: string;
   status: 'pending';
   attachments: string[];
+  /** MC-77: 投入時に即タスク化できた場合の TASK_TRACKER 上の id（例 MC-82）。 */
+  taskId?: string;
+  /** MC-77: taskId を書いた台帳（例 cxo/TASK_TRACKER）。 */
+  trackerSource?: string;
 }
 
 // ─── ディレクトリ準備 ────────────────────────────────────
@@ -82,15 +98,10 @@ function genId(now: Date): string {
 
 // ─── バリデーション ─────────────────────────────────────
 
-function parseKind(v: unknown): InboxKind | { error: string } {
-  if (typeof v !== 'string' || v.trim() === '') {
-    return { error: 'kind is required (task|instruction)' };
-  }
-  const k = v.trim();
-  if (!(ALLOWED_KINDS as readonly string[]).includes(k)) {
-    return { error: `kind must be one of: ${ALLOWED_KINDS.join(', ')}` };
-  }
-  return k as InboxKind;
+// MC-77: 投入は全て task。kind は任意（送られても無視）し、常に 'task' に正規化する。
+// 旧クライアントが kind=instruction を送っても受理する（後方互換・エラーにしない）。
+function normalizeKind(): InboxKind {
+  return 'task';
 }
 
 function parseProject(v: unknown): InboxProject | null | { error: string } {
@@ -219,11 +230,8 @@ async function handlePost(req: Request, res: Response): Promise<void> {
 
   const body = (req.body ?? {}) as Record<string, unknown>;
 
-  const kind = parseKind(body.kind);
-  if (typeof kind === 'object') {
-    res.status(400).json({ error: kind.error });
-    return;
-  }
+  // MC-77: kind は常に task に正規化（旧 instruction も task 扱い）。
+  const kind = normalizeKind();
   const project = parseProject(body.project);
   if (project !== null && typeof project === 'object') {
     res.status(400).json({ error: project.error });
@@ -264,14 +272,49 @@ async function handlePost(req: Request, res: Response): Promise<void> {
     }
   }
 
+  const projectVal = project as InboxProject | null;
+
+  // MC-77: 投入と同時に正本 TASK_TRACKER へ 1 タスク追記し、即タスクボードに出す。
+  // 採番は next-task-id.sh 相当（server 内 grep）、書き戻しは fail-closed の追記層。
+  // 失敗しても inbox 投入自体は成功扱いにする（taskId を付けず残し、autonomous-rin の
+  // 従来フローが後で拾える）。添付画像フローは inbox.jsonl 側に温存される。
+  let taskId: string | undefined;
+  let trackerSource: string | undefined;
+  try {
+    const newId = nextTaskId(prefixForProject(projectVal));
+    // タイトルは text の 1 行目（長すぎる場合は丸める）。詳細に全文を残す。
+    const firstLine = text.split(/\r?\n/)[0].trim() || text.trim();
+    const title = firstLine.length > 80 ? `${firstLine.slice(0, 79)}…` : firstLine;
+    const result = appendTask({
+      project: projectVal,
+      task: {
+        id: newId,
+        title,
+        status: 'TODO',
+        owner: '未定',
+        priority: 'P2',
+        detail: text.trim(),
+        source: 'Apollo投入',
+      },
+    });
+    taskId = result.task.id;
+    trackerSource = result.trackerSource;
+  } catch (e) {
+    // 即タスク化に失敗（採番衝突・検証失敗等）。投入自体は通し、autonomous-rin の
+    // 後方互換フローに委ねる。サーバログに残すのみ（ユーザー投入はブロックしない）。
+    const msg = e instanceof TaskAppendError ? `${e.code}: ${e.message}` : String(e);
+    console.error('[inbox] immediate task append failed:', msg);
+  }
+
   const entry: InboxEntry = {
     id,
     ts: now.toISOString(),
     kind,
-    project: project as InboxProject | null,
+    project: projectVal,
     text,
     status: 'pending',
     attachments,
+    ...(taskId ? { taskId, trackerSource } : {}),
   };
 
   appendEntry(entry);
