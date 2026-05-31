@@ -953,3 +953,20 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ | (1) priority 未指定時のデフォルト（P2 想定）を定義する。(2) 既存 inbox エントリ（priority フィールド無し）の後方互換＝未定義は欠落として扱い既定値にフォールバック、既存レコードを壊さない。(3) server は既存 `POST /api/inbox` を非破壊で拡張（フィールド追加のみ、既存レスポンス型を変えない）・既存 token/Basic 認証配下に置く。(4) モバイル対応（FAB/ボトムシートのセレクタがスマホで操作しやすい）。(5) UI chrome 制約: 中立的丁寧体（〜です/〜ます）、ハードコード hex 禁止・CSS 変数使用、UI chrome の emoji 不可（SVG のみ）。(6) autonomous-rin/林のタスク化時に priority を確実に引き継ぐ結線（消費ロジックの読み取り対応）。 |
 | 次アクション | dev-logic + designer が MC-66/MC-69(MC-71) と統合した priority 機構を設計 → 投入 UI セレクタ + inbox.jsonl priority フィールド + タスク化時の引き継ぎを実装 → 後方互換・デフォルト値・認証配下を検証 |
 | 更新日 | 2026-05-31 |
+
+## バッチ: 2026-05-31 Apollo 全文検索（MC-73）
+
+### MC-73 — 司令塔に全文検索機能（タスク/エージェント/会話/Vault 横断）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-73 |
+| タイトル | Apollo 司令塔に全文検索（タスク・エージェント・会話・Vault を横断検索） |
+| 優先度 | P1 |
+| ステータス | TODO |
+| 担当 | dev-logic + designer(UX) |
+| 詳細 | Keita 依頼（2026-05-31）「アポロに検索機能作って。タスクとか含めて全部検索できる機能。司令塔にほしい」。司令塔(Overview)に検索バー/モーダルを置き、横断検索する。対象: タスク(/api/tasks の全TASK_TRACKER)・エージェント(/api/roster)・会話(/api/agents feed)・Vault(/api/vault 既存の検索があれば流用)・workflow(/api/workflows)。 |
+| 受け入れ条件 | 司令塔から1つの検索窓でタスクID/タイトル/担当・エージェント名・会話本文・Vaultノートを横断検索でき、結果カテゴリ別表示＋クリックで該当詳細(MC-61ドリルダウン等)に飛べる。モバイル390px対応。 |
+| 依存 | 既存 collector(/api/tasks,roster,agents,workflows,vault)を横断する新 /api/search、or フロント側で各APIを叩いて集約。MC-61(ドリルダウン)に結果から飛べると理想。 |
+| 抜けもれ | server非破壊追加・既存token認証配下・中立文言・ハードコードhex禁止・SVGアイコン。Vault全文は既存 /api/vault の検索(VAULT_SEARCH_LIMIT)流用。大量ヒット時の上限・デバウンス。日本語検索(部分一致)。 |
+| 更新日 | 2026-05-31 |
