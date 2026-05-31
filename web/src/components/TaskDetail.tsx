@@ -913,6 +913,18 @@ function TaskDetailBody({
             )}
           </section>
 
+          {/* (a-2) 詳細メモ（MC-83）— 台帳の「詳細」/受け入れ条件/サブタスク等。取れた時のみ表示。 */}
+          {view.detail && (
+            <section className="mb-5">
+              <SectionHeading>詳細メモ</SectionHeading>
+              <div className="rounded-lg border border-border bg-surface px-3 py-3">
+                <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-text-muted">
+                  {view.detail}
+                </p>
+              </div>
+            </section>
+          )}
+
           {/* (b) 紐づくワークフロー */}
           <section className="mb-5">
             <SectionHeading>紐づくワークフロー</SectionHeading>

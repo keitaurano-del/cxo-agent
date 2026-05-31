@@ -59,6 +59,8 @@ export interface Task {
   // ─── 承認フロー（MC-79）の追加フィールド（既存 UI 非影響）──────────
   needsKeita?: boolean;
   approvalTags?: ApprovalKind[];
+  // ─── タスク詳細（MC-83）。台帳の「詳細」等を整形した read-only テキスト。取れなければ未設定。──
+  detail?: string;
 }
 
 // ─── 承認フロー（MC-79 / GET /api/approvals）──────────────────────

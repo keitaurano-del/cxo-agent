@@ -45,6 +45,65 @@ export interface Task {
    * 該当なしなら空配列。承認フローの集約・誤検知ゼロ判定にのみ使う追加フィールド（非破壊）。
    */
   approvalTags?: ApprovalKind[];
+  /**
+   * タスクの説明本文（MC-83）。台帳の「詳細」フィールド／受け入れ条件／サブタスク／次アクション、
+   * もしくは `### <ID>` セクション本文を整形した read-only テキスト。
+   * TaskDetail の「詳細メモ」表示にのみ使う追加フィールド（既存 UI 非影響）。取れなければ未設定。
+   */
+  detail?: string;
+}
+
+/**
+ * 台帳由来の説明テキストを表示用に整形する（MC-83）。
+ * - `<br>` / `<br/>` を改行に変換（縦型カードの詳細フィールドで使われる）
+ * - markdown の太字記号（**）とインラインコードのバッククォートを除去
+ * - 連続空白・行頭の余分なスペースを詰める。空なら undefined。
+ */
+function cleanDetailText(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  const text = raw
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/\*\*/g, '')
+    .replace(/`/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return text || undefined;
+}
+
+/**
+ * 縦型カード（`| フィールド | 値 |`）の説明系フィールドを 1 本の詳細テキストに束ねる（MC-83）。
+ * 「詳細」を主、続けて受け入れ条件・サブタスク・次アクションを見出し付きで連結する。
+ */
+function buildCardDetail(c: Record<string, string>): string | undefined {
+  const parts: string[] = [];
+  // label と、その値を探すキー候補（表記ゆれ吸収）。最初に見つかった非空値を採用。
+  const push = (label: string, ...keys: string[]) => {
+    for (const key of keys) {
+      const v = cleanDetailText(c[key]);
+      if (v) {
+        parts.push(label ? `${label}\n${v}` : v);
+        return;
+      }
+    }
+  };
+  push('', '詳細', 'description', '説明');
+  push('受け入れ条件', '受け入れ条件（DoD）', '受け入れ条件', 'DoD');
+  push('サブタスク', 'サブタスク');
+  push('次アクション', '次アクション');
+  const joined = parts.join('\n\n').trim();
+  return joined || undefined;
+}
+
+/**
+ * `### <ID>` セクション本文を表示用テキストにする（MC-83、横テーブル形式タスク向け）。
+ * 見出し行を落とし、`- ステータス:` / `- 担当:` 等のメタ行はそのまま残して整形する。
+ * セクションが取れない／実質空なら undefined。
+ */
+function buildSectionDetail(sectionText?: string): string | undefined {
+  if (!sectionText) return undefined;
+  const body = sectionText.replace(/^\s*###?[^\n]*\n/, '');
+  return cleanDetailText(body);
 }
 
 /**
@@ -264,6 +323,7 @@ export function parseTrackerString(
         updated,
         needsKeita: ownerHasKeita(owner),
         approvalTags,
+        detail: buildCardDetail(c),
       }),
     );
   };
@@ -367,6 +427,7 @@ export function parseTrackerString(
         updated,
         needsKeita: ownerHasKeita(owner),
         approvalTags,
+        detail: buildSectionDetail(sec?.[0]),
       }),
     );
   }

@@ -16,17 +16,18 @@ import {
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, StalledBadge, Badge } from '../components/ui';
 import { TaskDetail } from '../components/TaskDetail';
+import { ChevronRightIcon } from '../components/icons';
 
 function TaskCard({ t, onOpen }: { t: Task; onOpen: (t: Task) => void }) {
   return (
     <button
       type="button"
       onClick={() => onOpen(t)}
-      className="w-full rounded-lg border border-border bg-surface p-3 text-left hover:bg-surface-2"
+      className="group relative w-full cursor-pointer rounded-lg border border-border bg-surface p-3 pr-8 text-left transition-colors hover:border-accent/60 hover:bg-surface-2 active:bg-surface-3"
       style={{ borderLeft: `3px solid ${projectColor(t.project)}` }}
       aria-label={`タスク詳細を開く: ${t.title}`}
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-2 pr-1">
         <span className="font-mono text-[10px] text-text-faint">{t.id}</span>
         {t.stalled && <StalledBadge />}
       </div>
@@ -50,9 +51,22 @@ function TaskCard({ t, onOpen }: { t: Task; onOpen: (t: Task) => void }) {
           </span>
         )}
       </div>
-      <div className="mt-1 text-[10px] text-text-faint" title={`出典: ${t.source}`}>
-        {t.source}
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <span className="text-[10px] text-text-faint" title={`出典: ${t.source}`}>
+          {t.source}
+        </span>
+        {/* 「タップで詳細が開ける」アフォーダンス（MC-83）。常時うっすら表示し、hover/focus で強調＋前進。 */}
+        <span className="inline-flex items-center gap-0.5 text-[10px] text-text-faint transition-colors group-hover:text-accent">
+          詳細
+        </span>
       </div>
+      {/* 右端の chevron。タップ可能であることを示す恒常的な手がかり。 */}
+      <span
+        className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-text-faint transition-all group-hover:translate-x-0.5 group-hover:text-accent"
+        aria-hidden
+      >
+        <ChevronRightIcon width={16} height={16} />
+      </span>
     </button>
   );
 }
