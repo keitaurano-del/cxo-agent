@@ -8,6 +8,7 @@ import type { ProjectName, Task, TaskStatus } from '../lib/types';
 import {
   PROJECT_ORDER,
   TASK_COLUMNS,
+  priorityRank,
   projectColor,
   projectLabel,
   taskStatusMeta,
@@ -153,9 +154,18 @@ export default function Tasks() {
       const col: TaskStatus = t.status === 'UNKNOWN' ? 'TODO' : t.status;
       map[col].push(t);
     }
-    // 各列内: stalled を先頭、その後 ID 順。
+    // 各列内の並び（MC-78「早いやつが上」）:
+    //   1. stalled（滞留）を先頭に寄せる（放置検知の強調は維持）
+    //   2. 優先度の高い順（P0 → P1 → ... 不明は最後尾）
+    //   3. 同優先度なら ID 昇順
+    // これで Keita がボードを見たとき「優先度の高い（＝早く着手すべき）」タスクが各列の上に並ぶ。
     for (const k of Object.keys(map) as TaskStatus[]) {
-      map[k].sort((a, b) => Number(b.stalled) - Number(a.stalled) || a.id.localeCompare(b.id));
+      map[k].sort(
+        (a, b) =>
+          Number(b.stalled) - Number(a.stalled) ||
+          priorityRank(a.priority) - priorityRank(b.priority) ||
+          a.id.localeCompare(b.id),
+      );
     }
     return map;
   }, [filtered]);

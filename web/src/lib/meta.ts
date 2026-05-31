@@ -89,3 +89,26 @@ export const TASK_STATUS_META: Record<TaskStatus, TaskStatusMeta> = {
 export function taskStatusMeta(s: TaskStatus): TaskStatusMeta {
   return TASK_STATUS_META[s] ?? TASK_STATUS_META.UNKNOWN;
 }
+
+// タスク優先度の並び順ランク（小さいほど高優先＝上に出す）。
+// 台帳の優先度表記は複数形式が混在する（実データ確認済み）:
+//   - P0 / P1 / P2 / P3（cxo・logic の大多数）
+//   - 高 / 中 / 低（logic 一部の和語）
+//   - H / M / L（obsidian kanban の priority:）
+//   - high / medium / low（英語表記の保険）
+// いずれも 0=最高 → 大きいほど低優先に正規化する。空・不明は LOW より後ろ（最後尾）。
+const PRIORITY_UNKNOWN_RANK = 99;
+
+export function priorityRank(priority?: string | null): number {
+  if (!priority) return PRIORITY_UNKNOWN_RANK;
+  const p = priority.trim().toLowerCase();
+  // Pn 形式（P0〜P9）。数字をそのままランクに使う。
+  const pn = p.match(/^p\s*([0-9])/);
+  if (pn) return Number(pn[1]);
+  // 和語・英語・頭文字。高優先ほど小さい値。
+  if (p.includes('最優先') || p.includes('最高')) return 0;
+  if (p.startsWith('high') || p === 'h' || p.includes('高')) return 1;
+  if (p.startsWith('med') || p === 'm' || p.includes('中')) return 2;
+  if (p.startsWith('low') || p === 'l' || p.includes('低')) return 3;
+  return PRIORITY_UNKNOWN_RANK;
+}
