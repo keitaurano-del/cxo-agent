@@ -5,10 +5,11 @@
 //   (c) 紐づくエージェント会話（既存 Feed の該当スレッド = /api/agents/:id/feed を AgentFeed で再利用）
 // を一望表示する。
 //
-// 紐付けロジックは暫定（MC-62 で精緻化予定）:
-//   タスク ID を workflow run の runId/label に素朴に部分一致でフィルタ。
-//   1 件も一致しなければ「全 run 一覧」を候補として表示する（空状態にしない）。
-//   ※ 将来 MC-62（明示ログ紐付け）で誤マッチを排除・精緻化する。
+// 紐付けロジック（MC-62 で精緻化済み）:
+//   data/task-links.jsonl の明示ログ（/api/tasks/:taskId/links）を最優先で使う。
+//   明示リンクがあれば、その runId / agentId のものだけを表示（誤マッチを構造的に排除）。
+//   明示リンクが 1 件も無いタスクは、従来の素朴フォールバック
+//   （タスク ID を runId/label に部分一致 → 無ければ全 run 候補）を維持する。
 //
 // デザイン制約: ハードコード hex 禁止（既存トークン/CSS 変数のみ）、UI chrome は SVG アイコンのみ、
 //   文言は中立的な丁寧体、モバイル 390px で横溢れ 0。
@@ -65,6 +66,29 @@ interface WorkflowDetail extends WorkflowSummary {
   phases: WorkflowPhase[];
 }
 
+// ── 明示リンク API（server /api/tasks/:taskId/links と一致させる）──
+interface TaskLink {
+  taskId: string;
+  runId?: string;
+  agentId?: string;
+  label?: string;
+  ts?: string;
+}
+
+interface TaskLinkRun {
+  runId: string;
+  summary: WorkflowSummary | null;
+}
+
+interface TaskLinksResponse {
+  taskId: string;
+  hasExplicitLinks: boolean;
+  runs: TaskLinkRun[];
+  agentIds: string[];
+  links: TaskLink[];
+  generatedAt: string;
+}
+
 // AgentStatus に 'error' を足したワークフロー固有の状態色（既存 CSS 変数のみ使用）。
 function wfStatusMeta(status: AgentStatus | 'error'): { label: string; color: string } {
   if (status === 'error') return { label: 'エラー', color: 'var(--mc-stalled)' };
@@ -78,12 +102,15 @@ function tokensLabel(n: number): string {
   return String(n);
 }
 
-/** タスク ID 表記ゆれを正規化して比較する（MC-62 で精緻化予定の暫定実装）。 */
+/** タスク ID 表記ゆれを正規化して比較する（フォールバックの素朴一致でのみ使用）。 */
 function normalizeId(s: string): string {
   return s.toLowerCase().replace(/[\s_-]/g, '');
 }
 
-/** runId/label にタスク ID を素朴に含むかどうか（暫定の紐付け）。 */
+/**
+ * runId/label にタスク ID を素朴に含むかどうか（フォールバック専用）。
+ * 明示リンク（task-links.jsonl）が無いタスクのときだけ使う。
+ */
 function runMatchesTask(run: WorkflowSummary, taskId: string): boolean {
   const id = normalizeId(taskId);
   if (!id) return false;
@@ -255,8 +282,13 @@ function WorkflowRunRow({ run }: { run: WorkflowSummary }) {
   );
 }
 
-/** 紐づく workflow run の一覧セクション（暫定フィルタ + フォールバック）。 */
-function LinkedWorkflows({ task }: { task: Task }) {
+/**
+ * 紐づく workflow run の一覧セクション。
+ * - 明示リンク（task-links.jsonl）がある場合: そのリンク先 run のみを表示（誤マッチ排除）。
+ *   突合できなかった runId（run が消えた / 別環境）はその旨を添えて runId だけ示す。
+ * - 明示リンクが無い場合: 従来の素朴フィルタ（無ければ全 run 候補）にフォールバック。
+ */
+function LinkedWorkflows({ task, links }: { task: Task; links: TaskLinksResponse | null }) {
   const tick = useLiveTick();
   const { data, error, loading } = useLiveResource<{ workflows: WorkflowSummary[] }>(
     '/api/workflows',
@@ -264,13 +296,24 @@ function LinkedWorkflows({ task }: { task: Task }) {
   );
 
   const all = useMemo(() => data?.workflows ?? [], [data]);
-  const matched = useMemo(
+
+  // 明示リンクの有無で表示集合を切り替える。
+  const explicit = links?.hasExplicitLinks ?? false;
+  const explicitRuns = useMemo(
+    () => (links?.runs ?? []).filter((r) => r.summary !== null).map((r) => r.summary as WorkflowSummary),
+    [links],
+  );
+  const unresolvedRunIds = useMemo(
+    () => (links?.runs ?? []).filter((r) => r.summary === null).map((r) => r.runId),
+    [links],
+  );
+
+  const fallbackMatched = useMemo(
     () => all.filter((w) => runMatchesTask(w, task.id)),
     [all, task.id],
   );
-  // 暫定: ID 一致が無ければ全 run を候補として出す（MC-62 で精緻化）。
-  const hasMatch = matched.length > 0;
-  const shown = hasMatch ? matched : all;
+  const fallbackHasMatch = fallbackMatched.length > 0;
+  const shown = explicit ? explicitRuns : fallbackHasMatch ? fallbackMatched : all;
 
   if (loading && !data) {
     return (
@@ -287,7 +330,8 @@ function LinkedWorkflows({ task }: { task: Task }) {
       </p>
     );
   }
-  if (shown.length === 0) {
+
+  if (shown.length === 0 && unresolvedRunIds.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px] text-text-faint">
         紐づくワークフローはありません。
@@ -297,7 +341,7 @@ function LinkedWorkflows({ task }: { task: Task }) {
 
   return (
     <div className="space-y-2">
-      {!hasMatch && (
+      {!explicit && fallbackHasMatch === false && shown.length > 0 && (
         <p className="text-[11px] text-text-faint">
           このタスクに紐づくワークフローは特定できませんでした。直近のワークフロー一覧を表示しています。
         </p>
@@ -307,12 +351,30 @@ function LinkedWorkflows({ task }: { task: Task }) {
           <WorkflowRunRow key={run.runId} run={run} />
         ))}
       </ul>
+      {unresolvedRunIds.length > 0 && (
+        <ul className="space-y-1.5">
+          {unresolvedRunIds.map((runId) => (
+            <li
+              key={runId}
+              className="rounded-lg border border-dashed border-border bg-surface px-3 py-2 text-[11px] text-text-faint"
+            >
+              <span className="break-all font-mono text-text-muted">{runId}</span>
+              <span className="ml-2">（このワークフローは現在の環境では見つかりませんでした）</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
 
-/** 紐づくエージェント会話セクション。暫定で run の孫エージェントを候補に出す（MC-62 で精緻化）。 */
-function LinkedConversation({ task }: { task: Task }) {
+/**
+ * 紐づくエージェント会話セクション。
+ * - 明示リンクに agentId があれば、その会話を最優先候補にする（誤マッチ排除）。
+ * - 明示リンクに runId があれば、その run の孫エージェントも候補に加える。
+ * - 明示リンクが無い場合: 従来どおり「素朴一致 run（無ければ最新 run）」の孫を候補にする。
+ */
+function LinkedConversation({ task, links }: { task: Task; links: TaskLinksResponse | null }) {
   const tick = useLiveTick();
   const { data } = useLiveResource<{ workflows: WorkflowSummary[] }>('/api/workflows', tick);
   const [agentId, setAgentId] = useState<string | null>(null);
@@ -320,14 +382,26 @@ function LinkedConversation({ task }: { task: Task }) {
   const [loading, setLoading] = useState(false);
 
   const all = useMemo(() => data?.workflows ?? [], [data]);
-  const matched = useMemo(() => all.filter((w) => runMatchesTask(w, task.id)), [all, task.id]);
-  // 会話候補は「紐づく run（無ければ最新 run）」の孫エージェント。
-  const targetRun = matched[0] ?? all[0];
+  const explicit = links?.hasExplicitLinks ?? false;
+  const explicitAgentIds = useMemo(() => links?.agentIds ?? [], [links]);
 
+  // 会話の元になる run を決める:
+  //   明示リンクあり → リンク先 run の先頭（突合できたもの）。
+  //   明示リンクなし → 素朴一致 run の先頭、無ければ最新 run。
+  const fallbackMatched = useMemo(
+    () => all.filter((w) => runMatchesTask(w, task.id)),
+    [all, task.id],
+  );
+  const explicitFirstRun = useMemo(
+    () => (links?.runs ?? []).find((r) => r.summary !== null)?.summary ?? null,
+    [links],
+  );
+  const targetRun = explicit ? explicitFirstRun : (fallbackMatched[0] ?? all[0] ?? null);
+
+  // run の孫エージェント nodes を取得（run がある場合）。
   useEffect(() => {
     if (!targetRun) {
-      setNodes(null);
-      setAgentId(null);
+      setNodes([]);
       return;
     }
     let cancelled = false;
@@ -340,9 +414,7 @@ function LinkedConversation({ task }: { task: Task }) {
       .then((d) => {
         if (cancelled) return;
         const wf = (d as { workflow?: WorkflowDetail }).workflow ?? (d as WorkflowDetail);
-        const ns = wf.phases.flatMap((p) => p.nodes);
-        setNodes(ns);
-        setAgentId(ns[0]?.agentId ?? null);
+        setNodes(wf.phases.flatMap((p) => p.nodes));
       })
       .catch(() => {
         if (!cancelled) setNodes([]);
@@ -355,15 +427,31 @@ function LinkedConversation({ task }: { task: Task }) {
     };
   }, [targetRun]);
 
-  if (!targetRun) {
-    return (
-      <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px] text-text-faint">
-        紐づくエージェント会話はありません。
-      </p>
-    );
-  }
+  // 会話タブの候補 = 明示 agentId（run に無くても出す）+ run の孫エージェント。
+  // 明示リンクがあり agentId も run も無いケースはここで空になる。
+  const candidates = useMemo<{ agentId: string; label: string }[]>(() => {
+    const map = new Map<string, string>();
+    if (explicit) {
+      for (const aid of explicitAgentIds) {
+        map.set(aid, links?.links.find((l) => l.agentId === aid)?.label ?? aid.slice(0, 8));
+      }
+    }
+    for (const n of nodes ?? []) {
+      if (!map.has(n.agentId)) map.set(n.agentId, n.label);
+    }
+    return [...map.entries()].map(([aid, label]) => ({ agentId: aid, label }));
+  }, [explicit, explicitAgentIds, links, nodes]);
 
-  if (loading && !nodes) {
+  // 候補が決まったら選択中 agentId を初期化/補正する。
+  useEffect(() => {
+    if (candidates.length === 0) {
+      setAgentId(null);
+      return;
+    }
+    setAgentId((cur) => (cur && candidates.some((c) => c.agentId === cur) ? cur : candidates[0].agentId));
+  }, [candidates]);
+
+  if (loading && (nodes === null)) {
     return (
       <div className="flex items-center gap-2 text-[12px] text-text-muted">
         <Spinner />
@@ -372,34 +460,34 @@ function LinkedConversation({ task }: { task: Task }) {
     );
   }
 
-  if (!nodes || nodes.length === 0) {
+  if (candidates.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px] text-text-faint">
-        表示できるエージェント会話はありません。
+        紐づくエージェント会話はありません。
       </p>
     );
   }
 
   return (
     <div className="space-y-2">
-      {matched.length === 0 && (
+      {!explicit && fallbackMatched.length === 0 && (
         <p className="text-[11px] text-text-faint">
           このタスクに紐づく会話は特定できませんでした。直近のワークフローの会話を表示しています。
         </p>
       )}
-      {nodes.length > 1 && (
+      {candidates.length > 1 && (
         <div
           className="no-scrollbar -mx-1 flex items-center gap-1 overflow-x-auto px-1"
           role="group"
           aria-label="会話するエージェントを選択"
         >
-          {nodes.map((n) => {
-            const selected = n.agentId === agentId;
+          {candidates.map((c) => {
+            const selected = c.agentId === agentId;
             return (
               <button
-                key={n.agentId}
+                key={c.agentId}
                 type="button"
-                onClick={() => setAgentId(n.agentId)}
+                onClick={() => setAgentId(c.agentId)}
                 className={`shrink-0 rounded-md px-2.5 py-1.5 text-[11px] ${
                   selected
                     ? 'bg-surface-3 font-semibold text-text'
@@ -407,7 +495,7 @@ function LinkedConversation({ task }: { task: Task }) {
                 }`}
                 aria-pressed={selected}
               >
-                {n.label}
+                {c.label}
               </button>
             );
           })}
@@ -448,6 +536,20 @@ export function TaskDetail({ task, onClose }: { task: Task | null; onClose: () =
   }, [task, onClose]);
 
   if (!task) return null;
+  return <TaskDetailBody task={task} onClose={onClose} />;
+}
+
+/**
+ * ドロワー本体（task が確定した状態で描画）。
+ * 明示リンク（/api/tasks/:taskId/links）をここで一度だけ取得し、
+ * 紐づくワークフロー / 会話の両セクションへ渡す。
+ */
+function TaskDetailBody({ task, onClose }: { task: Task; onClose: () => void }) {
+  const tick = useLiveTick();
+  const { data: links } = useLiveResource<TaskLinksResponse>(
+    `/api/tasks/${encodeURIComponent(task.id)}/links`,
+    tick,
+  );
   const statusMeta = taskStatusMeta(task.status);
 
   return createPortal(
@@ -545,13 +647,13 @@ export function TaskDetail({ task, onClose }: { task: Task | null; onClose: () =
           {/* (b) 紐づくワークフロー */}
           <section className="mb-5">
             <SectionHeading>紐づくワークフロー</SectionHeading>
-            <LinkedWorkflows task={task} />
+            <LinkedWorkflows task={task} links={links} />
           </section>
 
           {/* (c) 紐づくエージェント会話 */}
           <section>
             <SectionHeading>紐づくエージェント会話</SectionHeading>
-            <LinkedConversation task={task} />
+            <LinkedConversation task={task} links={links} />
           </section>
         </div>
       </div>

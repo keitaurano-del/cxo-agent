@@ -16,6 +16,7 @@ import { collectNarrative } from './collectors/narrative.js';
 import { collectRoster } from './collectors/roster.js';
 import { collectUsage } from './collectors/usage.js';
 import { collectWorkflows, collectWorkflowDetail } from './collectors/workflows.js';
+import { linksForTask } from './collectors/taskLinks.js';
 import {
   buildTree,
   readNote,
@@ -100,6 +101,34 @@ app.get('/api/agents/:agentId/feed', (req, res) => {
 
 app.get('/api/tasks', (_req, res) => {
   safeJson(res, () => ({ tasks: collectTasks() }));
+});
+
+// ─── タスク↔workflow/agent 明示リンク（MC-62）────────────────────
+// data/task-links.jsonl（明示ログ・正本）を読み、指定タスクに紐づく
+// workflow run（/api/workflows のサマリと突合）と agent 会話を返す。
+// 明示リンクが 0 件なら runs/agentIds とも空配列（フロントが従来フォールバックする）。
+// 認証ミドルウェア配下。ファイル無し・壊れ行は collector 側で吸収して空で返す。
+app.get('/api/tasks/:taskId/links', (req, res) => {
+  safeJson(res, () => {
+    const set = linksForTask(req.params.taskId);
+    // 突合: 明示リンクの runId に対応する WorkflowSummary を /api/workflows から引く。
+    // 明示リンクにあるが run が存在しない（消えた/別環境）場合は runId だけ返す。
+    const summaries = collectWorkflows();
+    const byRunId = new Map(summaries.map((s) => [s.runId, s]));
+    const runs = set.runIds.map((runId) => ({
+      runId,
+      // 突合できた run はサマリ付き、できなければ null（UI 側で runId のみ表示）。
+      summary: byRunId.get(runId) ?? null,
+    }));
+    return {
+      taskId: set.taskId,
+      hasExplicitLinks: set.links.length > 0,
+      runs,
+      agentIds: set.agentIds,
+      links: set.links,
+      generatedAt: new Date().toISOString(),
+    };
+  });
 });
 
 app.get('/api/narrative', (_req, res) => {

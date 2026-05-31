@@ -47,6 +47,13 @@ export const INBOX_CONSUMED_FILE = join(INBOX_DATA_DIR, 'inbox-consumed.jsonl');
 /** 添付画像のルート（data/inbox-attachments/<id>/<file>）。 */
 export const INBOX_ATTACHMENTS_DIR = join(INBOX_DATA_DIR, 'inbox-attachments');
 
+/**
+ * タスク↔workflow/agent の明示リンク台帳（MC-62。追記専用 JSONL・1 行 1 リンク）。
+ * タスク ID（MC-xx 等）と、それを動かした runId / agentId をここに明示記録し、
+ * ID 文字列マッチに頼らず誤紐付けを排除する正本とする。
+ */
+export const TASK_LINKS_FILE = join(INBOX_DATA_DIR, 'task-links.jsonl');
+
 /** 添付画像の 1 枚あたり最大バイト数（10MB）。 */
 export const INBOX_MAX_FILE_BYTES = envNum('INBOX_MAX_FILE_BYTES', 10 * 1024 * 1024);
 
