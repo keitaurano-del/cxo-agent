@@ -10,7 +10,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { PORT, CLAUDE_PROJECTS_DIR, VAULT_DIR, STALL_MINUTES } from './config.js';
-import { collectAgents, collectAgentFeed } from './collectors/agents.js';
+import { collectAgents, collectAgentGroups, collectAgentFeed } from './collectors/agents.js';
 import { collectTasks } from './collectors/tasks.js';
 import { collectNarrative } from './collectors/narrative.js';
 import { collectRoster } from './collectors/roster.js';
@@ -90,6 +90,13 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/agents', (_req, res) => {
   safeJson(res, () => ({ agents: collectAgents() }));
+});
+
+// 人格別に集約したエージェント一覧（MC-88）。「エージェント」ビューはこちらを使い、
+// 231 件の稼働インスタンスを人格（subagentType）単位の数件に畳んで表示する。
+// /api/agents（生インスタンス）は overview/roster/feed が引き続き使うため非破壊で温存。
+app.get('/api/agents/grouped', (_req, res) => {
+  safeJson(res, () => ({ groups: collectAgentGroups() }));
 });
 
 app.get('/api/agents/:agentId/feed', (req, res) => {

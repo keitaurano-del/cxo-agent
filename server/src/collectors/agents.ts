@@ -5,7 +5,7 @@
 
 import { readdirSync, statSync, lstatSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { CLAUDE_PROJECTS_DIR } from '../config.js';
+import { CLAUDE_PROJECTS_DIR, ROSTER_VISIBLE } from '../config.js';
 import { readJsonl, lastActivity, firstText, type JsonlLine } from '../lib/jsonl.js';
 import { projectFromPath, projectLabel, type ProjectName } from '../lib/projectMap.js';
 import { agentStatus, type AgentStatus } from '../lib/stall.js';
@@ -216,6 +216,108 @@ export function collectAgents(): AgentSummary[] {
   cachedAgents = computeAgents();
   cachedAgentsAt = now;
   return cachedAgents;
+}
+
+// ─── 人格別の集約（MC-88）────────────────────────────────
+//
+// /api/agents は過去の全稼働インスタンス（workflow 孫・Explore・general-purpose を含む）を
+// 1 つずつ返すため数百件になる（実測 231 件）。「エージェント」ビューは人格（subagentType）
+// 単位で見たいので、ここでインスタンス群を subagentType ごとに集約する。
+//   - 人格保有エージェント（ROSTER_VISIBLE = dev-logic / designer / task-manager 等の 11 体）を主役に。
+//   - general-purpose / Explore / workflow:xxx（孫）/ unmatched:xxx は「人格でない」ので
+//     1 つの「その他」グループにまとめて主役の後ろに置く（隠す代わりに集計だけ残す）。
+// 各グループは稼働件数（active/idle/done/never の内訳）・最終活動・現在のタスク（最新インスタンスの
+// lastAction）・代表 agentId（会話を開く用）を持つ。
+
+/** 人格別に集約した 1 グループ。 */
+export interface AgentGroup {
+  subagentType: string; // 人格名（roster 名）。その他は 'その他'。
+  isPersona: boolean; // ROSTER_VISIBLE にある人格か
+  description?: string; // 役割説明（matched なインスタンスの description）
+  status: AgentStatus; // グループ代表ステータス（最新インスタンスの状態）
+  instanceCount: number; // 集約したインスタンス総数
+  activeCount: number;
+  idleCount: number;
+  doneCount: number;
+  neverCount: number;
+  lastActivity: string; // グループ内の最新活動
+  lastAction: string; // 最新インスタンスの作業スニペット（現在のタスク）
+  latestAgentId: string; // 最新インスタンスの agentId（会話 feed を開く用）
+  projectLabel?: string; // 最新インスタンスのプロジェクト
+  projects: string[]; // 関与した全プロジェクトラベル（重複排除）
+}
+
+/** 「人格でない」バケット（その他に畳む対象）を判定する。 */
+function isNonPersonaBucket(subagentType: string): boolean {
+  return (
+    subagentType.startsWith('workflow:') ||
+    subagentType.startsWith('unmatched:') ||
+    subagentType === 'general-purpose' ||
+    subagentType === 'Explore'
+  );
+}
+
+const OTHER_GROUP = 'その他';
+
+/** status の集約代表（最新インスタンスのものを使うが、worst でなく latest 基準）。 */
+function buildGroup(key: string, isPersona: boolean, items: AgentSummary[]): AgentGroup {
+  // 最新活動順（collectAgents が既にソート済みだが、グループ内で取り直す）。
+  const sorted = [...items].sort(
+    (a, b) => Date.parse(b.lastActivity) - Date.parse(a.lastActivity),
+  );
+  const latest = sorted[0];
+  const description = sorted.find((a) => a.matched && a.description)?.description;
+  const projects = Array.from(new Set(sorted.map((a) => a.projectLabel).filter(Boolean)));
+  return {
+    subagentType: key,
+    isPersona,
+    description,
+    status: latest.status,
+    instanceCount: sorted.length,
+    activeCount: sorted.filter((a) => a.status === 'active').length,
+    idleCount: sorted.filter((a) => a.status === 'idle').length,
+    doneCount: sorted.filter((a) => a.status === 'done').length,
+    neverCount: sorted.filter((a) => a.status === 'never').length,
+    lastActivity: latest.lastActivity,
+    lastAction: latest.lastAction,
+    latestAgentId: latest.agentId,
+    projectLabel: latest.projectLabel,
+    projects,
+  };
+}
+
+/**
+ * 全 subagent インスタンスを人格（subagentType）別に集約して返す。
+ * 並びは「人格保有グループ（最新活動順）→ その他グループ（1 件、末尾）」。
+ * 人格保有グループの判定は ROSTER_VISIBLE（roster collector と整合）。
+ */
+export function collectAgentGroups(): AgentGroup[] {
+  const agents = collectAgents();
+  const personaBuckets = new Map<string, AgentSummary[]>();
+  const otherBucket: AgentSummary[] = [];
+
+  for (const a of agents) {
+    if (!isNonPersonaBucket(a.subagentType) && ROSTER_VISIBLE.has(a.subagentType)) {
+      const list = personaBuckets.get(a.subagentType) ?? [];
+      list.push(a);
+      personaBuckets.set(a.subagentType, list);
+    } else {
+      // 人格でない（孫・Explore・general-purpose・unmatched）＝その他へ畳む。
+      otherBucket.push(a);
+    }
+  }
+
+  const groups: AgentGroup[] = [];
+  for (const [key, items] of personaBuckets) {
+    groups.push(buildGroup(key, true, items));
+  }
+  // 人格グループは最新活動の新しい順。
+  groups.sort((a, b) => Date.parse(b.lastActivity) - Date.parse(a.lastActivity));
+
+  if (otherBucket.length > 0) {
+    groups.push(buildGroup(OTHER_GROUP, false, otherBucket));
+  }
+  return groups;
 }
 
 /** 特定 agentId の会話タイムライン（user/assistant/tool を時系列）。 */

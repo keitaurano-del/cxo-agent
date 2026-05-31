@@ -260,24 +260,77 @@ console.log('\n[d] baseHash 不一致で CONFLICT');
   ok(after === CXO_FIXTURE, 'CONFLICT 時はファイルが書き換わらない');
 }
 
-// ── (e) 曖昧（同一 id 複数表現が重複）で AMBIGUOUS ────────────
-console.log('\n[e] 同一 id の表現が一意特定できず AMBIGUOUS');
+// ── (e) 同一 id の表行が複数あっても AMBIGUOUS にせず全行を一律更新（MC-87）──
+console.log('\n[e] 同一 id の表行が複数 → AMBIGUOUS にせず全行へ同一 patch を反映');
 {
-  // summary table に同じ ID 行を 2 つ仕込む。
-  const ambiguous = `# TASK_TRACKER — Logic
+  // 同じ表に同じ ID 行を 2 つ仕込む（現役表＋集約/重複行のような状況）。
+  // 旧仕様は AMBIGUOUS で承認を止めたが、表行を正とする方針では両行とも目的の status へ更新する。
+  const dup = `# TASK_TRACKER — Logic
 
 | ID | タイトル | 優先度 | ステータス | 担当案 | 由来 |
 |----|---------|--------|-----------|--------|------|
-| AF-09 | 一回目 | P2 | TODO | dev-logic | x |
-| AF-09 | 二回目 | P1 | DONE | designer | y |
+| AF-09 | 一回目 | P2 | BLOCKED | dev-logic | x |
+| AF-09 | 二回目 | P1 | BLOCKED | designer | y |
+| AF-10 | 別タスク | P3 | TODO | reviewer | z |
 `;
-  writeFileSync(LOGIC_PATH, ambiguous, 'utf-8');
-  expectError(
-    () => editTask({ source: 'logic/TASK_TRACKER', id: 'AF-09', patch: { status: 'REVIEW' } }),
-    'AMBIGUOUS',
-    '重複 summary 行は AMBIGUOUS',
-  );
-  ok(readFileSync(LOGIC_PATH, 'utf-8') === ambiguous, 'AMBIGUOUS 時はファイルが書き換わらない');
+  writeFileSync(LOGIC_PATH, dup, 'utf-8');
+  const before = readFileSync(LOGIC_PATH, 'utf-8');
+  const { task } = editTask({ source: 'logic/TASK_TRACKER', id: 'AF-09', patch: { status: 'TODO' } });
+  const after = readFileSync(LOGIC_PATH, 'utf-8');
+  ok(task.status === 'TODO', 'AF-09 の返却 status が TODO');
+  // 両 AF-09 行の ステータス列が TODO に。
+  const af09Rows = after.split('\n').filter((l) => /^\|\s*AF-09\s*\|/.test(l));
+  ok(af09Rows.length === 2, 'AF-09 行が 2 行のまま');
+  ok(af09Rows.every((l) => /\|\s*TODO\s*\|/.test(l)), '両 AF-09 行とも TODO に更新');
+  ok(!after.includes('| BLOCKED |'), '旧 BLOCKED 値が残っていない');
+  // 他タスク AF-10 は不変。
+  ok(othersUnchanged(before, after, 'logic', 'logic/TASK_TRACKER', 'AF-09'), '対象外タスク AF-10 が不変');
+}
+
+// ── (e2) AM-O 型: ID 表 ＋ 別タスクが id を言及する見出し ＋ 非 ID アーカイブ表（MC-87 本丸）──
+console.log('\n[e2] AM-O 型（言及見出し＋非ID集約表）でも承認が通り他タスク不変');
+{
+  // 現役 ID 表に AM-O 行（status を持つ表行＝正）。
+  // 別タスク T-AC の見出しが本文で「AM-O に集約」と AM-O を言及（旧仕様はここで AMBIGUOUS）。
+  // 非 ID 表（先頭列＝タスク）にも AM-O が出るが parseSummaryHeader が ID 表のみ拾うため触らない。
+  const amo = `# TASK_TRACKER — Logic
+
+## 現役ボード
+
+| ID | Keita ラベル | タイトル | 優先度 | ステータス | 担当案 | 関係 |
+|----|-------------|---------|--------|-----------|--------|------|
+| AM-O | T-O | 課金実装 | P1 | BLOCKED | dev-logic | x |
+| AM-N | T-N | 法務 | P1 | TODO | dev-logic | y |
+
+### AM-O — 課金実装　[P1 / BLOCKED]
+- 依頼原文: ダミー。
+- DoD: ダミー。
+
+### T-AC — 課金を実装　[→ AM-O に集約（重複）／現況 BLOCKED]
+- 集約注記: 正本 = AM-O。二重トラッキングしない。
+- 担当案: dev-logic。
+
+### 判断反映サマリ
+| タスク | 旧状態 | 新状態 | 反映内容 |
+|--------|--------|--------|----------|
+| AM-O | BLOCKED | BLOCKED（SKU 待ち） | コード DONE。残は Keita SKU 登録 |
+| AM-N | BLOCKED | TODO | 法的確定 |
+`;
+  writeFileSync(LOGIC_PATH, amo, 'utf-8');
+  const before = readFileSync(LOGIC_PATH, 'utf-8');
+  // 承認 = status を TODO へ（approvalWrite.approveTask と同じ patch）。
+  const { task } = editTask({ source: 'logic/TASK_TRACKER', id: 'AM-O', patch: { status: 'TODO' } });
+  const after = readFileSync(LOGIC_PATH, 'utf-8');
+  ok(task.status === 'TODO', 'AM-O の返却 status が TODO（AMBIGUOUS で落ちない）');
+  // 現役 ID 表の AM-O 行が TODO に。
+  ok(/\|\s*AM-O\s*\|\s*T-O\s*\|\s*課金実装\s*\|\s*P1\s*\|\s*TODO\s*\|/.test(after), '現役表の AM-O 行が TODO');
+  // T-AC の見出し・本文は無変更（言及されただけの別タスクを巻き込まない）。
+  ok(after.includes('### T-AC — 課金を実装　[→ AM-O に集約（重複）／現況 BLOCKED]'), 'T-AC 見出しが無変更');
+  ok(after.includes('- 担当案: dev-logic。'), 'T-AC 本文が無変更');
+  // 非 ID アーカイブ表の AM-O 行（先頭列=タスク）は触らない。
+  ok(after.includes('| AM-O | BLOCKED | BLOCKED（SKU 待ち） | コード DONE。残は Keita SKU 登録 |'), '非ID集約表の AM-O 行は無変更');
+  // 他タスク AM-N が不変。
+  ok(othersUnchanged(before, after, 'logic', 'logic/TASK_TRACKER', 'AM-O'), '対象外タスク AM-N が不変');
 }
 
 // ── (f) read-back 不変条件が崩れる細工で VALIDATION_FAILED ─────

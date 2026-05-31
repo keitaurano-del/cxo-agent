@@ -29,6 +29,25 @@ export interface AgentSummary {
   messageCount: number;
 }
 
+// 人格別に集約したエージェントグループ（MC-88 / GET /api/agents/grouped）。
+// server/src/collectors/agents.ts の AgentGroup と一致させる。
+export interface AgentGroup {
+  subagentType: string;
+  isPersona: boolean;
+  description?: string;
+  status: AgentStatus;
+  instanceCount: number;
+  activeCount: number;
+  idleCount: number;
+  doneCount: number;
+  neverCount: number;
+  lastActivity: string;
+  lastAction: string;
+  latestAgentId: string;
+  projectLabel?: string;
+  projects: string[];
+}
+
 export interface FeedItem {
   ts: string;
   role: 'user' | 'assistant' | 'tool' | 'system';

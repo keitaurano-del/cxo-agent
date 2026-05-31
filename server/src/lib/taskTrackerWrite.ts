@@ -192,64 +192,69 @@ interface ApplyResult {
 }
 
 /**
- * `### ...<id>...` セクション内の `- <ラベル>: 値` 行を patch で書き換える。
- * セクションは「次の同/上位レベル見出しまで」を範囲とする。
- * セクションが無ければ touched=false。複数セクションヒットは AMBIGUOUS。
+ * `### <id> — ...` セクション内の `- <ラベル>: 値` 行を patch で書き換える。
+ * セクションは「次の同/上位レベル見出しまで」を範囲とする。詳細セクションは表示用なので、
+ * これが無くても表行/カードがあれば編集は成立する（MC-87: 詳細セクションの重複/欠如を
+ * 承認のブロック理由にしない）。
+ *
+ * 見出しの対象判定は「id が見出しの先頭トークン（`### <id> ...`）であること」に限定する。
+ * 台帳の慣行では各タスクセクションは必ず `### <ID> — ...` の形で id を先頭に置くため、
+ * これで「本文中に他タスクが別タスクの id を言及している見出し」（例: `### T-AC — ... [→ AM-O に集約]`）
+ * を取り違えずに、当該 id 自身のセクションだけを一意に特定できる。これにより同一 id を文中で
+ * 参照する別セクションが存在しても AMBIGUOUS にならず（表行を正とするので）、かつ言及先の
+ * 別タスクのステータス行を誤って書き換える事故も防ぐ。
  */
 function applyToSection(md: string, id: string, patch: TaskPatch): ApplyResult {
   const lines = md.split('\n');
-  // `### ... <id> ...` の見出し行 index を集める（# の数は問わず id を含む見出し）。
+  // `### <id> ...` の見出し行 index を集める（id が見出しの先頭トークンのものだけ）。
   const headIdxs: number[] = [];
-  const idRe = new RegExp(`(^|[^\\w-])${escapeReg(id)}([^\\w-]|$)`);
+  const headRe = new RegExp(`^#{2,6}\\s+${escapeReg(id)}(?=$|[^\\w-])`);
   for (let i = 0; i < lines.length; i += 1) {
-    const l = lines[i];
-    if (/^#{2,6}\s/.test(l) && idRe.test(l)) headIdxs.push(i);
+    if (headRe.test(lines[i])) headIdxs.push(i);
   }
   if (headIdxs.length === 0) return { md, touched: false };
-  if (headIdxs.length > 1) {
-    throw new TaskEditError(
-      'AMBIGUOUS',
-      `id ${id} のセクション見出しが複数あり一意に特定できません。`,
-    );
-  }
-  const start = headIdxs[0];
-  const headLevel = (lines[start].match(/^(#{2,6})/)?.[1] ?? '##').length;
-  // セクション終端 = 次の同レベル以上の見出し（より少ない/等しい # 数）まで。
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i += 1) {
-    const m = lines[i].match(/^(#{2,6})\s/);
-    if (m && m[1].length <= headLevel) {
-      end = i;
-      break;
-    }
-  }
+  // 先頭トークン一致でも万一複数のセクションが id を見出し先頭に持つ場合、詳細セクションは
+  // 表示用なので AMBIGUOUS で承認を止めず、全該当セクションへ同一 patch を反映する（表行を正、
+  // 詳細は追従）。read-back（assertTargetApplied）で全表現が意図値であることを裏取りする。
   let touched = false;
-  for (const [field, value] of Object.entries(patch) as [keyof TaskPatch, string][]) {
-    if (field === 'title') continue; // title はセクション見出し自体なので別扱い（後述）。
-    const label = FIELD_LABEL[field];
-    // `- ステータス: X` 単独行も `- 優先度: P1 / ステータス: X / 担当: Y` 複合行も拾えるよう、
-    // 行頭固定ではなく「行内に `<label>:` を含む」で検出し、rewriteInlineField で当該区間のみ置換。
-    // `担当案` のような別ラベルを誤検出しないよう、label の直前が単語境界（行頭/非ラベル文字）であることを要求。
-    const lineRe = new RegExp(`(^|[\\s/|・])${escapeReg(label)}\\s*[:：]`);
-    const hits: number[] = [];
-    for (let i = start; i < end; i += 1) {
-      if (lineRe.test(lines[i])) hits.push(i);
+  for (const start of headIdxs) {
+    const headLevel = (lines[start].match(/^(#{2,6})/)?.[1] ?? '##').length;
+    // セクション終端 = 次の同レベル以上の見出し（より少ない/等しい # 数）まで。
+    let end = lines.length;
+    for (let i = start + 1; i < lines.length; i += 1) {
+      const m = lines[i].match(/^(#{2,6})\s/);
+      if (m && m[1].length <= headLevel) {
+        end = i;
+        break;
+      }
     }
-    if (hits.length === 0) continue;
-    for (const i of hits) {
-      // 同一行に複数フィールドが「 / 」区切りで載るケース（`- ステータス: X / 担当: Y`）に対応。
-      lines[i] = rewriteInlineField(lines[i], label, value);
-      touched = true;
+    for (const [field, value] of Object.entries(patch) as [keyof TaskPatch, string][]) {
+      if (field === 'title') continue; // title はセクション見出し自体なので別扱い（後述）。
+      const label = FIELD_LABEL[field];
+      // `- ステータス: X` 単独行も `- 優先度: P1 / ステータス: X / 担当: Y` 複合行も拾えるよう、
+      // 行頭固定ではなく「行内に `<label>:` を含む」で検出し、rewriteInlineField で当該区間のみ置換。
+      // `担当案` のような別ラベルを誤検出しないよう、label の直前が単語境界（行頭/非ラベル文字）であることを要求。
+      const lineRe = new RegExp(`(^|[\\s/|・])${escapeReg(label)}\\s*[:：]`);
+      const hits: number[] = [];
+      for (let i = start; i < end; i += 1) {
+        if (lineRe.test(lines[i])) hits.push(i);
+      }
+      if (hits.length === 0) continue;
+      for (const i of hits) {
+        // 同一行に複数フィールドが「 / 」区切りで載るケース（`- ステータス: X / 担当: Y`）に対応。
+        lines[i] = rewriteInlineField(lines[i], label, value);
+        touched = true;
+      }
     }
-  }
-  // title はセクション見出し（`### <id> — 旧title ...`）の dash 以降を置換する。
-  if (patch.title !== undefined) {
-    const head = lines[start];
-    // `### MC-70 — 旧タイトル [meta]` の "— " 以降を新タイトルに。dash が無ければ id の後ろに付ける。
-    const dashM = head.match(/^(#{2,6}\s+[^\n]*?\s[—–-]\s)(.*)$/);
-    if (dashM) {
-      lines[start] = `${dashM[1]}${patch.title}`;
-      touched = true;
+    // title はセクション見出し（`### <id> — 旧title ...`）の dash 以降を置換する。
+    if (patch.title !== undefined) {
+      const head = lines[start];
+      // `### MC-70 — 旧タイトル [meta]` の "— " 以降を新タイトルに。dash が無ければ id の後ろに付ける。
+      const dashM = head.match(/^(#{2,6}\s+[^\n]*?\s[—–-]\s)(.*)$/);
+      if (dashM) {
+        lines[start] = `${dashM[1]}${patch.title}`;
+        touched = true;
+      }
     }
   }
   return { md: lines.join('\n'), touched };
@@ -320,7 +325,13 @@ function applyToCard(md: string, id: string, patch: TaskPatch): ApplyResult {
 /**
  * summary table（`| ID | タイトル | 優先度 | ... | ステータス | 担当 | ... |`）の
  * `| <id> | ... |` データ行の該当列セルを patch で更新する。
- * 行が無ければ touched=false。複数ヒットは AMBIGUOUS。
+ * 行が無ければ touched=false。
+ *
+ * MC-87: 同一 id の表行が複数あっても AMBIGUOUS で承認を止めない。台帳は「現役ボード表 ＋
+ * アーカイブ/集約表」のように同じ id を複数の表に載せることがあり（例: AM-O が現役表とアーカイブ表に
+ * 各1行）、表行を正とする方針なので「全該当行へ同一 patch を一律反映」する。承認は status の
+ * 単一値遷移なので全行を同じ値にするのが正しく、他タスク行は触らないため read-back の不変条件
+ * （対象外タスク不変）も保たれる。各行は列マップ（その表のヘッダ）に従ってセル位置を解決する。
  */
 function applyToSummary(md: string, id: string, patch: TaskPatch): ApplyResult {
   const lines = md.split('\n');
@@ -346,28 +357,23 @@ function applyToSummary(md: string, id: string, patch: TaskPatch): ApplyResult {
     dataRows.push({ idx: i, col: curCol });
   }
   if (dataRows.length === 0) return { md, touched: false };
-  if (dataRows.length > 1) {
-    throw new TaskEditError(
-      'AMBIGUOUS',
-      `id ${id} の summary table 行が複数あり一意に特定できません。`,
-    );
-  }
-  const { idx, col } = dataRows[0];
-  let line = lines[idx];
   let touched = false;
-  const colFor: Record<keyof TaskPatch, number | undefined> = {
-    title: col.title,
-    status: col.status,
-    owner: col.owner,
-    priority: col.priority,
-  };
-  for (const [field, value] of Object.entries(patch) as [keyof TaskPatch, string][]) {
-    const ci = colFor[field];
-    if (ci === undefined) continue; // この台帳の summary table にその列が無い。
-    line = replaceSummaryCell(line, ci, value);
-    touched = true;
+  for (const { idx, col } of dataRows) {
+    let line = lines[idx];
+    const colFor: Record<keyof TaskPatch, number | undefined> = {
+      title: col.title,
+      status: col.status,
+      owner: col.owner,
+      priority: col.priority,
+    };
+    for (const [field, value] of Object.entries(patch) as [keyof TaskPatch, string][]) {
+      const ci = colFor[field];
+      if (ci === undefined) continue; // この表にその列が無い。
+      line = replaceSummaryCell(line, ci, value);
+      touched = true;
+    }
+    lines[idx] = line;
   }
-  lines[idx] = line;
   return { md: lines.join('\n'), touched };
 }
 
@@ -485,11 +491,13 @@ function extractFieldValues(
     }
   }
 
-  // (3) section: `### ...<id>...` 内の `- <label>: 値` 行（title は見出しの dash 以降）。
+  // (3) section: `### <id> ...` 内の `- <label>: 値` 行（title は見出しの dash 以降）。
+  // applyToSection と同じ「id が見出しの先頭トークン」判定に揃える。文中で別タスクが id を
+  // 言及している見出し（例: `### T-AC — ... [→ AM-O に集約]`）の本文を誤って読まないため。
   {
-    const idRe = new RegExp(`(^|[^\\w-])${escapeReg(id)}([^\\w-]|$)`);
+    const headRe = new RegExp(`^#{2,6}\\s+${escapeReg(id)}(?=$|[^\\w-])`);
     for (let i = 0; i < lines.length; i += 1) {
-      if (!(/^#{2,6}\s/.test(lines[i]) && idRe.test(lines[i]))) continue;
+      if (!headRe.test(lines[i])) continue;
       const headLevel = (lines[i].match(/^(#{2,6})/)?.[1] ?? '##').length;
       let end = lines.length;
       for (let k = i + 1; k < lines.length; k += 1) {
