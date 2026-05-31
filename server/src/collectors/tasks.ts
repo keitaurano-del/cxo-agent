@@ -88,6 +88,21 @@ function parseTrackerTable(path: string, project: ProjectName, source: string): 
   if (!existsSync(path)) return [];
   const md = readFileSync(path, 'utf-8');
   const updated = frontmatterUpdated(md) ?? fileMtimeIso(path);
+  return parseTrackerString(md, project, source, updated);
+}
+
+/**
+ * TASK_TRACKER markdown 文字列をパースして Task 配列を返す（ファイル I/O 非依存）。
+ * テスト・書き戻しの read-back 検証から「文字列を直接」渡せるよう切り出した内部 API。
+ * 列構成 / セクション / `| フィールド | 値 |` カードの 3 形式併存に対応する。
+ * @param updated frontmatter / mtime 由来の更新日時。collectTasks 経由では従来どおり付与する。
+ */
+export function parseTrackerString(
+  md: string,
+  project: ProjectName,
+  source: string,
+  updated?: string,
+): Task[] {
   const out: Task[] = [];
   const seen = new Set<string>();
 

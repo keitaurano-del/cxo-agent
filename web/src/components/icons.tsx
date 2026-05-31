@@ -199,6 +199,15 @@ export function PlusIcon(props: IconProps) {
   );
 }
 
+export function EditIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 20h4l10.5-10.5a2 2 0 0 0 0-2.8l-1.2-1.2a2 2 0 0 0-2.8 0L4 16z" />
+      <path d="M13.5 6.5 17.5 10.5" />
+    </svg>
+  );
+}
+
 export function TagIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

@@ -94,7 +94,7 @@ function Column({
 
 export default function Tasks() {
   const tick = useLiveTick('tasks');
-  const { data, error, loading, fetchedAt } = useLiveResource<{ tasks: Task[] }>(
+  const { data, error, loading, fetchedAt, refetch } = useLiveResource<{ tasks: Task[] }>(
     '/api/tasks',
     tick,
   );
@@ -231,7 +231,7 @@ export default function Tasks() {
           </div>
         </ResourceState>
       </div>
-      <TaskDetail task={selected} onClose={() => setSelected(null)} />
+      <TaskDetail task={selected} onClose={() => setSelected(null)} onChanged={refetch} />
     </div>
   );
 }

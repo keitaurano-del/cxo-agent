@@ -54,6 +54,13 @@ export const INBOX_ATTACHMENTS_DIR = join(INBOX_DATA_DIR, 'inbox-attachments');
  */
 export const TASK_LINKS_FILE = join(INBOX_DATA_DIR, 'task-links.jsonl');
 
+/**
+ * タスク手動編集の監査ログ（MC-71。追記専用 JSONL・1 行 1 編集）。
+ * Apollo の TaskDetail から正本 TASK_TRACKER.md へ書き戻した編集をここに記録する。
+ * 1 行 = `{ ts, source, id, patch, prevHash, newHash }`。
+ */
+export const TASK_EDITS_FILE = join(INBOX_DATA_DIR, 'task-edits.jsonl');
+
 /** 添付画像の 1 枚あたり最大バイト数（10MB）。 */
 export const INBOX_MAX_FILE_BYTES = envNum('INBOX_MAX_FILE_BYTES', 10 * 1024 * 1024);
 

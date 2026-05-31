@@ -28,6 +28,7 @@ import { ALL_PROJECTS, type ProjectName } from './lib/projectMap.js';
 import { makeAuthMiddleware, authEnabled } from './lib/auth.js';
 import { inboxRouter } from './inbox.js';
 import { vaultWriteRouter } from './vaultWriteRouter.js';
+import { taskEditRouter } from './taskEditRouter.js';
 import { startWatch } from './watch.js';
 
 const HEALTHZ_PATH = '/api/healthz';
@@ -130,6 +131,13 @@ app.get('/api/tasks/:taskId/links', (req, res) => {
     };
   });
 });
+
+// ─── タスク手動編集（MC-71 edit スライス）────────────────────────
+// GET /api/tasks/hash?source=... → 楽観ロック用ハッシュ
+// POST /api/tasks/edit { source, id, patch, baseHash? } → 正本 .md へ安全書き戻し
+// 既存 /api/tasks・/api/tasks/:taskId/links の後に mount（auth ミドルウェア配下）。
+// '/hash' '/edit' は :taskId パターンと衝突しない固定パス。
+app.use('/api/tasks', taskEditRouter());
 
 app.get('/api/narrative', (_req, res) => {
   safeJson(res, () => collectNarrative());
