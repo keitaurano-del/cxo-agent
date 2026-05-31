@@ -691,9 +691,9 @@ ID 採番: **AR-0x**。
 
 | ID | タイトル | 優先度 | 区分 | ステータス | 担当 | 依存 |
 |----|---------|--------|------|-----------|------|------|
-| MC-60 | Workflow コレクタ＋API 新規（/api/workflows・/api/workflows/:runId） | P0 | コア | TODO | dev-logic | なし（既存 collectors/lib 流用） |
-| MC-61 | タスク詳細ドリルダウン（フロント＋API、既存 Tasks/Feed 拡張） | P0 | コア | TODO | dev-logic + designer | MC-60 |
-| MC-62 | タスク↔workflow↔会話 紐付け（軽い案＝ID 文字列マッチ＋運用ルール） | P1 | コア | TODO | dev-logic（運用ルールは林） | MC-60 |
+| MC-60 | Workflow コレクタ＋API 新規（/api/workflows・/api/workflows/:runId） | P0 | コア | DONE（2026-05-31 本番反映済 commit 6362562。restart後 本番4317で /api/workflows が20run返却確認） | dev-logic | なし（既存 collectors/lib 流用） |
+| MC-61 | タスク詳細ドリルダウン（フロント＋API、既存 Tasks/Feed 拡張） | P0 | コア | DONE（2026-05-31 本番反映済 commit 6362562。TaskDetail.tsx 561行・web build→restart 済） | dev-logic + designer | MC-60 |
+| MC-62 | タスク↔workflow↔会話 紐付け（堅い案＝明示ログ data/task-links.jsonl） | P1 | コア | DONE（2026-05-31 本番反映済 commit f0bfb52。link-task.sh で MC-60↔wf_880723a6-991 を実紐付け→API hasExplicitLinks:true でrun summary返却をE2E実証） | dev-logic（運用ルールは林） | MC-60 |
 | MC-63 | 通知/アラート（ERROR・BLOCKED 長期滞留・deploy 失敗のバッジ） | P2 | おまけ | TODO | dev-logic | MC-60, MC-61 |
 | MC-64 | deploy 連動（GitHub Actions run 状態をタスク詳細に表示） | P2 | おまけ | TODO | dev-logic | MC-61 |
 | MC-65 | autonomous-rin 可視化（30分毎ティックの選択タスク×結果レーン） | P2 | おまけ | TODO | dev-logic | MC-61 |
