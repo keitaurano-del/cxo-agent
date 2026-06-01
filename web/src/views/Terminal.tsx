@@ -71,52 +71,6 @@ interface TerminalStatusResponse {
 
 // ─── ターミナル出力コピーボタン（MC-92 コピー改善）────────────
 // /api/terminal/output?lines=100 を叩いてコンテンツを取得し、
-// navigator.clipboard.writeText() でクリップボードにコピーする。
-// コピー成功時はラベルを「コピー完了」に 1.5 秒間変更してフィードバック。
-function CopyOutputButton() {
-  const [state, setState] = useState<'idle' | 'copying' | 'done' | 'error'>('idle');
-
-  const handleCopy = async () => {
-    if (state === 'copying') return;
-    setState('copying');
-    try {
-      const res = await fetch('/api/terminal/output?lines=100');
-      const body = (await res.json()) as { ok: boolean; content?: string; error?: string };
-      if (!body.ok || !body.content) {
-        setState('error');
-        setTimeout(() => setState('idle'), 2000);
-        return;
-      }
-      await navigator.clipboard.writeText(body.content);
-      setState('done');
-      setTimeout(() => setState('idle'), 1500);
-    } catch {
-      setState('error');
-      setTimeout(() => setState('idle'), 2000);
-    }
-  };
-
-  const label =
-    state === 'done' ? 'コピー完了' : state === 'error' ? 'エラー' : '出力をコピー';
-
-  const colorClass =
-    state === 'done'
-      ? 'border-active/40 bg-active-bg text-active'
-      : state === 'error'
-        ? 'border-stalled/40 text-text-muted'
-        : 'border-border text-text-muted hover:bg-surface-2 hover:text-text';
-
-  return (
-    <button
-      type="button"
-      onClick={() => void handleCopy()}
-      disabled={state === 'copying'}
-      className={`rounded-md border px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${colorClass}`}
-    >
-      {state === 'copying' ? 'コピー中…' : label}
-    </button>
-  );
-}
 
 export default function Terminal() {
   const [state, setState] = useState<UploadState>({ kind: 'idle' });
@@ -340,19 +294,15 @@ export default function Terminal() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="ターミナル"
-        subtitle="tmux main（林セッション）をブラウザから操作します。読み書き両方に対応しています。"
         right={
-          <div className="flex items-center gap-2">
-            <CopyOutputButton />
-            <a
-              href="/terminal/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-md border border-border px-2.5 py-1 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
-            >
-              新しいタブで開く
-            </a>
-          </div>
+          <a
+            href="/terminal/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md border border-border px-2.5 py-1 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+          >
+            新しいタブで開く
+          </a>
         }
       />
 
@@ -377,9 +327,6 @@ export default function Terminal() {
             <ImageFileIcon width={15} height={15} />
             画像を選択
           </button>
-          <span className="text-[11px] text-text-faint">
-            またはこの画面で Ctrl+V（Mac は ⌘+V）で画像を貼り付け
-          </span>
           <span className="ml-auto text-[11px] text-text-faint">
             {staged.length} / {MAX_IMAGES} 枚
           </span>
@@ -447,7 +394,7 @@ export default function Terminal() {
               ) : (
                 <>
                   <PlusIcon width={14} height={14} />
-                  林に送る（{staged.length} 枚）
+                  送る（{staged.length} 枚）
                 </>
               )}
             </button>
@@ -470,8 +417,8 @@ export default function Terminal() {
             </button>
             <span>
               {state.injected
-                ? `${state.count} 枚を林の入力欄に追加しました（保存先パスを挿入済み）。下のターミナルに続けてメッセージを入力し、Enter で送信してください。`
-                : `${state.count} 枚を保存しましたが、入力欄への自動挿入に失敗しました。次のパスを手動で貼り付けてください: ${state.paths.join('  ')}`}
+                ? `追加しました`
+                : `追加しました（パス: ${state.paths.join('  ')}）`}
             </span>
           </div>
         )}
@@ -494,10 +441,6 @@ export default function Terminal() {
         )}
       </div>
 
-      <p className="px-1 pb-2 text-xs text-text-muted">
-        画像は選択・貼り付けでまとめて追加でき、上のサムネで確認・個別削除できます。「林に送る」を押すと、林の入力欄に画像の保存先パスが挿入されます（林はそのパスを画像として読み取れます）。うまく貼り付けられない場合は、HTTPS
-        で開くか、右上の「新しいタブで開く」をご利用ください。
-      </p>
       <div className="relative flex-1 overflow-hidden bg-bg">
         {backend.kind === 'ready' ? (
           <iframe
