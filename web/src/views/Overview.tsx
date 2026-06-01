@@ -3,14 +3,16 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLiveResource } from '../lib/useLiveData';
 import { useLiveTick } from '../lib/liveContext';
-import type { Overview as OverviewData, OverviewProject } from '../lib/types';
+import type { Overview as OverviewData, OverviewProject, ProjectName, Task } from '../lib/types';
 import { PROJECT_ORDER, projectColor, projectLabel } from '../lib/meta';
 import { relativeTime } from '../lib/time';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, StalledBadge } from '../components/ui';
 import { GlobalSearch } from '../components/GlobalSearch';
 import { AlertBanner } from '../components/AlertBanner';
-import { SearchIcon } from '../components/icons';
+import { ProjectDetail } from '../components/ProjectDetail';
+import { TaskDetail } from '../components/TaskDetail';
+import { ChevronRightIcon, SearchIcon } from '../components/icons';
 
 interface KpiCardProps {
   label: string;
@@ -33,15 +35,18 @@ function KpiCard({ label, value, color, sub }: KpiCardProps) {
   );
 }
 
-function ProjectCard({ p }: { p: OverviewProject }) {
+function ProjectCard({ p, onOpen }: { p: OverviewProject; onOpen: (project: ProjectName) => void }) {
   const accent = projectColor(p.project);
   const empty = p.agentsTotal === 0 && p.tasksTotal === 0;
   return (
-    <div
-      className="rounded-xl border border-border bg-surface p-4"
+    <button
+      type="button"
+      onClick={() => onOpen(p.project)}
+      className="group relative w-full cursor-pointer rounded-xl border border-border bg-surface p-4 pr-8 text-left transition-colors hover:border-accent/60 hover:bg-surface-2 hover:shadow-sm focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:bg-surface-3"
       style={{ borderLeft: `3px solid ${accent}` }}
+      aria-label={`プロジェクト詳細を開く: ${projectLabel(p.project)}`}
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 pr-1">
         <div className="flex items-center gap-2">
           <span
             className="inline-block h-3 w-3 rounded-sm"
@@ -83,7 +88,15 @@ function ProjectCard({ p }: { p: OverviewProject }) {
         </span>
         {empty && <span className="text-[10px] text-text-faint">活動記録なし</span>}
       </div>
-    </div>
+
+      {/* 右端の chevron。タップ可能であることを示す恒常的な手がかり。 */}
+      <span
+        className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-text-faint transition-all group-hover:translate-x-0.5 group-hover:text-accent"
+        aria-hidden
+      >
+        <ChevronRightIcon width={16} height={16} />
+      </span>
+    </button>
   );
 }
 
@@ -98,6 +111,10 @@ export default function Overview() {
   const kpi = data?.kpi;
   // 横断検索モーダル（MC-73）の開閉。
   const [searchOpen, setSearchOpen] = useState(false);
+  // プロジェクトカードのドリルダウン詳細（MC-67）。null は閉じている状態。
+  const [selectedProject, setSelectedProject] = useState<ProjectName | null>(null);
+  // 関連タスクから開くタスク詳細（MC-61）。ProjectDetail の上に重ねて開く。
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   // 表示順を PROJECT_ORDER に揃える。
   const projects = data
     ? [...data.projects].sort(
@@ -169,13 +186,20 @@ export default function Overview() {
             <h2 className="mb-3 text-sm font-semibold text-text-muted">プロジェクト</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {projects.map((p) => (
-                <ProjectCard key={p.project} p={p} />
+                <ProjectCard key={p.project} p={p} onOpen={setSelectedProject} />
               ))}
             </div>
           </section>
         </ResourceState>
       </div>
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+      {/* プロジェクト詳細（MC-67）。関連タスククリックで TaskDetail を上に重ねて開く。 */}
+      <ProjectDetail
+        project={selectedProject}
+        onClose={() => setSelectedProject(null)}
+        onOpenTask={setSelectedTask}
+      />
+      <TaskDetail task={selectedTask} onClose={() => setSelectedTask(null)} />
     </div>
   );
 }

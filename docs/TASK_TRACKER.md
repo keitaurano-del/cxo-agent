@@ -861,15 +861,15 @@ ID 採番: **AR-0x**。
 | ID | MC-67 |
 | タイトル | 司令塔(Overview)カードの詳細表示 |
 | 優先度 | P2 |
-| ステータス | TODO |
+| ステータス | DONE（2026-06-01 林ティック。MC-61 の TaskDetail ドロワー基盤を流用し、Overview のプロジェクトカードをタップ→ProjectDetail ドロワー（内訳＝ステータス別タスク件数＋滞留件数／関連タスク一覧、各行クリックで既存 TaskDetail を重ねて開く）を実装＝DoD「司令塔カードをタップすると詳細（内訳・関連タスク等）が表示される」充足。新規 `web/src/components/ProjectDetail.tsx`＋`web/src/views/Overview.tsx`（ProjectCard を div→button 化・chevron/aria アフォーダンス・selectedProject/selectedTask 結線、KPI帯/GlobalSearch/AlertBanner/エージェント一覧リンクは無改変＝回帰なし）。生成→reviewer(関) 独立検証 pass＋林が実ファイル/実ビルド裏取り: web `npm run build`（tsc -b && vite build）EXIT0（317 modules）、変更2ファイルにハードコード hex 0（grep exit1）、中立丁寧体・UI絵文字なし SVGのみ・button＋aria-label＋状態色の語ラベル併記・390px 全幅ドロワー固定幅なし を確認。dist は gitignore ゆえソースのみローカル commit。フロント変更＝server restart 不要、web/dist 再ビルド済で静的配信に反映。非ブロッカー: ドロワー本文にエージェント稼働数値は出さずカード側に維持（内訳の主眼=件数＋滞留は充足）。本ティックは林の cxo スコープのため push は NO_PUSH ゲートで未実施＝Keita 承認待ち。エージェント稼働サマリ追加は任意改善で別途） |
 | 担当 | dev-logic |
 | 詳細 | 司令塔（Overview）ビューの各カードをタップしたら詳細を表示する。MC-61 はタスクボードのカード詳細ドリルダウン。本件は Overview ビューのカードが対象。MC-61 で作る詳細ドリルダウン基盤を Overview カードにも適用する派生として実装する。 |
 | 関連 | Apollo dashboard (Overview ビュー) |
 | 受け入れ条件 | 司令塔ビューの各カードをタップすると詳細（内訳・関連タスク等）が表示される |
 | 依存 | MC-61(タスク詳細ドリルダウン基盤)。MC-61 完了後に同基盤を流用 |
 | 提言・抜けもれ | MC-61 と対象ビューが異なる（タスクボード vs 司令塔）ため、MC-61 のスコープを膨らませず別票(本MC-67)として MC-61 に依存させる構成が綺麗と判断。詳細表示の中身（カード種別ごとに出す情報）が未定義のため着手前に要件確認推奨。 |
-| 次アクション | MC-61 のドリルダウン基盤実装を待つ → 司令塔カード種別ごとの詳細表示要件を Keita に確認 → 適用 |
-| 更新日 | 2026-05-31 |
+| 次アクション | （完了）MC-61 の TaskDetail 基盤を流用して実装・検証 green。詳細の中身は受け入れ条件どおり「内訳（ステータス別件数＋滞留）＋関連タスク一覧」で確定。 |
+| 更新日 | 2026-06-01 |
 
 ---
 
