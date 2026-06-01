@@ -64,18 +64,95 @@ const proxy = httpProxy.createProxyServer({
 //   ゲートを通らない）。Ctrl+Shift+V（既存ネイティブ paste）・通常打鍵は素通りで非退行。
 //   実機検証（Playwright chromium、clipboard-read 未付与＝実 PC ブラウザ相当）で
 //   synthetic paste → onData が ESC[200~<text>ESC[201~ を送ることを確認済み（MC-94）。
-const PASTE_FIX_SCRIPT = `<script>(function(){
+// ─── PageUp/PageDown でのスクロール対応（MC-108）──────────────────────────────
+// 根因（MC-105 で実証済み + 本件で確定）: claude などの TUI は alternate screen ＋ mouse
+//   reporting（DEC 1000/1002 + SGR 1006）を有効化する。この状態では (a) xterm の scrollback
+//   buffer 自体が無効、(b) ブラウザ/xterm のネイティブな PageUp/PageDown スクロールバックも
+//   効かない。MC-105 でスワイプ／マウスホイールは wheel SGR（button:4＝SGR 64/65）に変換して
+//   TUI に送る経路を作り、TUI 側が履歴をスクロールするのを実証した。だがキーボードの
+//   PageUp/PageDown はその経路に乗っておらず、xterm にそのまま渡って TUI が無反応 or 別用途で
+//   消費し、スクロールしなかった（＝Keita 報告の「PageUp/Down が効かない」）。
+// 修正:
+//   - mouse reporting 有効時（TUI）: PageUp → wheel up を1ページ分（term.rows-1 行、最低1行）
+//     coreMouseService.triggerMouseEvent(button:4, action:0) で送出。PageDown → wheel down
+//     (action:1)。MC-105 のスワイプ／ホイールと同一の SGR 経路で TUI がスクロールする。
+//     Shift 修飾の有無に関わらず同じ扱い（mouse mode 下では native scrollback が無いため、
+//     素の PageUp/Down も Shift+PageUp/Down も wheel 変換でスクロールに割り当てる）。return false
+//     で xterm への生キー送出を抑止する（TUI が PageUp/Down を別用途で消費するのを防ぐ）。
+//   - mouse reporting 無効時（通常 shell）: Shift+PageUp/Down は xterm がネイティブに scrollback へ
+//     当てているので尊重し素通り（return true、二重送出しない）。素の PageUp/Down は xterm が
+//     端末へ ESC[5~ / ESC[6~ を送るだけでスクロールバックを動かさないため、term.scrollPages(-1)/
+//     scrollPages(1) の公開 API で scrollback を1ページ動かし、return false で生キー送出を抑止する。
+//   既存ハンドラ（MC-94 Ctrl+V）と統合し1つの attachCustomKeyEventHandler に同居させる（xterm は
+//   custom key handler を1つしか持てず、後勝ちで上書きされるため、別々に attach すると Ctrl+V が
+//   壊れる）。内部 API（coreMouseService / scrollPages）は try/catch でガードし、構造変化時も
+//   通常打鍵を壊さない（その場合は return true で素通り）。
+//
+// KEY_FIX_BODY はブラウザで eval する素の JS（テストから new Function で eval し window.term を
+// モックして「mouse mode→wheel / 通常 shell→scrollPages / Shift は native 尊重 / Ctrl+V→SYN抑止」を
+// 検証する）。本番注入は PASTE_FIX_SCRIPT（<script> でラップ）を使う。
+export const KEY_FIX_BODY = `(function(){
   function install(){
     var t=window.term;
     if(!t||typeof t.attachCustomKeyEventHandler!=='function'){return false;}
     if(t.__apolloPasteFix){return true;}
     t.__apolloPasteFix=true;
+    // mouse reporting が有効か（claude のメニュー等は有効化する）。内部 API はガード。
+    function mouseActive(){
+      try{
+        var c=t._core&&t._core.coreMouseService;
+        return !!(c&&c.areMouseEventsActive);
+      }catch(_e){return false;}
+    }
+    // wheel イベントを n 回撃つ。button:4 が xterm の wheel エンコード（up=action:0→SGR 64、
+    // down=action:1→SGR 65）＝PC マウスホイール／MC-105 スワイプと同一の出力。
+    function sendWheel(up,n){
+      try{
+        var c=t._core.coreMouseService;
+        var action=up?0:1;
+        for(var i=0;i<n;i++){
+          c.triggerMouseEvent({col:0,row:0,x:1,y:1,button:4,action:action,ctrl:false,alt:false,shift:false});
+        }
+        return true;
+      }catch(_e){return false;}
+    }
+    // 1ページ分の行数（端末行数-1、最低1）。
+    function pageLines(){
+      var r=(typeof t.rows==='number'&&t.rows>1)?t.rows-1:1;
+      return r;
+    }
     t.attachCustomKeyEventHandler(function(e){
+      if(e.type!=='keydown'){return true;}
       // Ctrl+V（Shift/Alt/Meta 無し）: xterm に端末入力（SYN）として送らせない（return false）。
       // preventDefault は呼ばない＝ブラウザのネイティブ paste を生かし、xterm 組み込みの
       // paste ハンドラ（helper textarea の 'paste' DOM イベント）が bracketed paste で送る。
-      if(e.type==='keydown'&&e.ctrlKey&&!e.shiftKey&&!e.altKey&&!e.metaKey&&(e.key==='v'||e.key==='V')){
+      if(e.ctrlKey&&!e.shiftKey&&!e.altKey&&!e.metaKey&&(e.key==='v'||e.key==='V')){
         return false;
+      }
+      // PageUp / PageDown（MC-108）: Alt/Ctrl/Meta 付きは別用途なので触らない。
+      if((e.key==='PageUp'||e.key==='PageDown')&&!e.altKey&&!e.ctrlKey&&!e.metaKey){
+        var up=(e.key==='PageUp');
+        if(mouseActive()){
+          // TUI（alternate screen + mouse reporting）: native scrollback が無いので wheel に変換。
+          // Shift 有無に関わらず同じ（mouse mode では素も Shift もスクロールに割り当てる）。
+          if(sendWheel(up,pageLines())){
+            if(typeof e.preventDefault==='function'){e.preventDefault();}
+            return false; // 生キー（ESC[5~/6~）を TUI に送らない
+          }
+          return true; // 内部 API が取れなければ素通り（非退行）
+        }
+        // 通常 shell: Shift+PageUp/Down は xterm ネイティブの scrollback に任せる（二重送出しない）。
+        if(e.shiftKey){return true;}
+        // 素の PageUp/Down は xterm が ESC[5~/6~ を送るだけで scrollback を動かさないので、
+        // 公開 API でスクロールバックを1ページ動かし、生キー送出を抑止する。
+        try{
+          if(typeof t.scrollPages==='function'){
+            t.scrollPages(up?-1:1);
+            if(typeof e.preventDefault==='function'){e.preventDefault();}
+            return false;
+          }
+        }catch(_e){/* fall through */}
+        return true;
       }
       return true;
     });
@@ -84,7 +161,8 @@ const PASTE_FIX_SCRIPT = `<script>(function(){
   if(!install()){
     var n=0,iv=setInterval(function(){if(install()||++n>100){clearInterval(iv);}},100);
   }
-})();</script>`;
+})();`;
+const PASTE_FIX_SCRIPT = `<script>${KEY_FIX_BODY}</script>`;
 
 // ─── モバイルのタップで TUI メニューを選択できるようにする（MC-104）＋スクロール温存（MC-105）─
 // 根因（MC-104・実機/コード確定）: claude などの TUI は mouse reporting（DEC 1000/1002 + SGR 1006）を
