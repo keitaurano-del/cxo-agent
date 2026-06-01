@@ -1663,3 +1663,26 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ | (1) 修正前に worker の現行 status 書き戻し経路を完全に洗い出し、cxo 形式で到達しうる全パスを列挙する。(2) 「形式自動検出」か「形式フラグ」かを設計レベルで決める（hybrid tracker に両形式が混在しうるなら自動検出が堅い）。(3) logic 形式の既存 E2E テストがない場合は先に書いて非退行を担保する。(4) 修正完了後は autonomous-cxo の kill-switch 解除前に dry-run で検証する。 |
 | 更新日 | 2026-06-01（起票） |
 
+---
+
+## バッチ: 2026-06-01 Apollo ターミナル PageUp/PageDown キースクロール（MC-108）
+
+> Keita 報告（2026-06-01）。ターミナルで PageUp/PageDown キーでスクロールできない。MC-105 でスワイプ・マウスホイールのスクロールは直したが、キーボードの PageUp/PageDown は素通りしている。claude TUI は alternate screen ＋ mouse reporting で本来のスクロールバックが無効なため、MC-105 と同様に「PageUp/PageDown を wheel シーケンス（数行分）に変換して TUI に送る」方式でスクロールさせる。通常シェル（mouse mode 無効）時は xterm ネイティブのページスクロール。台帳は task-manager（棚町）管轄、dev-logic はコードのみ触る取り決め。採番は next-task-id.sh で MC-108 確定（pull --rebase 後）。
+
+### MC-108 — Apollo ターミナルで PageUp/PageDown キーでもスクロールできるようにする
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-108 |
+| タイトル | Apollo ターミナルで PageUp/PageDown キーでもスクロールできるようにする |
+| 種別 | feature / UX |
+| 優先度 | 中〜高（Keita 報告・キーボードスクロール不能） |
+| ステータス | IN_PROGRESS |
+| 担当 | dev-logic（蓮） |
+| 背景 | Keita 報告（2026-06-01）。ターミナルで PageUp/PageDown キーでスクロールできない。MC-105 でスワイプ・マウスホイールのスクロールは直したが、キーボードの PageUp/PageDown は素通りしている。claude TUI は alternate screen ＋ mouse reporting で本来のスクロールバックが無効なため、MC-105 と同様に「PageUp/PageDown を wheel シーケンス（数行分）に変換して TUI に送る」方式でスクロールさせる。通常シェル（mouse mode 無効）時は xterm ネイティブのページスクロール。 |
+| 受け入れ条件（DoD） | (1) claude TUI（mouse mode）で PageUp/PageDown キーでスクロールできる (2) 通常シェルでも PageUp/PageDown でスクロールバックが動く (3) MC-94（Ctrl+V）/MC-104（タップ）/MC-105（スワイプ・ホイール）と共存・非退行 (4) tsc/build green・restart 後 healthz 200・実機検証・本番 main 非破壊 |
+| 関連ファイル | `server/src/terminalProxy.ts`、MC-105（スクロール）、MC-104（タップ）、MC-92/93/94 |
+| 依存 | MC-105（スクロール実装の前例）、MC-104（TAP_FIX と同一注入経路） |
+| 提言・抜けもれ | (1) **mouse mode 判定の共有**: TAP_FIX と同じ `term._core.coreMouseService.areMouseEventsActive` で mouse mode 有無を見て、TUI 時は wheel シーケンス変換・通常シェル時はネイティブ PageUp/PageDown スクロールバックに分岐する。(2) **wheel シーケンスの行数**: 1ページ分（rows 相当）を wheel イベント複数回に分割して送るか、xterm の `scrollLines` API を直呼びするか、MC-105 の実装方式に合わせる。(3) **既存 Key イベントとの衝突**: xterm が PageUp/PageDown を別の用途（コピーモード等）に使っている場合は `stopPropagation`/`preventDefault` の順序に注意。(4) **MC-94/MC-104/MC-105 非退行**: 同一の TAP/SCROLL_FIX_SCRIPT を拡張する場合、既存ハンドラを上書きしないよう追記形式で足す。(5) push / 本番反映（apollo.service restart 含む）は Keita 承認待ち。 |
+| 更新日 | 2026-06-01（起票・IN_PROGRESS） |
+
