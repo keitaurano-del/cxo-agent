@@ -15,6 +15,20 @@ const PROJECT_OPTIONS: { value: ProjectChoice; label: string }[] = [
   { value: 'en-chakai', label: 'en-chakai' },
 ];
 
+// MC-84: 優先度（P0=最優先 〜 P3=最低）。未選択時のデフォルトは P2。
+// 自律ループ（autonomous-rin）は優先度の高い順にタスクを拾うため、選択した値が
+// 処理される順番に影響する。意味を UI でも明示する（label に意味を併記）。
+type PriorityChoice = 'P0' | 'P1' | 'P2' | 'P3';
+
+const PRIORITY_OPTIONS: { value: PriorityChoice; label: string }[] = [
+  { value: 'P0', label: 'P0（最優先・今すぐ着手）' },
+  { value: 'P1', label: 'P1（高・早めに着手）' },
+  { value: 'P2', label: 'P2（標準・既定）' },
+  { value: 'P3', label: 'P3（低・余力があれば）' },
+];
+
+const DEFAULT_PRIORITY: PriorityChoice = 'P2';
+
 // MC-86: 指令を委譲できない（指令の担当にならない）エージェント。
 // 林（main assistant）と apollo（インフラ番人）は roster には出るが委譲先ではないため、
 // 担当セレクタの選択肢からは除外する。サーバ側 INBOX_AGENTS ホワイトリストと整合させる。
@@ -33,6 +47,8 @@ export default function AddTaskFab() {
   const [open, setOpen] = useState(false);
   const [project, setProject] = useState<ProjectChoice>('');
   const [agent, setAgent] = useState('');
+  // MC-84: 優先度（既定 P2）。
+  const [priority, setPriority] = useState<PriorityChoice>(DEFAULT_PRIORITY);
   const [text, setText] = useState('');
   const [images, setImages] = useState<PickedImage[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -85,6 +101,7 @@ export default function AddTaskFab() {
     images.forEach((img) => URL.revokeObjectURL(img.url));
     setProject('');
     setAgent('');
+    setPriority(DEFAULT_PRIORITY);
     setText('');
     setImages([]);
     setError(null);
@@ -187,6 +204,8 @@ export default function AddTaskFab() {
       // MC-77: kind は廃止。サーバは送られても task に正規化するが、ここでは送らない。
       fd.append('text', text.trim());
       fd.append('project', project);
+      // MC-84: 優先度（P0〜P3）。サーバ側の body キー名と一致させる（'priority'）。
+      fd.append('priority', priority);
       // MC-86: 担当エージェント（任意）。未指定なら送らない＝自動割当。
       if (agent) fd.append('agent', agent);
       images.forEach((img) => fd.append('images', img.file, img.file.name));
@@ -306,6 +325,30 @@ export default function AddTaskFab() {
               </select>
               <p className="mt-1.5 text-[11px] text-text-faint">
                 指定すると、その担当としてタスク化され、自律処理時に該当エージェントへ委譲されます。
+              </p>
+            </div>
+
+            {/* MC-84: 優先度（P0〜P3・既定 P2） */}
+            <div className="mb-3">
+              <label className="mb-1 block text-xs text-text-muted" htmlFor="inbox-priority">
+                優先度
+              </label>
+              <select
+                id="inbox-priority"
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as PriorityChoice)}
+                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text focus:border-accent focus:outline-none"
+              >
+                {PRIORITY_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-[11px] text-text-faint">
+                優先度は P0（最優先）から P3（最低）の 4 段階です。自律処理は優先度の高い順に
+                タスクを拾うため、急ぎのものほど小さい番号を選んでください。未選択の場合は P2
+                （標準）になります。
               </p>
             </div>
 

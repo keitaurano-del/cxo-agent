@@ -1181,7 +1181,7 @@ ID 採番: **AR-0x**。
 | ID | MC-84 |
 | タイトル | Apollo 投入時に優先度を選べる UI＋優先度の意味（P0最優先〜）を分かりやすく（MC-72 集約） |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | DONE（2026-06-01 林ティック完了。実装→検証 workflow で green。(a) web/src/components/AddTaskFab.tsx に優先度セレクタ（P0〜P3・既定P2）＋意味の凡例（P0=最優先〜P3=最低／自律処理は高い順に拾う／未選択はP2）を project/agent と同スタイルで追加、送信時 FormData に 'priority' を append。(b) server/src/inbox.ts に parsePriority（未指定→P2・小文字正規化・不正値400・許可P0-P3）を追加、InboxEntry に priority を格納、appendTask のハードコード 'P2' を parse 結果に置換＝inbox.jsonl と TASK_TRACKER 登録の両方に優先度反映。(c) server/src/inbox.priority.test.ts 新規（node:assert+tsx, 16ケース）。林が独立に裏取り: server tsc --noEmit EXIT0 / inbox.priority 16/16 / approvals.decision 9/9 / tasks.normStatus 31/31 / web build EXIT0（dist 再ビルド済）。reviewer(関) 独立検証 pass＝DoD充足・UI chrome制約（中立丁寧体/CSS変数/SVGのみ/絵文字なし/390px w-full）違反なし・ハードコードP2残存なし(grep)・後方互換OK。ローカル commit のみ。**本番反映には server コード変更ゆえ mission-control.service の restart が必要＝Keita 承認待ち（restart まで実挙動は未変化）。** MC-72 集約済。MC-71(手動編集)/MC-78(優先度順ピック) と priority 機構は整合（appendTask/編集層は既存を再利用）） |
 | 担当 | dev-logic + designer |
 | 詳細 | Keita「タスクの優先度の選択がよくわからない。どういうロジック？」。現状 AddTaskFab には project/text のみで優先度セレクタが無く、投入タスクはデフォルト P2、ボードで後から手動編集（MC-71）、autonomous-rin は優先度高い順に拾う（MC-78）。Keita は投入時に優先度を選びたい＋現状ロジックが不透明。→ MC-72(投入時優先度指定) と同義のため MC-72 を本件に集約。AddTaskFab に優先度セレクタ（P0〜P3、デフォルト P2）を追加、投入→TASK_TRACKER に優先度反映。優先度の意味（P0=最優先〜P3）を UI 上で分かりやすく説明。 |
 | 関連 | Apollo dashboard（FAB/ボトムシート投入 UI, タスクボード）, `cxo-agent/data/inbox.jsonl`, `POST /api/inbox`, autonomous-rin の inbox 消費ロジック（[[project-autonomous-rin]]）, 各 docs/TASK_TRACKER.md, MC-72(集約元)・MC-71(手動編集)・MC-78(優先度順ピック) |

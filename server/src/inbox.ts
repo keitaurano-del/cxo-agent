@@ -61,6 +61,11 @@ type InboxProject = (typeof ALLOWED_PROJECTS)[number];
 // MC-77: kind は内部的に 'task' 固定。旧 'instruction' は受理しても task に正規化する。
 type InboxKind = 'task';
 
+// MC-84: 優先度。P0=最優先 〜 P3=最低。未指定は P2 をデフォルトにする。
+const ALLOWED_PRIORITIES = ['P0', 'P1', 'P2', 'P3'] as const;
+type InboxPriority = (typeof ALLOWED_PRIORITIES)[number];
+const DEFAULT_PRIORITY: InboxPriority = 'P2';
+
 export interface InboxEntry {
   id: string;
   ts: string;
@@ -73,6 +78,12 @@ export interface InboxEntry {
   taskId?: string;
   /** MC-77: taskId を書いた台帳（例 cxo/TASK_TRACKER）。 */
   trackerSource?: string;
+  /**
+   * MC-84: 投入時に選択された優先度（P0=最優先 〜 P3=最低）。
+   * 未指定はデフォルト 'P2'。即タスク化時の TASK_TRACKER 登録にも引き継ぐ。
+   * 後方互換: 旧エントリにこのフィールドが無くても読み取り側は壊れない。
+   */
+  priority: InboxPriority;
   /**
    * MC-86: 指令の担当として明示指定された subagent（例 'dev-logic'）。
    * 指定時のみ付与し、即タスク化した場合はその担当（owner）にも反映する。
@@ -143,6 +154,20 @@ function parseAgent(v: unknown): string | null | { error: string } {
     };
   }
   return a;
+}
+
+// MC-84: 優先度（任意）。P0=最優先 〜 P3=最低。未指定（undefined/null/''/'null'）は
+// デフォルト 'P2'。許可は P0|P1|P2|P3 のみで、'p2' 等の小文字は大文字に正規化する。
+// 未知値（'P9' / 'high' / 数値等）は { error } を返し、handlePost 側で 400 にする。
+export function parsePriority(v: unknown): InboxPriority | { error: string } {
+  if (v === undefined || v === null || v === '') return DEFAULT_PRIORITY;
+  if (typeof v !== 'string') return { error: 'priority must be a string' };
+  const p = v.trim().toUpperCase();
+  if (p === '' || p === 'NULL') return DEFAULT_PRIORITY;
+  if (!(ALLOWED_PRIORITIES as readonly string[]).includes(p)) {
+    return { error: `priority must be one of: ${ALLOWED_PRIORITIES.join(', ')} (or omitted)` };
+  }
+  return p as InboxPriority;
 }
 
 // ─── multer（メモリ保存）──────────────────────────────────
@@ -274,6 +299,14 @@ async function handlePost(req: Request, res: Response): Promise<void> {
   }
   const agentVal = agent as string | null;
 
+  // MC-84: 優先度（任意・未指定はデフォルト P2）。
+  const priority = parsePriority(body.priority);
+  if (typeof priority === 'object') {
+    res.status(400).json({ error: priority.error });
+    return;
+  }
+  const priorityVal = priority as InboxPriority;
+
   const files = (req.files as Express.Multer.File[] | undefined) ?? [];
 
   const now = new Date();
@@ -324,7 +357,8 @@ async function handlePost(req: Request, res: Response): Promise<void> {
         status: 'TODO',
         // MC-86: 担当エージェント指定があれば台帳の担当（owner）に反映。未指定は従来どおり未定。
         owner: agentVal ?? '未定',
-        priority: 'P2',
+        // MC-84: 投入時に選択された優先度を台帳登録に引き継ぐ（旧ハードコード 'P2' を置換）。
+        priority: priorityVal,
         detail: text.trim(),
         source: 'Apollo投入',
       },
@@ -346,6 +380,7 @@ async function handlePost(req: Request, res: Response): Promise<void> {
     text,
     status: 'pending',
     attachments,
+    priority: priorityVal,
     ...(agentVal ? { agent: agentVal } : {}),
     ...(taskId ? { taskId, trackerSource } : {}),
   };
