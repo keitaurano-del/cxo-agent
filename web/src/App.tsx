@@ -168,6 +168,7 @@ function Sidebar({
 }
 
 export default function App() {
+  const { pathname } = useLocation();
   const { ticks, connected } = useLiveStream();
   const { data: approvals } = useLiveResource<ApprovalsResponse>('/api/approvals', ticks.tasks);
   const approvalCount = approvals?.total ?? 0;
@@ -208,7 +209,7 @@ export default function App() {
           </Routes>
         </main>
         <BottomNav items={NAV} badges={badges} />
-        <AddTaskFab />
+        {pathname === '/tasks' && <AddTaskFab />}
       </div>
     </LiveContext.Provider>
   );
