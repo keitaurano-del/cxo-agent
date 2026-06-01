@@ -841,7 +841,7 @@ ID 採番: **AR-0x**。
 | ID | MC-66 |
 | タイトル | inbox エントリのタスクボード即時反映 |
 | 優先度 | P2 |
-| ステータス | TODO |
+| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
 | 担当 | dev-logic |
 | 詳細 | Apollo から追加したタスク/指示が即時にタスクボードへ反映されるようにする。現状 inbox.jsonl は autonomous-rin か林が手動消化するまでボードに出ない。inbox エントリを即 TASK_TRACKER 化する、または タスクボードに pending レーンとして未消化 inbox を表示する。 |
 | 関連 | Apollo dashboard, inbox.jsonl, TASK_TRACKER.md |
@@ -879,7 +879,7 @@ ID 採番: **AR-0x**。
 | ID | MC-68 |
 | タイトル | Keita 承認・確認待ち項目を Apollo で一覧表示（承認ビュー/メニュー追加） |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-79「承認フロー」〔DONE commit 66283a0、GET /api/approvals＋承認1タップ→TODO/却下→CANCELLED・件数バッジ、/api/approvals 12件返却確認〕で「Keita 承認/確認待ち項目の Apollo 一覧表示」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-79 を参照） |
 | 担当 | dev-logic + designer(UX) |
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 関連 | Apollo dashboard（新メニュー/ビュー、既存 /api/tasks）, 各プロジェクト docs/TASK_TRACKER.md |
@@ -897,7 +897,7 @@ ID 採番: **AR-0x**。
 | ID | MC-69 |
 | タイトル | タスクボードで優先度を手動変更できる |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-71〔DONE push d3dc792、TaskDetail の優先度フィールド編集＋md 安全書き戻し層〕に「MC-69（優先度の手動変更）は本タスクの『優先度』フィールド編集に包含」と明記のとおり包含・実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-71 を参照） |
 | 担当 | dev-logic + designer(UX) |
 | 詳細 | 優先順位は林/task-manager が決めてよいが、Keita が Apollo タスクボード上で優先度（P0/P1/P2/P3 等）を手動変更できる UI（ドロップダウン/ドラッグ等）を追加する。変更は正本である TASK_TRACKER.md に書き戻す必要がある（次回読み込みで保持）。 |
 | 関連 | Apollo dashboard（タスクボード UI / server PATCH API）, 各プロジェクト docs/TASK_TRACKER.md |
@@ -1258,7 +1258,7 @@ ID 採番: **AR-0x**。
 | ID | MC-88 |
 | タイトル | autonomous-rin が BLOCKED タスクを TODO に書き戻す疑い（選定ロジックの BLOCKED 誤認） |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | IN_PROGRESS（2026-06-01 夜目 根因確定調査中。下記「根因確定」欄参照） |
 | 担当 | dev-logic（autonomous-rin.sh / プロンプトの選定ロジック点検） |
 | 背景 | 2026-05-31 の台帳整合作業中、AM-O（BLOCKED／SKU 登録待ち）が autonomous-rin と思われる外部プロセスにより複数回 TODO に書き戻される現象を観測。HEAD `8925c39` で BLOCKED 復元済みの後、未コミット編集で再び TODO 化された。autonomous-rin は本来「設計判断」「Keita 承認待ち」「BLOCKED」タグのタスクのステータスを触らない設計（project-autonomous-rin の選定基準）なのに、BLOCKED タスクのステータスを TODO に変えている。 |
 | 影響 | 台帳が静かに汚れ、Keita ゲート（承認待ち・設計判断・BLOCKED）のタスクが誤って着手対象に見える事故につながる。ボードの信頼性に直結。 |
