@@ -21,7 +21,6 @@
 //   objectURL は unmount／削除／送信成功時に revoke してメモリリークを防ぐ。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PageHeader } from '../components/PageHeader';
 import { ImageFileIcon, CloseIcon, TerminalIcon, PlusIcon } from '../components/icons';
 import { Spinner } from '../components/ui';
 
@@ -292,19 +291,16 @@ export default function Terminal() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader
-        title="ターミナル"
-        right={
-          <a
-            href="/terminal/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-md border border-border px-2.5 py-1 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
-          >
-            新しいタブで開く
-          </a>
-        }
-      />
+      <div className="flex justify-end px-4 py-2">
+        <a
+          href="/terminal/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-md border border-border px-2.5 py-1 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+        >
+          新しいタブで開く
+        </a>
+      </div>
 
       {/* 画像添付ツールバー（MC-95）。ファイル選択とクリップボード貼付で林に画像を渡す。 */}
       <div className="mb-2 rounded-lg border border-border bg-surface px-3 py-2.5">
