@@ -86,6 +86,98 @@ const PASTE_FIX_SCRIPT = `<script>(function(){
   }
 })();</script>`;
 
+// ─── モバイルのタップで TUI メニューを選択できるようにする（MC-105）────────────
+// 根因（実機/コード確定）: claude などの TUI は mouse reporting（DEC 1000/1002 + SGR 1006）を
+//   有効化し、ユーザーがメニュー項目をクリックすると端末がその座標を SGR mouse シーケンス
+//   （ESC[<0;col;rowM 押下 → ESC[<0;col;rowm 解放）で PTY へ送り、TUI が該当項目を選択する。
+//   xterm.js（ttyd 1.7.4 同梱 = xterm 4.x）は mouse mode 有効時、PC のマウスイベントは
+//   coreMouseService.triggerMouseEvent() 経由で正しく SGR 化して送るが、モバイルの touch
+//   イベントには mouse report を一切張っていない（xterm の bindMouse は mousedown/mouseup/
+//   wheel のみ登録。touchstart/touchend は未処理）。ブラウザは tap を合成 click にするが、
+//   合成 mousedown/up も発火タイミング・座標が不安定で、mouse mode 下のメニュー選択に
+//   繋がらない＝「PC クリックは効くがモバイルのタップは無反応」になる。
+// 修正（公開 API 中心・内部依存は最小＋ガード付き）: xterm の screen 要素に touchstart/
+//   touchend を張り、mouse reporting が有効なときだけ、タップ座標を term.cols/term.rows と
+//   要素の getBoundingClientRect() から col/row（0-indexed）へ換算し、xterm 公開内部の
+//   coreMouseService.triggerMouseEvent({col,row,x,y,button:0,action:1}) で press、続けて
+//   action:0 で release を撃つ。これで xterm が active protocol（SGR 等）に応じた正しい
+//   mouse シーケンスを PTY へ送る＝PC クリックと同じ出力になり TUI が項目を選択する。
+//   mouse reporting 無効時（通常 shell）は何もしない＝既存のフォーカス/スクロール/選択を温存。
+//   スクロール（スワイプ）と単発タップは移動量しきい値（10px）と時間（700ms）で区別し、
+//   スワイプは mouse press を撃たない。内部 API（term._core.coreMouseService）は try/catch で
+//   ガードし、構造が変わっても通常タップを壊さない（false を返して無処理に倒す）。
+const TAP_FIX_SCRIPT = `<script>(function(){
+  function install(){
+    var t=window.term;
+    if(!t||typeof t.cols!=='number'){return false;}
+    if(t.__apolloTapFix){return true;}
+    var el=null;
+    try{el=t.element&&t.element.querySelector?t.element.querySelector('.xterm-screen'):null;}catch(_e){}
+    if(!el){el=t.element;}
+    if(!el){return false;}
+    t.__apolloTapFix=true;
+    // mouse reporting が有効か（claude のメニュー等は有効化する）。内部 API はガード。
+    function mouseActive(){
+      try{
+        var c=t._core&&t._core.coreMouseService;
+        return !!(c&&c.areMouseEventsActive);
+      }catch(_e){return false;}
+    }
+    // タップ座標を 0-indexed の col/row に換算（公開 getter + rect のみ使用）。
+    function toCell(clientX,clientY){
+      var r=el.getBoundingClientRect();
+      var cols=t.cols,rows=t.rows;
+      if(!cols||!rows||r.width<=0||r.height<=0){return null;}
+      var cw=r.width/cols, ch=r.height/rows;
+      var col=Math.floor((clientX-r.left)/cw);
+      var row=Math.floor((clientY-r.top)/ch);
+      if(col<0){col=0;} if(col>=cols){col=cols-1;}
+      if(row<0){row=0;} if(row>=rows){row=rows-1;}
+      return {col:col,row:row};
+    }
+    // press(action:1) → release(action:0) を左ボタン(button:0)で撃つ。triggerMouseEvent は
+    // 内部で col/row を ++ するので 0-indexed を渡す。x/y は SGR_PIXELS 用だが SGR では未使用。
+    function sendTap(cell){
+      try{
+        var c=t._core.coreMouseService;
+        c.triggerMouseEvent({col:cell.col,row:cell.row,x:cell.col+1,y:cell.row+1,button:0,action:1,ctrl:false,alt:false,shift:false});
+        c.triggerMouseEvent({col:cell.col,row:cell.row,x:cell.col+1,y:cell.row+1,button:0,action:0,ctrl:false,alt:false,shift:false});
+        return true;
+      }catch(_e){return false;}
+    }
+    var sx=0,sy=0,st=0,moved=false,tracking=false;
+    el.addEventListener('touchstart',function(e){
+      if(!mouseActive()){tracking=false;return;} // 通常 shell では一切介入しない
+      if(e.touches.length!==1){tracking=false;return;} // マルチタッチ（ズーム等）は無視
+      tracking=true;moved=false;
+      var tt=e.touches[0];sx=tt.clientX;sy=tt.clientY;st=Date.now();
+    },{passive:true});
+    el.addEventListener('touchmove',function(e){
+      if(!tracking){return;}
+      var tt=e.touches[0];
+      if(Math.abs(tt.clientX-sx)>10||Math.abs(tt.clientY-sy)>10){moved=true;}
+    },{passive:true});
+    el.addEventListener('touchend',function(e){
+      if(!tracking){return;}
+      tracking=false;
+      if(moved||(Date.now()-st)>700){return;} // スワイプ/長押しはタップ扱いしない
+      if(!mouseActive()){return;}
+      var tt=(e.changedTouches&&e.changedTouches[0])||null;
+      if(!tt){return;}
+      var cell=toCell(tt.clientX,tt.clientY);
+      if(!cell){return;}
+      if(sendTap(cell)){
+        // ブラウザの合成 mousedown/click による二重送出を防ぐ（mouse mode 時のみ）。
+        e.preventDefault();
+      }
+    },{passive:false});
+    return true;
+  }
+  if(!install()){
+    var n=0,iv=setInterval(function(){if(install()||++n>100){clearInterval(iv);}},100);
+  }
+})();</script>`;
+
 // proxy 失敗時に Apollo 全体を落とさない。ttyd 停止中（林セッション無し等）でも 502 を返すだけ。
 proxy.on('error', (err, _req, resOrSocket) => {
   console.error('[terminal proxy error]', err?.message ?? err);
@@ -141,7 +233,7 @@ proxy.on('proxyRes', (proxyRes, _req, res) => {
   proxyRes.on('end', () => {
     let body = Buffer.concat(chunks).toString('utf8');
     if (body.includes('</body>') && !body.includes('__apolloPasteFix')) {
-      body = body.replace('</body>', `${PASTE_FIX_SCRIPT}</body>`);
+      body = body.replace('</body>', `${PASTE_FIX_SCRIPT}${TAP_FIX_SCRIPT}</body>`);
     }
     const buf = Buffer.from(body, 'utf8');
     headers['content-length'] = String(buf.byteLength);
