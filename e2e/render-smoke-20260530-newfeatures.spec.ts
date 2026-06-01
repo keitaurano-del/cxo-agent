@@ -79,8 +79,10 @@ test.describe('390px モバイル', () => {
     expect(await projectRows.count(), 'project breakdown rows').toBeGreaterThan(0);
 
     // 期間トグル（aria-pressed 切替）。
-    const lastHourTab = page.getByRole('button', { name: '直近1h' });
-    const allTab = page.getByRole('button', { name: '全期間' });
+    // 注: BigStat（当日/全期間）が「…の消費量内訳を開く」ボタンになり名前部分一致で衝突するため、
+    //     トグルは exact 一致で取得する（MC-67 全タイル展開）。
+    const lastHourTab = page.getByRole('button', { name: '直近1h', exact: true });
+    const allTab = page.getByRole('button', { name: '全期間', exact: true });
     await expect(lastHourTab).toBeVisible();
     await lastHourTab.click();
     await expect(lastHourTab).toHaveAttribute('aria-pressed', 'true');

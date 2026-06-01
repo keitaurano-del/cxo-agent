@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, Badge } from '../components/ui';
+import { TileDetail, type TileSection } from '../components/TileDetail';
 import { relativeTime } from '../lib/time';
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // サーバ側キャッシュと同じ 5 分
@@ -63,9 +64,22 @@ function full(n: number): string {
   return Number.isFinite(n) ? Math.round(n).toLocaleString('en-US') : '0';
 }
 
-function BigStat({ label, value }: { label: string; value: number }) {
+function BigStat({
+  label,
+  value,
+  onOpen,
+}: {
+  label: string;
+  value: number;
+  onOpen: () => void;
+}) {
   return (
-    <div className="rounded-xl border border-border bg-surface px-5 py-4">
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group cursor-pointer rounded-xl border border-border bg-surface px-5 py-4 text-left transition-colors hover:border-accent/60 hover:bg-surface-2 hover:shadow-sm focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+      aria-label={`${label}の消費量内訳を開く`}
+    >
       <div className="text-xs text-text-muted">{label}</div>
       <div
         className="mt-1 text-3xl font-bold tabular-nums text-text"
@@ -74,22 +88,29 @@ function BigStat({ label, value }: { label: string; value: number }) {
         {compact(value)}
       </div>
       <div className="mt-0.5 text-[11px] text-text-faint">tokens</div>
-    </div>
+    </button>
   );
 }
 
-/** 内訳カード 1 件。total と output を強調表示する。 */
+/** 内訳カード 1 件。total と output を強調表示する。クリックで詳細内訳を開く。 */
 function BreakdownRow({
   name,
   accent,
   b,
+  onOpen,
 }: {
   name: string;
   accent?: string;
   b: Breakdown;
+  onOpen: () => void;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-surface p-3">
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group w-full cursor-pointer rounded-lg border border-border bg-surface p-3 text-left transition-colors hover:border-accent/60 hover:bg-surface-2 focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+      aria-label={`${name}の消費量内訳を開く`}
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           {accent && (
@@ -127,8 +148,44 @@ function BreakdownRow({
         </Badge>
         <Badge title={`${full(b.messages)} 件`}>{compact(b.messages)} msg</Badge>
       </div>
-    </div>
+    </button>
   );
+}
+
+// 消費量タイルの内訳ドロワーで使う Breakdown の stat 行を組み立てる。
+function breakdownStats(b: Breakdown) {
+  return [
+    { key: 'total', label: '合計', value: compact(b.total), sub: `${full(b.total)} tokens` },
+    {
+      key: 'output',
+      label: '出力',
+      value: compact(b.output),
+      color: 'var(--mc-accent)',
+      sub: `${full(b.output)} tokens`,
+    },
+    { key: 'input', label: '入力', value: compact(b.input), sub: `${full(b.input)} tokens` },
+    {
+      key: 'cacheCreation',
+      label: 'キャッシュ書込',
+      value: compact(b.cacheCreation),
+      sub: `${full(b.cacheCreation)} tokens`,
+    },
+    {
+      key: 'cacheRead',
+      label: 'キャッシュ読込',
+      value: compact(b.cacheRead),
+      sub: `${full(b.cacheRead)} tokens`,
+    },
+    { key: 'messages', label: 'メッセージ', value: compact(b.messages), sub: `${full(b.messages)} 件` },
+  ];
+}
+
+// 選択中の消費量タイル（ドロワー表示対象）。
+interface UsageDetailTarget {
+  kindLabel: string;
+  title: string;
+  accent?: string;
+  breakdown: Breakdown;
 }
 
 // プロジェクト色トークン（meta.ts の PROJECT_COLORS と整合。未知は other）。
@@ -148,6 +205,8 @@ export default function Usage() {
   const [loading, setLoading] = useState(true);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const [windowKey, setWindowKey] = useState<WindowKey>('today');
+  // 消費量タイルのドリルダウン詳細（MC-67 全タイル展開）。null は閉じている状態。
+  const [detail, setDetail] = useState<UsageDetailTarget | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
@@ -199,8 +258,28 @@ export default function Usage() {
             <div className="flex flex-col gap-5">
               {/* 大見出し: 当日 と 全期間 */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <BigStat label="当日" value={data.windows.today.total} />
-                <BigStat label="全期間" value={data.totals.total} />
+                <BigStat
+                  label="当日"
+                  value={data.windows.today.total}
+                  onOpen={() =>
+                    setDetail({
+                      kindLabel: '消費量',
+                      title: '当日',
+                      breakdown: data.windows.today,
+                    })
+                  }
+                />
+                <BigStat
+                  label="全期間"
+                  value={data.totals.total}
+                  onOpen={() =>
+                    setDetail({
+                      kindLabel: '消費量',
+                      title: '全期間',
+                      breakdown: data.totals,
+                    })
+                  }
+                />
               </div>
 
               {/* 期間トグル */}
@@ -276,14 +355,26 @@ export default function Usage() {
                         データがありません
                       </p>
                     )}
-                    {data.byProject.map((p) => (
-                      <BreakdownRow
-                        key={p.project}
-                        name={p.projectLabel || p.project}
-                        accent={PROJECT_ACCENTS[p.project] ?? 'var(--mc-proj-other)'}
-                        b={p}
-                      />
-                    ))}
+                    {data.byProject.map((p) => {
+                      const accent = PROJECT_ACCENTS[p.project] ?? 'var(--mc-proj-other)';
+                      const name = p.projectLabel || p.project;
+                      return (
+                        <BreakdownRow
+                          key={p.project}
+                          name={name}
+                          accent={accent}
+                          b={p}
+                          onOpen={() =>
+                            setDetail({
+                              kindLabel: 'プロジェクト別消費量',
+                              title: name,
+                              accent,
+                              breakdown: p,
+                            })
+                          }
+                        />
+                      );
+                    })}
                   </div>
                 </section>
                 <section>
@@ -295,7 +386,18 @@ export default function Usage() {
                       </p>
                     )}
                     {data.byModel.map((m) => (
-                      <BreakdownRow key={m.model} name={m.model} b={m} />
+                      <BreakdownRow
+                        key={m.model}
+                        name={m.model}
+                        b={m}
+                        onOpen={() =>
+                          setDetail({
+                            kindLabel: 'モデル別消費量',
+                            title: m.model,
+                            breakdown: m,
+                          })
+                        }
+                      />
                     ))}
                   </div>
                 </section>
@@ -310,6 +412,25 @@ export default function Usage() {
           )}
         </ResourceState>
       </div>
+      {/* 消費量タイルのドリルダウン詳細（MC-67 全タイル展開）。 */}
+      <TileDetail
+        open={!!detail}
+        onClose={() => setDetail(null)}
+        kindLabel={detail?.kindLabel ?? '消費量'}
+        title={detail?.title ?? ''}
+        accent={detail?.accent}
+        sections={
+          detail
+            ? ([
+                {
+                  heading: 'トークン内訳',
+                  stats: breakdownStats(detail.breakdown),
+                  note: '出力トークンはコスト感の主因です。',
+                } as TileSection,
+              ] satisfies TileSection[])
+            : []
+        }
+      />
     </div>
   );
 }

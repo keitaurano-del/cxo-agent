@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, Badge, EmptyState } from '../components/ui';
+import { TileDetail, type TileSection } from '../components/TileDetail';
 import { LoopIcon } from '../components/icons';
 import { relativeTime, absoluteTime } from '../lib/time';
 import { projectColor } from '../lib/meta';
@@ -106,12 +107,17 @@ function ResultBadge({ kind }: { kind: TickResultKind }) {
   );
 }
 
-/** 1 ティックのカード。 */
-function TickCard({ tick }: { tick: Tick }) {
+/** 1 ティックのカード。クリックで詳細（全項目）をドロワー表示する。 */
+function TickCard({ tick, onOpen }: { tick: Tick; onOpen: () => void }) {
   const duration = formatDuration(tick.durationMs);
   const task = tick.selectedTask;
   return (
-    <article className="rounded-lg border border-border bg-surface p-3">
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group block w-full cursor-pointer rounded-lg border border-border bg-surface p-3 text-left transition-colors hover:border-accent/60 hover:bg-surface-2 focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+      aria-label={`ティックの詳細を開く: ${task?.id || task?.title || tick.startedAt}`}
+    >
       <div className="flex items-center justify-between gap-2">
         <StatusDot status={tick.status} />
         <time
@@ -160,12 +166,20 @@ function TickCard({ tick }: { tick: Tick }) {
           {tick.skipReason}
         </p>
       )}
-    </article>
+    </button>
   );
 }
 
 /** スコープ 1 レーン（見出し + ティックカードの縦並び）。 */
-function ScopeLane({ scope, ticks }: { scope: string; ticks: Tick[] }) {
+function ScopeLane({
+  scope,
+  ticks,
+  onOpenTick,
+}: {
+  scope: string;
+  ticks: Tick[];
+  onOpenTick: (t: Tick) => void;
+}) {
   const accent = projectColor(scopeToProject(scope));
   return (
     <section className="flex min-w-0 flex-col gap-2 md:w-80 md:shrink-0">
@@ -182,7 +196,13 @@ function ScopeLane({ scope, ticks }: { scope: string; ticks: Tick[] }) {
         {ticks.length === 0 ? (
           <EmptyState>このスコープのティックはありません</EmptyState>
         ) : (
-          ticks.map((t) => <TickCard key={`${t.source}-${t.startedAt}`} tick={t} />)
+          ticks.map((t) => (
+            <TickCard
+              key={`${t.source}-${t.startedAt}`}
+              tick={t}
+              onOpen={() => onOpenTick(t)}
+            />
+          ))
         )}
       </div>
     </section>
@@ -194,6 +214,8 @@ export default function Ticks() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+  // ティックのドリルダウン詳細（MC-67 全タイル展開）。null は閉じている状態。
+  const [selectedTick, setSelectedTick] = useState<Tick | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
@@ -261,12 +283,94 @@ export default function Ticks() {
             ) : (
               <div className="flex flex-col gap-5 md:flex-row md:items-start md:gap-4 md:overflow-x-auto">
                 {laneScopes.map((scope) => (
-                  <ScopeLane key={scope} scope={scope} ticks={byScope.get(scope) ?? []} />
+                  <ScopeLane
+                    key={scope}
+                    scope={scope}
+                    ticks={byScope.get(scope) ?? []}
+                    onOpenTick={setSelectedTick}
+                  />
                 ))}
               </div>
             ))}
         </ResourceState>
       </div>
+      {/* ティックのドリルダウン詳細（MC-67 全タイル展開）。 */}
+      <TileDetail
+        open={!!selectedTick}
+        onClose={() => setSelectedTick(null)}
+        kindLabel="ティック"
+        title={
+          selectedTick
+            ? selectedTick.selectedTask?.id ||
+              selectedTick.selectedTask?.title ||
+              `${selectedTick.scope} のティック`
+            : ''
+        }
+        accent={selectedTick ? STATUS_META[selectedTick.status].color : undefined}
+        sections={selectedTick ? buildTickSections(selectedTick) : []}
+      />
     </div>
   );
+}
+
+/** ティック詳細の TileDetail セクションを組み立てる。 */
+function buildTickSections(tick: Tick): TileSection[] {
+  const duration = formatDuration(tick.durationMs);
+  const status = STATUS_META[tick.status];
+  const result = tick.result ? RESULT_META[tick.result.kind] : null;
+
+  const stats: TileSection['stats'] = [
+    { key: 'scope', label: 'スコープ', value: tick.scope },
+    { key: 'status', label: '状態', value: status.label, color: status.color },
+  ];
+  if (result) {
+    stats.push({ key: 'result', label: '結果', value: result.label, color: result.color });
+  }
+  if (duration) {
+    stats.push({ key: 'duration', label: '所要', value: duration });
+  }
+  stats.push({
+    key: 'startedAt',
+    label: '開始',
+    value: relativeTime(tick.startedAt),
+    sub: absoluteTime(tick.startedAt),
+  });
+  if (tick.endedAt) {
+    stats.push({
+      key: 'endedAt',
+      label: '終了',
+      value: relativeTime(tick.endedAt),
+      sub: absoluteTime(tick.endedAt),
+    });
+  }
+
+  const sections: TileSection[] = [{ heading: '概要', stats }];
+
+  // 選んだタスク。
+  const task = tick.selectedTask;
+  sections.push({
+    heading: '選んだタスク',
+    related:
+      task && (task.id || task.title)
+        ? [
+            {
+              key: 'selected-task',
+              tag: task.id ?? undefined,
+              title: task.title ?? '（タイトルなし）',
+            },
+          ]
+        : [],
+    emptyText: '選んだタスクの記録はありません。',
+  });
+
+  // 結果テキスト / スキップ理由。
+  const resultText = tick.result?.text;
+  const skipReason = tick.status === 'skipped' ? tick.skipReason : undefined;
+  if (resultText || skipReason) {
+    sections.push({
+      heading: tick.status === 'skipped' ? 'スキップ理由' : '結果の詳細',
+      note: resultText || skipReason,
+    });
+  }
+  return sections;
 }

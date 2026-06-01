@@ -1,37 +1,207 @@
 // Overview（司令塔）— 上部 KPI 帯 + プロジェクトカード + 横断検索（MC-73）。
-import { useState } from 'react';
+// MC-67 でプロジェクトカードのタップ詳細を実装。MC-67 全タイル展開で KPI カードも
+// タップ→詳細（プロジェクト別内訳＋関連タスク）に対応（TileDetail を再利用）。
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLiveResource } from '../lib/useLiveData';
 import { useLiveTick } from '../lib/liveContext';
-import type { Overview as OverviewData, OverviewProject, ProjectName, Task } from '../lib/types';
-import { PROJECT_ORDER, projectColor, projectLabel } from '../lib/meta';
+import type {
+  Overview as OverviewData,
+  OverviewProject,
+  ProjectName,
+  Task,
+  TaskStatus,
+} from '../lib/types';
+import { PROJECT_ORDER, priorityRank, projectColor, projectLabel } from '../lib/meta';
 import { relativeTime } from '../lib/time';
 import { PageHeader } from '../components/PageHeader';
-import { ResourceState, StalledBadge } from '../components/ui';
+import { ResourceState, StalledBadge, Badge, TaskStatusBadge } from '../components/ui';
 import { GlobalSearch } from '../components/GlobalSearch';
 import { AlertBanner } from '../components/AlertBanner';
 import { ProjectDetail } from '../components/ProjectDetail';
 import { TaskDetail } from '../components/TaskDetail';
+import { TileDetail, type TileSection } from '../components/TileDetail';
 import { ChevronRightIcon, SearchIcon } from '../components/icons';
+
+// KPI タイルの種別。クリック時にどの内訳・関連を出すかを決める。
+type KpiKind =
+  | 'agentsActive'
+  | 'agentsIdle'
+  | 'tasksInProgress'
+  | 'tasksStalled'
+  | 'tasksBlocked'
+  | 'tasksReview';
 
 interface KpiCardProps {
   label: string;
   value: number;
   color: string;
   sub?: string;
+  onOpen: () => void;
 }
 
-function KpiCard({ label, value, color, sub }: KpiCardProps) {
+function KpiCard({ label, value, color, sub, onOpen }: KpiCardProps) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-3 md:p-4">
-      <div className="text-xs font-medium text-text-muted">{label}</div>
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group relative cursor-pointer rounded-xl border border-border bg-surface p-3 text-left transition-colors hover:border-accent/60 hover:bg-surface-2 hover:shadow-sm focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:bg-surface-3 md:p-4"
+      aria-label={`指標の詳細を開く: ${label}`}
+    >
+      <div className="flex items-center justify-between gap-1">
+        <div className="text-xs font-medium text-text-muted">{label}</div>
+        <span
+          className="shrink-0 text-text-faint transition-all group-hover:translate-x-0.5 group-hover:text-accent"
+          aria-hidden
+        >
+          <ChevronRightIcon width={14} height={14} />
+        </span>
+      </div>
       <div className="mt-1 flex items-baseline gap-2">
         <span className="text-2xl font-bold tabular-nums md:text-3xl" style={{ color }}>
           {value}
         </span>
         {sub && <span className="text-xs text-text-faint">{sub}</span>}
       </div>
-    </div>
+    </button>
+  );
+}
+
+// KPI 種別ごとの表示メタ（ドロワーのラベル・アクセント色・対象タスクステータス）。
+const KPI_META: Record<
+  KpiKind,
+  { label: string; color: string; taskStatus?: TaskStatus; stalledOnly?: boolean }
+> = {
+  agentsActive: { label: '稼働中エージェント', color: 'var(--mc-active)' },
+  agentsIdle: { label: '待機エージェント', color: 'var(--mc-idle)' },
+  tasksInProgress: { label: '進行中タスク', color: 'var(--mc-active)', taskStatus: 'IN_PROGRESS' },
+  tasksStalled: { label: '滞留タスク', color: 'var(--mc-stalled)', stalledOnly: true },
+  tasksBlocked: { label: 'ブロックタスク', color: 'var(--mc-blocked)', taskStatus: 'BLOCKED' },
+  tasksReview: { label: 'レビュー待ちタスク', color: 'var(--mc-review)', taskStatus: 'REVIEW' },
+};
+
+/** KPI カードのドリルダウン詳細。プロジェクト別の内訳＋関連タスクを TileDetail で表示。 */
+function KpiDetail({
+  kind,
+  projects,
+  onClose,
+  onOpenTask,
+}: {
+  kind: KpiKind | null;
+  projects: OverviewProject[];
+  onClose: () => void;
+  onOpenTask: (t: Task) => void;
+}) {
+  // 関連タスク（タスク系 KPI のみ）。/api/tasks から該当ステータスで抽出。
+  const tick = useLiveTick('tasks');
+  const { data: tasksData } = useLiveResource<{ tasks: Task[] }>('/api/tasks', tick);
+
+  const sections = useMemo<TileSection[]>(() => {
+    if (!kind) return [];
+    const meta = KPI_META[kind];
+
+    // (a) プロジェクト別の内訳。OverviewProject から該当指標を引く。
+    const perProject = (p: OverviewProject): number => {
+      switch (kind) {
+        case 'agentsActive':
+          return p.agentsActive;
+        case 'agentsIdle':
+          return p.agentsIdle;
+        case 'tasksInProgress':
+          return p.tasksInProgress;
+        case 'tasksStalled':
+          return p.tasksStalled;
+        default:
+          return 0; // blocked / review は overview に project 別集計が無い → タスクから集計
+      }
+    };
+
+    // blocked / review はタスク一覧から project 別に数える。
+    const taskCountsByProject = new Map<ProjectName, number>();
+    if ((kind === 'tasksBlocked' || kind === 'tasksReview') && tasksData) {
+      for (const t of tasksData.tasks) {
+        if (t.status === meta.taskStatus) {
+          taskCountsByProject.set(t.project, (taskCountsByProject.get(t.project) ?? 0) + 1);
+        }
+      }
+    }
+
+    const stats = projects
+      .map((p) => {
+        const v =
+          kind === 'tasksBlocked' || kind === 'tasksReview'
+            ? (taskCountsByProject.get(p.project) ?? 0)
+            : perProject(p);
+        return { project: p.project, value: v };
+      })
+      .filter((x) => x.value > 0)
+      .map((x) => ({
+        key: `proj:${x.project}`,
+        label: projectLabel(x.project),
+        value: x.value,
+        color: projectColor(x.project),
+      }));
+
+    const breakdownSection: TileSection = {
+      heading: 'プロジェクト別内訳',
+      stats,
+      emptyText: '該当するプロジェクトはありません。',
+    };
+
+    // (b) 関連タスク（タスク系 KPI のみ）。
+    const sectionList: TileSection[] = [breakdownSection];
+    if ((meta.taskStatus || meta.stalledOnly) && tasksData) {
+      const related = tasksData.tasks
+        .filter((t) =>
+          meta.stalledOnly ? t.stalled : t.status === meta.taskStatus,
+        )
+        .sort(
+          (a, b) =>
+            Number(b.stalled) - Number(a.stalled) ||
+            priorityRank(a.priority) - priorityRank(b.priority) ||
+            a.id.localeCompare(b.id),
+        )
+        .map((t) => ({
+          key: `${t.source}:${t.id}`,
+          tag: t.id,
+          badges: (
+            <>
+              <TaskStatusBadge status={t.status} />
+              <Badge>{projectLabel(t.project)}</Badge>
+              {t.priority && <Badge>{t.priority}</Badge>}
+              {t.stalled && <StalledBadge />}
+            </>
+          ),
+          title: t.title,
+          onClick: () => onOpenTask(t),
+        }));
+      sectionList.push({
+        heading: '関連タスク',
+        related,
+        emptyText: '該当するタスクはありません。',
+      });
+    } else if (kind === 'agentsActive' || kind === 'agentsIdle') {
+      sectionList.push({
+        heading: '関連情報',
+        note: 'エージェントの一覧と会話タイムラインは「エージェント」タブで確認できます。',
+        related: [],
+        emptyText: '',
+      });
+    }
+    return sectionList;
+  }, [kind, projects, tasksData, onOpenTask]);
+
+  if (!kind) return null;
+  const meta = KPI_META[kind];
+  return (
+    <TileDetail
+      open={!!kind}
+      onClose={onClose}
+      kindLabel="指標"
+      title={meta.label}
+      accent={meta.color}
+      sections={sections}
+    />
   );
 }
 
@@ -113,7 +283,9 @@ export default function Overview() {
   const [searchOpen, setSearchOpen] = useState(false);
   // プロジェクトカードのドリルダウン詳細（MC-67）。null は閉じている状態。
   const [selectedProject, setSelectedProject] = useState<ProjectName | null>(null);
-  // 関連タスクから開くタスク詳細（MC-61）。ProjectDetail の上に重ねて開く。
+  // KPI カードのドリルダウン詳細（MC-67 全タイル展開）。null は閉じている状態。
+  const [selectedKpi, setSelectedKpi] = useState<KpiKind | null>(null);
+  // 関連タスクから開くタスク詳細（MC-61）。ProjectDetail / KpiDetail の上に重ねて開く。
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   // 表示順を PROJECT_ORDER に揃える。
   const projects = data
@@ -160,24 +332,38 @@ export default function Overview() {
                   value={kpi.agentsActive}
                   color="var(--mc-active)"
                   sub={`/ ${kpi.agentsTotal}`}
+                  onOpen={() => setSelectedKpi('agentsActive')}
                 />
-                <KpiCard label="待機" value={kpi.agentsIdle} color="var(--mc-idle)" />
+                <KpiCard
+                  label="待機"
+                  value={kpi.agentsIdle}
+                  color="var(--mc-idle)"
+                  onOpen={() => setSelectedKpi('agentsIdle')}
+                />
                 <KpiCard
                   label="進行中タスク"
                   value={kpi.tasksInProgress}
                   color="var(--mc-active)"
+                  onOpen={() => setSelectedKpi('tasksInProgress')}
                 />
                 <KpiCard
                   label="滞留タスク"
                   value={kpi.tasksStalled}
                   color="var(--mc-stalled)"
+                  onOpen={() => setSelectedKpi('tasksStalled')}
                 />
                 <KpiCard
                   label="ブロック"
                   value={kpi.tasksBlocked}
                   color="var(--mc-blocked)"
+                  onOpen={() => setSelectedKpi('tasksBlocked')}
                 />
-                <KpiCard label="レビュー待ち" value={kpi.tasksReview} color="var(--mc-review)" />
+                <KpiCard
+                  label="レビュー待ち"
+                  value={kpi.tasksReview}
+                  color="var(--mc-review)"
+                  onOpen={() => setSelectedKpi('tasksReview')}
+                />
               </div>
             </section>
           )}
@@ -197,6 +383,13 @@ export default function Overview() {
       <ProjectDetail
         project={selectedProject}
         onClose={() => setSelectedProject(null)}
+        onOpenTask={setSelectedTask}
+      />
+      {/* KPI カードのドリルダウン詳細（MC-67 全タイル展開）。 */}
+      <KpiDetail
+        kind={selectedKpi}
+        projects={projects}
+        onClose={() => setSelectedKpi(null)}
         onOpenTask={setSelectedTask}
       />
       <TaskDetail task={selectedTask} onClose={() => setSelectedTask(null)} />
