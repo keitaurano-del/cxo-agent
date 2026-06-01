@@ -314,7 +314,7 @@ export interface DeploysResponse {
 
 export type AlertSeverity = 'error' | 'warning';
 
-export type AlertCategory = 'error' | 'blocked-stalled' | 'deploy-failed';
+export type AlertCategory = 'error' | 'blocked-stalled' | 'deploy-failed' | 'inbox-stalled';
 
 export interface AlertItem {
   id: string;
@@ -340,9 +340,11 @@ export interface AlertsResponse {
     error: number;
     'blocked-stalled': number;
     'deploy-failed': number;
+    'inbox-stalled': number;
   };
   alerts: AlertItem[];
   thresholds: {
     blockedStallDays: number;
+    inboxStallHours: number;
   };
 }

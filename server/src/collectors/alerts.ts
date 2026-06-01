@@ -11,20 +11,24 @@
 //                       agent の 8 分しきい値・タスクの 3 日 IN_PROGRESS 滞留とは別軸の「長期 BLOCKED」。
 //   - deploy-failed  : MVP では未実装（GitHub Actions 連携は MC-64 が担当）。カテゴリは用意するが
 //                       常に 0 件で返す（無いものを ERROR 表示しない＝誤検知ゼロ）。
+//   - inbox-stalled  : Apollo 受信箱(inbox.jsonl)の未消化エントリ最古が INBOX_STALL_HOURS（時間単位）
+//                       超。受信箱を消費する自律ループが止まっている可能性を 1 件に集約して警告する
+//                       （MC-90 DoD(4)。agent/タスク/長期 BLOCKED とは別軸の inbox 消費停止検知）。
 //
 // 解消したアラートは次回集計で自然に消える（毎回フル再計算。永続/既読状態は持たない＝MVP）。
 // このコレクタは throw しない（個別ソースの失敗は握り潰して空で続行）。index.ts 側でも safeJson で包む。
 
 import { collectWorkflows } from './workflows.js';
 import { collectTasks } from './tasks.js';
-import { BLOCKED_STALL_DAYS } from '../config.js';
+import { readInboxEntries, readConsumedIds } from '../inbox.js';
+import { BLOCKED_STALL_DAYS, INBOX_STALL_HOURS } from '../config.js';
 import type { ProjectName } from '../lib/projectMap.js';
 
 /** アラートの深刻度。フロントの配色（error/stalled/blocked）にマップする。 */
 export type AlertSeverity = 'error' | 'warning';
 
 /** アラートのカテゴリ。 */
-export type AlertCategory = 'error' | 'blocked-stalled' | 'deploy-failed';
+export type AlertCategory = 'error' | 'blocked-stalled' | 'deploy-failed' | 'inbox-stalled';
 
 /** 1 件のアラート。 */
 export interface AlertItem {
@@ -55,12 +59,14 @@ export interface AlertsResponse {
     error: number;
     'blocked-stalled': number;
     'deploy-failed': number;
+    'inbox-stalled': number;
   };
   /** 個別アラート（深刻度→新しい順）。 */
   alerts: AlertItem[];
   /** しきい値（フロント表示の説明に使える）。 */
   thresholds: {
     blockedStallDays: number;
+    inboxStallHours: number;
   };
 }
 
@@ -134,15 +140,92 @@ function deployFailedAlerts(): AlertItem[] {
   return [];
 }
 
+/**
+ * Apollo 受信箱(inbox.jsonl)の滞留を評価する純粋関数（MC-90 DoD(4)）。
+ * テスト可能なように副作用なし（時刻もしきい値も引数で受ける）。
+ *
+ * ロジック:
+ *  - 未消化 = consumedIds に id が無いエントリ。
+ *  - SMOKE ノイズ除外: text に '__SMOKE' を含むものは無視（スモークテストマーカー）。
+ *  - 未消化が 0 件なら [] （アラート無し）。
+ *  - 未消化の中で ts が最古のものの経過時間 hours を求める（(nowMs - parsed) / 3600000）。
+ *    ts が解析不能なら hours=Infinity（= 滞留扱い。既存 daysSince と同じ思想）。
+ *  - 最古経過 <= stallHours なら [] （最近の投入だけなら正常）。
+ *  - 最古経過 > stallHours なら警告を 1 件だけ（エントリ毎に出さず集約してノイズ回避）。
+ *
+ * @param entries     inbox エントリ（id / ts / text）。
+ * @param consumedIds 消費済み id の集合。
+ * @param nowMs       現在時刻（エポック ms）。
+ * @param stallHours  滞留とみなすしきい値（時間）。
+ */
+export function evaluateInboxStall(
+  entries: { id: string; ts: string; text?: string }[],
+  consumedIds: Set<string>,
+  nowMs: number,
+  stallHours: number,
+): AlertItem[] {
+  // 未消化 ＆ SMOKE 除外。
+  const pending = entries.filter(
+    (e) => e && e.id && !consumedIds.has(e.id) && !(e.text ?? '').includes('__SMOKE'),
+  );
+  if (pending.length === 0) return [];
+
+  // 最古エントリ（ts のエポックが最小）を求める。解析不能 ts は Infinity 経過＝最優先で滞留扱い。
+  let oldest = pending[0];
+  let oldestParsed = Date.parse(oldest.ts);
+  for (const e of pending) {
+    const t = Date.parse(e.ts);
+    // NaN（不正 ts）は最古扱い。既存の有効値より NaN を優先する。
+    if (Number.isNaN(t)) {
+      oldest = e;
+      oldestParsed = t;
+      break;
+    }
+    if (!Number.isNaN(oldestParsed) && t < oldestParsed) {
+      oldest = e;
+      oldestParsed = t;
+    }
+  }
+
+  const hours = Number.isNaN(oldestParsed) ? Infinity : (nowMs - oldestParsed) / 3600000;
+  if (!(hours > stallHours)) return []; // 閾値内（最近の投入だけ）は正常。
+
+  const hoursLabel = Number.isFinite(hours) ? `最古 ${Math.floor(hours)} 時間経過` : '最古 長期間';
+  return [
+    {
+      id: 'inbox-stalled', // 安定シングルトンキー（毎ティック同一・トグル維持）。
+      category: 'inbox-stalled',
+      severity: 'warning',
+      title: `Apollo 受信箱に未処理のエントリが ${pending.length} 件あります（${hoursLabel}）。`,
+      detail: '受信箱を消費する自律ループが動作していない可能性があります。',
+      project: 'cxo',
+      // since は最古エントリの ts（取れれば）。taskId は付けない（deep link 不要）。
+      since: oldest.ts && !Number.isNaN(Date.parse(oldest.ts)) ? oldest.ts : undefined,
+    },
+  ];
+}
+
+/** Apollo 受信箱の滞留アラート（throw しない。MC-90 DoD(4)）。 */
+function inboxStalledAlerts(): AlertItem[] {
+  try {
+    const entries = readInboxEntries().map((e) => ({ id: e.id, ts: e.ts, text: e.text }));
+    const consumed = readConsumedIds();
+    return evaluateInboxStall(entries, consumed, Date.now(), INBOX_STALL_HOURS);
+  } catch {
+    return [];
+  }
+}
+
 /** GET /api/alerts — 3 カテゴリのアラートを集計して返す。0 件でも 200 で空配列。 */
 export function collectAlerts(): AlertsResponse {
   const errors = errorAlerts();
   const blocked = blockedStalledAlerts();
   const deploys = deployFailedAlerts();
+  const inbox = inboxStalledAlerts();
 
   // 深刻度（error → warning）→ since 新しい順で並べる。
   const sevRank = (s: AlertSeverity): number => (s === 'error' ? 0 : 1);
-  const alerts = [...errors, ...blocked, ...deploys].sort((a, b) => {
+  const alerts = [...errors, ...blocked, ...deploys, ...inbox].sort((a, b) => {
     const d = sevRank(a.severity) - sevRank(b.severity);
     if (d !== 0) return d;
     const ta = a.since ? Date.parse(a.since) : 0;
@@ -164,10 +247,12 @@ export function collectAlerts(): AlertsResponse {
       error: errors.length,
       'blocked-stalled': blocked.length,
       'deploy-failed': deploys.length,
+      'inbox-stalled': inbox.length,
     },
     alerts,
     thresholds: {
       blockedStallDays: BLOCKED_STALL_DAYS,
+      inboxStallHours: INBOX_STALL_HOURS,
     },
   };
 }

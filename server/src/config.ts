@@ -253,6 +253,14 @@ export const TASK_STALL_DAYS = envNum('TASK_STALL_DAYS', 3);
 export const BLOCKED_STALL_DAYS = envNum('BLOCKED_STALL_DAYS', 5);
 
 /**
+ * inbox に pending が残存して滞留とみなす時間（時間単位）。
+ * agent の 8分(STALL_MINUTES)・タスク 3日(TASK_STALL_DAYS)・長期 BLOCKED 5日(BLOCKED_STALL_DAYS)
+ * とは別軸の inbox 消費停止検知。Apollo 受信箱(inbox.jsonl)の未消化エントリ最古が
+ * この時間を超えたら、受信箱を消費する自律ループが止まっている可能性を警告する（default 3 時間）。
+ */
+export const INBOX_STALL_HOURS = envNum('INBOX_STALL_HOURS', 3);
+
+/**
  * Token 消費量集計のキャッシュ TTL（ミリ秒）。default 5 分。
  * 全 jsonl のフルスキャンは重いのでリアルタイム不要のこの集計は 5 分粒度で十分。
  * 連続要求は最後の集計結果をそのまま返し、重い再走査を 5 分に 1 回へ抑える。

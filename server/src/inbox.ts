@@ -220,7 +220,7 @@ function appendEntry(entry: InboxEntry): void {
  * inbox.jsonl を読み、壊れた行を飛ばして InboxEntry 配列を返す。
  * 無ければ空配列。
  */
-function readInboxEntries(): InboxEntry[] {
+export function readInboxEntries(): InboxEntry[] {
   let raw: string;
   try {
     raw = readFileSync(INBOX_FILE, 'utf-8');
