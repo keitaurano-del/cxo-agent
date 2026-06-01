@@ -1133,17 +1133,21 @@ ID 採番: **AR-0x**。
 
 最終更新: 2026-05-31 / 管理: task-manager（2026-05-31 Keita 要望4件 MC-83〜86 起票。MC-84←MC-72集約、MC-85↔MC-86は起動機構が重なり統合設計、MC-85/86はBLOCKED=Keita設計判断待ち。旧同日: Apollo 要望6件 MC-75〜80、MC-77←MC-66集約・MC-79←MC-68集約、tasks collector 修正 MC-74、全文検索 MC-73、投入時優先度 MC-72(→MC-84)、手動編集 MC-71、カイロUI MC-70(CANCELLED)、承認ビュー MC-68・優先度手動 MC-69、inbox MC-66/67）
 
-### MC-82 — アポロのタスクボードのタスクは何をやっているか詳細を記載すること
+### MC-82 — タスクボードの各タスクに「詳細＋成果物完了までのワークフロー」を記載する運用整備
 
 | フィールド | 値 |
 |---|---|
 | ID | MC-82 |
-| タイトル | アポロのタスクボードのタスクは何をやっているか詳細を記載すること |
+| タイトル | Apollo タスクボードの各タスクに「何をやっているか詳細＋成果物完了までのワークフロー」を記載する運用整備 |
 | 優先度 | P2 |
 | ステータス | TODO |
-| 担当 | 未定 |
-| 詳細 | 【Apollo投入】 アポロのタスクボードのタスクは何をやっているか詳細を記載すること<br>　→成果物完了までのワークフローも記載すること |
-| 更新日 | 2026-05-31 |
+| 担当 | task-manager（記載運用ルール・テンプレ整備）+ designer/dev-logic（TaskDetail での表示） |
+| 詳細 | 【Apollo投入】 アポロのタスクボードのタスクは何をやっているか詳細を記載すること → 成果物完了までのワークフローも記載すること。各タスクに (a) 今何をやっているか（詳細）、(b) 成果物が完了するまでのワークフロー（誰が→何を→どの品質ゲート→DONE までの段取り）を残す。台帳側はフィールド充実（詳細・サブタスク・受け入れ条件・次アクション）で、Apollo 側は TaskDetail（MC-61/MC-83）でそれを見やすく表示する両輪。 |
+| 受け入れ条件（DoD） | (1) タスク記載のテンプレ/運用ルールが定まる（詳細＋ワークフロー＝担当・段取り・品質ゲート・DoD を必須欄化）。(2) 新規起票時に task-manager がこのテンプレで構造化する運用が回る。(3) Apollo の TaskDetail で「詳細」と「ワークフロー（サブタスク/段取り）」が読める。 |
+| 依存 | MC-83（カードタップで TaskDetail＋詳細の中身充実）と表示面が重なる＝統合。MC-71（タスク手動編集の md 書き戻し層）で詳細を Apollo から編集可能にするなら連動。 |
+| 提言・抜けもれ | (1) これは半分が運用ルール（task-manager がどう書くか）・半分が表示（Apollo がどう見せるか）。MC-83（詳細充実表示）と表示面を統合し、本件は「書く側のテンプレ／必須欄」を定義する役割に寄せると重複しない。(2) 「ワークフロー記載」は本台帳の既存フォーマット（サブタスク・次アクション・依存・DoD）でほぼ表現できる＝新フィールド乱立より既存欄の徹底活用＋テンプレ化が筋。(3) 全タスクへの遡及適用は重いので、まず新規起票から徹底し、既存は優先度高いものから追記。(4) UI 表示は中立丁寧体・CSS 変数・SVG 制約を維持。 |
+| note | Apollo inbox id `2026-05-31T10-28-46-426Z-3ea08292`（MC-77 機構で taskId=MC-82 紐付け済み）。ブリーフ #3。2026-06-01 棚卸しで構造化。 |
+| 更新日 | 2026-06-01 |
 
 ---
 
@@ -1224,17 +1228,21 @@ ID 採番: **AR-0x**。
 | 更新日 | 2026-05-31 |
 
 
-### MC-87 — 止まってる進行中のタスク再開して
+### MC-87 — IN_PROGRESS のまま停滞しているタスクの洗い出しと再開
 
 | フィールド | 値 |
 |---|---|
 | ID | MC-87 |
-| タイトル | 止まってる進行中のタスク再開して |
-| 優先度 | P0 |
+| タイトル | IN_PROGRESS のまま停滞しているタスクの洗い出しと再開 |
+| 優先度 | P1 |
 | ステータス | TODO |
-| 担当 | dev-logic |
-| 詳細 | 【Apollo投入】 止まってる進行中のタスク再開して |
-| 更新日 | 2026-05-31 |
+| 担当 | task-manager（停滞タスクの洗い出し・棚卸し）→ 各実装エージェント（再開） |
+| 詳細 | 【Apollo投入】 止まってる進行中のタスク再開して。全 TASK_TRACKER（logic / cxo-agent / en-chakai / 西丸町）を走査し、IN_PROGRESS のまま長期停滞しているタスクを洗い出して再開する。apollo番人の停滞検知（apollo-task-stall-check.sh、`TASK_STALL_DAYS=3`）と連動させ、3日以上更新の無い IN_PROGRESS を検出→担当へ再アサイン or 状態整理（実は DONE/REVIEW/BLOCKED だったものは正しい状態へ修正）する運用にする。 |
+| 受け入れ条件（DoD） | (1) 全 TASK_TRACKER の IN_PROGRESS タスクを棚卸しし、停滞（3日以上 mtime 更新なし等）を一覧化。(2) 各停滞タスクを「再開（担当アサイン→着手）」「状態修正（実態は DONE/REVIEW/BLOCKED）」のいずれかに振り分け、台帳を実態に整合させる。(3) 以後 apollo番人の stall 検知（TASK_STALL_DAYS=3）がティック毎に停滞を拾い task-manager に提言する導線が機能する。 |
+| 依存 | apollo番人の停滞検知（[[project-apollo-keeper]] / apollo-task-stall-check.sh）。MC-88（autonomous-rin が status を勝手に書き戻す件）が未解決だと「再開」と「自動巻き戻し」が衝突しうるため、MC-88 と合わせて見る。 |
+| 提言・抜けもれ | (1) 「再開」の前に、その IN_PROGRESS が本当に止まっているのか（[[reference-subagent-slow-not-dead]]＝8分未満で死亡判定しない）を見極める。停滞判定は mtime ベースで日単位（TASK_STALL_DAYS=3）。(2) IN_PROGRESS の中には実態 DONE/REVIEW なのに更新漏れのものが混ざる＝まず棚卸しで状態を実態に合わせてから「真に止まっているもの」を再開する（やみくもに全部再着手しない）。(3) これは task-manager の定常運用（棚卸し）そのもの＝単発タスクでなく recurring な点検として apollo番人と共同責任で回す（[[feedback-taskboard-based-execution]]）。(4) 再開時の採番・編集は pull --rebase 後・名指し add（autonomous-rin とのレース回避）。 |
+| note | Apollo inbox id `2026-05-31T12-35-36-034Z-c1543d0e`（MC-77 機構で taskId=MC-87・agent=dev-logic 紐付け済み）。ブリーフ #4。2026-06-01 棚卸しで構造化。担当は洗い出し主体を task-manager に修正（dev-logic は再開実装側）。 |
+| 更新日 | 2026-06-01 |
 
 
 ### MC-88 — autonomous-rin が BLOCKED タスクを TODO に書き戻す疑い（選定ロジックの BLOCKED 誤認）
@@ -1252,4 +1260,54 @@ ID 採番: **AR-0x**。
 | DoD | autonomous-rin が BLOCKED／Keita 承認待ち／設計判断タグのタスクのステータスを書き換えないことを確認。原因（プロンプトの台帳編集指示 or 選定判定）を特定し修正。修正後、BLOCKED タスクが TODO に書き戻されないことを再現確認（ログ or 試走で検証）。 |
 | 関連 | `/home/dev/cron-scripts/autonomous-rin.sh`、project-autonomous-rin（選定基準＝「設計判断」「Keita承認待ち」タグは触らない）、AM-O（観測対象・logic TASK_TRACKER）、HEAD `8925c39`（BLOCKED 復元コミット） |
 | 更新日 | 2026-05-31 |
+
+
+### MC-89 — 承認ビューで承認済み項目が何度も承認キューに再出現する不具合
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-89 |
+| タイトル | Apollo 承認ビューで承認済み項目が何度も承認キューに再出現する不具合 |
+| 優先度 | P1 |
+| ステータス | TODO |
+| 担当 | apollo番人（実機調査）→ dev-logic（collector / 承認書き戻しの修正） |
+| 詳細 | 【Apollo投入】 承認しても何度も出てくる。承認ビュー（GET /api/approvals、MC-79/MC-68）で一度承認した項目が、また承認待ちキューに湧いてくる。承認1タップで決定は `toStatus:"TODO"` を書こうとしているが、実 TASK_TRACKER 側の status が `approve` のまま残り、collector が再び pending（承認待ち）として拾い直している疑い。 |
+| 背景・裏取り（決定的証拠） | `cxo-agent/data/approval-decisions.jsonl` を突合したところ、同一 ID が複数回 approve 記録されている＝承認しても消えず再出現している直接証拠: ・AM-O が **5回** approve（2026-05-31 12:16 / 12:28 / 12:54 / 20:03、2026-06-01 00:20）。・DF-F13 / DF-F3 / FB-05 が **各2回**（5/31 10:22-24 に1回 → 同 20:03 に再出現で再承認 → さらに 6/01 00:20 にまた再承認）。すべて `fromStatus:"approve" → toStatus:"TODO"` を書こうとしているのに、次のティックでまた `approve` 扱いで承認キューに現れている。MC-88（autonomous-rin が BLOCKED→TODO 書き戻し疑い）と status 書き戻しのレース／不整合という点で根が近い可能性。 |
+| 仮説（要検証） | (1) 承認決定の TASK_TRACKER 書き戻し（MC-71 の md 書き戻し層）が実際には status を `approve`→`TODO` に反映できていない（楽観ロック失敗・read-back 不一致・該当行マッチ漏れ・autonomous-rin/他プロセスとの編集レースで上書き巻き戻し）。(2) collector（tasks.ts / approvals 抽出）が status 文字列 `approve` を承認待ちと判定しており、書き戻しが効かない限り毎ティック再 pending 化する。(3) approval-decisions.jsonl は「決定ログ」として追記されるだけで、それ自体は承認キューから除外する根拠に使われていない（＝決定済み ID を queue から除外していない）。 |
+| 受け入れ条件（DoD） | (1) 一度承認した項目が承認キューに再出現しないことを再現確認（approval-decisions.jsonl に同一 ID の重複 approve が新規発生しない）。(2) 根因を特定（書き戻し失敗 or collector の再判定 or 決定ログの未活用）。(3) 承認決定が TASK_TRACKER の status に確実に反映され（`approve`→`TODO`）、かつ書き戻しが他プロセスのレースで巻き戻らない。必要なら decided ID を承認キューから除外する二重防御を入れる。(4) 既に多重承認された AM-O/DF-F13/DF-F3/FB-05 の現状 status を正しい値に整える。 |
+| 依存 | MC-79（承認フロー実装・DONE）, MC-71（md 安全書き戻し層・DONE）, MC-88（status 書き戻しレースと同根の可能性、合わせて調査）。 |
+| 提言・抜けもれ | (1) スクショ証拠あり（下記 attachment）。実機調査時に Read で確認。(2) MC-88（BLOCKED→TODO 誤書き戻し）と同じ「共有 TASK_TRACKER への並行書き込みレース」が真因なら、両者を同一の書き戻し排他機構（flock or 楽観ロック+read-back+リトライ）で一括解決するのが筋。バラバラに対症療法しない。(3) 承認は logic/TASK_TRACKER の項目（AM-O/DF-* は logic 側）を cxo の Apollo から書き戻している＝クロスプロジェクト書き込みのパス・採番直列化・autonomous-rin（logic ループ）との編集レースを点検。(4) 恒久対策として decided ID（approval-decisions.jsonl）を承認キュー算出時に除外する冪等化を入れると、書き戻しが一時的にこけても二重承認は防げる。(5) UI chrome 制約（中立丁寧体・CSS 変数・SVG）は本件 UI 変更時に維持。 |
+| スクショ | `cxo-agent/data/inbox-attachments/2026-06-01T00-31-20-092Z-26e61381/3243.png` |
+| note | Apollo inbox id `2026-06-01T00-31-20-092Z-26e61381`（MC-77 機構で taskId=MC-89 紐付け済み）。ブリーフ #1。2026-06-01 棚卸しで調査結果を反映。 |
+| 更新日 | 2026-06-01 |
+
+---
+
+## バッチ: 2026-06-01 Apollo inbox 棚卸し（未消化検出・バグ確定）
+
+> 2026-06-01 の Apollo inbox（cxo-agent/data/inbox.jsonl 全17件）の consumed 突合で、未消化が滞留していることを検出。調査で根因（cxo スコープの自律ループが cron 未登録＝inbox が誰にも消費されない）を確定し MC-90 を起票。inbox 由来の他3件（承認再湧き／タスク詳細記載／停滞タスク再開）は MC-77 の inbox 即タスク化機構により既に taskId 紐付き済み（MC-89 / MC-82 / MC-87）で、本棚卸しでは新規採番せず既存スタブを調査結果で充実させた（重複起票回避）。
+
+### MC-90 — Apollo inbox が誰にも消費されず滞留（cxo スコープの自律ループが cron 未登録）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-90 |
+| タイトル | Apollo inbox（inbox.jsonl）が誰にも消費されず滞留する不具合（cxo スコープの autonomous ループが cron に登録されていない） |
+| 優先度 | P1 |
+| ステータス | TODO |
+| 担当 | apollo番人（実機調査・根因確定）→ dev-logic（cron 登録 or HANDLE_INBOX 結線の修正） |
+| 背景 | 2026-06-01 の inbox 棚卸しで `cxo-agent/data/inbox.jsonl` 全17件が `status:"pending"`、`inbox-consumed.jsonl` の最終更新が 2026-05-31 19:52 で止まっていることを検出。誰も inbox を消費していない。 |
+| 根因（裏取り済み） | 記憶 [[project-autonomous-rin]] では「ティック冒頭で inbox を最優先消費」とあるが、実装は MC-85 で `autonomous-worker.sh` に一般化され、inbox 消費は `HANDLE_INBOX=1`（worker line 44-58/120-126）でガードされ **PROJECT_SCOPE=cxo のときだけ** 動く。ところが cron に登録されているのは `*/10 * * * * autonomous-rin.sh`（PROJECT_SCOPE=logic 固定ラッパ、`HANDLE_INBOX=0`）の **logic スコープ1本だけ**。cxo スコープのループ（`PROJECT_SCOPE=cxo bash autonomous-worker.sh`、唯一 inbox を処理する経路）は cron にもどこにも登録されていない。よって inbox を消費する主体が一度も走らず、pending が滞留している。※ブリーフの「autonomous-rin.sh に inbox 処理コードが一切無い」は半分正しく半分不正確: コード自体は worker 側に在るが、それを呼ぶ cxo スコープのスケジュールが無い、が正確な根因。 |
+| 詳細 | (1) cxo スコープの autonomous ループ（`PROJECT_SCOPE=cxo bash autonomous-worker.sh`）を flock・kill-switch・時刻ずらし付きで cron 登録し、inbox を定期消費させる（MC-85 のプロジェクト別並行ループ設計に沿う）。(2) または logic ラッパでも inbox を処理させたい場合は HANDLE_INBOX の結線方針を Keita/林と確認（ただし inbox 消費を logic ティックに混ぜると責務が混ざるため、cxo 専用ループを足す案が素直）。(3) 既存滞留17件は手動 or 初回ティックで消化（taskId 紐付き済みのものは inbox-consumed に落とすだけ、未紐付けは起票）。 |
+| 受け入れ条件（DoD） | (1) inbox を消費する自律ループ（cxo スコープ）が定期実行され、`status:"pending"` の inbox エントリが処理→`inbox-consumed.jsonl` 追記される導線が成立する。(2) 既存17件の pending が解消（消費済み or 起票済み）。(3) 同時実行ガード（flock）と既存 logic ループとの時刻ずらし・採番直列化が効き、二重 push/競合が起きない。(4) 再発防止: inbox に pending が一定期間（例 N 時間）残ったら apollo番人/監視が検知できる（滞留アラート）。 |
+| 依存 | MC-85（プロジェクト別並行 autonomous ループの設計／cxo 専用ループ追加はこの設計に含まれる）。MC-85 が cxo ループを cron 化するなら本件はその一部として解消し得るので、統合して二重実装を避ける。 |
+| 提言・抜けもれ | (1) MC-85 と機構が完全に重なる（cxo スコープのループを cron 化＝MC-85 の「cxo(Apollo)専用を独立 cron で並行」そのもの）。本件は MC-85 の cxo ループ未登録という具体的バグの顕在化なので、MC-85 のサブ issue として進めるのが効率的。(2) cron 追加時は flock（`/tmp/autonomous-cxo.lock` 等）・kill-switch・logic ループと時刻ずらし・採番直列化（next-task-id.sh、[[reference-task-id-numbering]]）必須。共有 Anthropic アカウントの同時 LLM 起動で 529 を誘発しないよう同時実行上限も（[[project-vultr-second-server]]）。(3) inbox 消費が走り出すと未起票エントリを自動タスク化するため、採番衝突・DoD 空タスク量産に注意（MC-77 提言と同根）。(4) 記憶 [[project-autonomous-rin]] の「ティック冒頭 inbox 最優先消費」は現実装とズレているので、修正後に memory を実態へ更新する。(5) 再発検知（pending 滞留アラート）を apollo-keeper の点検範囲（[[project-apollo-keeper]]）に足すと恒久対策になる。 |
+| サブタスク | - [ ] apollo番人: cron・worker・inbox の実機調査で根因（cxo ループ未登録）を最終確認<br>- [ ] cxo スコープ autonomous ループの cron 登録（flock・kill-switch・時刻ずらし）— MC-85 と統合<br>- [ ] 既存17件 pending の消化（紐付き済→consumed、未起票→起票）<br>- [ ] pending 滞留検知を apollo-keeper の点検に追加<br>- [ ] memory [[project-autonomous-rin]] を現実装に合わせて更新 |
+| 関連 | `/home/dev/cron-scripts/autonomous-rin.sh`（logic ラッパ）, `/home/dev/cron-scripts/autonomous-worker.sh`（HANDLE_INBOX gate: line 44-58/120-126）, `cxo-agent/data/inbox.jsonl`（17件 pending）, `cxo-agent/data/inbox-consumed.jsonl`（最終 2026-05-31 19:52）, dev crontab（logic ループ1本のみ）, [[project-autonomous-rin]], [[project-apollo-keeper]], MC-85（cxo 並行ループ） |
+| note | 林の inbox 棚卸し調査由来（inbox エントリではない＝元 inbox id なし）。ブリーフ #2。 |
+| 更新日 | 2026-06-01 |
+
+---
+
+最終更新: 2026-06-01 / 管理: task-manager（棚町）。2026-06-01 Apollo inbox 棚卸しバッチ: MC-90 新規起票（Apollo inbox 滞留＝cxo スコープ autonomous ループが cron 未登録という根因を確定）。ブリーフ #1/#3/#4 は MC-77 の inbox 即タスク化機構で既に taskId 紐付き済み（MC-89/MC-82/MC-87）と判明したため新規採番せず、既存スタブを調査結果で充実（重複起票回避）。採番は next-task-id.sh 直列（pull --rebase 後）。
 
