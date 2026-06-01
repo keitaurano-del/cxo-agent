@@ -1611,38 +1611,30 @@ ID 採番: **AR-0x**。
 | フィールド | 値 |
 |---|---|
 | ID | MC-105 |
-| タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
+| タイトル | Apollo ターミナルがスクロールできない不具合の修正（MC-104 タッチ対応の回帰疑い） |
 | 種別 | bug / 回帰 |
 | 優先度 | 高（Keita 報告・実操作に支障。ターミナルからの林との対話でログを遡れない） |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
-| 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
-| 背景 | 2026-05-31 の台帳整合作業中、AM-O（BLOCKED／SKU 登録待ち）が autonomous-rin と思われる外部プロセスにより複数回 TODO に書き戻される現象を観測。HEAD `8925c39` で BLOCKED 復元済みの後、未コミット編集で再び TODO 化された。autonomous-rin は本来「設計判断」「Keita 承認待ち」「BLOCKED」タグのタスクのステータスを触らない設計（project-autonomous-rin の選定基準）なのに、BLOCKED タスクのステータスを TODO に変えている。 |
-| 想定設計 | `TAP_FIX_SCRIPT`（MC-104）が `.xterm-screen` の touchstart/move/end を捕捉して mouse report に変換する際、スクロール用のスワイプまで preventDefault / 横取りしてスクロールバックへ届かなくしている疑い。mouse reporting 有効時のみ介入する分岐は入っているが、(a) スワイプ閾値（>10px）判定後にネイティブスクロールへ戻していない、(b) wheel/タッチスクロールのデフォルト挙動を殺している、等を実機で切り分け→スクロール経路を温存しつつタップ選択だけ拾うよう修正。 |
-| 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
-| 関連ファイル | `server/src/terminalProxy.ts`（`TAP_FIX_SCRIPT`/script 注入）、`web/src/views/Terminal.tsx`、ttyd 1.7.4、[[project-apollo-dashboard]] |
-| 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
-| 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| サブタスク | - [ ] 「承認が要る項目」判定基準の確定（REVIEW は除外＝MC-80 整合）<br>- [ ] designer: 「承認フロー」ビュー UX＋MC-76 ナビ統合設計<br>- [ ] 集約一覧の実装（/api/tasks フィルタ、非破壊）<br>- [ ] 承認/却下 書き込み API（MC-71 楽観ロック層再利用＋承認監査ログ）<br>- [ ] MC-61 詳細ドリルダウンへの導線<br>- [ ] 放置(stale)表示 |
-| note | Keita 報告由来（2026-06-01）。MC-104 投入直後の回帰疑い。 |
-| 更新日 | 2026-06-01（起票→IN_PROGRESS） |
+| ステータス | DONE |
+| 担当 | dev-logic（蓮）— 実装 + 実機検証 |
+| 背景 | MC-104 の TAP_FIX が `.xterm-screen` touchstart/move/end を横取りし、スワイプ時にネイティブ scrollback が届かなくなった回帰。PC ホイールは xterm wheel ハンドラが生きていたので有効だったが、モバイルスワイプは完全に無反応だった。 |
+| 受け入れ条件（DoD） | (1) PC ホイールと モバイルスワイプ両方でターミナル scrollback が動く。(2) タップで TUI 選択肢が選べる（MC-104 維持）。(3) 通常シェルの scrollback も維持（mouse mode 無効時）。(4) tsc exit0・tapfix.test.ts 9/9・browser-verify 10/10・healthz 200・MC-92/93/94 非退行。 |
+| 関連ファイル | `server/src/terminalProxy.ts`（TAP_FIX_SCRIPT を .xterm-viewport に移動）、[[project-apollo-dashboard]] |
+| 完了検証 | tsc EXIT0・tapfix.test.ts 9/9・browser-verify 10/10・restart 後 healthz 200・Playwright で PC ホイール/モバイルスワイプ両方スクロール・タップ選択維持・通常シェル scrollback・MC-92/93/94 非退行。commit bd68490。[[feedback-review-agent-verify-then-done]] でエージェント実機検証 DONE 化。 |
+| 更新日 | 2026-06-01（DONE）|
 
 ### MC-106 — ダッシュボードの全タイル（全種）をクリックで詳細表示できるようにする
 
 | フィールド | 値 |
 |---|---|
 | ID | MC-106 |
-| タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
+| タイトル | ダッシュボードの全タイル（全種）をクリックで詳細表示できるようにする |
 | 種別 | feature / UX |
 | 優先度 | 中 |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
-| 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
-| 背景 | 2026-05-31 の台帳整合作業中、AM-O（BLOCKED／SKU 登録待ち）が autonomous-rin と思われる外部プロセスにより複数回 TODO に書き戻される現象を観測。HEAD `8925c39` で BLOCKED 復元済みの後、未コミット編集で再び TODO 化された。autonomous-rin は本来「設計判断」「Keita 承認待ち」「BLOCKED」タグのタスクのステータスを触らない設計（project-autonomous-rin の選定基準）なのに、BLOCKED タスクのステータスを TODO に変えている。 |
-| 想定設計 | MC-67 の司令塔カード詳細表示（内訳＋関連タスク）の UI/データ取得パターンを、ダッシュボードの他タイル種別（各 view のカード・メトリクスタイル）へ横展開する。各タイル種別ごとに「詳細に出す内訳・関連情報」を定義し、MC-67 と一貫したインタラクション（クリック/タップで詳細パネル展開）に揃える。 |
-| 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
-| 関連ファイル | `web/src/views/`（各 view のタイル/カード）、MC-67 の詳細表示実装（司令塔 Overview カード）、`server/src/`（詳細データ API があれば）、[[project-apollo-dashboard]] |
-| 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
-| 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| サブタスク | - [ ] 「承認が要る項目」判定基準の確定（REVIEW は除外＝MC-80 整合）<br>- [ ] designer: 「承認フロー」ビュー UX＋MC-76 ナビ統合設計<br>- [ ] 集約一覧の実装（/api/tasks フィルタ、非破壊）<br>- [ ] 承認/却下 書き込み API（MC-71 楽観ロック層再利用＋承認監査ログ）<br>- [ ] MC-61 詳細ドリルダウンへの導線<br>- [ ] 放置(stale)表示 |
-| note | Keita 要望由来（2026-06-01）。MC-67 の全タイル展開。 |
-| 更新日 | 2026-06-01（起票→IN_PROGRESS） |
+| ステータス | DONE |
+| 担当 | dev-logic（蓮）— 実装 + 実機検証 |
+| 背景 | MC-67 で司令塔 Overview カードの詳細パネルを作ったが、他タイル（Usage/Ticks 等）には展開されていなかった。Keita 要望で全タイル種別へ汎用化。 |
+| 受け入れ条件（DoD） | (1) Overview KPI カード6枚（稼働/待機/進行中/滞留/ブロック/レビュー）クリックで詳細展開。(2) Usage BigStat2+内訳・Ticks TickCard も詳細表示。(3) 新規 API 不要（既存 /api/overview,tasks,usage,ticks から構成）。(4) related 行 min-h44px（MC-103 教訓）。(5) web build green・server tsc EXIT0・restart 後 healthz 200・Playwright smoke 32 全 pass（モバイル390px+PC1280px・pageerror 0）・/terminal-view 含む既存ルート非退行。 |
+| 関連ファイル | `web/src/components/TileDetail.tsx`（新規、6ファイル）、[[project-apollo-dashboard]] |
+| 完了検証 | web build green・server tsc EXIT0・restart 後 healthz 200・Playwright smoke 32 全 pass（新規4件=KPI/BigStat/MC-67非退行/ティック、モバイル390px+PC1280px、pageerror 0）。commit e575a50（6ファイル、server 無改修）。[[feedback-review-agent-verify-then-done]] でエージェント実機検証 DONE 化。 |
+| 更新日 | 2026-06-01（DONE）|
 
