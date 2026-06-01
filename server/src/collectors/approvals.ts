@@ -89,20 +89,42 @@ function categoriesFor(t: Task): ApprovalKind[] {
   return [...set].sort((a, b) => CATEGORY_PRIORITY[a] - CATEGORY_PRIORITY[b]);
 }
 
+/** id+source ごとの最新決定（抑止判定に使う最小フィールド）。 */
+export interface LatestDecision {
+  /** 'approve' | 'reject'（壊れ値もそのまま保持し、判定側で approve 以外として扱う）。 */
+  decision: string;
+  /** その決定の遷移先 status（approve→TODO / reject→CANCELLED）。 */
+  toStatus: string;
+}
+
 /**
- * id+source ごとの「最新の決定の遷移先 status」を作る（最後の行が勝つ）。
+ * 決定レコード（latest）と現在 status から、承認キューで抑止すべきかを判定する純粋関数（MC-89）。
  *
- * 承認フローは status だけでなく本文タグ（設計判断/承認待ち等）でも拾うため、承認で
- * BLOCKED→TODO に進めても本文タグが残っていると再浮上してしまう。これを防ぐため、承認/却下
- * の決定ログ（approval-decisions.jsonl）から id+source ごとに最後の決定の toStatus を引き、
- * 「現在の status がその toStatus と一致する」項目を抑止する（＝決定が今も反映されている）。
- *
- * whole-file ハッシュ一致での抑止だと、無関係な別タスクの編集で全件の抑止が外れて再浮上する。
- * status 一致での抑止なら、当該タスクが再度ブロック/差し戻し（status 変更）されたときだけ
- * 再浮上し、他タスクの編集には影響されない（per-task で堅牢）。
+ * - latest が無い（決定なし）→ 抑止しない（false）。通常どおり承認対象にする。
+ * - 最新決定が approve → status 不問で抑止（true）。これが MC-89 の本丸。承認後に collector が
+ *   同一 ID の別表現から status を BLOCKED 等に揺らして読んでも、approve 済みなら再浮上させない。
+ * - それ以外（reject 等）→ 従来挙動にフォールバック。「現在 status が決定の toStatus と一致する
+ *   ときだけ抑止」。reject 後に当該タスクが再度起票/差し戻し（status 変更）されれば再浮上できる。
  */
-function buildDecidedStatus(): Map<string, string> {
-  const latest = new Map<string, string>();
+export function isSuppressedByDecision(
+  latest: LatestDecision | undefined,
+  currentStatus: string,
+): boolean {
+  if (!latest) return false;
+  if (latest.decision === 'approve') return true; // approve は status 不問で抑止（再浮上防止の本丸）。
+  return latest.toStatus === currentStatus; // reject 等は従来どおり status 一致時のみ抑止。
+}
+
+/**
+ * id+source ごとの「最新の決定レコード（decision と toStatus）」を作る（最後の行が勝つ）。
+ *
+ * 承認フローは status だけでなく本文タグ（設計判断/承認待ち等）でも拾う。さらに tasks collector が
+ * 同一 ID の別表現（表行 vs 別バッチの旧表現）から status を揺らして読むことがあり、これが MC-89 の
+ * 再浮上ループの真因だった。決定ログ（approval-decisions.jsonl）から id+source ごとに最後の決定を
+ * 引き、approve 済みなら status 不問で抑止する（{@link isSuppressedByDecision} 参照）。
+ */
+function buildLatestDecisions(): Map<string, LatestDecision> {
+  const latest = new Map<string, LatestDecision>();
   let raw: string;
   try {
     raw = readFileSync(APPROVAL_DECISIONS_FILE, 'utf-8');
@@ -112,9 +134,14 @@ function buildDecidedStatus(): Map<string, string> {
   for (const line of raw.split('\n')) {
     if (!line.trim()) continue;
     try {
-      const rec = JSON.parse(line) as { source?: string; id?: string; toStatus?: string };
-      if (!rec.source || !rec.id || !rec.toStatus) continue;
-      latest.set(`${rec.source}:${rec.id}`, rec.toStatus); // 後勝ち（最新決定）。
+      const rec = JSON.parse(line) as {
+        source?: string;
+        id?: string;
+        decision?: string;
+        toStatus?: string;
+      };
+      if (!rec.source || !rec.id || !rec.decision || !rec.toStatus) continue;
+      latest.set(`${rec.source}:${rec.id}`, { decision: rec.decision, toStatus: rec.toStatus }); // 後勝ち（最新決定）。
     } catch {
       // 壊れ行は無視。
     }
@@ -131,8 +158,8 @@ export function collectApprovals(): ApprovalsResponse {
     tasks = [];
   }
 
-  // id+source ごとの最新決定の遷移先 status（現在 status が一致すれば抑止）。
-  const decidedStatus = buildDecidedStatus();
+  // id+source ごとの最新決定（approve なら status 不問で抑止、それ以外は status 一致で抑止）。
+  const latestDecisions = buildLatestDecisions();
 
   const items: ApprovalItem[] = [];
   const byCategory: Record<ApprovalKind, number> = {
@@ -144,10 +171,10 @@ export function collectApprovals(): ApprovalsResponse {
   };
 
   for (const t of tasks) {
-    // 決定が今も反映されている（最新決定の toStatus と現在 status が一致する）項目は出さない。
-    // 設計判断/承認待ちタグが本文に残っていても、承認で TODO 化済みなら再浮上させない（再浮上防止）。
-    // 当該タスクが再度 status 変更されれば（差し戻し等）一致が外れ、再び承認対象に戻る。
-    if (decidedStatus.get(`${t.source}:${t.id}`) === t.status) continue;
+    // 最新決定で抑止すべき項目は出さない（MC-89）。approve 済みなら collector が status を
+    // BLOCKED 等に揺らして読んでも status 不問で抑止し、再浮上ループを断つ。reject 等は従来どおり
+    // 現在 status が決定の toStatus と一致するときだけ抑止し、再起票/差し戻しでは再浮上できる。
+    if (isSuppressedByDecision(latestDecisions.get(`${t.source}:${t.id}`), t.status)) continue;
     const categories = categoriesFor(t);
     if (categories.length === 0) continue;
     for (const c of categories) byCategory[c] += 1;
