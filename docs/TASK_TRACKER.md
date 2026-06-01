@@ -709,6 +709,7 @@ ID 採番: **AR-0x**。
 | MC-65 | autonomous-rin 可視化（30分毎ティックの選択タスク×結果レーン） | P2 | おまけ | DONE（2026-06-01 林ティック。collector ticks.ts＋GET /api/ticks＋ダッシュボード配下「ティック」タブ(Ticks.tsx) 実装。autonomous-*.log を末尾読み解析→スコープ別レーン×選択タスク/結果バッジ/時刻。fail-soft・既存型非破壊・--mc-*変数のみ/SVGのみ/中立文言/390px対応。server tsc EXIT0／web build EXIT0／ticks単体17件pass を林が自己裏取り＋reviewer 独立検証 pass。ローカル commit b8b8e3a。**本番反映は mission-control.service restart＝Keita 承認待ち（restart まで /api/ticks は稼働サーバに出ない）**） | dev-logic | MC-61 |
 | MC-81 | tasks collector の normStatus 堅牢化（statusセル先頭トークンで正規化） | P2 | 品質 | DONE | dev-logic | MC-80（棚卸し中に副産物として発見） |
 | MC-91 | roster に persona（人格名）/personality（気質）を反映（collector + Agents ビュー表示） | P1 | 機能 | DONE（2026-06-01。collector roster.ts に persona/personality 追加→Agents.tsx でカード見出し=人格名・サブ=識別名・本文に「気質:」表示。server tsc 0 / web build 成功 / restart 後 healthz 200。/api/roster で 11/11 体に persona+personality 充足を確認、欠落0。push 待ち=Keita 承認領域） | dev-logic | なし（60-Agents frontmatter 追記済 commit 29849b0） |
+| MC-101 | Apollo ターミナルビューに「ターミナル開始」ボタンを追加（tmux main / ttyd 切断後の再起動導線） | 中〜高 | feature | IN_PROGRESS（dev-logic 着手中。Apollo は生きているが端末バックエンド＝tmux main/ttyd が落ちた時の復旧導線。GET /api/terminal/status＋POST /api/terminal/start＋Terminal.tsx に開始ボタン。検証は本番 main 非破壊で別名セッション） | dev-logic（実装）／test-functional・dev-logic（検証） | MC-92/93/94/95（ターミナル系）、MC-96（レスキュー） |
 
 ---
 
@@ -1446,6 +1447,27 @@ ID 採番: **AR-0x**。
 | 受け入れ条件（DoD） | (1) Apollo 本体を停止した状態でもレスキュー画面が開ける。(2) レスキュー画面から restart して本体が復活する。(3) 独立 systemd で自動起動・常駐。(4) 認証ゲートあり。 |
 | 関連 | MC-93（今回の障害＝この要望の発端）、`~/cron-scripts/apollo-watchdog.sh`（自動 restart の既存版・手動 Web 版がこれ）、`deploy/apollo.service` / 新規 `deploy/apollo-rescue.service`, cloudflared, [[project-apollo-dashboard]]、[[project-apollo-keeper]] |
 | 提言・抜けもれ | (1) **非依存が肝**: レスキューサーバは apollo-web/server のビルド成果物・node_modules・共通設定に依存させない（本体が壊れた原因と心中しないため、単一ファイル＋Node 標準ライブラリのみが望ましい）。依存を持たせると「本体が死ぬ時に一緒に死ぬ」。(2) restart 権限＝レスキューサーバが `systemctl restart` を実行できる権限設計（dev ユーザの sudo 範囲 or systemd 経由）。任意 restart が認証ゲート内に限定されること（未認証で叩けると DoS）。(3) ポート 4318 と cloudflared 別経路が本体と衝突しない・独立して落ちないこと。(4) apollo番人（apollo）の cron watchdog（自動 restart）と機能重複・競合しないか整理（手動 Web 版＝人が押す、cron＝自動、の役割分担を明記）。(5) **設計は Keita 確認中**＝合意前に実装着手しない（BLOCKED 相当の判断待ち。確定したら IN_PROGRESS へ）。(6) レスキュー画面自体が単一障害点にならないよう、最低限の自己復旧（systemd Restart=always）も付ける。 |
+| 更新日 | 2026-06-01 |
+
+---
+
+### MC-101 — Apollo ターミナルビューに「ターミナル開始」ボタンを追加（tmux main / ttyd 切断後の再起動導線）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-101 |
+| タイトル | Apollo ターミナルビューに「ターミナル開始」ボタンを追加（tmux main / ttyd 切断後の再起動導線） |
+| 種別 | feature |
+| 優先度 | 中〜高（ターミナルが切断されると現状ブラウザから復旧できず SSH が要る。Keita 直近要望） |
+| ステータス | IN_PROGRESS（dev-logic 着手中） |
+| 担当 | dev-logic（蓮／実装）、検証は test-functional（試野）／dev-logic |
+| 背景 | Keita 要望（2026-06-01）。PC のターミナルが切断された後（tmux main セッション消失、または ttyd プロセス停止）、Apollo のターミナル画面から「開始」ボタンで tmux main（林 CLI）と ttyd を再起動して復旧できるようにしたい。現状は切断されるとブラウザ側に復旧導線がなく SSH 介入が要る。MC-96 のレスキュー画面（Apollo 本体 :4317 が死んだ時用）とは別レイヤー＝Apollo は生きているが端末バックエンド（tmux/ttyd）が落ちた時の導線。 |
+| 想定設計 | サーバに GET /api/terminal/status（tmux main 有無・ttyd 稼働の状態）と POST /api/terminal/start（無ければ tmux main を rin-terminal.sh 相当で起動・ttyd 停止なら起動、冪等）。要認証。フロント web/src/views/Terminal.tsx で切断状態を検知して「ターミナル開始」ボタンを表示、押下で start→iframe リロード。rin-terminal.sh（/home/dev/cron-scripts/rin-terminal.sh）と既存 ttyd 起動構成を dev-logic が調査して整合させる。 |
+| 重要制約 | 検証で本番 tmux main（対話中の林セッション）を kill しないこと。検証は別名セッションで行う。 |
+| 受け入れ条件（DoD） | (1) tmux main を（別名セッションで）落とした状態からボタンで端末が復活／(2) 既に稼働中はボタン非表示 or 冪等で無害／(3) 認証ゲート維持／(4) tsc green・build・restart 後 healthz 200・実機検証／(5) 本番 main 非破壊。 |
+| 関連ファイル | `web/src/views/Terminal.tsx`、`server/src/`（GET /api/terminal/status・POST /api/terminal/start 新規）、`/home/dev/cron-scripts/rin-terminal.sh`、既存 ttyd 起動構成（apollo-terminal.service） |
+| 依存 | MC-92/93/94/95（ターミナル系の実装/proxy/paste/upload）、MC-96（レスキュー＝別レイヤーだが導線思想を参照） |
+| 提言・抜けもれ | (1) **冪等性が肝**: POST /api/terminal/start は「既に tmux main 稼働・ttyd 稼働」のとき二重起動して既存セッション（対話中の林）を壊さないこと。存在チェック→無い時だけ起動、を厳格に。(2) **本番 main 非破壊の検証手順を明記**: 検証は別名セッション（例 `main_test`）で「落ちた状態→ボタン復活」を再現し、本物の `main` には触れない。DoD(5) の決め手。(3) **認証ゲート**: status/start とも MC_TOKEN 認証配下に置く（未認証で start を叩けると DoS／勝手起動になる）。MC-92/96 と同じ強度で。(4) **MC-96 レスキューとの役割整理**: レスキュー（:4318・本体が死んだ時）と本件（:4317 本体は生存・端末だけ落ちた時）の役割分担を UI/ドキュメントで明示し、機能重複させない。(5) **rin-terminal.sh の整合**: tmux main 起動の正準手順が rin-terminal.sh に集約されているか確認。API がシェルを直書きせず同スクリプト/同等手順を呼ぶ形にして二重メンテを避ける。(6) **ttyd と tmux の起動順序**: ttyd は tmux main にアタッチする構成なら、start で tmux→ttyd の順序・依存を保証（ttyd だけ起きて空セッションを掴む事故を防ぐ）。(7) **状態表示の正確さ**: status はプロセス grep だけでなく「アタッチ可能か」まで見られると親切（ゾンビ ttyd 検知）。(8) 検証根拠（別名セッションでの落とす→復活ログ・status JSON・認証401/200・冪等2回叩き）を DONE note に file/コマンドベースで残す（[[feedback-review-agent-verify-then-done]]）。(9) push / 本番反映（apollo.service restart 含む）は Keita 承認待ち（[[reference-deploy-commands]]）。 |
 | 更新日 | 2026-06-01 |
 
 ---
