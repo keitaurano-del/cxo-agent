@@ -66,6 +66,14 @@ proxy.on('proxyReqWs', (proxyReq) => {
   if (authHeader) proxyReq.setHeader('Authorization', authHeader);
 });
 
+// ttyd からのレスポンス（iframe で読み込まれる HTML / JS）に Permissions-Policy を付与する。
+// index.ts のグローバル middleware でも付けているが、http-proxy が upstream（ttyd）の
+// ヘッダで writeHead する際に Express が set 済みのヘッダを取りこぼす可能性を避け、
+// proxy 経路でも確実に clipboard を self 許可する（MC-92 コピペ改善）。
+proxy.on('proxyRes', (proxyRes) => {
+  proxyRes.headers['permissions-policy'] = 'clipboard-read=(self), clipboard-write=(self)';
+});
+
 /**
  * /terminal の HTTP リクエストを ttyd へ中継する Express ハンドラ。
  * index.ts で makeAuthMiddleware の後ろにマウントするので、ここに来る時点で認証済み。

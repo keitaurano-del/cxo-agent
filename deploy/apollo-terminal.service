@@ -15,10 +15,12 @@ EnvironmentFile=/home/dev/projects/cxo-agent/.terminal.env
 # -p 7681      : ポート
 # -W           : writable（フル操作。読み取り専用にしない＝MC-92 DoD(5)）
 # --credential : Basic 認証（強いランダム。env から /bin/sh で展開）
+# -t rightClickSelectsWord=true : 右クリックで単語選択（コピペ UX 改善・MC-92）。
+#   xterm.js(ITerminalOptions) の有効オプション。選択補助でコピーしやすくする。
 # rin-terminal.sh : main があれば attach・無ければ claude 起動で作成（共有林セッション）
 #   （reboot/session-cleanup で main が落ちていても繋がる＝MC-92 提言(6) UX 対応）
 #   PC・スマホ・reboot の3経路を rin-terminal.sh に寄せて「1つの林」を共有する。
-ExecStart=/bin/sh -c 'exec /usr/bin/ttyd -i 127.0.0.1 -p 7681 -W --credential "$TTYD_USER:$TTYD_PASS" /home/dev/cron-scripts/rin-terminal.sh'
+ExecStart=/bin/sh -c 'exec /usr/bin/ttyd -i 127.0.0.1 -p 7681 -W -t rightClickSelectsWord=true --credential "$TTYD_USER:$TTYD_PASS" /home/dev/cron-scripts/rin-terminal.sh'
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Restart=always
 RestartSec=3

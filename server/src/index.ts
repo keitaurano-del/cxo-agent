@@ -52,6 +52,23 @@ const app = express();
 app.use(cors({ origin: false }));
 app.use(express.json({ limit: '1mb' }));
 
+// ─── Permissions-Policy（クリップボード委譲）── MC-92 コピペ改善 ────
+// Apollo 本体（親 HTML）と /terminal proxy（iframe 内 ttyd）のレスポンスに
+// clipboard-read / clipboard-write を self に許可するヘッダを付ける。iframe の
+// allow="clipboard-read; clipboard-write"（Terminal.tsx）だけでは、ブラウザに
+// よっては親ドキュメントの Permissions-Policy で許可されていないと iframe へ
+// clipboard 権限が委譲されない。ここで親・iframe 両方の経路に付与して
+// navigator.clipboard / Ctrl+V paste を通す。
+//   注意: navigator.clipboard は secure context（HTTPS か localhost）でしか
+//   動かないため、http://IP:4317 直アクセス時はこのヘッダがあっても read API は
+//   封じられる（HTTPS 必須）。ただし Ctrl+V のネイティブ paste（DOM paste
+//   イベント）は ttyd/xterm.js が受けるので非セキュアでも通る経路がある。
+//   全ルートに付けても害はない（401 等にも乗るが副作用なし）。認証は別レイヤー。
+app.use((_req, res, next) => {
+  res.setHeader('Permissions-Policy', 'clipboard-read=(self), clipboard-write=(self)');
+  next();
+});
+
 // ─── ヘルスチェック（認証不要・最優先で登録）────────────────
 // systemd / 外形監視用の軽量版。詳細版 /api/health は認証下に残す。
 app.get(HEALTHZ_PATH, (_req, res) => {

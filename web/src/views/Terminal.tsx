@@ -26,6 +26,10 @@ export default function Terminal() {
           </a>
         }
       />
+      <p className="px-1 pb-2 text-xs text-text-muted">
+        コピー / 貼り付けは Ctrl+V（macOS は Cmd+V）で行えます。うまく貼り付けられない場合は、HTTPS
+        で開くか、右上の「新しいタブで開く」をご利用ください。
+      </p>
       <div className="relative flex-1 overflow-hidden bg-bg">
         <iframe
           src="/terminal/"
