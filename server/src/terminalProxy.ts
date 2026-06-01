@@ -86,8 +86,8 @@ const PASTE_FIX_SCRIPT = `<script>(function(){
   }
 })();</script>`;
 
-// ─── モバイルのタップで TUI メニューを選択できるようにする（MC-105）────────────
-// 根因（実機/コード確定）: claude などの TUI は mouse reporting（DEC 1000/1002 + SGR 1006）を
+// ─── モバイルのタップで TUI メニューを選択できるようにする（MC-104）＋スクロール温存（MC-105）─
+// 根因（MC-104・実機/コード確定）: claude などの TUI は mouse reporting（DEC 1000/1002 + SGR 1006）を
 //   有効化し、ユーザーがメニュー項目をクリックすると端末がその座標を SGR mouse シーケンス
 //   （ESC[<0;col;rowM 押下 → ESC[<0;col;rowm 解放）で PTY へ送り、TUI が該当項目を選択する。
 //   xterm.js（ttyd 1.7.4 同梱 = xterm 4.x）は mouse mode 有効時、PC のマウスイベントは
@@ -96,26 +96,61 @@ const PASTE_FIX_SCRIPT = `<script>(function(){
 //   wheel のみ登録。touchstart/touchend は未処理）。ブラウザは tap を合成 click にするが、
 //   合成 mousedown/up も発火タイミング・座標が不安定で、mouse mode 下のメニュー選択に
 //   繋がらない＝「PC クリックは効くがモバイルのタップは無反応」になる。
-// 修正（公開 API 中心・内部依存は最小＋ガード付き）: xterm の screen 要素に touchstart/
-//   touchend を張り、mouse reporting が有効なときだけ、タップ座標を term.cols/term.rows と
-//   要素の getBoundingClientRect() から col/row（0-indexed）へ換算し、xterm 公開内部の
-//   coreMouseService.triggerMouseEvent({col,row,x,y,button:0,action:1}) で press、続けて
-//   action:0 で release を撃つ。これで xterm が active protocol（SGR 等）に応じた正しい
-//   mouse シーケンスを PTY へ送る＝PC クリックと同じ出力になり TUI が項目を選択する。
-//   mouse reporting 無効時（通常 shell）は何もしない＝既存のフォーカス/スクロール/選択を温存。
-//   スクロール（スワイプ）と単発タップは移動量しきい値（10px）と時間（700ms）で区別し、
-//   スワイプは mouse press を撃たない。内部 API（term._core.coreMouseService）は try/catch で
-//   ガードし、構造が変わっても通常タップを壊さない（false を返して無処理に倒す）。
-const TAP_FIX_SCRIPT = `<script>(function(){
+//
+// 回帰（MC-105・実機/コード確定）: MC-104 が touchstart/move/end を張ったことで、claude などの
+//   TUI（mouse reporting 有効＝alternate screen + DEC 1000/1002）でモバイルのスワイプスクロールが
+//   完全に死んだ。実機（Playwright モバイル + mouse-mode probe で onData を観測）で確定した根因:
+//     - xterm 4.x のネイティブ touch スクロール（viewport.handleTouchStart/handleTouchMove）は
+//       `if(!coreMouseService.areMouseEventsActive)` でガードされ、mouse mode 有効時は発火しない。
+//       さらに alternate screen では scrollback buffer 自体が無効＝ネイティブにスクロールする対象が無い。
+//     - MC-104 の TAP_FIX は touchend で「moved（スワイプ）はタップ扱いせず return＝何もしない」。
+//     結果、mouse mode 中のスワイプは (a) xterm ネイティブが mouse-mode ガードで不発、(b) TAP_FIX も
+//     何もしない、で宙ぶらりんになり、TUI へホイールイベントすら届かず＝スワイプが完全に無反応。
+//   実機観測（mouse mode 有効・スワイプ）: PTY 送出は空配列＝何も飛んでいなかった。
+//   ※ PC マウスホイールは xterm ネイティブの wheel ハンドラが mouse mode 時に SGR wheel（button:4＝
+//     SGR 64=up / 65=down）に変換して PTY へ送るので生きていた＝「PC ホイールは効くがモバイルの
+//     スワイプだけ無反応」という症状だった（PC ホイール経路はこの script は一切触らない＝非退行）。
+//
+// 修正（MC-105、スワイプスクロール復活・タップ選択維持・通常 shell 非介入）:
+//   1) リスナを **.xterm-viewport（スクロール要素）に張る**。座標→col/row 換算は .xterm-screen の
+//      rect を使う（viewport は screen を覆うので clientX/Y は一致）。viewport が取れない構造の
+//      ときだけ .xterm-screen → t.element の順でフォールバック。
+//   2) **mouse reporting 無効時（通常 shell / scrollback 閲覧）は touch に一切介入しない**＝xterm
+//      ネイティブの touch スクロール（handleTouchMove）をそのまま生かす。touch-action: pan-x pan-y
+//      を明示してブラウザのネイティブ pan も殺さない。実機でこの経路はスクロールバックが動くことを確認済み。
+//   3) **mouse reporting 有効時（TUI）のみ介入**:
+//      - タップ（移動量小・短時間）→ press(action:1)→release(action:0) を button:0 で撃つ＝PC
+//        クリックと同一の SGR で TUI が項目を選択（MC-104 機能、維持）。
+//      - スワイプ（移動量がしきい値超）→ 移動量を行数に換算し、その回数だけ wheel イベント
+//        （button:4、指を下へ＝過去へ＝action:0=up / 指を上へ＝action:1=down）を triggerMouseEvent で
+//        撃つ＝PC ホイールと同一の SGR（ESC[<64.. / ESC[<65..）が TUI へ届き、TUI が履歴をスクロールする。
+//      mouse mode 中はネイティブ touch スクロールが不発（上記ガード）なので、スワイプ中の touchmove は
+//      preventDefault してページスクロール等への漏れを防ぐ（ネイティブ介入を奪う心配はない）。
+//   内部 API（term._core.coreMouseService）は try/catch でガードし、構造変化時も通常 touch を壊さない。
+//
+// TAP_FIX_BODY はブラウザで eval する素の JS（テストから直接 eval して window.term をモックし
+// 「通常 shell は非介入/clean tap は press→release/スワイプは wheel を撃つ」を検証する）。
+// 本番注入は TAP_FIX_SCRIPT（<script> でラップ）を使う。
+export const TAP_FIX_BODY = `(function(){
   function install(){
     var t=window.term;
     if(!t||typeof t.cols!=='number'){return false;}
     if(t.__apolloTapFix){return true;}
-    var el=null;
-    try{el=t.element&&t.element.querySelector?t.element.querySelector('.xterm-screen'):null;}catch(_e){}
-    if(!el){el=t.element;}
-    if(!el){return false;}
+    // スクロール要素は .xterm-viewport（overflow-y:scroll）。ここに張ってネイティブ pan を温存する。
+    // 座標→cell 換算には .xterm-screen の rect を使う（viewport は screen を覆い座標は一致）。
+    var view=null, screen=null;
+    try{
+      if(t.element&&t.element.querySelector){
+        view=t.element.querySelector('.xterm-viewport');
+        screen=t.element.querySelector('.xterm-screen');
+      }
+    }catch(_e){}
+    var rectEl=screen||view||t.element;        // 座標換算の基準（screen 優先）
+    var listenEl=view||screen||t.element;      // リスナを張る対象（スクロール要素 viewport 優先）
+    if(!rectEl||!listenEl){return false;}
     t.__apolloTapFix=true;
+    // ネイティブのスクロール（縦横 pan）を常に許可する。clean tap だけ JS 側で横取りする。
+    try{listenEl.style.touchAction='pan-x pan-y';}catch(_e){}
     // mouse reporting が有効か（claude のメニュー等は有効化する）。内部 API はガード。
     function mouseActive(){
       try{
@@ -125,7 +160,7 @@ const TAP_FIX_SCRIPT = `<script>(function(){
     }
     // タップ座標を 0-indexed の col/row に換算（公開 getter + rect のみ使用）。
     function toCell(clientX,clientY){
-      var r=el.getBoundingClientRect();
+      var r=rectEl.getBoundingClientRect();
       var cols=t.cols,rows=t.rows;
       if(!cols||!rows||r.width<=0||r.height<=0){return null;}
       var cw=r.width/cols, ch=r.height/rows;
@@ -145,30 +180,70 @@ const TAP_FIX_SCRIPT = `<script>(function(){
         return true;
       }catch(_e){return false;}
     }
-    var sx=0,sy=0,st=0,moved=false,tracking=false;
-    el.addEventListener('touchstart',function(e){
-      if(!mouseActive()){tracking=false;return;} // 通常 shell では一切介入しない
+    // wheel イベントを n 回撃つ。button:4 が xterm の wheel エンコード（up=action:0→SGR 64、
+    // down=action:1→SGR 65）＝PC マウスホイールと同一の出力。mouse mode の TUI がこれを受けて
+    // 履歴をスクロールする。n は暴走防止のため呼び出し側でクランプ済み。
+    function sendWheel(cell,up,n){
+      try{
+        var c=t._core.coreMouseService;
+        var action=up?0:1;
+        for(var i=0;i<n;i++){
+          c.triggerMouseEvent({col:cell.col,row:cell.row,x:cell.col+1,y:cell.row+1,button:4,action:action,ctrl:false,alt:false,shift:false});
+        }
+        return true;
+      }catch(_e){return false;}
+    }
+    var MOVE_THRESHOLD=10; // px。これ未満はタップ、超えたらスワイプ。
+    var TAP_MAX_MS=700;    // ms。これ超は長押し扱いでタップにしない。
+    var sx=0,sy=0,lastY=0,st=0,moved=false,scrolled=false,tracking=false;
+    listenEl.addEventListener('touchstart',function(e){
+      if(!mouseActive()){tracking=false;return;} // 通常 shell では一切介入しない（ネイティブスクロール温存）
       if(e.touches.length!==1){tracking=false;return;} // マルチタッチ（ズーム等）は無視
-      tracking=true;moved=false;
-      var tt=e.touches[0];sx=tt.clientX;sy=tt.clientY;st=Date.now();
+      tracking=true;moved=false;scrolled=false;
+      var tt=e.touches[0];sx=tt.clientX;sy=tt.clientY;lastY=tt.clientY;st=Date.now();
     },{passive:true});
-    el.addEventListener('touchmove',function(e){
+    listenEl.addEventListener('touchmove',function(e){
       if(!tracking){return;}
       var tt=e.touches[0];
-      if(Math.abs(tt.clientX-sx)>10||Math.abs(tt.clientY-sy)>10){moved=true;}
-    },{passive:true});
-    el.addEventListener('touchend',function(e){
+      if(!tt){return;}
+      if(Math.abs(tt.clientX-sx)>MOVE_THRESHOLD||Math.abs(tt.clientY-sy)>MOVE_THRESHOLD){moved=true;}
+      if(!moved){return;}
+      // mouse mode 中のスワイプ＝TUI へ wheel を送って漸進スクロール。1 行分動くごとに wheel 1 発。
+      // （mouse mode 中は xterm ネイティブの touch スクロールがガードで不発なので、ここで送らないと
+      //   何もスクロールしない＝MC-105 の回帰の本体。）
+      var cell=toCell(tt.clientX,tt.clientY);
+      if(!cell){return;}
+      var r=rectEl.getBoundingClientRect();
+      var ch=(t.rows&&r.height>0)?r.height/t.rows:0;
+      if(ch<=0){return;}
+      var dy=tt.clientY-lastY;
+      var steps=Math.floor(Math.abs(dy)/ch);
+      if(steps>0){
+        var up=dy>0; // 指を下へ（dy>0）＝過去（上）を見る＝wheel up。指を上へ＝wheel down。
+        sendWheel(cell,up,steps>10?10:steps);
+        lastY=lastY+(up?steps*ch:-steps*ch);
+        scrolled=true;
+      }
+      // mouse mode 中はネイティブ介入が無いので、ページスクロール等への漏れを防ぐため抑止する。
+      if(typeof e.preventDefault==='function'&&e.cancelable!==false){e.preventDefault();}
+    },{passive:false});
+    listenEl.addEventListener('touchend',function(e){
       if(!tracking){return;}
       tracking=false;
-      if(moved||(Date.now()-st)>700){return;} // スワイプ/長押しはタップ扱いしない
       if(!mouseActive()){return;}
+      // スワイプ（スクロール済 or 移動量超）・長押しはタップ扱いしない。
+      if(moved||scrolled||(Date.now()-st)>TAP_MAX_MS){
+        // スクロールしたなら末尾の合成 click を抑止（mouse mode 時のみ）。
+        if(scrolled&&typeof e.preventDefault==='function'){e.preventDefault();}
+        return;
+      }
       var tt=(e.changedTouches&&e.changedTouches[0])||null;
       if(!tt){return;}
       var cell=toCell(tt.clientX,tt.clientY);
       if(!cell){return;}
       if(sendTap(cell)){
-        // ブラウザの合成 mousedown/click による二重送出を防ぐ（mouse mode 時のみ）。
-        e.preventDefault();
+        // ブラウザの合成 mousedown/click による二重送出を防ぐ（mouse mode の clean tap 時のみ）。
+        if(typeof e.preventDefault==='function'){e.preventDefault();}
       }
     },{passive:false});
     return true;
@@ -176,7 +251,8 @@ const TAP_FIX_SCRIPT = `<script>(function(){
   if(!install()){
     var n=0,iv=setInterval(function(){if(install()||++n>100){clearInterval(iv);}},100);
   }
-})();</script>`;
+})();`;
+const TAP_FIX_SCRIPT = `<script>${TAP_FIX_BODY}</script>`;
 
 // proxy 失敗時に Apollo 全体を落とさない。ttyd 停止中（林セッション無し等）でも 502 を返すだけ。
 proxy.on('error', (err, _req, resOrSocket) => {
