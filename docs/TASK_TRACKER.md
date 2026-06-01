@@ -1268,7 +1268,7 @@ ID 採番: **AR-0x**。
 | ID | MC-88 |
 | タイトル | autonomous-rin が BLOCKED タスクを TODO に書き戻す疑い（選定ロジックの BLOCKED 誤認） |
 | 優先度 | P1 |
-| ステータス | IN_PROGRESS（2026-06-01 夜目 根因確定調査中。下記「根因確定」欄参照） |
+| ステータス | DONE（2026-06-01 cxo 自律ティック（林）で検証確定。実装は commit `e154e00`＝(A)(B) worker プロンプト＋物理ガード（`~/cron-scripts/autonomous-worker.sh`：他タスクの BLOCKED 行を ID 非依存で HEAD から復元する決定的 python ガード L215-293／`SELECTED_TASK_ID` キャプチャ L212／鉄則 L163・L168）＝リポ外ローカルスクリプトで即時有効（本ティック自身がこの強化版プロンプト下で走行＝live 反映を実証）。(C/D) collector status 正本一本化は `server/src/collectors/tasks.ts` の `inNonTaskTable`（非タスク表を行ごと除外）で実装。**当ティックで実ファイル＋git 裏取りし独立に再検証 green**: `git log` に e154e00 在・ガード実コード実在・`tsc --noEmit` EXIT0・`tasks.summaryTable` 3/3・`approvals.decision` 9/9・`tasks.normStatus` 回帰 31/31。DoD（原因特定＝a58c147 の reconcile 上書き／修正＝ガード＋正本一本化／再現確認＝ガード単体検証①〜④＋本ティック green）充足。[[feedback-review-agent-verify-then-done]] によりエージェント検証で DONE 化（Keita 実機確認不要）。**collector のライブ反映には cxo-agent server（mission-control.service）restart が必要＝Keita 承認待ち（restart まで Apollo live は未変化）。push も Keita 承認領域（NO_PUSH）。** MC-89／MC-88-MC-89 共通行と同根・同 commit で対処済み。） |
 | 担当 | dev-logic（autonomous-rin.sh / プロンプトの選定ロジック点検） |
 | 背景 | 2026-05-31 の台帳整合作業中、AM-O（BLOCKED／SKU 登録待ち）が autonomous-rin と思われる外部プロセスにより複数回 TODO に書き戻される現象を観測。HEAD `8925c39` で BLOCKED 復元済みの後、未コミット編集で再び TODO 化された。autonomous-rin は本来「設計判断」「Keita 承認待ち」「BLOCKED」タグのタスクのステータスを触らない設計（project-autonomous-rin の選定基準）なのに、BLOCKED タスクのステータスを TODO に変えている。 |
 | 影響 | 台帳が静かに汚れ、Keita ゲート（承認待ち・設計判断・BLOCKED）のタスクが誤って着手対象に見える事故につながる。ボードの信頼性に直結。 |
