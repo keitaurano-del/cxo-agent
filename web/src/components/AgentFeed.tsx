@@ -1,6 +1,6 @@
 // 個別エージェントの会話タイムライン。/api/agents/:id/feed を取得して時系列表示。
 // 長文は折り畳み。重さ対策として末尾（最新）から上位 N 件に制限する。
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FeedItem } from '../lib/types';
 import { absoluteTime, relativeTime } from '../lib/time';
 import { Spinner } from './ui';
@@ -33,12 +33,42 @@ function roleColor(role: FeedItem['role']): string {
   }
 }
 
+/** クリップボードコピーボタン。成功時 1.5 秒間「コピー完了」色でフィードバック。 */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleCopy = () => {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      aria-label="メッセージをコピー"
+      title={copied ? 'コピー完了' : 'コピー'}
+      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] transition-colors
+        md:opacity-0 md:group-hover:opacity-100
+        ${copied ? 'text-[color:var(--mc-active)]' : 'text-text-faint hover:text-text'}`}
+    >
+      {copied ? '✓' : 'copy'}
+    </button>
+  );
+}
+
 function FeedEntry({ item }: { item: FeedItem }) {
   const [expanded, setExpanded] = useState(false);
   const long = item.text.length > FOLD_LEN;
   const shown = long && !expanded ? item.text.slice(0, FOLD_LEN) + '…' : item.text;
+  // コピー対象は展開の有無に関係なく全文。
+  const fullText = item.text;
   return (
-    <li className="border-l-2 pl-3" style={{ borderColor: roleColor(item.role) }}>
+    <li className="group border-l-2 pl-3" style={{ borderColor: roleColor(item.role) }}>
       <div className="mb-0.5 flex items-center gap-2 text-[11px]">
         <span className="font-semibold" style={{ color: roleColor(item.role) }}>
           {ROLE_LABEL[item.role]}
@@ -51,8 +81,9 @@ function FeedEntry({ item }: { item: FeedItem }) {
         <span className="text-text-faint" title={absoluteTime(item.ts)}>
           {relativeTime(item.ts)}
         </span>
+        <CopyButton text={fullText} />
       </div>
-      <div className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-text">
+      <div className="select-text whitespace-pre-wrap break-words text-[13px] leading-relaxed text-text">
         {shown}
       </div>
       {long && (

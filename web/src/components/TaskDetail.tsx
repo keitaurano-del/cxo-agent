@@ -1051,7 +1051,7 @@ function TaskDetailBody({
                   </div>
                   <div className="flex items-center gap-2">
                     <dt className="w-20 shrink-0 text-text-faint">担当</dt>
-                    <dd className="text-text">{view.owner || '未割り当て'}</dd>
+                    <dd className="select-text text-text">{view.owner || '未割り当て'}</dd>
                   </div>
                   {view.priority && (
                     <div className="flex items-center gap-2">
@@ -1063,7 +1063,7 @@ function TaskDetailBody({
                   )}
                   <div className="flex items-center gap-2">
                     <dt className="w-20 shrink-0 text-text-faint">出典</dt>
-                    <dd className="break-all text-text-muted">{view.source}</dd>
+                    <dd className="select-text break-all text-text-muted">{view.source}</dd>
                   </div>
                   {view.updated && (
                     <div className="flex items-center gap-2">

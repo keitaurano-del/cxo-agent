@@ -10,6 +10,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+/** 直前のシリアライズ済みレスポンスを保持（内容不変なら setData をスキップして再レンダリングを抑制）。 */
+
 const POLL_INTERVAL_MS = 12000;
 
 async function fetchJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -41,6 +43,8 @@ export function useLiveResource<T>(path: string, liveTick = 0): LiveResource<T> 
 
   // 進行中フェッチをキャンセルできるよう保持。
   const abortRef = useRef<AbortController | null>(null);
+  // 直前のシリアライズ結果。ref なので useCallback の deps に含めない。
+  const prevJsonRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     abortRef.current?.abort();
@@ -49,6 +53,14 @@ export function useLiveResource<T>(path: string, liveTick = 0): LiveResource<T> 
     try {
       const json = await fetchJson<T>(path, ctrl.signal);
       if (ctrl.signal.aborted) return;
+      // データが変わっていなければ setData をスキップ → 再レンダリング抑制。
+      // テキスト選択が消える根本原因（12 秒ポーリング + SSE トリガーによる不要な再描画）を防ぐ。
+      const newJson = JSON.stringify(json);
+      if (newJson === prevJsonRef.current) {
+        if (!ctrl.signal.aborted) setLoading(false);
+        return;
+      }
+      prevJsonRef.current = newJson;
       setData(json);
       setError(null);
       setFetchedAt(new Date().toISOString());
