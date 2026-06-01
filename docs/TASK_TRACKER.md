@@ -702,7 +702,7 @@ ID 採番: **AR-0x**。
 | MC-61 | タスク詳細ドリルダウン（フロント＋API、既存 Tasks/Feed 拡張） | P0 | コア | DONE（2026-05-31 本番反映済 commit 6362562。TaskDetail.tsx 561行・web build→restart 済） | dev-logic + designer | MC-60 |
 | MC-62 | タスク↔workflow↔会話 紐付け（堅い案＝明示ログ data/task-links.jsonl） | P1 | コア | DONE（2026-05-31 本番反映済 commit f0bfb52。link-task.sh で MC-60↔wf_880723a6-991 を実紐付け→API hasExplicitLinks:true でrun summary返却をE2E実証） | dev-logic（運用ルールは林） | MC-60 |
 | MC-63 | 通知/アラート（ERROR・BLOCKED 長期滞留・deploy 失敗のバッジ） | P2 | おまけ | DONE（2026-05-31 本番反映済 commit 37ad6ed。/api/alerts 新規＋司令塔 AlertBanner。restart 後 本番4317 で `counts:{error:0,warning:0,total:0}` / `byCategory` / `thresholds.blockedStallDays:5` を返却＝現在アラート0件で正常、無トークン401・healthz ok 検証済） | dev-logic | MC-60, MC-61 |
-| MC-64 | deploy 連動（GitHub Actions run 状態をタスク詳細に表示） | P2 | おまけ | TODO | dev-logic | MC-61 |
+| MC-64 | deploy 連動（GitHub Actions run 状態をタスク詳細に表示） | P2 | おまけ | DONE（2026-06-01 林ティック。collector deploys.ts＋GET /api/deploys＋TaskDetail「デプロイ状況」section 実装。logic/en-chakai のみ対象・gh 失敗は空フォールバック・5分キャッシュ・既存 token 認証配下で非破壊。server tsc EXIT0/web build EXIT0、reviewer 独立検証 pass。ローカル commit bbe7058。**本番反映は apollo.service restart＝Keita 承認待ち。GH_TOKEN を service env に渡す設定も別途要**） | dev-logic | MC-61 |
 | MC-65 | autonomous-rin 可視化（30分毎ティックの選択タスク×結果レーン） | P2 | おまけ | TODO | dev-logic | MC-61 |
 | MC-81 | tasks collector の normStatus 堅牢化（statusセル先頭トークンで正規化） | P2 | 品質 | DONE | dev-logic | MC-80（棚卸し中に副産物として発見） |
 | MC-91 | roster に persona（人格名）/personality（気質）を反映（collector + Agents ビュー表示） | P1 | 機能 | DONE（2026-06-01。collector roster.ts に persona/personality 追加→Agents.tsx でカード見出し=人格名・サブ=識別名・本文に「気質:」表示。server tsc 0 / web build 成功 / restart 後 healthz 200。/api/roster で 11/11 体に persona+personality 充足を確認、欠落0。push 待ち=Keita 承認領域） | dev-logic | なし（60-Agents frontmatter 追記済 commit 29849b0） |
@@ -776,7 +776,10 @@ ID 採番: **AR-0x**。
 - 更新日: 2026-05-31
 
 ### MC-64 — deploy 連動（GitHub Actions run 状態表示）　[P2 / おまけ]
-- ステータス: TODO / 担当: dev-logic
+- ステータス: DONE（2026-06-01 林ティック）/ 担当: dev-logic
+- 完了(2026-06-01 林ティック): 生成→検証 workflow で green。(a) 新規 `server/src/collectors/deploys.ts`＝`gh run list --repo <r> --workflow <wf> --limit 5 --json …` を execFileSync で叩き正規化（返却 `{generatedAt, source(hostname), cached, repos:[{repo,project,runs:[{id,title,status,conclusion,branch,event,workflow,createdAt,updatedAt,url}],error?}]}`）。gh 不在(ENOENT)/タイムアウト/未認証/レート/JSON parse 失敗は workflow 単位＋repo 単位＋全体の三重 try/catch で error 付き空配列にフォールバックし Apollo を落とさない。usage.ts 同方式の5分 TTL キャッシュ。(b) `GET /api/deploys` を `server/src/index.ts` に既存 makeAuthMiddleware（token/Basic）認証配下で非破壊追加（既存ルート/レスポンス型は不変）。(c) `server/src/config.ts` に DEPLOY_REPOS 定数化＝logic(keitaurano-del/logic: deploy-production.yml+android-deploy.yml)・en-chakai(keitaurano-del/en-chakai: deploy-production.yml) の2件のみ、**cxo-agent は deploy 連動対象外**。env override 可（DEPLOY_REPOS/DEPLOY_RUN_LIMIT/DEPLOY_GH_TIMEOUT_MS/DEPLOY_TTL_MS/DEPLOY_GH_PATH）。(d) `web/src/lib/types.ts` に DeployRun/DeployRepo/DeploysResponse 型、`web/src/components/TaskDetail.tsx` に LinkedDeploys（「デプロイ状況」section、ワークフローと会話の間）。task.project に対応 repo を突合して直近 run 表示、対象外 project/run 0件/取得失敗は中立的丁寧体の空状態でクラッシュせず。UI 制約遵守＝ハードコード hex なし(既存 CSS 変数のみ)・絵文字なし SVG のみ・状態色に語ラベル＋role/aria・390px 横溢れ対策。
+- 検証(2026-06-01): 林が独立に裏取り＝server `npx tsc --noEmit` EXIT0／web `npm run build`(tsc -b && vite build) 成功。reviewer(関) 独立検証 pass（serverTsc0/webBuild0・非破壊・認証配下・graceful fallback・UI制約・repoスコープ logic/en-chakai 限定、issues 0）。ローカル commit `bbe7058`。
+- 本番反映: **未実施**。server コード変更ゆえ `sudo systemctl restart mission-control.service` が要る＝Keita 承認領域。加えて run を実表示するには service の env に GH_TOKEN を渡す設定が別途必要（未設定でも未認証 error の空表示にフォールバックし壊れない）。restart まで実挙動は未変化。
 - 詳細: GitHub Actions の deploy 系 workflow（logic: deploy-production / android-deploy、en-chakai: deploy-production 等）の run 状態（queued/in_progress/success/failure）をタスク詳細（MC-61）に表示する。「このタスクの実装が本番に出たか」を Apollo から把握できるようにする。
 - 関連ファイル: `cxo-agent/server/src/collectors/`（新規 deploys.ts、`gh` CLI or GitHub API で run 取得）, server に新エンドポイント（/api/deploys 等）, フロントはタスク詳細内セクション
 - DoD: タスク詳細に直近の deploy run 状態が出る。run が無いタスクは空状態。GitHub API レート/認証エラーで Apollo 全体が落ちない（フォールバック表示）。
