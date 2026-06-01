@@ -31,6 +31,7 @@ import { SafePathError } from './lib/vaultPath.js';
 import { ALL_PROJECTS, type ProjectName } from './lib/projectMap.js';
 import { makeAuthMiddleware, authEnabled } from './lib/auth.js';
 import { inboxRouter } from './inbox.js';
+import { terminalUploadRouter } from './terminalUpload.js';
 import { vaultWriteRouter } from './vaultWriteRouter.js';
 import { taskEditRouter } from './taskEditRouter.js';
 import { approvalRouter } from './approvalRouter.js';
@@ -263,6 +264,12 @@ app.get('/api/workflows/:runId', (req, res) => {
 // Keita がスマホから投入したタスク/指示 + 画像添付を受け、自律林が次ティックで拾う。
 // auth ミドルウェア配下。POST=multipart 投入 / GET=pending 一覧 / GET attachment=画像配信。
 app.use('/api/inbox', inboxRouter());
+
+// ─── ターミナル画像アップロード（MC-95）──────────────────────────
+// Apollo のターミナルビューから画像を添付し、tmux main（林 CLI）の入力欄へ
+// 保存先の絶対パスを send-keys でリテラル注入する（自動 Enter なし）。林はそのパスを
+// Read で画像として読める。auth ミドルウェア配下＝Cookie 必須。POST /api/terminal/upload。
+app.use('/api/terminal', terminalUploadRouter());
 
 // ─── Vault（Obsidian 一元化ビュー・read-only）────────────────────
 // すべてのパス入力は collectors/vault → lib/vaultPath で安全化される。

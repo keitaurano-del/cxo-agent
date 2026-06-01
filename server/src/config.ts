@@ -77,6 +77,39 @@ export const INBOX_MAX_FILE_BYTES = envNum('INBOX_MAX_FILE_BYTES', 10 * 1024 * 1
 /** 添付画像の最大枚数。 */
 export const INBOX_MAX_FILES = envNum('INBOX_MAX_FILES', 5);
 
+// ─── ターミナル画像アップロード（MC-95）──────────────────────────
+//
+// Apollo のターミナルビューから画像を添付し、tmux main（林 CLI）の入力欄へ
+// その保存先絶対パスを send-keys でリテラル注入する。林はそのパスを Read で
+// 画像として読める。inbox の画像添付と同じ流儀（multipart・MIME検証・サイズ/枚数上限）。
+
+/** ターミナルアップロード画像の保存ディレクトリ（data/terminal-uploads）。絶対パスを林に渡す基準。 */
+export const TERMINAL_UPLOADS_DIR = join(INBOX_DATA_DIR, 'terminal-uploads');
+
+/** ターミナルアップロード 1 枚あたりの最大バイト数（10MB。inbox と揃える）。 */
+export const TERMINAL_UPLOAD_MAX_FILE_BYTES = envNum(
+  'TERMINAL_UPLOAD_MAX_FILE_BYTES',
+  10 * 1024 * 1024,
+);
+
+/** ターミナルアップロードの最大枚数（5 枚。inbox と揃える）。 */
+export const TERMINAL_UPLOAD_MAX_FILES = envNum('TERMINAL_UPLOAD_MAX_FILES', 5);
+
+/** send-keys を送る tmux ターゲット（既定 'main' = 林 CLI 常駐セッション）。env で差し替え可。 */
+export const TERMINAL_TMUX_TARGET = env('TERMINAL_TMUX_TARGET', 'main');
+
+/**
+ * tmux コマンドの PATH（systemd の env が痩せていても tmux を解決させる）。
+ * VAULT_GIT_PATH / DEPLOY_GH_PATH と同方式。
+ */
+export const TERMINAL_TMUX_PATH = env(
+  'TERMINAL_TMUX_PATH',
+  '/usr/local/bin:/usr/bin:/bin:' + (process.env.PATH ?? ''),
+);
+
+/** tmux send-keys のタイムアウト（ミリ秒）。詰まっても Apollo を固めない。 */
+export const TERMINAL_TMUX_TIMEOUT_MS = envNum('TERMINAL_TMUX_TIMEOUT_MS', 5000);
+
 /** マークダウンのタスクソース（複数）。存在しないものは collector 側で無視。 */
 export const TASK_SOURCES = {
   logicTracker: join(PROJECTS_DIR, 'logic', 'docs', 'TASK_TRACKER.md'),
