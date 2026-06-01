@@ -712,6 +712,7 @@ ID 採番: **AR-0x**。
 | MC-101 | Apollo ターミナルビューに「ターミナル開始」ボタンを追加（tmux main / ttyd 切断後の再起動導線） | 中〜高 | feature | DONE（dev-logic 実機検証グリーンで DONE 化。tsc/build green・restart 後 healthz 200・status API 本番 ready:true/Cookie無し401・別名セッション mc100test で start created→ready・2回目 no-op 冪等・本番 main session 不変・Playwright smoke 5/5。commit a9ceef4 未 push） | dev-logic（実装）／test-functional・dev-logic（検証） | MC-92/93/94/95（ターミナル系）、MC-96（レスキュー） |
 | MC-102 | ターミナル画像添付にプレビュー表示と複数枚ステージング UI を追加（MC-95 拡張） | 中 | feature / UX | DONE（2026-06-01 dev-logic 実機検証グリーンで IN_PROGRESS→DONE。Terminal.tsx を即送信→ステージング方式へ。StagedImage 配列＋createObjectURL サムネ＋revokeObjectURL リーク解放＋個別削除＋5枚上限＋「林に送る（N枚）」で multipart 一括 201。web build/server tsc 0・healthz 200・Playwright smoke 7/7・MC-100 非退行 5/5・実機 authed 2枚 count:2・main 非破壊。commit 2065363） | dev-logic | MC-95、MC-92〜94、MC-100/101 |
 | MC-98 | Apollo e2e smoke の既存 fail を現状の UI（ナビ5項目）に合わせて修正（テスト負債） | 中 | chore / test 負債 | DONE（2026-06-01 検証グリーンで TODO→DONE。smoke 28 spec 全 green（before 11 fail→after 0）。修正 spec=e2e/render-smoke-20260530.spec.ts（:18-37 TOP_NAV/EXPECTED_TAB_COUNT 定数化、:144 toBe(7)→toBe(EXPECTED_TAB_COUNT)、:146-168 ボトムナビ遷移を実在項目 Vault→/tasks→/terminal-view に更新）。newfeatures.spec.ts の同種修正は MC-99 commit c6614ce に含まれ重複なし。MC-95/100/102 spec とも共存 green。正準ナビ=App.tsx:41 NAV 配列5項目（/ダッシュボード・/tasks・/approvals・/vault・/terminal-view）。commit 22499fa。[[feedback-review-agent-verify-then-done]]） | test-functional（試野）／dev-logic（蓮） | なし（MC-95 とは無関係の既存ドリフト） |
+| MC-103 | ターミナル画像添付の「送る前のプレビュー」を確実に個別削除できるようにする（MC-102 の削除 UX 修正） | 中〜高 | bug / UX 修正 | IN_PROGRESS（dev-logic 着手中。Keita 実機で「送る前の画像プレビューを削除できない」と報告＝MC-102 で個別削除×（removeStaged）を実装し Playwright「個別削除で1枚減」は PASS だったが実機体験と食い違い。原因候補(a)削除ボタンが視認しづらい/ホバー依存でタップ非表示(b)ヒット領域小・iframe/他要素に隠れ押せない(c)本番 dist 反映漏れ(d)削除ハンドラのバグ。実機で切り分け→修正） | dev-logic（実機確認→修正） | MC-102、MC-95 |
 | MC-99 | inbox 即タスク化が SMOKE テストパターン（`__SMOKE_...__`）を起票対象から除外する | 中 | chore / 堅牢化 | DONE（2026-06-01 検証グリーンで TODO→DONE。server/src/inbox.ts:144 付近 isSmokeText()＝/__SMOKE_[^_]*(?:_[^_]+)*__/ でプレフィックス付きも検出、handlePost で SMOKE は appendTask スキップ＋appendConsumed に「SMOKE skip」記録。tsc green・単体 isSmokeText 3/3/autoConsume 4/4/priority 16/16・restart 後 healthz 200・live で SMOKE 投入→taskId 無し/pending 0/幽霊 0・通常タスクは起票＋自動消し込み正常・cron healthcheck の SMOKE 2件も実トラフィックで skip 確認。commit c6614ce。[[feedback-review-agent-verify-then-done]]） | dev-logic（蓮）。台帳更新は task-manager（棚町） | MC-77（inbox 即タスク化機構） |
 
 ---
@@ -1473,6 +1474,26 @@ ID 採番: **AR-0x**。
 | 依存 | MC-92/93/94/95（ターミナル系の実装/proxy/paste/upload）、MC-96（レスキュー＝別レイヤーだが導線思想を参照） |
 | 提言・抜けもれ | (1) **冪等性が肝**: POST /api/terminal/start は「既に tmux main 稼働・ttyd 稼働」のとき二重起動して既存セッション（対話中の林）を壊さないこと。存在チェック→無い時だけ起動、を厳格に。(2) **本番 main 非破壊の検証手順を明記**: 検証は別名セッション（例 `main_test`）で「落ちた状態→ボタン復活」を再現し、本物の `main` には触れない。DoD(5) の決め手。(3) **認証ゲート**: status/start とも MC_TOKEN 認証配下に置く（未認証で start を叩けると DoS／勝手起動になる）。MC-92/96 と同じ強度で。(4) **MC-96 レスキューとの役割整理**: レスキュー（:4318・本体が死んだ時）と本件（:4317 本体は生存・端末だけ落ちた時）の役割分担を UI/ドキュメントで明示し、機能重複させない。(5) **rin-terminal.sh の整合**: tmux main 起動の正準手順が rin-terminal.sh に集約されているか確認。API がシェルを直書きせず同スクリプト/同等手順を呼ぶ形にして二重メンテを避ける。(6) **ttyd と tmux の起動順序**: ttyd は tmux main にアタッチする構成なら、start で tmux→ttyd の順序・依存を保証（ttyd だけ起きて空セッションを掴む事故を防ぐ）。(7) **状態表示の正確さ**: status はプロセス grep だけでなく「アタッチ可能か」まで見られると親切（ゾンビ ttyd 検知）。(8) 検証根拠（別名セッションでの落とす→復活ログ・status JSON・認証401/200・冪等2回叩き）を DONE note に file/コマンドベースで残す（[[feedback-review-agent-verify-then-done]]）。(9) push / 本番反映（apollo.service restart 含む）は Keita 承認待ち（[[reference-deploy-commands]]）。 |
 | 更新日 | 2026-06-01 |
+
+---
+
+### MC-103 — ターミナル画像添付の「送る前のプレビュー」を確実に個別削除できるようにする（MC-102 の削除 UX 修正）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-103 |
+| タイトル | ターミナル画像添付の「送る前のプレビュー」を確実に個別削除できるようにする（MC-102 の削除 UX 修正） |
+| 種別 | bug / UX 修正 |
+| 優先度 | 中〜高（Keita 実機で削除できないと報告。送信前プレビューの操作不能は体験を直接損なう） |
+| ステータス | IN_PROGRESS（dev-logic 着手中・実機切り分け→修正） |
+| 担当 | dev-logic（蓮、実機確認→修正）。台帳更新は task-manager（棚町）管轄 |
+| 背景 | Keita 要望（2026-06-01）。MC-102 で画像ステージングの各サムネに削除ボタン（×、removeStaged）を実装し Playwright 検証では「個別削除で1枚減」が PASS していたが、Keita が実機で「送る前の画像プレビューを削除できない」と報告。実装と実機体験が食い違っている。原因候補: (a) 削除ボタンが視認しづらい/ホバー依存でタップで出ない (b) クリック/タップのヒット領域が小さい・iframe や他要素に隠れて押せない (c) 本番 dist 反映漏れ (d) 削除ハンドラのバグ。実機で切り分けて修正する。 |
+| 想定設計 | `web/src/views/Terminal.tsx` のステージングサムネ削除 UI を見直す。削除ボタンを常時表示（ホバー依存をやめる）・ヒット領域とタップターゲットを十分大きく（44px 目安）・z-index と重なり順を確認し iframe/他要素に隠れないようにする。removeStaged ハンドラと object URL revoke の動作を実機で確認。本番 dist の反映状況も確認（restart/build 漏れがないか）。原因が (c) なら build/restart で解消、(a)(b)(d) なら CSS/JSX/ハンドラ修正。 |
+| 受け入れ条件（DoD） | (1) 本番（:4317 /terminal-view）実機で、ステージング中の各画像プレビューに常時見える削除ボタンがあり、PC クリック・スマホタップの両方で確実に1枚ずつ消せる。(2) 全消し/一部消しが効く。(3) MC-102 の他機能（複数選択・貼付・5枚上限・林に送る）非退行。(4) build/tsc green・restart 後 `/api/healthz` 200・実機検証・本番 main 非破壊。 |
+| 関連ファイル | `web/src/views/Terminal.tsx`、`web/dist`（本番反映確認）、`server/src/`（`/api/terminal/upload` 既存・複数対応済） |
+| 依存 | MC-102（削除 UI の実装元）、MC-95（サーバ側複数枚対応の前提） |
+| 提言・抜けもれ | (1) **PC とスマホ両方で検証**: 削除ボタンの不具合は「ホバーでしか出ない（タップ端末で消えない）」「タップターゲットが小さすぎる」が典型。Playwright のクリックは座標直撃で PASS しても実機タップで再現しないことがあるため、実機相当（タッチ/ポインタ）で両方確認する。(2) **本番 dist 反映の確認を最初に**: MC-102 の commit 2065363 が web build→restart 済で本番に乗っているか先に確認（原因 (c) なら build/restart だけで解消し、無駄なコード修正を避けられる）。(3) **常時表示化**: 削除ボタンをホバー依存にしない（CSS の `:hover` 表示はタッチ端末で出ない）。常時可視＋十分なコントラストにする。(4) **z-index / pointer-events**: サムネ上のボタンが画像や overlay に pointer-events を奪われていないか確認。(5) **object URL revoke の整合**: 削除時に revokeObjectURL が走り、かつ配列から正しく除去されて再レンダリングされるか（state 更新の参照同一性に注意）。(6) UI 文言は中立的丁寧体・CSS 変数・SVG アイコンのみ（emoji 不可、[[feedback-app-copy-neutral]]）。(7) 検証根拠（実機 PC クリック＋スマホタップで個別/全消しが効く・非退行・main 非破壊）を DONE note に file:line で残す（[[feedback-review-agent-verify-then-done]]）。(8) push / 本番反映（apollo.service restart 含む）は Keita 承認待ち（[[reference-deploy-commands]]）。 |
+| 更新日 | 2026-06-01（新規起票・IN_PROGRESS） |
 
 ---
 
