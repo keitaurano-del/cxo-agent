@@ -27,7 +27,9 @@ const STATUS_FILTERS: { value: AgentStatus | 'all'; label: string }[] = [
 interface DisplayCard {
   key: string;
   agentId?: string; // feed を開ける最新インスタンスの agentId（その他/未稼働は無し）
-  name: string; // 人格名
+  name: string; // エージェント識別名（subagentType ベース）
+  persona?: string; // 人格名（roster frontmatter persona）
+  personality?: string; // 気質（roster frontmatter personality）
   role?: string; // 役割（roster or グループの description）
   status: AgentStatus;
   isPersona: boolean;
@@ -55,6 +57,8 @@ function buildCards(groups: AgentGroup[], roster: RosterEntry[]): DisplayCard[] 
       key: `group:${g.subagentType}`,
       agentId: g.latestAgentId || undefined,
       name: g.subagentType,
+      persona: r?.persona,
+      personality: r?.personality,
       role: r?.role ?? g.description,
       status: g.status,
       isPersona: g.isPersona,
@@ -76,6 +80,8 @@ function buildCards(groups: AgentGroup[], roster: RosterEntry[]): DisplayCard[] 
     cards.push({
       key: `roster:${r.name}`,
       name: r.name,
+      persona: r.persona,
+      personality: r.personality,
       role: r.role,
       status: 'never',
       isPersona: true,
@@ -105,17 +111,27 @@ function AgentCard({ card, onOpen }: { card: DisplayCard; onOpen: () => void }) 
         clickable ? 'hover:border-border-strong hover:bg-surface-2' : 'cursor-default opacity-80'
       }`}
       style={{ borderLeft: `3px solid ${meta.color}` }}
-      aria-label={`${card.name}（${meta.label}）${clickable ? ' — 会話を表示' : ''}`}
+      aria-label={`${card.persona || card.name}（${meta.label}）${clickable ? ' — 会話を表示' : ''}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="truncate text-sm font-bold text-text">{card.name}</div>
+          <div className="truncate text-sm font-bold text-text">{card.persona || card.name}</div>
+          {card.persona && (
+            <div className="truncate text-[10px] text-text-faint">{card.name}</div>
+          )}
           {card.role && (
             <div className="mt-0.5 line-clamp-1 text-[11px] text-text-muted">{card.role}</div>
           )}
         </div>
         <StatusDot status={card.status} />
       </div>
+
+      {card.personality && (
+        <p className="mt-2 line-clamp-2 text-[11px] leading-snug text-text-muted">
+          <span className="font-semibold text-text-faint">気質: </span>
+          {card.personality}
+        </p>
+      )}
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         {card.projects.slice(0, 3).map((p) => (
@@ -265,7 +281,7 @@ export default function Agents() {
       {openCard?.agentId && (
         <Drawer
           agentId={openCard.agentId}
-          name={openCard.name}
+          name={openCard.persona || openCard.name}
           onClose={() => navigate('/agents')}
         />
       )}

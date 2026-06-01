@@ -114,6 +114,8 @@ export interface Narrative {
 
 export interface RosterEntry {
   name: string;
+  persona?: string;
+  personality?: string;
   role?: string;
   agentType?: string;
   phase?: string;

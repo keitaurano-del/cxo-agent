@@ -11,6 +11,8 @@ import type { AgentStatus } from '../lib/stall.js';
 
 export interface RosterEntry {
   name: string; // ファイル名ベース（= subagent_type に対応）
+  persona?: string; // 人格名（frontmatter persona、例「蓮（れん）」）
+  personality?: string; // 気質（frontmatter personality、1〜2文）
   role?: string;
   agentType?: string;
   phase?: string;
@@ -103,6 +105,8 @@ export function collectRoster(): RosterEntry[] {
     const live = mergeLive(name, agents);
     out.push({
       name,
+      persona: fm.persona || undefined,
+      personality: fm.personality || undefined,
       role: fm.role,
       agentType: fm.agent_type,
       phase: fm.phase,
