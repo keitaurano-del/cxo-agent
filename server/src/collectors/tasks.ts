@@ -281,6 +281,14 @@ export function parseTrackerString(
   // ヘッダ行から列名→index を引いて layout 非依存に拾う（無ければ位置フォールバック）。
   const lines = md.split('\n');
   let col: { priority?: number; owner?: number; status?: number } | null = null;
+  // 直前に確定した表が「タスクの正準サマリ表」か「非タスク表（別表）」か。
+  // ID 列見出しが `ID` の表だけをタスク表とみなす。`| タスク | 旧状態 | 新状態 | 反映内容 |`
+  // のような「判断反映サマリ」等の別表（ID 見出しが `ID` でない／status 列を持たない）は
+  // 非タスク表として行を一切 task 化しない。これで MC-88/MC-89 の「別表の旧/新状態列を
+  // status ソースに誤採用してフラッピングする」経路を、表の出現順に依存せず決定的に塞ぐ。
+  // （旧実装は seen 先勝ちで別表をスキップしていたが、正準表が必ず先という順序前提に
+  //   依存しており脆かった。ここで表単位の種別判定に置き換える。）
+  let inNonTaskTable = false;
 
   // 縦型カード（`| フィールド | 値 |` ヘッダ + `| key | value |` 行の連なり）の集約状態。
   // 1 カード = 1 タスク。次のカードヘッダ / `### ` 見出し / 非テーブル行で確定する。
@@ -359,7 +367,9 @@ export function parseTrackerString(
     }
 
     // ヘッダ行を検出して列マッピングを確定（最初の `| ID |` 行）。
+    // ID 列見出しが `ID`（=タスクの正準サマリ表）のときだけタスク表として扱う。
     if (id === 'ID') {
+      inNonTaskTable = false;
       col = {};
       cells.forEach((h, i) => {
         if (/優先度|priority/i.test(h)) col!.priority = i;
@@ -368,8 +378,24 @@ export function parseTrackerString(
       });
       continue;
     }
-    // 区切り行・非タスク行を除外
-    if (!id || /^[-:]+$/.test(id) || id.includes('---')) continue;
+    // 区切り行は表種別を変えずスキップ（直前のヘッダ判定を保持）。
+    if (/^[-:]+$/.test(id) || id.includes('---')) continue;
+    // ID 見出しが `ID` でないテーブルヘッダ行を検出したら「非タスク表」とマークする。
+    // 例: `| タスク | 旧状態 | 新状態 | 反映内容 |`（判断反映サマリ）。
+    // 1列目が見出し語（タスク/task/項目/対象 等）で、かつ「旧状態/新状態/反映内容」のような
+    // status 列でない遷移列を持つ表は、その表全体を task 化しない。
+    const looksLikeOtherHeader =
+      /^(タスク|task|項目|対象|名称)$/i.test(id) &&
+      cells.some((h) => /旧状態|新状態|変更前|変更後|遷移|反映内容|before|after/i.test(h));
+    if (looksLikeOtherHeader) {
+      inNonTaskTable = true;
+      col = null;
+      continue;
+    }
+    // 非タスク表の中の行は一切 task 化しない（別表の旧/新状態列を status に拾わない）。
+    if (inNonTaskTable) continue;
+    // 非タスク行を除外
+    if (!id) continue;
     if (!/^[A-Za-z]/.test(id) && !/^\d/.test(id)) continue;
     const title = cells[1];
     if (!title) continue;
