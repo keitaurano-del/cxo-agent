@@ -703,7 +703,7 @@ ID 採番: **AR-0x**。
 | MC-62 | タスク↔workflow↔会話 紐付け（堅い案＝明示ログ data/task-links.jsonl） | P1 | コア | DONE（2026-05-31 本番反映済 commit f0bfb52。link-task.sh で MC-60↔wf_880723a6-991 を実紐付け→API hasExplicitLinks:true でrun summary返却をE2E実証） | dev-logic（運用ルールは林） | MC-60 |
 | MC-63 | 通知/アラート（ERROR・BLOCKED 長期滞留・deploy 失敗のバッジ） | P2 | おまけ | DONE（2026-05-31 本番反映済 commit 37ad6ed。/api/alerts 新規＋司令塔 AlertBanner。restart 後 本番4317 で `counts:{error:0,warning:0,total:0}` / `byCategory` / `thresholds.blockedStallDays:5` を返却＝現在アラート0件で正常、無トークン401・healthz ok 検証済） | dev-logic | MC-60, MC-61 |
 | MC-64 | deploy 連動（GitHub Actions run 状態をタスク詳細に表示） | P2 | おまけ | DONE（2026-06-01 林ティック。collector deploys.ts＋GET /api/deploys＋TaskDetail「デプロイ状況」section 実装。logic/en-chakai のみ対象・gh 失敗は空フォールバック・5分キャッシュ・既存 token 認証配下で非破壊。server tsc EXIT0/web build EXIT0、reviewer 独立検証 pass。ローカル commit bbe7058。**本番反映は apollo.service restart＝Keita 承認待ち。GH_TOKEN を service env に渡す設定も別途要**） | dev-logic | MC-61 |
-| MC-65 | autonomous-rin 可視化（30分毎ティックの選択タスク×結果レーン） | P2 | おまけ | TODO | dev-logic | MC-61 |
+| MC-65 | autonomous-rin 可視化（30分毎ティックの選択タスク×結果レーン） | P2 | おまけ | DONE（2026-06-01 林ティック。collector ticks.ts＋GET /api/ticks＋ダッシュボード配下「ティック」タブ(Ticks.tsx) 実装。autonomous-*.log を末尾読み解析→スコープ別レーン×選択タスク/結果バッジ/時刻。fail-soft・既存型非破壊・--mc-*変数のみ/SVGのみ/中立文言/390px対応。server tsc EXIT0／web build EXIT0／ticks単体17件pass を林が自己裏取り＋reviewer 独立検証 pass。ローカル commit b8b8e3a。**本番反映は mission-control.service restart＝Keita 承認待ち（restart まで /api/ticks は稼働サーバに出ない）**） | dev-logic | MC-61 |
 | MC-81 | tasks collector の normStatus 堅牢化（statusセル先頭トークンで正規化） | P2 | 品質 | DONE | dev-logic | MC-80（棚卸し中に副産物として発見） |
 | MC-91 | roster に persona（人格名）/personality（気質）を反映（collector + Agents ビュー表示） | P1 | 機能 | DONE（2026-06-01。collector roster.ts に persona/personality 追加→Agents.tsx でカード見出し=人格名・サブ=識別名・本文に「気質:」表示。server tsc 0 / web build 成功 / restart 後 healthz 200。/api/roster で 11/11 体に persona+personality 充足を確認、欠落0。push 待ち=Keita 承認領域） | dev-logic | なし（60-Agents frontmatter 追記済 commit 29849b0） |
 
@@ -794,7 +794,8 @@ ID 採番: **AR-0x**。
 - 更新日: 2026-05-31
 
 ### MC-65 — autonomous-rin 可視化（ティック×結果レーン）　[P2 / おまけ]
-- ステータス: TODO / 担当: dev-logic
+- ステータス: DONE（2026-06-01 林ティック・内部検証 green）/ 担当: dev-logic
+- 完了(2026-06-01): `server/src/collectors/ticks.ts`（新規）が `~/logs/autonomous-*.log` を末尾読み（TICKS_TAIL_BYTES）で解析し、ティックを `{scope, startedAt, endedAt, status(running/done/skipped), selectedTask{id,title}, result{kind,text}, durationMs}` で新しい順に返す。deploys.ts の TTLキャッシュ・fail-soft・空フォールバックを踏襲、壊れ行/自由文/孤立 done を例外なく吸収、redact 通し。`config.ts` に AUTONOMOUS_LOG_DIR/GLOB・TICKS_LIMIT/TAIL_BYTES/TTL_MS を集約（env override）。`index.ts` に GET /api/ticks（既存 token 認証配下・?scope= フィルタ・既存型非破壊）。web は DashboardLayout 配下に「ティック」タブ(/ticks)＋`views/Ticks.tsx`（スコープ別レーン×ティックカード、--mc-*変数のみ/SVG(LoopIcon)のみ/中立丁寧体/390px 単一列）。単体テスト `ticks.test.ts` 17件 pass。検証: 林 自己裏取りで server tsc EXIT0／ticks 17件 pass／web build EXIT0／dist は gitignore、reviewer 独立検証 pass（非破壊・hexハードコード0・末尾読み・fail-soft をコード/実ログで確認）。ローカル commit `b8b8e3a`。**本番反映には server コード変更ゆえ mission-control.service の restart が必要＝Keita 承認領域（NO_PUSH）。restart まで稼働サーバに /api/ticks は出ず Ticks タブは空表示になる点に留意。**
 - 詳細: 自律林（autonomous-rin、30分毎 cron ティック）が各ティックで「どのタスクを選び、何をして、結果どうなったか（commit/push/deploy/skip/失敗）」を専用レーンで時系列表示する。`~/logs/autonomous-rin.log` と inbox 消費（inbox-consumed.jsonl）を可視化ソースにする。
 - 関連ファイル: `cxo-agent/server/src/collectors/`（新規 autonomousRin.ts、`~/logs/autonomous-rin.log` 解析）, `cxo-agent/data/inbox-consumed.jsonl`, server 新エンドポイント, フロントは専用レーン view or タスク詳細内セクション
 - DoD: ティックごとの「選択タスク・アクション・結果」が時系列レーンで見える。ログが空でも落ちない。直近 N ティックを表示。
