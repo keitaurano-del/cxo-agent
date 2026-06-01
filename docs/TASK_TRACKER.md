@@ -1270,7 +1270,7 @@ ID 採番: **AR-0x**。
 | ID | MC-89 |
 | タイトル | Apollo 承認ビューで承認済み項目が何度も承認キューに再出現する不具合 |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | DONE（2026-06-01 林ティック。方針A実装＝approvals collector の冪等化を「最新決定が approve の id+source は status 不問で承認キューから除外」へ強化し永久ループを根治。buildDecidedStatus→buildLatestDecisions(decision保持)＋純粋関数 isSuppressedByDecision に切出し、collectApprovals の抑止判定を置換。単体テスト approvals.decision.test.ts 追加。server tsc EXIT0 / approvals 9/9 / normStatus 回帰 31/31 green。reviewer 独立検証 pass（非破壊・誤抑止/誤再浮上なし）。ローカル commit `3bc0139`。**本番反映には mission-control.service の restart が必要＝Keita 承認待ち（restart まで実挙動は未変化）。** (B) logic台帳 AM-O 二重行集約は他プロジェクト台帳ゆえ本ティックのスコープ外で別途〔夜目調査参照〕） |
 | 担当 | apollo番人（実機調査）→ dev-logic（collector / 承認書き戻しの修正） |
 | 詳細 | 【Apollo投入】 承認しても何度も出てくる。承認ビュー（GET /api/approvals、MC-79/MC-68）で一度承認した項目が、また承認待ちキューに湧いてくる。承認1タップで決定は `toStatus:"TODO"` を書こうとしているが、実 TASK_TRACKER 側の status が `approve` のまま残り、collector が再び pending（承認待ち）として拾い直している疑い。 |
 | 背景・裏取り（決定的証拠） | `cxo-agent/data/approval-decisions.jsonl` を突合したところ、同一 ID が複数回 approve 記録されている＝承認しても消えず再出現している直接証拠: ・AM-O が **5回** approve（2026-05-31 12:16 / 12:28 / 12:54 / 20:03、2026-06-01 00:20）。・DF-F13 / DF-F3 / FB-05 が **各2回**（5/31 10:22-24 に1回 → 同 20:03 に再出現で再承認 → さらに 6/01 00:20 にまた再承認）。すべて `fromStatus:"approve" → toStatus:"TODO"` を書こうとしているのに、次のティックでまた `approve` 扱いで承認キューに現れている。MC-88（autonomous-rin が BLOCKED→TODO 書き戻し疑い）と status 書き戻しのレース／不整合という点で根が近い可能性。 |
