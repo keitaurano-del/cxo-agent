@@ -7,28 +7,47 @@
 //
 // モバイル: iframe は高さいっぱいに広げ、打鍵・閲覧できる。ttyd 自体がレスポンシブ。
 //
-// MC-95 画像添付:
+// MC-95 画像添付 / MC-102 ステージング化:
 //   iframe の上にツールバーをオーバーレイし、ファイル選択 / クリップボード貼付で画像を
-//   POST /api/terminal/upload に送る。サーバが data/terminal-uploads/ に保存し、その
-//   絶対パスを tmux main の入力欄へ send-keys でリテラル注入する（自動 Enter なし）。
-//   林はそのパスを Read で画像として読める。Keita は注入されたパスを見て、続けて
-//   メッセージを添えて Enter する。クリップボード読取は iframe 内ではなく Apollo SPA 側
-//   （同一オリジン・secure context）で受けるため、HTTPS トンネル経由なら画像 Blob を取れる。
+//   集める。MC-95 の「選択即送信」から「ステージング方式」へ拡張（MC-102）:
+//   選んだ／貼り付けた画像はまずフロントの配列に貯め、サムネ（URL.createObjectURL）で
+//   プレビューする。複数枚をまとめて確認・個別削除できる。「林に送る」を押すと、
+//   ステージング中の全画像を一括で POST /api/terminal/upload に multipart 送信する。
+//   サーバは data/terminal-uploads/ に保存し、その絶対パス群を tmux main の入力欄へ
+//   send-keys でリテラル注入する（自動 Enter なし）。林はそのパスを Read で画像として
+//   読める。Keita は注入されたパスを見て、続けてメッセージを添えて Enter する。
+//   クリップボード読取は iframe 内ではなく Apollo SPA 側（同一オリジン・secure context）
+//   で受けるため、HTTPS トンネル経由なら画像 Blob を取れる。
+//   objectURL は unmount／削除／送信成功時に revoke してメモリリークを防ぐ。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '../components/PageHeader';
-import { ImageFileIcon, CloseIcon, TerminalIcon } from '../components/icons';
+import { ImageFileIcon, CloseIcon, TerminalIcon, PlusIcon } from '../components/icons';
 import { Spinner } from '../components/ui';
 
 const ACCEPTED_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const MAX_IMAGES = 5;
 const MAX_BYTES = 10 * 1024 * 1024; // 10MB / 枚
 
+// ステージング中の 1 枚。file は送信用、url はサムネ表示用（unmount/削除/送信成功で revoke）。
+interface StagedImage {
+  id: string;
+  file: File;
+  url: string;
+}
+
 type UploadState =
   | { kind: 'idle' }
   | { kind: 'uploading' }
   | { kind: 'done'; count: number; injected: boolean; paths: string[] }
   | { kind: 'error'; message: string };
+
+/** バイト数を人が読める単位に整形する（サムネのキャプション用）。 */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 // ターミナルバックエンド（tmux main + ttyd）の稼働状態（MC-100）。
 //   checking: 初回 status 取得中
@@ -53,6 +72,18 @@ interface TerminalStatusResponse {
 export default function Terminal() {
   const [state, setState] = useState<UploadState>({ kind: 'idle' });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ── 画像ステージング（MC-102）────────────────────────────
+  // 選択/貼付した画像をここに貯め、サムネ表示する。送信は「林に送る」で一括。
+  const [staged, setStaged] = useState<StagedImage[]>([]);
+  // unmount 時に残存 objectURL を確実に revoke するため、最新 staged を ref で持つ。
+  const stagedRef = useRef<StagedImage[]>([]);
+  stagedRef.current = staged;
+  useEffect(() => {
+    return () => {
+      for (const s of stagedRef.current) URL.revokeObjectURL(s.url);
+    };
+  }, []);
 
   // ── バックエンド復旧（MC-100）─────────────────────────────
   const [backend, setBackend] = useState<BackendState>({ kind: 'checking' });
@@ -123,17 +154,12 @@ export default function Terminal() {
     return () => window.clearInterval(id);
   }, [refreshStatus]);
 
-  // 画像ファイル群を /api/terminal/upload へ送る。成功すると tmux main に
-  // 保存パスが注入され、林の入力欄に絶対パス文字列が入る。
-  const uploadFiles = useCallback(async (files: File[]) => {
-    // クライアント側で MIME / サイズ / 枚数を先に弾いて無駄な往復を避ける。
+  // 選択/貼付した画像をステージング配列に追加する（即送信しない）。
+  // MIME / サイズをクライアント側で先に弾き、合計 5 枚上限を超える分は抑止する。
+  const addToStaging = useCallback((files: File[]) => {
     const images = files.filter((f) => ACCEPTED_MIME.includes(f.type));
     if (images.length === 0) {
       setState({ kind: 'error', message: '対応する画像（PNG / JPEG / WebP / GIF）が見つかりませんでした。' });
-      return;
-    }
-    if (images.length > MAX_IMAGES) {
-      setState({ kind: 'error', message: `画像は一度に最大 ${MAX_IMAGES} 枚までです。` });
       return;
     }
     const tooLarge = images.find((f) => f.size > MAX_BYTES);
@@ -141,20 +167,58 @@ export default function Terminal() {
       setState({ kind: 'error', message: '各画像は 10MB までです。' });
       return;
     }
-
-    setState({ kind: 'uploading' });
-    try {
-      const fd = new FormData();
-      images.forEach((f) => {
+    setStaged((prev) => {
+      const room = MAX_IMAGES - prev.length;
+      if (room <= 0) {
+        setState({ kind: 'error', message: `画像は合計 ${MAX_IMAGES} 枚までです。先に何枚か削除してください。` });
+        return prev;
+      }
+      const accepted = images.slice(0, room);
+      if (accepted.length < images.length) {
+        setState({
+          kind: 'error',
+          message: `画像は合計 ${MAX_IMAGES} 枚までです。${images.length - accepted.length} 枚は追加できませんでした。`,
+        });
+      } else {
+        // 追加できたら以前のエラー/結果表示は消す（ステージング中の状態に戻す）。
+        setState({ kind: 'idle' });
+      }
+      const next = accepted.map((f, i) => {
         // スクショ等は名前が空のことがあるため拡張子付きの名前を補う。
         const named =
           f.name && f.name.trim() !== ''
             ? f
-            : new File([f], `pasted-${Date.now()}.${(f.type.split('/')[1] || 'png')}`, {
+            : new File([f], `pasted-${Date.now()}-${i}.${f.type.split('/')[1] || 'png'}`, {
                 type: f.type,
               });
-        fd.append('images', named, named.name);
+        return {
+          id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}`,
+          file: named,
+          url: URL.createObjectURL(named),
+        };
       });
+      return [...prev, ...next];
+    });
+  }, []);
+
+  // ステージングから 1 枚削除し、その objectURL を revoke する。
+  const removeStaged = useCallback((id: string) => {
+    setStaged((prev) => {
+      const target = prev.find((s) => s.id === id);
+      if (target) URL.revokeObjectURL(target.url);
+      return prev.filter((s) => s.id !== id);
+    });
+  }, []);
+
+  // ステージング中の全画像を /api/terminal/upload へ一括送信する。
+  // 成功すると tmux main に保存パス群が注入され、林の入力欄に絶対パス文字列が入る。
+  const sendStaged = useCallback(async () => {
+    const items = stagedRef.current;
+    if (items.length === 0) return;
+    setState({ kind: 'uploading' });
+    try {
+      const fd = new FormData();
+      items.forEach((s) => fd.append('images', s.file, s.file.name));
       // Content-Type は指定しない（FormData が boundary 付きで自動設定）。
       // 認証 Cookie（mc_token）は同一オリジンなので自動付与される。
       const res = await fetch('/api/terminal/upload', { method: 'POST', body: fd });
@@ -174,26 +238,30 @@ export default function Terminal() {
         injected?: boolean;
         paths?: string[];
       };
+      const sentCount = items.length;
       setState({
         kind: 'done',
-        count: body.count ?? images.length,
+        count: body.count ?? sentCount,
         injected: body.injected ?? false,
         paths: Array.isArray(body.paths) ? body.paths : [],
+      });
+      // 送信成功 → ステージングをクリアし objectURL を revoke する。
+      setStaged((prev) => {
+        for (const s of prev) URL.revokeObjectURL(s.url);
+        return [];
       });
     } catch (e) {
       setState({
         kind: 'error',
         message: e instanceof Error ? `送信に失敗しました。${e.message}` : '送信に失敗しました。',
       });
-    } finally {
-      // 同じファイルを連続選択できるよう input をクリア。
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }, []);
 
   const handleFiles = (fileList: FileList | null) => {
-    if (!fileList || fileList.length === 0) return;
-    void uploadFiles(Array.from(fileList));
+    if (fileList && fileList.length > 0) addToStaging(Array.from(fileList));
+    // 同じファイルを連続選択できるよう input をクリア。
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   // クリップボード貼付（Ctrl+V / ⌘+V）。Apollo SPA 側（同一オリジン・secure context）で
@@ -212,12 +280,12 @@ export default function Terminal() {
       }
       if (files.length > 0) {
         e.preventDefault();
-        void uploadFiles(files);
+        addToStaging(files);
       }
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, [uploadFiles]);
+  }, [addToStaging]);
 
   return (
     <div className="flex h-full flex-col">
@@ -251,7 +319,7 @@ export default function Terminal() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={state.kind === 'uploading'}
+            disabled={state.kind === 'uploading' || staged.length >= MAX_IMAGES}
             className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-xs text-text hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ImageFileIcon width={15} height={15} />
@@ -260,10 +328,64 @@ export default function Terminal() {
           <span className="text-[11px] text-text-faint">
             またはこの画面で Ctrl+V（Mac は ⌘+V）で画像を貼り付け
           </span>
-          {state.kind === 'uploading' && (
-            <span className="text-[11px] text-text-muted">送信中…</span>
-          )}
+          <span className="ml-auto text-[11px] text-text-faint">
+            {staged.length} / {MAX_IMAGES} 枚
+          </span>
         </div>
+
+        {/* ステージング中のサムネ一覧。横並び・モバイルでも折り返して崩れない。 */}
+        {staged.length > 0 && (
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {staged.map((s) => (
+              <div
+                key={s.id}
+                className="group relative w-20 overflow-hidden rounded-md border border-border bg-surface-2"
+              >
+                <img
+                  src={s.url}
+                  alt={s.file.name}
+                  className="h-16 w-full object-cover"
+                />
+                <button
+                  type="button"
+                  aria-label={`${s.file.name} を削除`}
+                  onClick={() => removeStaged(s.id)}
+                  disabled={state.kind === 'uploading'}
+                  className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-bg/80 text-text-muted hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <CloseIcon width={11} height={11} />
+                </button>
+                <div className="truncate px-1 py-0.5 text-[9px] text-text-faint" title={`${s.file.name}（${formatBytes(s.file.size)}）`}>
+                  {formatBytes(s.file.size)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 送信アクション。ステージングが空のときは無効。 */}
+        {staged.length > 0 && (
+          <div className="mt-2.5 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void sendStaged()}
+              disabled={state.kind === 'uploading' || staged.length === 0}
+              className="flex items-center gap-2 rounded-lg border border-active/40 bg-active-bg px-3 py-1.5 text-xs font-medium text-active hover:bg-active/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {state.kind === 'uploading' ? (
+                <>
+                  <Spinner />
+                  送信中…
+                </>
+              ) : (
+                <>
+                  <PlusIcon width={14} height={14} />
+                  林に送る（{staged.length} 枚）
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
         {/* 結果フィードバック。 */}
         {state.kind === 'done' && (
@@ -281,8 +403,8 @@ export default function Terminal() {
             </button>
             <span>
               {state.injected
-                ? `画像 ${state.count} 件を林の入力欄に追加しました（保存先パスを挿入済み）。下のターミナルに続けてメッセージを入力し、Enter で送信してください。`
-                : `画像 ${state.count} 件を保存しましたが、入力欄への自動挿入に失敗しました。次のパスを手動で貼り付けてください: ${state.paths.join('  ')}`}
+                ? `${state.count} 枚を林の入力欄に追加しました（保存先パスを挿入済み）。下のターミナルに続けてメッセージを入力し、Enter で送信してください。`
+                : `${state.count} 枚を保存しましたが、入力欄への自動挿入に失敗しました。次のパスを手動で貼り付けてください: ${state.paths.join('  ')}`}
             </span>
           </div>
         )}
@@ -306,8 +428,8 @@ export default function Terminal() {
       </div>
 
       <p className="px-1 pb-2 text-xs text-text-muted">
-        コピー / 貼り付けは Ctrl+V（macOS は Cmd+V）で行えます。うまく貼り付けられない場合は、HTTPS
-        で開くか、右上の「新しいタブで開く」をご利用ください。画像を貼り付け・選択すると、林の入力欄に画像の保存先パスが挿入されます（林はそのパスを画像として読み取れます）。
+        画像は選択・貼り付けでまとめて追加でき、上のサムネで確認・個別削除できます。「林に送る」を押すと、林の入力欄に画像の保存先パスが挿入されます（林はそのパスを画像として読み取れます）。うまく貼り付けられない場合は、HTTPS
+        で開くか、右上の「新しいタブで開く」をご利用ください。
       </p>
       <div className="relative flex-1 overflow-hidden bg-bg">
         {backend.kind === 'ready' ? (
