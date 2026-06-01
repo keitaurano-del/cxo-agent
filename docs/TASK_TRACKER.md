@@ -711,8 +711,8 @@ ID 採番: **AR-0x**。
 | MC-91 | roster に persona（人格名）/personality（気質）を反映（collector + Agents ビュー表示） | P1 | 機能 | DONE（2026-06-01。collector roster.ts に persona/personality 追加→Agents.tsx でカード見出し=人格名・サブ=識別名・本文に「気質:」表示。server tsc 0 / web build 成功 / restart 後 healthz 200。/api/roster で 11/11 体に persona+personality 充足を確認、欠落0。push 待ち=Keita 承認領域） | dev-logic | なし（60-Agents frontmatter 追記済 commit 29849b0） |
 | MC-101 | Apollo ターミナルビューに「ターミナル開始」ボタンを追加（tmux main / ttyd 切断後の再起動導線） | 中〜高 | feature | DONE（dev-logic 実機検証グリーンで DONE 化。tsc/build green・restart 後 healthz 200・status API 本番 ready:true/Cookie無し401・別名セッション mc100test で start created→ready・2回目 no-op 冪等・本番 main session 不変・Playwright smoke 5/5。commit a9ceef4 未 push） | dev-logic（実装）／test-functional・dev-logic（検証） | MC-92/93/94/95（ターミナル系）、MC-96（レスキュー） |
 | MC-102 | ターミナル画像添付にプレビュー表示と複数枚ステージング UI を追加（MC-95 拡張） | 中 | feature / UX | DONE（2026-06-01 dev-logic 実機検証グリーンで IN_PROGRESS→DONE。Terminal.tsx を即送信→ステージング方式へ。StagedImage 配列＋createObjectURL サムネ＋revokeObjectURL リーク解放＋個別削除＋5枚上限＋「林に送る（N枚）」で multipart 一括 201。web build/server tsc 0・healthz 200・Playwright smoke 7/7・MC-100 非退行 5/5・実機 authed 2枚 count:2・main 非破壊。commit 2065363） | dev-logic | MC-95、MC-92〜94、MC-100/101 |
-| MC-98 | Apollo e2e smoke の既存 fail を現状の UI（ナビ5項目）に合わせて修正（テスト負債） | 中 | chore / test 負債 | TODO（2026-06-01 表行補完。詳細セクションに起票済だが summary table 行が欠落しボード未表示だったため起票。e2e の 2026-05-30 smoke が 11 件 fail＝ナビ7項目想定の旧 spec が現状5項目とドリフト。MC-95 由来でないことは dev-logic 切り分け済） | test-functional（試野）／dev-logic（蓮） | なし（MC-95 とは無関係の既存ドリフト） |
-| MC-99 | inbox 即タスク化が SMOKE テストパターン（`__SMOKE_...__`）を起票対象から除外する | 中 | chore / 堅牢化 | TODO（2026-06-01 表行補完。詳細セクションに起票済だが summary table 行が欠落しボード未表示だったため起票。inbox 消費ロジックで `__SMOKE_...__` パターンは TASK_TRACKER 起票せず consumed 記録のみで握る。MC-101/102 検証中に SMOKE 混入→dev-logic が git checkout で戻す事象が再発のため優先度 中） | dev-logic（蓮）。台帳更新は task-manager（棚町） | MC-77（inbox 即タスク化機構） |
+| MC-98 | Apollo e2e smoke の既存 fail を現状の UI（ナビ5項目）に合わせて修正（テスト負債） | 中 | chore / test 負債 | DONE（2026-06-01 検証グリーンで TODO→DONE。smoke 28 spec 全 green（before 11 fail→after 0）。修正 spec=e2e/render-smoke-20260530.spec.ts（:18-37 TOP_NAV/EXPECTED_TAB_COUNT 定数化、:144 toBe(7)→toBe(EXPECTED_TAB_COUNT)、:146-168 ボトムナビ遷移を実在項目 Vault→/tasks→/terminal-view に更新）。newfeatures.spec.ts の同種修正は MC-99 commit c6614ce に含まれ重複なし。MC-95/100/102 spec とも共存 green。正準ナビ=App.tsx:41 NAV 配列5項目（/ダッシュボード・/tasks・/approvals・/vault・/terminal-view）。commit 22499fa。[[feedback-review-agent-verify-then-done]]） | test-functional（試野）／dev-logic（蓮） | なし（MC-95 とは無関係の既存ドリフト） |
+| MC-99 | inbox 即タスク化が SMOKE テストパターン（`__SMOKE_...__`）を起票対象から除外する | 中 | chore / 堅牢化 | DONE（2026-06-01 検証グリーンで TODO→DONE。server/src/inbox.ts:144 付近 isSmokeText()＝/__SMOKE_[^_]*(?:_[^_]+)*__/ でプレフィックス付きも検出、handlePost で SMOKE は appendTask スキップ＋appendConsumed に「SMOKE skip」記録。tsc green・単体 isSmokeText 3/3/autoConsume 4/4/priority 16/16・restart 後 healthz 200・live で SMOKE 投入→taskId 無し/pending 0/幽霊 0・通常タスクは起票＋自動消し込み正常・cron healthcheck の SMOKE 2件も実トラフィックで skip 確認。commit c6614ce。[[feedback-review-agent-verify-then-done]]） | dev-logic（蓮）。台帳更新は task-manager（棚町） | MC-77（inbox 即タスク化機構） |
 
 ---
 
@@ -1523,7 +1523,7 @@ ID 採番: **AR-0x**。
 | タイトル | Apollo e2e smoke の既存 fail を現状の UI に合わせて修正（テスト負債） |
 | 種別 | chore / test 負債 |
 | 優先度 | 中（本番機能には影響なし。ただし MC-95 等の新規 smoke が既存 fail に埋もれて新規回帰を見逃すリスクがあるので近いうちに解消） |
-| ステータス | TODO |
+| ステータス | DONE（2026-06-01 検証グリーン。smoke 28 spec 全 green=before 11 fail→after 0。修正 spec=e2e/render-smoke-20260530.spec.ts:18-37/144/146-168、commit 22499fa。[[feedback-review-agent-verify-then-done]]） |
 | 担当 | test-functional（試野）または dev-logic（蓮） |
 | 詳細 | 2026-06-01 の MC-95 実装検証中に dev-logic が報告。e2e の 2026-05-30 smoke が 11 件 fail している。原因は MC-95 とは無関係の既存ドリフトで、テストが BottomNav「7項目」想定の古いままだが、現状のナビは 5項目になっているため。MC-95（/terminal-view・画像 upload）由来ではないことを dev-logic が切り分け済み。 |
 | 対応方針 | 古い smoke テストを現状の Apollo ナビ構成（5項目）に合わせて更新。MC-95 で追加された /terminal-view・画像添付の smoke（`e2e/render-smoke-20260601-terminal-upload.spec.ts`、4/4 pass）と整合させ、ナビ項目数をハードコードしている箇所を現状構成に追従させる。 |
@@ -1543,7 +1543,7 @@ ID 採番: **AR-0x**。
 | タイトル | inbox 即タスク化が SMOKE テストパターン（`__SMOKE_...__`）を起票対象から除外する |
 | 種別 | chore / 堅牢化 |
 | 優先度 | 中（2026-06-01 低〜中→中 に引き上げ。MC-101 検証のフル smoke 実行中に inbox 経由で SMOKE タスク（MC-102 等）が台帳に自動混入し dev-logic が git checkout で戻す事象が繰り返し発生。再発が実作業を妨げているため優先度を上げる） |
-| ステータス | TODO |
+| ステータス | DONE（2026-06-01 検証グリーン。isSmokeText/handlePost で SMOKE は起票せず consumed に「SMOKE skip」記録、live 投入で幽霊 0。commit c6614ce。[[feedback-review-agent-verify-then-done]]） |
 | 担当 | dev-logic（蓮）。台帳更新は task-manager（棚町）管轄 |
 | 背景 | 2026-06-01。MC-97 のように inbox スモーク（`__SMOKE_20260530_1780292879903__` 等）が即タスク化機構を通って TASK_TRACKER に幽霊カードとして起票される。即タスク化機構（MC-77 由来、server 側 inbox 消費ロジック）が text を素通しで起票しているため。MC-101 検証中にも SMOKE が混入→dev-logic が git checkout で戻す事象が再発（繰り返し発生のため優先度を中へ引き上げ）。 |
 | 対応方針 | inbox 消費ロジックで、text が `__SMOKE_..__` パターンに一致するものは TASK_TRACKER へ起票せず「スモーク扱い」で消費する（inbox-consumed.jsonl への記録は行い、台帳カード化はしない）フィルタを入れる。 |
