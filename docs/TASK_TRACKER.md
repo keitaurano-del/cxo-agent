@@ -1257,7 +1257,7 @@ ID 採番: **AR-0x**。
 | 依存 | apollo番人の停滞検知（[[project-apollo-keeper]] / apollo-task-stall-check.sh）。MC-88（autonomous-rin が status を勝手に書き戻す件）が未解決だと「再開」と「自動巻き戻し」が衝突しうるため、MC-88 と合わせて見る。 |
 | 提言・抜けもれ | (1) 「再開」の前に、その IN_PROGRESS が本当に止まっているのか（[[reference-subagent-slow-not-dead]]＝8分未満で死亡判定しない）を見極める。停滞判定は mtime ベースで日単位（TASK_STALL_DAYS=3）。(2) IN_PROGRESS の中には実態 DONE/REVIEW なのに更新漏れのものが混ざる＝まず棚卸しで状態を実態に合わせてから「真に止まっているもの」を再開する（やみくもに全部再着手しない）。(3) これは task-manager の定常運用（棚卸し）そのもの＝単発タスクでなく recurring な点検として apollo番人と共同責任で回す（[[feedback-taskboard-based-execution]]）。(4) 再開時の採番・編集は pull --rebase 後・名指し add（autonomous-rin とのレース回避）。 |
 | note | Apollo inbox id `2026-05-31T12-35-36-034Z-c1543d0e`（MC-77 機構で taskId=MC-87・agent=dev-logic 紐付け済み）。ブリーフ #4。2026-06-01 棚卸しで構造化。担当は洗い出し主体を task-manager に修正（dev-logic は再開実装側）。 |
-| 進捗（cxo ティック 2026-06-01 林） | cxo スコープ分を実施。本台帳の内部 status 不整合を是正＝詳細セクション MC-60/MC-61/MC-62 が「ステータス: TODO」のまま残っていたが、正本の表行は DONE（git 実態で commit 6362562/f0bfb52・workflows.ts/TaskDetail.tsx/task-links.jsonl 実在を裏取り）。3 箇所を DONE へ整合し、詳細と表行の食い違いを解消（MC-89 で根因になった「同一 ID の status 多重表現」予防にも寄与）。cxo の IN_PROGRESS（MC-85/MC-86=Keita 設計承認待ち BLOCKED、MC-90=調査完了・cron 登録が Keita 承認待ち）は実態と一致＝誤って止まっている停滞・状態取り違えは無し。**残: logic/en-chakai/西丸町 の走査と recurring 滞留検知の配線は別スコープ（MC-90 の apollo-keeper 連携）として継続。** スコープ厳守で他プロジェクト台帳は未読・未編集。 |
+| 進捗（cxo ティック 2026-06-01 林） | cxo スコープ分を実施。本台帳の内部 status 不整合を是正＝詳細セクション MC-60/MC-61/MC-62 が「ステータス: TODO」のまま残っていたが、正本の表行は DONE（git 実態で commit 6362562/f0bfb52・workflows.ts/TaskDetail.tsx/task-links.jsonl 実在を裏取り）。3 箇所を DONE へ整合し、詳細と表行の食い違いを解消（MC-89 で根因になった「同一 ID の status 多重表現」予防にも寄与）。cxo の IN_PROGRESS（MC-85/MC-86=Keita 設計承認待ち BLOCKED）は実態と一致＝誤って止まっている停滞・状態取り違えは無し。**[stale 整合 2026-06-01]** 本 note 旧記述の「MC-90=調査完了・cron 登録が Keita 承認待ち」は実態とズレていたため訂正＝MC-90 は cron 既登録（`*/15 autonomous-cxo.sh`、HANDLE_INBOX=1）で kill-switch `~/.autonomous-cxo.disabled` 解除により稼働再開、2026-06-01 に **DONE**（MC-90 カードの「実態訂正」「ステータス: DONE」を正とする）。**残: logic/en-chakai/西丸町 の走査と recurring 滞留検知の配線は別スコープ（MC-90 の apollo-keeper 連携）として継続。** スコープ厳守で他プロジェクト台帳は未読・未編集。 |
 | 更新日 | 2026-06-01 |
 
 
@@ -1601,4 +1601,48 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ | (1) **座標換算の正確さ**: タッチ座標→セル(col/row) は xterm の実 charWidth/lineHeight・スクロール offset を見て計算する（固定値ハードコードは端末で崩れる）。(2) **SGR mouse モードの有無で分岐**: TUI 側が mouse reporting を有効化していない時にレポートを送ると誤入力になる。DECSET 1000/1002/1006 等の有効状態を見て、有効な時だけタッチ→マウス変換する（無効時は従来挙動）。(3) **PC 非退行**: 既存のマウスクリック経路（xterm 標準）を殺さない。タッチ専用にイベントを足す。(4) **MC-93 の content-encoding/文字化け修正と MC-94 の paste-fix を壊さない**（同じ注入 script を触るため curl でヘッダ・注入箇所を再確認）。(5) 未コミット差分のまま restart で本番に乗せない（MC-93 の事故再発防止＝ローカル commit でワーキングツリーを汚さない）。(6) 検証根拠（実機モバイルタップで選択肢を選べる・PC 非退行・他ターミナル機能非退行）を DONE note に file:line で残す（[[feedback-review-agent-verify-then-done]]）。(7) push / 本番反映（apollo.service restart 含む）は Keita 承認待ち（[[reference-deploy-commands]]）。 |
 | 検証根拠（DONE） | 原因確定: ttyd 1.7.4 同梱 xterm.js は mouse reporting 有効時、PC マウスは `coreMouseService.triggerMouseEvent` で SGR 化して送るが、touch イベントには mouse report を張っていない（`bindMouse` は mousedown/up/wheel のみ）。合成 click も不安定 → PC クリックは効くがモバイルタップ無反応。修正: `server/src/terminalProxy.ts:89-159` 付近に `TAP_FIX_SCRIPT` 追加、`PASTE_FIX_SCRIPT`（MC-94）と並べて HTML 注入（MC-93 で非圧縮化済みの selfHandleResponse 経路）。`.xterm-screen` の touchstart/move/end を拾い、mouse reporting 有効時（`term._core.coreMouseService.areMouseEventsActive`）のみタップ座標を col/row 換算→`coreMouseService.triggerMouseEvent` で press/release。内部 API は try/catch ガード、スワイプ(>10px)/長押し(>700ms)はタップ扱いせず、mouse mode 無効時は非介入。commit `484d908`。検証: `tsc --noEmit` exit 0、restart 後 `/api/healthz` 200、注入確認（`__apolloPasteFix`/`__apolloTapFix`/`triggerMouseEvent`）、Playwright モバイル（hasTouch/isMobile/390px）で別名 ttyd:7682 probe にタップ→PTY に SGR mouse press/release 着弾・座標一致、PC クリック非退行、mouse mode 無効時 0 件（非介入）、MC-93/94/100/102/103 非退行。本番 tmux main 不触で検証。[[feedback-review-agent-verify-then-done]] で DONE。 |
 | 更新日 | 2026-06-01（起票→IN_PROGRESS→DONE） |
+
+## バッチ: 2026-06-01 Apollo ターミナル スクロール不能（MC-104 回帰疑い） / ダッシュボード全タイル詳細表示
+
+> Keita 報告・要望2件（2026-06-01）。MC-105=ターミナルがスクロールできない不具合（直前の MC-104 タッチ→マウス変換でスワイプがスクロールバックに流れなくなった回帰疑い）。MC-106=ダッシュボードの全タイルをクリックで詳細表示（MC-67 の司令塔カード詳細を全タイルへ展開）。台帳は task-manager（棚町）管轄、dev-logic はコードのみ触る取り決め。採番は next-task-id.sh で MC-105/MC-106 確定（pull --rebase 後）。
+
+### MC-105 — Apollo ターミナルがスクロールできない不具合の修正（MC-104 タッチ対応の回帰疑い）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-105 |
+| タイトル | Apollo ターミナルがスクロールできない不具合の修正（MC-104 タッチ対応の回帰疑い） |
+| 種別 | bug / 回帰 |
+| 優先度 | 高（Keita 報告・実操作に支障。ターミナルからの林との対話でログを遡れない） |
+| ステータス | IN_PROGRESS（dev-logic 着手中） |
+| 担当 | dev-logic（蓮）。台帳更新は task-manager（棚町）管轄 |
+| 背景 | Keita 報告（2026-06-01）。Apollo ターミナルがスクロールできない。直前に入れた MC-104（タッチ→マウス変換、`terminalProxy.ts` の `TAP_FIX_SCRIPT`）でタッチイベントを掴むようにした副作用で、スワイプがスクロールバックに流れなくなった疑いが濃厚。PC マウスホイール／モバイルスワイプ両方のスクロールを確認する。 |
+| 想定設計 | `TAP_FIX_SCRIPT`（MC-104）が `.xterm-screen` の touchstart/move/end を捕捉して mouse report に変換する際、スクロール用のスワイプまで preventDefault / 横取りしてスクロールバックへ届かなくしている疑い。mouse reporting 有効時のみ介入する分岐は入っているが、(a) スワイプ閾値（>10px）判定後にネイティブスクロールへ戻していない、(b) wheel/タッチスクロールのデフォルト挙動を殺している、等を実機で切り分け→スクロール経路を温存しつつタップ選択だけ拾うよう修正。 |
+| 受け入れ条件（DoD） | (1) PC マウスホイールでスクロールバックが動く。(2) モバイルのスワイプでスクロールできる。(3) MC-104 のタップ選択（mouse mode 時）は維持＝非退行。(4) MC-93/94 等ターミナル機能が非退行。(5) tsc/build green・restart 後 `/api/healthz` 200・実機検証・本番 main 非破壊。 |
+| 関連ファイル | `server/src/terminalProxy.ts`（`TAP_FIX_SCRIPT`/script 注入）、`web/src/views/Terminal.tsx`、ttyd 1.7.4、[[project-apollo-dashboard]] |
+| 依存 | MC-104（直前の回帰元）、MC-92/93/94（ターミナル系・script 注入） |
+| 提言・抜けもれ | (1) **回帰の根本切り分け**: 本当に MC-104 起因か、`git stash`/commit `484d908` を一時退避して切り分け、原因 commit を file:line で特定してから直す（推測で殺すと別の回帰を生む）。(2) **PC とモバイル両方を検証**: ホイールスクロール（PC）とタッチスワイプスクロール（モバイル）は別経路。両方の DoD を実機（Playwright 390px hasTouch + デスクトップ）で確認。(3) **タップ選択の非退行**: スクロールを戻す修正で MC-104 のタップ選択（選択肢メニュー）を壊さない。スワイプ（スクロール）とタップ（選択）の判定境界（移動量・時間閾値）を明示。(4) **alternate screen 考慮**: claude TUI は alternate screen を使うことが多く、その状態ではスクロールバックが無い（TUI 自前スクロール）ことがある。「スクロールできない」が通常 shell のスクロールバックの話か TUI 内スクロールの話か Keita 報告の文脈を切り分ける。(5) push / 本番反映（apollo.service restart 含む）は Keita 承認待ち（[[reference-deploy-commands]]）。(6) 検証根拠（PC ホイール・モバイルスワイプでスクロール動く・タップ選択非退行）を DONE note に file:line で残す（[[feedback-review-agent-verify-then-done]]）。 |
+| サブタスク | - [ ] 回帰の原因 commit/行を切り分けで特定（MC-104 `484d908` 退避テスト）<br>- [ ] スクロール経路（PC ホイール / モバイルスワイプ）を温存しつつタップ選択だけ拾う修正<br>- [ ] PC ホイール・モバイルスワイプ・タップ選択の3点を実機検証<br>- [ ] MC-93/94 非退行確認・tsc/build green・restart 後 healthz 200 |
+| note | Keita 報告由来（2026-06-01）。MC-104 投入直後の回帰疑い。 |
+| 更新日 | 2026-06-01（起票→IN_PROGRESS） |
+
+### MC-106 — ダッシュボードの全タイル（全種）をクリックで詳細表示できるようにする
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-106 |
+| タイトル | ダッシュボードのタイル（全種）をクリックで詳細表示できるようにする（MC-67 の全タイル展開） |
+| 種別 | feature / UX |
+| 優先度 | 中 |
+| ステータス | IN_PROGRESS（dev-logic 着手中） |
+| 担当 | dev-logic（蓮）。台帳更新は task-manager（棚町）管轄 |
+| 背景 | Keita 要望（2026-06-01）。MC-67 で司令塔（Overview）カードのタップ詳細（内訳＋関連タスク）は実装済みだが、ダッシュボードの全タイルには行き渡っていない。どのタイルもクリックで詳細（内訳・関連情報）が見えるようにしたい。 |
+| 想定設計 | MC-67 の司令塔カード詳細表示（内訳＋関連タスク）の UI/データ取得パターンを、ダッシュボードの他タイル種別（各 view のカード・メトリクスタイル）へ横展開する。各タイル種別ごとに「詳細に出す内訳・関連情報」を定義し、MC-67 と一貫したインタラクション（クリック/タップで詳細パネル展開）に揃える。 |
+| 受け入れ条件（DoD） | (1) ダッシュボードの各タイル/カードがクリックで詳細表示できる。(2) 詳細に内訳・関連情報を出す。(3) モバイルタップでも動く。(4) 既存 MC-67 の挙動と一貫している。(5) build/tsc green・restart 後 `/api/healthz` 200・実機検証。 |
+| 関連ファイル | `web/src/views/`（各 view のタイル/カード）、MC-67 の詳細表示実装（司令塔 Overview カード）、`server/src/`（詳細データ API があれば）、[[project-apollo-dashboard]] |
+| 依存 | MC-67（司令塔カード詳細表示・横展開の元パターン） |
+| 提言・抜けもれ | (1) **「全タイル」のスコープ確定**: ダッシュボードに何種類のタイル/カードがあるか先に棚卸しし、各々に出すべき内訳・関連情報を定義してから実装（漠然と「全部」だと抜けや一貫性崩れが出る）。Keita に「どのタイルで特に詳細が欲しいか」優先順位を確認推奨。(2) **MC-67 との一貫性**: 詳細パネルの開き方・閉じ方・レイアウト・関連タスクへの導線を MC-67 と揃える（バラバラな UX にしない）。(3) **モバイル対応**: タップ操作・詳細パネルの縦積み/ボトムシート挙動を 390px で実機確認（[[project-apollo-dashboard]] のレスポンシブ方針）。(4) **詳細データの出所**: 内訳・関連情報を出すのに新規 API/collector 拡張が要るか確認。要るなら既存 token 認証配下で非破壊に追加。(5) **UI 文言は中立的丁寧体**（[[feedback-app-copy-neutral]]）・アイコンは SVG（emoji 不可）。(6) push / 本番反映（apollo.service restart 含む）は Keita 承認待ち（[[reference-deploy-commands]]）。(7) 検証根拠（各タイルがクリックで詳細展開・モバイルタップ動作・MC-67 一貫）を DONE note に残す（[[feedback-review-agent-verify-then-done]]）。 |
+| サブタスク | - [ ] ダッシュボードのタイル/カード種別を棚卸し、各々に出す内訳・関連情報を定義<br>- [ ] MC-67 の詳細表示パターンを全タイルへ横展開（一貫した開閉・レイアウト）<br>- [ ] 詳細データ API/collector 拡張（必要なら、token 認証配下で非破壊）<br>- [ ] モバイルタップ・PC クリック両方を 390px/デスクトップで実機検証<br>- [ ] build/tsc green・restart 後 healthz 200 |
+| note | Keita 要望由来（2026-06-01）。MC-67 の全タイル展開。 |
+| 更新日 | 2026-06-01（起票→IN_PROGRESS） |
 
