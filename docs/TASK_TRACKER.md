@@ -1213,7 +1213,7 @@ ID 採番: **AR-0x**。
 | ID | MC-85 |
 | タイトル | 複数の開発独立エージェントが並行で自律稼働する仕組み（autonomous-rin 群への拡張・dev-logic 以外の開発エージェント増設） |
 | 優先度 | P0 |
-| ステータス | BLOCKED（reconcile 2026-06-01: 表記整合。本タスクの依存・次アクション・見出し注記がいずれも「Keita 設計承認待ち＝BLOCKED」で一致しているのにステータスセルだけ IN_PROGRESS のままだったので BLOCKED に統一。実態＝Keita の設計承認待ち。2026-05-31 Keita設計確定: プロジェクト別に複数自律ループ。logic専用/cxo(Apollo)専用/en-chakai専用を独立cronで並行、各自のTASK_TRACKERのみ見てファイル重複をプロジェクト単位で分離→二重push回避。cron時刻ずらし+flock+同時実行上限で529制御。汎用autonomous-rinは残す。林設計→dev-logic実装） |
+| ステータス | IN_PROGRESS（設計フェーズ着手。Keita 2026-06-01 決定：複数エージェント並行を本格設計。現状2スコープ(logic autonomous-rin */10 / cxo autonomous-cxo */15)を土台に拡張。まず設計案ドキュメント作成→Keita レビュー→実装の段階を踏む（いきなり実装しない）。BLOCKED→IN_PROGRESS。以下は経緯: 2026-05-31 Keita設計確定: プロジェクト別に複数自律ループ。logic専用/cxo(Apollo)専用/en-chakai専用を独立cronで並行、各自のTASK_TRACKERのみ見てファイル重複をプロジェクト単位で分離→二重push回避。cron時刻ずらし+flock+同時実行上限で529制御。汎用autonomous-rinは残す。林設計→dev-logic実装） |
 | 担当 | 林（設計） + dev-logic（cron スクリプト/エージェント定義） |
 | 詳細 | Keita「開発エージェントは基本的に動き続けるようにしてほしい。自律して判断して動き続けるようにしてほしい。あと必要であれば dev-logic 以外にも開発の独立エージェントを増やして」。現状 autonomous-rin（headless 林、10分毎 cron、1ティック1タスク）が唯一の自律ループ。これを「複数の開発独立エージェントが並行で自律稼働」に拡張する。dev-logic 的な実装エージェントを複数立て（例: dev-logic-2 や領域別）、各々が独立 cron ループでタスクボードから拾って進める。並行時の二重 push/競合回避（プロジェクト/ファイル分担、flock）。林が設計。 |
 | 関連 | [[project-autonomous-rin]]（既存ループ）, [[project-agent-roster-20260531]]（開発9体）, `/home/dev/cron-scripts/autonomous-rin.sh`, `next-task-id.sh`, 各 docs/TASK_TRACKER.md, [[reference-subagent-slow-not-dead]] |
@@ -1221,8 +1221,8 @@ ID 採番: **AR-0x**。
 | 依存 | Keita の設計承認（何体・分担方針）が前提＝BLOCKED。承認後に dev-logic が cron/定義を実装。既存 autonomous-rin の flock・1ティック1タスク・green ゲート設計を踏襲。 |
 | 提言・抜けもれ | (1) 並行で最大の事故は二重 push/競合＝[[project-vultr-second-server]] の2箱二重実装事故と同型。分担は「プロジェクト単位（A=logic/B=cxo-agent）」か「ファイルバケツ単位」で非重複に割り、コミットは直列化（git レース回避）。(2) 採番レース＝必ず next-task-id.sh＋起票直列化（[[reference-task-id-numbering]]）。(3) Anthropic アカウント共有のため同時 LLM 多重起動は 529/激遅を誘発（[[project-vultr-second-server]]）＝同時実行数に上限を設ける。(4) 各ループに kill-switch（autonomous-rin の `~/.autonomous-rin.disabled` 方式）と stall 監視（8分未満で切らない＝[[reference-subagent-slow-not-dead]]）。(5) push/deploy は autonomous-rin と同じく green ゲート前提（承認領域は維持）。(6) 「動き続ける」は [[feedback-never-stop-with-open-todos]]（24h 自走）と整合。(7) エージェント定義を増やすなら agent-config に登録→全 sub-repo sync、roster（60-Agents）にも追加。(8) Keita 確認事項を明確化: 何体・領域分担の軸（プロジェクト別 or 機能別）・各ループの cron 間隔・同時実行上限。 |
 | サブタスク | - [ ] 林が設計案（体数・分担軸・cron 間隔・同時実行上限・競合回避機構）を作成<br>- [ ] Keita に体数・分担方針を確認（BLOCKED 解除条件）<br>- [ ] 承認後: 追加開発エージェント定義（agent-config 登録→sync）<br>- [ ] 各エージェントの独立 cron ループスクリプト（flock・kill-switch・green ゲート）<br>- [ ] 分担機構（プロジェクト/ファイル非重複・コミット直列化・採番直列化）<br>- [ ] 監視（apollo番人/Monitor）と暴走停止の検証<br>- [ ] DRY_RUN 試走で二重 push しないこと検証してから本番アーム |
-| 次アクション | 林が設計案を作成 → Keita に体数・分担を確認（BLOCKED 解除）→ dev-logic が実装 |
-| 更新日 | 2026-05-31 |
+| 次アクション | 【設計フェーズ＝次の具体ステップ】林が設計案ドキュメントを作成（体数・分担軸・cron 間隔・同時実行上限・競合回避機構・MC-86 のサーバ直接 spawn 起動方式とのセット設計）→ Keita レビュー → 承認後に dev-logic が実装。実装はレビュー後（いきなり実装しない）。 |
+| 更新日 | 2026-06-01 |
 
 ### MC-86 — 稼働してないエージェントを起こして指令を出す機能
 
@@ -1231,16 +1231,16 @@ ID 採番: **AR-0x**。
 | ID | MC-86 |
 | タイトル | Apollo からアイドルなエージェントを選んで指令を出し起動する機能 |
 | 優先度 | P0 |
-| ステータス | BLOCKED（reconcile 2026-06-01: 表記整合。依存欄・次アクション・見出し注記がいずれも「起動方式とセキュリティ境界の設計判断が前提＝BLOCKED（Keita 設計判断待ち）」で一致しているのにステータスセルだけ IN_PROGRESS のままだったので BLOCKED に統一。実態＝Keita の設計判断待ち。2026-05-31 Keita設計確定: inbox経由起動。Apolloでアイドルエージェント選択→指令入力→inboxにagent指定タスク投入→autonomousティックが該当subagentを起動。MC-77のinbox即タスク化を拡張。サーバ直spawnせず既存機構活用で安全） |
+| ステータス | IN_PROGRESS（設計フェーズ着手。Keita 2026-06-01 決定：サーバ直接 spawn 方式を採用（inbox 経由でなく Apollo サーバが claude --print --agent を起動）。セキュリティ境界・リソース管理・同時実行上限の設計が前提。MC-85 とセットで設計案を作る。BLOCKED→IN_PROGRESS。※2026-05-31 時点の暫定案「inbox 経由起動」は Keita 6/01 決定で「サーバ直接 spawn」に上書き＝起動方式が確定したため設計フェーズへ前進。） |
 | 担当 | 林（設計） + dev-logic |
 | 詳細 | Keita「稼働していないエージェントを動かして指令を出す、という機能がほしい」。Apollo から、今アイドルなエージェント（roster/agents）を選んで指令（プロンプト/タスク）を出し起動する。Apollo UI に「エージェント選択→指令入力→headless 起動」の導線。技術的には headless claude（`--print --agent <type>`）をサーバから起動、もしくは inbox 経由で autonomous 系に渡す。任意プロンプト実行のセキュリティとプロセス管理に注意。 |
 | 関連 | [[project-apollo-dashboard]]（roster/agents/inbox）, `/api/roster`・`/api/inbox`, [[project-autonomous-rin]], MC-85（自律エージェント群・起動機構が重なる）, headless `claude --print --agent` |
 | 受け入れ条件（DoD） | (1) Apollo UI でアイドルなエージェントを一覧から選び、指令（プロンプト/タスク）を入力して送信できる。(2) 送信で対象エージェントが headless 起動し、指令を実行する（or inbox 経由で autonomous 系に渡り処理される）。(3) 任意プロンプト実行のセキュリティ境界（認証配下・実行範囲制限）が担保される。(4) 起動したプロセスの状態が Apollo で追える（起動中/完了/失敗）。(5) 390px モバイルで操作できる。 |
-| 依存 | MC-85（自律エージェント群）と headless 起動・並行プロセス管理が重なるため統合設計で重複実装を避ける。起動方式（直接 headless 起動 vs inbox 経由）とセキュリティ境界の設計判断が前提＝BLOCKED。 |
+| 依存 | MC-85（自律エージェント群）と headless 起動・並行プロセス管理が重なるため統合設計で重複実装を避ける。起動方式は Keita 2026-06-01 決定で「サーバ直接 spawn」に確定（BLOCKED 解除）。残るセキュリティ境界・リソース管理の設計は設計フェーズ（MC-85 とセット）で詰める。実装は Keita レビュー後。 |
 | 提言・抜けもれ | (1) セキュリティが最大の論点＝サーバから任意プロンプトで claude を起動＝RCE 相当。必ず既存 token 認証配下、実行は許可エージェント type のホワイトリスト、プロンプト長/頻度制限、ログ監査。(2) プロセス管理: 起動したヘッドレスの PID 追跡・タイムアウト・kill 導線・同時起動上限（共有アカウントで 529 回避、[[project-vultr-second-server]]）。(3) 「アイドル判定」の定義＝roster の最終稼働 mtime か、cron ループ稼働状況か（MC-85 のループ状態と連動）。(4) 起動方式の選択肢を Keita に提示: (a) サーバが直接 `claude --print --agent` を spawn（即時・実装重・セキュリティ責任大）vs (b) inbox.jsonl に instruction 投入して autonomous 系が拾う（既存機構流用・即時性は cron 間隔依存・安全）。MC-85 が複数ループを作るなら (b) が自然。(5) UI chrome 制約（中立丁寧体・CSS 変数・SVG）。(6) MC-85 と設計セットで進めるのが効率的（先に MC-85 の起動基盤を決めてから本件 UI を載せる）。 |
 | サブタスク | - [ ] 起動方式を Keita に確認（直接 spawn vs inbox 経由）＝BLOCKED 解除条件<br>- [ ] セキュリティ境界設計（認証・type ホワイトリスト・レート制限・監査ログ）<br>- [ ] アイドル判定ロジック定義（MC-85 のループ状態と連動）<br>- [ ] Apollo UI: エージェント選択→指令入力→起動 導線<br>- [ ] プロセス状態追跡（起動中/完了/失敗・kill 導線・同時起動上限）<br>- [ ] 390px モバイル確認<br>- [ ] restart → test-functional 実機検証 |
-| 次アクション | MC-85 の起動基盤設計とセットで、林が起動方式・セキュリティ境界案を作成 → Keita 確認（BLOCKED 解除）→ dev-logic が実装 |
-| 更新日 | 2026-05-31 |
+| 次アクション | 【設計フェーズ＝次の具体ステップ】起動方式は「サーバ直接 spawn（claude --print --agent をサーバが起動）」で確定済。林が MC-85 とセットで設計案ドキュメントを作成（セキュリティ境界＝認証配下・type ホワイトリスト・レート制限・監査ログ、プロセス管理＝PID 追跡・タイムアウト・kill・同時起動上限/529制御、アイドル判定ロジック、Apollo UI 導線）→ Keita レビュー → 承認後に dev-logic が実装。実装はレビュー後。 |
+| 更新日 | 2026-06-01 |
 
 
 ### MC-87 — IN_PROGRESS のまま停滞しているタスクの洗い出しと再開
