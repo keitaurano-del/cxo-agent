@@ -1638,3 +1638,28 @@ ID 採番: **AR-0x**。
 | 完了検証 | web build green・server tsc EXIT0・restart 後 healthz 200・Playwright smoke 32 全 pass（新規4件=KPI/BigStat/MC-67非退行/ティック、モバイル390px+PC1280px、pageerror 0）。commit e575a50（6ファイル、server 無改修）。[[feedback-review-agent-verify-then-done]] でエージェント実機検証 DONE 化。 |
 | 更新日 | 2026-06-01（DONE）|
 
+---
+
+## バッチ: 2026-06-01 autonomous-worker の cxo フィールド表カード誤パース根本修正（MC-107）
+
+> 2026-06-01 MC-90 で autonomous-cxo を有効化したところ autonomous-worker.sh が cxo の TASK_TRACKER（フィールド表カード形式）を誤パースし、MC-66〜MC-104 の 33 カードが汚染（commit f0bac30）、commit 07e23df で git 履歴から修復済み。MC-88 の対症ガードでは根本解決にならず、autonomous-cxo は kill-switch で停止中。本タスク完了が再稼働の前提。台帳は task-manager（棚町）管轄。採番は next-task-id.sh で MC-107 確定。
+
+### MC-107 — autonomous-worker の cxo フィールド表カード誤パースを根治（台帳破壊の根本修正・autonomous-cxo 再稼働の前提）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-107 |
+| タイトル | autonomous-worker の cxo フィールド表カード誤パースを根治（台帳破壊の根本修正・autonomous-cxo 再稼働の前提） |
+| 種別 | bug / インフラ（重大・データ破壊） |
+| 優先度 | 高 |
+| ステータス | TODO |
+| 担当 | dev-logic（蓮）— 設計込み。MC-85 の中核論点として台帳更新堅牢化を設計する |
+| 背景 | 2026-06-01、MC-90 で autonomous-cxo を有効化したところ、autonomous-worker.sh が cxo-agent の TASK_TRACKER（`| フィールド | 値 |` の縦並びフィールド表カード形式）を誤パースし、各カードのフィールド行（タイトル・担当・ステータス・DoD・背景・詳細・関連・依存・提言・サブタスク・次アクション）を「タスク行」と誤認して別タスク値や誤 status で上書き破壊した。commit f0bac30 で MC-66〜MC-104 の計 33 カードが汚染され、commit 07e23df で git 履歴から修復済み。MC-88 のガード（BLOCKED/REVIEW/CANCELLED 保護・collector inNonTaskTable）は対症療法で、カードのタイトル/詳細行を別タスク値で上書きする経路が残っている。 |
+| 根本原因 | autonomous-worker の台帳 status 書き戻しロジックが logic 形式（pipe 表＋詳細セクション）前提で、cxo のフィールド表カード形式に非対応。セクション境界・カード形式を認識せず行単位で status を付け直すため破壊する。 |
+| 修正方針（設計含む・dev-logic） | worker の書き戻しが (1) フィールド表カードのセクション境界を尊重し本文行を書き換えない、(2) status 更新は summary 表行のみに限定する、(3) cxo 形式を検出したらカード本体は read-only 扱い、のいずれか堅い方式。MC-85（並行自律の本格設計）の中核論点として、台帳更新の堅牢化（形式非依存・冪等・破壊防止）を設計する。 |
+| 受け入れ条件（DoD） | (1) cxo フィールド表カードに対し autonomous tick を回しても詳細セクション本文が破壊されない (2) status 更新は表行のみ・冪等 (3) logic 形式の既存挙動は非退行 (4) 検証後 autonomous-cxo を再稼働できる状態 |
+| 関連ファイル | `/home/dev/cron-scripts/autonomous-worker.sh`、`/home/dev/projects/cxo-agent/docs/TASK_TRACKER.md`、commit f0bac30（汚染）/07e23df（修復） |
+| 依存 | MC-88（対症ガード）、MC-90（有効化で顕在化）、MC-85（並行設計） |
+| 提言・抜けもれ | (1) 修正前に worker の現行 status 書き戻し経路を完全に洗い出し、cxo 形式で到達しうる全パスを列挙する。(2) 「形式自動検出」か「形式フラグ」かを設計レベルで決める（hybrid tracker に両形式が混在しうるなら自動検出が堅い）。(3) logic 形式の既存 E2E テストがない場合は先に書いて非退行を担保する。(4) 修正完了後は autonomous-cxo の kill-switch 解除前に dry-run で検証する。 |
+| 更新日 | 2026-06-01（起票） |
+
