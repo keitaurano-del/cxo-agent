@@ -5,6 +5,7 @@
 // 横断検索からの遷移に影響を出さない。
 import { NavLink, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { useLiveStream, useLiveResource } from './lib/useLiveData';
 import { LiveContext } from './lib/liveContext';
 import type { ApprovalsResponse } from './lib/types';
@@ -65,22 +66,59 @@ function NavBadge({ count }: { count: number }) {
 function Sidebar({
   connected,
   badges,
+  open,
+  onToggle,
 }: {
   connected: boolean;
   badges: Partial<Record<string, number>>;
+  open: boolean;
+  onToggle: () => void;
 }) {
   const { pathname } = useLocation();
   const dashActive = isDashboardPath(pathname);
+
+  // 折りたたみ時: 細いストリップにトグルボタンだけ表示
+  if (!open) {
+    return (
+      <aside className="hidden w-8 shrink-0 flex-col items-center border-r border-border bg-surface pt-3 md:flex">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label="サイドバーを開く"
+          className="rounded p-1 text-text-muted hover:bg-surface-2 hover:text-text"
+        >
+          {/* › */}
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-surface md:flex">
-      <div className="flex items-center gap-2 px-5 py-4">
-        <span className="text-accent" aria-hidden>
-          <GridIcon width={22} height={22} />
-        </span>
-        <div>
-          <div className="text-sm font-bold leading-tight text-text">Apollo</div>
-          <div className="text-[10px] text-text-faint">開発状況リアルタイム可視化</div>
+      <div className="flex items-center justify-between px-5 py-4">
+        <div className="flex items-center gap-2">
+          <span className="text-accent" aria-hidden>
+            <GridIcon width={22} height={22} />
+          </span>
+          <div>
+            <div className="text-sm font-bold leading-tight text-text">Apollo</div>
+            <div className="text-[10px] text-text-faint">開発状況リアルタイム可視化</div>
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label="サイドバーを閉じる"
+          className="rounded p-1 text-text-muted hover:bg-surface-2 hover:text-text"
+        >
+          {/* ‹ */}
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path d="M10 4L6 8l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
       </div>
       <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
         {NAV.map((item) => {
@@ -131,14 +169,25 @@ function Sidebar({
 
 export default function App() {
   const { ticks, connected } = useLiveStream();
-  // 承認フローの総件数（ナビバッジ用）。tasks 由来なので tasks tick で再フェッチ。
   const { data: approvals } = useLiveResource<ApprovalsResponse>('/api/approvals', ticks.tasks);
   const approvalCount = approvals?.total ?? 0;
   const badges: Partial<Record<string, number>> = { '/approvals': approvalCount };
+
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    return localStorage.getItem('apollo-sidebar-open') !== 'false';
+  });
+  const toggleSidebar = () => {
+    setSidebarOpen((prev) => {
+      const next = !prev;
+      localStorage.setItem('apollo-sidebar-open', String(next));
+      return next;
+    });
+  };
+
   return (
     <LiveContext.Provider value={{ ticks }}>
       <div className="flex h-screen overflow-hidden bg-bg text-text">
-        <Sidebar connected={connected} badges={badges} />
+        <Sidebar connected={connected} badges={badges} open={sidebarOpen} onToggle={toggleSidebar} />
         <main className="flex-1 overflow-y-auto pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
           <Routes>
             {/* ダッシュボード（/）配下に 5 タブを入れ子。各子ビューの URL は従来どおり。 */}
