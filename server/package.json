@@ -11,9 +11,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@types/http-proxy": "^1.17.17",
     "chokidar": "^4.0.3",
     "cors": "^2.8.5",
     "express": "^5.2.1",
+    "http-proxy": "^1.18.1",
     "multer": "^2.1.1"
   },
   "devDependencies": {

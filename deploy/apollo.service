@@ -11,6 +11,9 @@ WorkingDirectory=/home/dev/projects/cxo-agent/server
 # tsx を直接起動して node を main プロセスにする（アプリの SIGTERM graceful shutdown を効かせるため）
 ExecStart=/home/dev/projects/cxo-agent/server/node_modules/.bin/tsx src/index.ts
 EnvironmentFile=/home/dev/projects/cxo-agent/.mc.env
+# Web ターミナル（MC-92）: proxy が ttyd の Basic 認証 credential を内部付与するため
+# TTYD_USER/TTYD_PASS を注入。先頭 '-' で、ファイルが無くても起動失敗しない（任意）。
+EnvironmentFile=-/home/dev/projects/cxo-agent/.terminal.env
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=NODE_ENV=production
 # 裏の作業エージェントが pkill で巻き添え kill しても自動復活させる

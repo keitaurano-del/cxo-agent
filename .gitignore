@@ -2,6 +2,7 @@
 .mc_token
 .env
 .env.*
+.terminal.env
 
 # deps / build (per-package gitignores also cover these)
 node_modules/

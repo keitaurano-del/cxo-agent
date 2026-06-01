@@ -34,6 +34,7 @@ import { inboxRouter } from './inbox.js';
 import { vaultWriteRouter } from './vaultWriteRouter.js';
 import { taskEditRouter } from './taskEditRouter.js';
 import { approvalRouter } from './approvalRouter.js';
+import { terminalHttpHandler, attachUpgrade } from './terminalProxy.js';
 import { startWatch } from './watch.js';
 
 const HEALTHZ_PATH = '/api/healthz';
@@ -60,6 +61,13 @@ app.get(HEALTHZ_PATH, (_req, res) => {
 // ─── token 認証（healthz より後、他ルートより前に適用）──────────
 // MC_TOKEN 設定時は /api/* ・SSE ・静的配信 ・SPA fallback すべてを保護する。
 app.use(makeAuthMiddleware(HEALTHZ_PATH));
+
+// ─── Web ターミナル（MC-92）── 認証ミドルウェアの「後ろ」に置く ─────
+// localhost の ttyd（tmux main = 林 CLI 常駐）へ reverse proxy する。
+// ここに来る時点で makeAuthMiddleware を通過済み＝HTTP は認証済みのみ到達。
+// WS upgrade は別経路（server.on('upgrade') → attachUpgrade）で同強度の認証を行う。
+// ttyd の Basic 認証 credential は proxy が内部付与（TTYD_USER/TTYD_PASS env）。
+app.use('/terminal', terminalHttpHandler);
 
 // ─── REST ─────────────────────────────────────────────
 
@@ -451,6 +459,18 @@ const server = app.listen(PORT, () => {
       '   ⚠ auth:              DISABLED (MC_TOKEN 未設定) — 全リクエストが無認証で通ります。' +
         '公開バインド前に必ず MC_TOKEN を設定してください。',
     );
+  }
+});
+
+// ─── WebSocket upgrade（MC-92 Web ターミナル）──────────────────────
+// Express ミドルウェアは upgrade に走らないため http.Server レベルで拾う。
+// /terminal 配下のみ attachUpgrade が処理（内部で認証チェック）。それ以外の
+// upgrade は Apollo に WS 利用者がいないので 400 で閉じる（ぶら下がり socket 防止）。
+server.on('upgrade', (req, socket, head) => {
+  const handled = attachUpgrade(req, socket, head);
+  if (!handled) {
+    socket.write('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+    socket.destroy();
   }
 });
 

@@ -1,0 +1,27 @@
+[Unit]
+Description=Apollo Web Terminal (ttyd) — localhost only, tmux main attach for MC-92
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dev
+Group=dev
+WorkingDirectory=/home/dev
+# 認証情報（TTYD_USER / TTYD_PASS）は repo 外の env ファイルから注入する（コミットしない）。
+# Apollo の /terminal proxy が同じ credential を内部付与して ttyd の Basic 認証を通す。
+EnvironmentFile=/home/dev/projects/cxo-agent/.terminal.env
+# -i 127.0.0.1 : localhost のみ bind（外部から ttyd ポートへ直接到達不可）
+# -p 7681      : ポート
+# -W           : writable（フル操作。読み取り専用にしない＝MC-92 DoD(5)）
+# --credential : Basic 認証（強いランダム。env から /bin/sh で展開）
+# tmux new-session -A -s main : main があれば attach・無ければ作成
+#   （reboot/session-cleanup で main が落ちていても繋がる＝MC-92 提言(6) UX 対応）
+ExecStart=/bin/sh -c 'exec /usr/bin/ttyd -i 127.0.0.1 -p 7681 -W --credential "$TTYD_USER:$TTYD_PASS" tmux new-session -A -s main'
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Restart=always
+RestartSec=3
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

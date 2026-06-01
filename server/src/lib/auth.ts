@@ -146,3 +146,56 @@ export function makeAuthMiddleware(healthzPath: string) {
 export function authEnabled(): boolean {
   return configuredToken() !== null;
 }
+
+/**
+ * WebSocket upgrade 経路用の認証チェッカ。
+ *
+ * Express の通常ミドルウェア（makeAuthMiddleware）は HTTP リクエストにしか走らず、
+ * `server.on('upgrade')` の WS ハンドシェイクには適用されない。proxy 越しに ttyd へ
+ * WS を流す前に、ここで token/Cookie/Bearer を同じ強度（timingSafe）で検証する。
+ * これが抜けると WS 経路だけ無認証で素通りするため、/terminal の最重要ゲート。
+ *
+ * - MC_TOKEN 未設定なら常に true（ローカル開発・既存挙動と一致）。
+ * - クエリ ?token= / Authorization: Bearer / Cookie mc_token のいずれか一致で true。
+ *   （WS では Cookie が最も実用的。ブラウザは upgrade に Cookie を自動付与する。）
+ */
+export function isRequestAuthorized(req: {
+  headers: Record<string, string | string[] | undefined>;
+  url?: string;
+}): boolean {
+  const token = configuredToken();
+  if (!token) return true; // 認証無効（ローカル開発）
+
+  // Bearer
+  const authHeader = req.headers['authorization'];
+  if (typeof authHeader === 'string') {
+    const m = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (m && safeEqual(m[1].trim(), token)) return true;
+  }
+
+  // Cookie mc_token
+  const cookieHeader = req.headers['cookie'];
+  if (typeof cookieHeader === 'string') {
+    for (const part of cookieHeader.split(';')) {
+      const idx = part.indexOf('=');
+      if (idx === -1) continue;
+      if (part.slice(0, idx).trim() === COOKIE_NAME) {
+        const v = decodeURIComponent(part.slice(idx + 1).trim());
+        if (safeEqual(v, token)) return true;
+      }
+    }
+  }
+
+  // クエリ ?token=
+  if (req.url) {
+    try {
+      const u = new URL(req.url, 'http://placeholder');
+      const q = u.searchParams.get('token');
+      if (q && safeEqual(q, token)) return true;
+    } catch {
+      /* malformed url → 認可しない */
+    }
+  }
+
+  return false;
+}

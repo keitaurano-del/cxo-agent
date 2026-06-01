@@ -14,6 +14,7 @@ import {
   ApprovalIcon,
   DotIcon,
   VaultIcon,
+  TerminalIcon,
 } from './components/icons';
 import DashboardLayout from './components/DashboardLayout';
 import { isDashboardPath } from './lib/nav';
@@ -26,6 +27,7 @@ import Vault from './views/Vault';
 import Usage from './views/Usage';
 import Ticks from './views/Ticks';
 import Approvals from './views/Approvals';
+import Terminal from './views/Terminal';
 import BottomNav from './components/BottomNav';
 import AddTaskFab from './components/AddTaskFab';
 
@@ -41,6 +43,9 @@ const NAV: NavItem[] = [
   { to: '/tasks', label: 'タスクボード', shortLabel: 'ボード', icon: <BoardIcon /> },
   { to: '/approvals', label: '承認フロー', shortLabel: '承認', icon: <ApprovalIcon /> },
   { to: '/vault', label: 'Vault', shortLabel: 'Vault', icon: <VaultIcon /> },
+  // ターミナル: iframe ホスト用 React ルートは /terminal-view。
+  // サーバ proxy ルート /terminal（→ ttyd）と衝突させないため別パスにする。
+  { to: '/terminal-view', label: 'ターミナル', shortLabel: '端末', icon: <TerminalIcon /> },
 ];
 
 /** ナビ項目の件数バッジ（0 なら非表示）。承認フロー（/approvals）で使う。 */
@@ -149,6 +154,7 @@ export default function App() {
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/approvals" element={<Approvals />} />
             <Route path="/vault" element={<Vault />} />
+            <Route path="/terminal-view" element={<Terminal />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
