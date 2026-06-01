@@ -16,16 +16,19 @@ import {
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, StalledBadge, Badge } from '../components/ui';
 import { TaskDetail } from '../components/TaskDetail';
-import { ChevronRightIcon } from '../components/icons';
+import { ChevronRightIcon, NoteIcon } from '../components/icons';
 
 function TaskCard({ t, onOpen }: { t: Task; onOpen: (t: Task) => void }) {
+  // 台帳に詳細本文（受け入れ条件・サブタスク等）がある場合は、カード上で「詳細あり」を明示する。
+  // これで「どのカードを開くと中身が読めるか」が一覧の段階で分かる（MC-83 アフォーダンス強化）。
+  const hasDetail = !!(t.detail && t.detail.trim());
   return (
     <button
       type="button"
       onClick={() => onOpen(t)}
-      className="group relative w-full cursor-pointer rounded-lg border border-border bg-surface p-3 pr-8 text-left transition-colors hover:border-accent/60 hover:bg-surface-2 active:bg-surface-3"
+      className="group relative w-full cursor-pointer rounded-lg border border-border bg-surface p-3 pr-8 text-left transition-colors hover:border-accent/60 hover:bg-surface-2 hover:shadow-sm focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:bg-surface-3"
       style={{ borderLeft: `3px solid ${projectColor(t.project)}` }}
-      aria-label={`タスク詳細を開く: ${t.title}`}
+      aria-label={`タスク詳細を開く: ${t.title}${hasDetail ? '（詳細あり）' : ''}`}
     >
       <div className="flex items-start justify-between gap-2 pr-1">
         <span className="font-mono text-[10px] text-text-faint">{t.id}</span>
@@ -55,9 +58,11 @@ function TaskCard({ t, onOpen }: { t: Task; onOpen: (t: Task) => void }) {
         <span className="text-[10px] text-text-faint" title={`出典: ${t.source}`}>
           {t.source}
         </span>
-        {/* 「タップで詳細が開ける」アフォーダンス（MC-83）。常時うっすら表示し、hover/focus で強調＋前進。 */}
+        {/* 「タップで詳細が開ける」アフォーダンス（MC-83）。常時うっすら表示し、hover/focus で強調＋前進。
+            詳細本文があるカードは NoteIcon 付きで「詳細あり」と明示し、開く価値があると分かるようにする。 */}
         <span className="inline-flex items-center gap-0.5 text-[10px] text-text-faint transition-colors group-hover:text-accent">
-          詳細
+          {hasDetail && <NoteIcon width={11} height={11} aria-hidden />}
+          {hasDetail ? '詳細あり' : '詳細'}
         </span>
       </div>
       {/* 右端の chevron。タップ可能であることを示す恒常的な手がかり。 */}
