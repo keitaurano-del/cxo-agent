@@ -1362,5 +1362,91 @@ ID 採番: **AR-0x**。
 
 ---
 
-最終更新: 2026-06-01 / 管理: task-manager（棚町）。2026-06-01 Apollo Web ターミナル実装（dev-logic 蓮）: MC-92 を IN_PROGRESS→DONE。ttyd 1.7.4（127.0.0.1 bind・writable・強 credential）を apollo-terminal.service で常駐、Apollo に /terminal reverse proxy（HTTP=auth ミドルウェア後ろ・WS=server.on('upgrade')＋isRequestAuthorized で同強度認証）を追加、web に「ターミナル」ナビ（iframe・/terminal-view・SVG アイコン・モバイル対応）を追加。検証 (a)未認証 HTTP/WS とも 401／(b)認証済 HTTP 200・WS 101・キー入力で shell 書込確認／(c)ttyd 公開 IP 直叩き拒否。restart 済・live。GitHub push は Keita 承認待ち（ローカル commit のみ）。2026-06-01 Apollo Web ターミナルバッチ: MC-92 新規起票（Keita 指示・方向 A=Web ターミナル）。依存に MC-88/MC-89 を記載（cxo リポ競合回避のため着手はそれら完了後）。採番は next-task-id.sh 直列（pull --rebase 後、MC-91 既存を裏取りし MC-92 確定）。2026-06-01 Apollo inbox 棚卸しバッチ: MC-90 新規起票（Apollo inbox 滞留＝cxo スコープ autonomous ループが cron 未登録という根因を確定）。ブリーフ #1/#3/#4 は MC-77 の inbox 即タスク化機構で既に taskId 紐付き済み（MC-89/MC-82/MC-87）と判明したため新規採番せず、既存スタブを調査結果で充実（重複起票回避）。採番は next-task-id.sh 直列（pull --rebase 後）。
+## バッチ: 2026-06-01 Apollo Web ターミナル文字化け修正（MC-92 の回帰）
+
+> Keita が実機で /terminal を開くと、ブラウザに文字化けバイナリが表示されターミナルが実質使えない状態。MC-92（Web ターミナル新設・コピペ改善）で入った未コミット差分の selfHandleResponse 化が、上流 ttyd の gzip 圧縮 body を壊して content-encoding ヘッダも消すため、ブラウザが壊れた gzip を平文表示している。根因確定済み。dev-logic が server/src/terminalProxy.ts を修正中（台帳は task-manager 管轄＝dev-logic はコードのみ）。
+
+### MC-93 — Apollo Web ターミナル（/terminal）でブラウザに文字化けバイナリが表示される不具合の修正
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-93 |
+| タイトル | Apollo Web ターミナル（/terminal）でブラウザに文字化けバイナリが表示される不具合の修正 |
+| 種別 | bug / インフラ（MC-92 の回帰） |
+| 優先度 | 高（Keita が実機で遭遇・ターミナルが実質使えない状態） |
+| ステータス | DONE（DoD 4項目クリア・Keita 実機で「治った」確認済み 2026-06-01） |
+| 担当 | dev-logic（実装）。検証は dev-logic の curl 検証＋必要なら test-functional（試野）の実機確認。台帳更新は task-manager（棚町）が管轄（dev-logic はコードのみ触る取り決め） |
+| 背景・根因（確定済み） | ブラウザの `Accept-Encoding: gzip` に対し上流 ttyd が gzip 圧縮 HTML を返す。今日入った未コミット差分 `server/src/terminalProxy.ts` の `selfHandleResponse: true` 化が、圧縮 body を `Buffer.concat(...).toString('utf8')` で文字列化して破壊し、`content-encoding` ヘッダも delete するため、ブラウザが壊れた gzip を平文として表示 → 文字化け。再現: curl で `Accept-Encoding: gzip` を付けると先頭 `1f ef bf bd...`・content-encoding 消失。Accept-Encoding 無しだと正常に見えるため気づきにくかった。さらにこの未コミット差分のまま 13:59 に server が restart され本番に乗っていた。 |
+| 修正方針 | `proxyReq` で `Accept-Encoding` を削除し ttyd に非圧縮で返させる（ターミナルは軽量なので非圧縮で問題なし）。paste-fix script 注入（`__apolloPasteFix`）は維持。 |
+| 受け入れ条件（DoD） | (1) server `tsc --noEmit` green。(2) restart 後 `/api/healthz` 200。(3) `Accept-Encoding: gzip` 付き `GET /terminal/` で content-encoding 無し・本文が `<!DOCTYPE html` 始まり・`__apolloPasteFix` 注入あり。(4) ブラウザ実機でターミナル表示・打鍵・Ctrl+V 貼り付けが正常。 |
+| 検証メモ（確認済み・2026-06-01） | 修正本体: `server/src/terminalProxy.ts:105` の proxyReq ハンドラに `proxyReq.removeHeader('accept-encoding')` を追加（commit d40459a「fix(terminal): drop accept-encoding to ttyd so HTML body stays uncompressed (MC-93)」、未 push）。ttyd に非圧縮で返させ、selfHandleResponse の utf8 文字列化で gzip body が壊れる根因を解消。`:141` の `delete headers['content-encoding']` も二重防御で残置。／(1) tsc `npx tsc --noEmit` EXIT=0 green ✓／(2) restart 後 `/api/healthz` 200・systemctl is-active active ✓／(3) `Accept-Encoding: gzip` 付き GET /terminal/ → content-encoding 無し・本文 `<!DOCTYPE html` 始まり・`__apolloPasteFix` 注入2箇所 ✓／(4) 実機: Keita がブラウザで「治った」と確認済み（2026-06-01）✓。非退行: Permissions-Policy: clipboard-read=(self),clipboard-write=(self) 維持・Cookie 無しは 401（認証ゲート維持）・/terminal/token 200・/terminal/ws 101 ✓。後始末: 使い捨て `_repro_*.mjs` 6本 dev-logic 削除済み、terminalProxy.ts は commit 済みでワーキングツリーから汚れ差分除去済み。push は Keita 承認待ち（[[reference-deploy-commands]]）。 |
+| 関連 | MC-92（Web ターミナル新設・コピペ改善）。`server/src/terminalProxy.ts`（proxyReq で Accept-Encoding 削除・proxyRes で script 注入）, `deploy/apollo.service` restart, ttyd 1.7.4, [[project-apollo-dashboard]] |
+| 提言・抜けもれ | (1) MC-92 の selfHandleResponse 化が回帰の根。今回の修正後、MC-92 の DoD（コピペ改善で付けた `Permissions-Policy` ヘッダ注入・clipboard 権限委譲）が壊れていないか同時に再確認（curl -I でヘッダ・未認証 HTTP/WS とも 401 維持）。(2) **未コミット差分のまま restart で本番に乗った**のが今回の事故の温床。push は Keita 承認が要るが、ローカル commit でワーキングツリーを汚れたまま放置しないこと（次の restart で意図せぬ差分が乗る再発防止）。(3) push / 本番反映の判断は Keita 専権（[[reference-deploy-commands]]）。今回はローカル編集＋restart までで、push はしない。 |
+| 更新日 | 2026-06-01 |
+
+---
+
+## バッチ: 2026-06-01 Apollo ターミナル PC コピペ修正 / 画像添付 / レスキュー画面
+
+> Keita 要望3件（2026-06-01）。MC-94=MC-92 の積み残し（PC ブラウザ Ctrl+V が実機で効かない）の根因確定→修正、dev-logic 実機検証で DoD クリア＝DONE（2026-06-01）。MC-95=ターミナルから画像を林に渡せるようにする feature。MC-96=Apollo が落ちても開ける独立レスキュー画面（設計 Keita 確認中）。台帳は task-manager（棚町）管轄、dev-logic はコードのみ触る取り決め。採番は next-task-id.sh で MC-94/95/96 確定済み（pull --rebase 後、MC-90〜93 既存を裏取り、再採番なし）。
+
+### MC-94 — Apollo Web ターミナルで PC ブラウザの Ctrl+V コピペが効かない不具合の修正
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-94 |
+| タイトル | Apollo Web ターミナルで PC ブラウザの Ctrl+V コピペが効かない不具合の修正 |
+| 種別 | bug / MC-92 の積み残し |
+| 優先度 | 高 |
+| ステータス | DONE（dev-logic 蓮 が根因実機特定→修正→Playwright 実機検証で DoD 4項目クリア。2026-06-01。[[feedback-review-agent-verify-then-done]] によりエージェント実機検証で DONE 化、Keita PC 確認は別途依頼中・なお不可なら再オープン） |
+| 担当 | dev-logic（実機調査→修正→restart→Playwright 実機検証まで）。台帳更新は task-manager（棚町）管轄（dev-logic はコードのみ触る取り決め） |
+| 背景 | MC-92 で PC 用 Ctrl+V 貼り付け対応（`terminalProxy.ts` の `__apolloPasteFix` script を ttyd の HTML に注入、`navigator.clipboard.readText`→`term.paste`）を入れたが、実機の PC では貼り付けが効かない。Keita 報告（2026-06-01）。アクセスは HTTPS トンネル経由＝secure context はあるため「HTTP だから clipboard API が無い」線は除外済み。 |
+| 根因（実機確定済み 2026-06-01） | iframe 内の `navigator.clipboard.readText()` が clipboard-read 権限ゲートで NotAllowedError 失敗。旧 MC-92 コードはそれを catch で握りつぶしつつ Ctrl+V を無条件 `preventDefault` していたため、クリップボード取得失敗時にネイティブ paste も殺され何も貼れなかった。当初の根因候補 (a) `window.term` 未公開説は外れ（paste-fix はアタッチ済みだった）。(b)/(c) も主因ではなく、真因は readText 失敗時の preventDefault による native paste 殺し。 |
+| 受け入れ条件（DoD）★クリア | (1) 根因を実機証拠付きで特定 → 上記「根因」で確定 ✓。(2) PC ブラウザで Ctrl+V 貼り付けが実際に効く → Playwright（chromium、clipboard-read 未付与＝実 PC ブラウザ相当）で Ctrl+V 貼り付けが bracketed paste で PTY 到達・SYN なしを確認 ✓。(3) 非退行 → 通常打鍵 abc 素通り・Ctrl+Shift+V 素通り・MC-93 文字化け無し すべて PASS ✓。(4) tsc green・restart 後 healthz 200 → `tsc --noEmit` exit 0・restart 後 healthz 200・`__apolloPasteFix` 注入2箇所・readText 撤去確認 ✓。 |
+| 修正・検証メモ（dev-logic 実機検証済み 2026-06-01） | 修正本体: `server/src/terminalProxy.ts:57-78` の PASTE_FIX_SCRIPT。Ctrl+V（Shift 無し）に `return false` で xterm の SYN(0x16) 送出のみ抑止し、`preventDefault` は呼ばない。ブラウザのネイティブ paste が xterm helper textarea に走り、組み込み paste ハンドラが bracketed paste で PTY 送出。`clipboard.readText`／clipboard-read 権限／ttyd 構造に非依存。commit `0e8e6d0`（main、未 push）。検証: Playwright chromium（clipboard-read 未付与＝実 PC ブラウザ相当）で Ctrl+V 貼り付け→bracketed paste で PTY 到達・SYN なし確認。非退行（通常打鍵 abc 素通り・Ctrl+Shift+V 素通り・MC-93 文字化け無し）PASS。`tsc --noEmit` exit 0・restart 後 healthz 200・`__apolloPasteFix` 注入2箇所・readText 撤去確認。push は Keita 承認待ち（[[reference-deploy-commands]]）。 |
+| 関連 | MC-92（Web ターミナル新設・コピペ改善の起源）、MC-93（文字化け修正）。`server/src/terminalProxy.ts:57-78`（PASTE_FIX_SCRIPT・SYN 抑止のみ／preventDefault 呼ばない）, ttyd 1.7.4, [[project-apollo-dashboard]], [[feedback-review-agent-verify-then-done]] |
+| 提言・抜けもれ | (1) 根因 (a) の場合、`window.term` 非公開なら ttyd の xterm インスタンスへの到達手段（ttyd の内部 API・グローバル探索・あるいは iframe 内で keydown を捕まえて自前で WS に送る）を要検討。preventDefault だけで貼れない実装は最悪手。(2) ブラウザ別マトリクス（Chrome / Edge / Firefox / Safari）で clipboard.readText 可否が割れる。最低 Chrome 系で確実に効くことを DoD の必達ラインにし、非対応ブラウザは Ctrl+Shift+V や右クリック貼付のフォールバックを案内。(3) iframe の clipboard 権限は親（Apollo 配信元）の Permissions-Policy と iframe の `allow="clipboard-read; clipboard-write"` の両方が要る。片方欠落で空振りするので両方確認。(4) Playwright で clipboard を扱うには context permissions（clipboard-read/write）付与が要る点に注意（実機ブラウザの権限ダイアログと挙動が違う）。実機確認も併せる。(5) push / 本番反映は Keita 専権（[[reference-deploy-commands]]）。ローカル編集＋restart まで、push はしない。 |
+| 更新日 | 2026-06-01 |
+
+---
+
+### MC-95 — Apollo ターミナルから画像を添付して対話中の林に渡せるようにする（クリップボード貼付＋ファイル選択）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-95 |
+| タイトル | Apollo ターミナルから画像を添付して対話中の林に渡せるようにする（クリップボード貼付＋ファイル選択 両方） |
+| 種別 | feature |
+| 優先度 | 中 |
+| ステータス | TODO |
+| 担当 | dev-logic（設計詳細は着手時に詰める）。台帳更新は task-manager（棚町）管轄 |
+| 背景 | Keita 要望（2026-06-01）。ターミナル（tmux main の claude=林）に画像を見せたい。クリップボードからの貼り付けとファイル選択の両方に対応したい。 |
+| 想定設計 | ターミナルビュー（`web/src/views/Terminal.tsx`）にオーバーレイ UI（添付ボタン＋ペースト受け）を追加 → 画像をサーバ保存（`data/terminal-uploads/`、新規 API `POST /api/terminal/upload`、multipart）→ 保存パスを tmux main に注入（`tmux send-keys` でパス文字列を流す）→ 林が Read で読む。クリップボード画像は secure context（https）前提で可。既存 inbox の画像添付実装（`server/src/inbox.ts`、`data/inbox-attachments/`）が流用の参考。 |
+| 受け入れ条件（DoD） | (1) ターミナル画面からファイル選択で画像アップロード→tmux main にパスが届き林が Read 可能。(2) クリップボードからの画像貼付も同様に動作。(3) 認証ゲート維持・サイズ/枚数制限・拡張子検証。(4) tsc green・restart 後 `/api/healthz` 200・実機検証。 |
+| 関連 | MC-94（同じターミナルビューの clipboard 周り＝着手順序で干渉しうる）、`server/src/inbox.ts`（流用元）, `data/inbox-attachments/`, `web/src/views/Terminal.tsx`, [[project-apollo-dashboard]] |
+| 提言・抜けもれ | (1) MC-94 と同じ `Terminal.tsx` / clipboard を触るため、着手順序を要調整（MC-94 のコピペ修正と同時並行だと iframe・clipboard 周りで競合しうる）。dev-logic 内で順序整理を。(2) `tmux send-keys` でパスを流す方式は、林が対話入力途中だと割り込む懸念あり。送出タイミング（プロンプト待機中に限る等）か、明示確認を挟む設計を検討。(3) アップロードのサイズ上限・許可拡張子（png/jpg/webp 等）・枚数上限を inbox 実装に揃える。マルウェア/巨大ファイル対策。(4) 保存先 `data/terminal-uploads/` の肥大化＝定期掃除 or 上限を検討（提言、別タスク化候補）。(5) 認証は既存 MC_TOKEN ゲートの内側に置く（未認証アップロード禁止）。(6) push / 本番反映は Keita 専権。 |
+| 更新日 | 2026-06-01 |
+
+---
+
+### MC-96 — Apollo が開けない/壊れた時の独立レスキュー画面・修復ルートを確保する
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-96 |
+| タイトル | Apollo が開けない/壊れた時の独立レスキュー画面・修復ルートを確保する |
+| 種別 | feature / インフラ（レジリエンス） |
+| 優先度 | 高 |
+| ステータス | TODO（想定設計は Keita 確認中。設計確定は Keita 合意後） |
+| 担当 | dev-logic（実装）＋apollo番人（apollo）協調。台帳更新は task-manager（棚町）管轄 |
+| 背景 | Keita 要望（2026-06-01）。今回の MC-93 のようにターミナル/Apollo が使えなくなった時に、ブラウザから復旧できる導線が欲しい。Apollo 本体(:4317)が落ちても開ける予備画面を準備しておきたい。 |
+| 想定設計（Keita 確認中） | Apollo 本体とは独立したプロセスで軽量レスキューサーバを立てる（別ポート例:4318・別 systemd `apollo-rescue.service`・素の Node http 単一ファイルで apollo-web/server のビルドに非依存＝本体が死んでも起動可能）。機能: Apollo 死活(healthz)表示／ワンクリック `mission-control.service` restart／直近ログ表示／ttyd・tmux・df・free 状態／ターミナル直リンク。認証は MC_TOKEN 流用、cloudflared で本体と独立した別経路公開。位置づけは既存 cron `apollo-watchdog`（自動 restart）の手動 Web 版で、番人(apollo)と協調。 |
+| 受け入れ条件（DoD） | (1) Apollo 本体を停止した状態でもレスキュー画面が開ける。(2) レスキュー画面から restart して本体が復活する。(3) 独立 systemd で自動起動・常駐。(4) 認証ゲートあり。 |
+| 関連 | MC-93（今回の障害＝この要望の発端）、`~/cron-scripts/apollo-watchdog.sh`（自動 restart の既存版・手動 Web 版がこれ）、`deploy/apollo.service` / 新規 `deploy/apollo-rescue.service`, cloudflared, [[project-apollo-dashboard]]、[[project-apollo-keeper]] |
+| 提言・抜けもれ | (1) **非依存が肝**: レスキューサーバは apollo-web/server のビルド成果物・node_modules・共通設定に依存させない（本体が壊れた原因と心中しないため、単一ファイル＋Node 標準ライブラリのみが望ましい）。依存を持たせると「本体が死ぬ時に一緒に死ぬ」。(2) restart 権限＝レスキューサーバが `systemctl restart` を実行できる権限設計（dev ユーザの sudo 範囲 or systemd 経由）。任意 restart が認証ゲート内に限定されること（未認証で叩けると DoS）。(3) ポート 4318 と cloudflared 別経路が本体と衝突しない・独立して落ちないこと。(4) apollo番人（apollo）の cron watchdog（自動 restart）と機能重複・競合しないか整理（手動 Web 版＝人が押す、cron＝自動、の役割分担を明記）。(5) **設計は Keita 確認中**＝合意前に実装着手しない（BLOCKED 相当の判断待ち。確定したら IN_PROGRESS へ）。(6) レスキュー画面自体が単一障害点にならないよう、最低限の自己復旧（systemd Restart=always）も付ける。 |
+| 更新日 | 2026-06-01 |
+
+---
+
+最終更新: 2026-06-01 / 管理: task-manager（棚町）。2026-06-01 Apollo ターミナル PC コピペ修正完了: MC-94 を IN_PROGRESS→DONE。根因（実機確定）=iframe 内 navigator.clipboard.readText() が clipboard-read 権限ゲートで NotAllowedError 失敗、旧 MC-92 コードが catch で握りつぶしつつ Ctrl+V を無条件 preventDefault していたため native paste も殺され貼れなかった（window.term 未公開説は外れ）。修正=terminalProxy.ts:57-78 PASTE_FIX_SCRIPT で Ctrl+V に return false（xterm の SYN 送出のみ抑止・preventDefault は呼ばない）→ブラウザ native paste が xterm helper textarea に走り bracketed paste で PTY 送出、readText/clipboard 権限/ttyd 構造に非依存（commit 0e8e6d0 未 push）。DoD 4項目クリア（根因実機特定／Playwright chromium・clipboard-read 未付与＝実 PC 相当で Ctrl+V 貼付が bracketed paste で PTY 到達・SYN なし／非退行=通常打鍵 abc 素通り・Ctrl+Shift+V 素通り・MC-93 文字化け無し PASS／tsc --noEmit exit 0・restart 後 healthz 200・__apolloPasteFix 注入2箇所・readText 撤去確認）。[[feedback-review-agent-verify-then-done]] によりエージェント実機検証で DONE 化、Keita PC 確認は別途依頼中（なお不可なら再オープン）。push は Keita 承認待ち。2026-06-01 Apollo ターミナル PC コピペ修正 / 画像添付 / レスキュー画面バッチ: MC-94/95/96 新規起票。MC-94（高）=MC-92 の積み残し、PC ブラウザの Ctrl+V が実機で効かない。secure context はあるため HTTP 線は除外、根因候補 (a)ttyd が window.term 非公開で paste-fix 空振り (b)ブラウザ依存 (c)iframe clipboard 権限委譲未効、を実機 Playwright で確定→修正。dev-logic 蓮 着手。MC-95（中・TODO）=ターミナルから画像を tmux main の林に渡す feature、クリップボード貼付＋ファイル選択、新規 POST /api/terminal/upload・data/terminal-uploads/、inbox 実装流用。MC-94 と同じ Terminal.tsx/clipboard を触るため着手順序要調整。MC-96（高・TODO・設計 Keita 確認中）=Apollo 本体(:4317)が落ちても開ける独立レスキュー画面（別ポート 4318・別 systemd apollo-rescue.service・素の Node 単一ファイルで本体ビルド非依存）。死活表示/ワンクリック restart/ログ/リソース/ターミナル直リンク、MC_TOKEN 認証・cloudflared 別経路。非依存が肝、設計合意前は着手しない。3件とも台帳は task-manager 管轄（dev-logic はコードのみ）、採番は next-task-id.sh で MC-94/95/96 確定済み（再採番なし）。push は Keita 承認待ち。2026-06-01 Apollo Web ターミナル文字化け修正完了: MC-93 を IN_PROGRESS→DONE。修正=terminalProxy.ts:105 で proxyReq から accept-encoding 削除（ttyd 非圧縮化、commit d40459a 未 push）。DoD 4項目クリア（tsc green/healthz 200/Accept-Encoding:gzip 付き GET で content-encoding 無し・DOCTYPE 始まり・__apolloPasteFix 注入2箇所/Keita 実機「治った」確認）。非退行=Permissions-Policy 維持・401 認証ゲート維持・token 200・ws 101。後始末=_repro_*.mjs 6本削除・ワーキングツリー clean。push は Keita 承認待ち。2026-06-01 Apollo Web ターミナル文字化け修正バッチ: MC-93 新規起票（IN_PROGRESS）。Keita 実機遭遇の /terminal 文字化け＝MC-92 で入った selfHandleResponse 化が上流 ttyd の gzip body を破壊＋content-encoding 削除する回帰。根因確定済み。修正方針=proxyReq で Accept-Encoding 削除し非圧縮化（paste-fix 注入維持）。DoD=tsc green/healthz 200/Accept-Encoding:gzip 付き GET で content-encoding 無し・DOCTYPE 始まり・paste-fix 注入あり/実機で表示・打鍵・Ctrl+V 正常。担当 dev-logic（実装）、検証 dev-logic curl＋test-functional 実機。台帳は task-manager 管轄（dev-logic はコードのみ）。採番は next-task-id.sh で MC-93 取得済み（再採番なし）。push は Keita 承認待ち（ローカル編集＋restart まで）。2026-06-01 Apollo Web ターミナル実装（dev-logic 蓮）: MC-92 を IN_PROGRESS→DONE。ttyd 1.7.4（127.0.0.1 bind・writable・強 credential）を apollo-terminal.service で常駐、Apollo に /terminal reverse proxy（HTTP=auth ミドルウェア後ろ・WS=server.on('upgrade')＋isRequestAuthorized で同強度認証）を追加、web に「ターミナル」ナビ（iframe・/terminal-view・SVG アイコン・モバイル対応）を追加。検証 (a)未認証 HTTP/WS とも 401／(b)認証済 HTTP 200・WS 101・キー入力で shell 書込確認／(c)ttyd 公開 IP 直叩き拒否。restart 済・live。GitHub push は Keita 承認待ち（ローカル commit のみ）。2026-06-01 Apollo Web ターミナルバッチ: MC-92 新規起票（Keita 指示・方向 A=Web ターミナル）。依存に MC-88/MC-89 を記載（cxo リポ競合回避のため着手はそれら完了後）。採番は next-task-id.sh 直列（pull --rebase 後、MC-91 既存を裏取りし MC-92 確定）。2026-06-01 Apollo inbox 棚卸しバッチ: MC-90 新規起票（Apollo inbox 滞留＝cxo スコープ autonomous ループが cron 未登録という根因を確定）。ブリーフ #1/#3/#4 は MC-77 の inbox 即タスク化機構で既に taskId 紐付き済み（MC-89/MC-82/MC-87）と判明したため新規採番せず、既存スタブを調査結果で充実（重複起票回避）。採番は next-task-id.sh 直列（pull --rebase 後）。
 
