@@ -1318,5 +1318,31 @@ ID 採番: **AR-0x**。
 
 ---
 
-最終更新: 2026-06-01 / 管理: task-manager（棚町）。2026-06-01 Apollo inbox 棚卸しバッチ: MC-90 新規起票（Apollo inbox 滞留＝cxo スコープ autonomous ループが cron 未登録という根因を確定）。ブリーフ #1/#3/#4 は MC-77 の inbox 即タスク化機構で既に taskId 紐付き済み（MC-89/MC-82/MC-87）と判明したため新規採番せず、既存スタブを調査結果で充実（重複起票回避）。採番は next-task-id.sh 直列（pull --rebase 後）。
+## バッチ: 2026-06-01 Apollo Web ターミナル（林との同期・双方向対話をブラウザから）
+
+> Keita 指示（2026-06-01）「このターミナルでできるのと同じこと（林との対話）を Apollo 上でやりたい。方向は A: Web ターミナル（最速）」。Vultr 箱の tmux `main` に常駐する林 CLI セッションを、Apollo 経由でブラウザ（スマホ含む）から同期・双方向にフル操作できるようにする。受信箱（非同期・片方向）に対する同期・双方向版。
+
+### MC-92 — Apollo に Web ターミナル（tmux の林セッションをブラウザ操作）を追加
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-92 |
+| タイトル | Apollo に Web ターミナル（tmux の林セッションをブラウザ操作）を追加 |
+| 優先度 | P1 |
+| ステータス | TODO |
+| 担当 | dev-logic（Apollo proxy / nav / モバイルレイアウト実装）＋ apollo番人（ttyd / cloudflared / Cloudflare Access 等インフラ・セキュリティ設定。sudo を伴うインフラ作業は権限境界に従い案提示＋Keita 承認後実施） |
+| 目的 | Keita がこのターミナル（Vultr 箱で tmux `main` に常駐する林 CLI セッション）と同じ対話操作を、Apollo 経由でブラウザ（スマホ含む）からできるようにする。Apollo 受信箱（非同期・片方向）に対し、これは**同期・双方向のフル操作**。 |
+| 実装方針（A: 最速・安全） | (1) `ttyd` を箱に導入し `tmux attach -t main`（林セッション）を映す。**localhost バインド固定**（外に直接公開しない）。(2) 認証2段: (a) ttyd 自体に強いクレデンシャル、(b) localhost のみ→Apollo サーバが `/terminal`（仮）で reverse proxy し、Apollo 既存のトークン/Cookie 認証の後ろに置く。トンネルは既存 cloudflared を再利用。さらに堅くするなら Cloudflare Access（keita.urano@gmail.com 限定）を上乗せ可（オプション）。(3) Apollo web にナビ項目「ターミナル」を追加し、認証済みでワンタップで開ける。モバイルレイアウト対応。 |
+| セキュリティ要件（DoD に必須） | (1) **素の ttyd を無認証で外部公開しない。必ず Apollo 認証 or Cloudflare Access の後ろ**。(2) フルシェル＝箱の全権限が取れる前提で、認証強度・バインド範囲・トンネル経路を設計する。(3) 操作は林の tmux と共有（Keita 入力がそのまま林セッションに入る）。**読み取り専用でなくフル操作である旨を仕様に明記**。(4) MC_TOKEN や認証情報をコード/リポ本体に直書きしない（`.mc.env` 等の env 参照）。 |
+| 受け入れ条件（DoD） | (1) Apollo の「ターミナル」から、認証を通った上で tmux 林セッションを操作できる。(2) スマホブラウザでも実用的に打鍵・閲覧できる（モバイルレイアウト対応）。(3) **無認証アクセスが不可能なことを検証**（直 URL・トンネル経路ともに Apollo 認証 or Cloudflare Access を通らないと到達できない）。(4) ttyd は localhost バインドで、外部から ttyd ポートへ直接到達できないことを確認。(5) フル操作（読み書き両方）であることが動作確認できる。 |
+| 依存 | **MC-88（台帳 status 書き戻しレース／collector フラッピング修正）・MC-89（承認再湧き修正）の後に着手**。cxo リポが dev-logic の MC-88/89 修正と autonomous-cxo ループで競合中のため、それらが片付き cxo リポが落ち着いてから着手する（リポ競合回避）。 |
+| 提言・抜けもれ | (1) ttyd 導入は **sudo を伴うインフラ作業**＝apollo番人の権限境界で「案提示まで／Keita 承認後実施」（[[project-apollo-keeper]]）。(2) **Cloudflare Access の適用には Cloudflare 側のダッシュボード設定が必要**で、その場合 Keita の操作が一部要る（Application 作成・keita.urano@gmail.com の policy 設定）。オプション扱いだが、フルシェル公開のリスクを考えると強く推奨。(3) Apollo サーバは `tsx src/index.ts`（watch 無し）起動なので `/terminal` proxy 追加は `sudo systemctl restart apollo.service`（旧名 mission-control.service）で反映、web ナビ追加は `cd web && npm run build`（[[project-apollo-dashboard]]）。生 tsx 起動は禁止。(4) tmux 共有セッションを複数クライアントが attach すると画面サイズが最小クライアントに同期される（tmux 仕様）。スマホ＋PC 同時 attach 時の見え方を検証。専有したい場合は `tmux new-session -t main`（grouped session）で別ウィンドウサイズを持たせる選択肢も検討。(5) フルシェル＝箱の全権限が漏れると致命的（git push / deploy / 鍵アクセスが全部できてしまう）。認証強度は最優先。ttyd の `--credential` だけに頼らず Apollo 認証 or Cloudflare Access を必須の前段に置く（多層防御）。(6) 林セッションが session-cleanup や reboot で落ちている場合の挙動（attach 先が無い）も UX として考慮（再起動導線 or エラー表示）。(7) UI chrome 制約（中立丁寧体・CSS 変数・ハードコード hex 禁止・emoji 不可で SVG のみ）はナビ項目「ターミナル」追加時に維持（[[feedback-app-copy-neutral]]）。 |
+| サブタスク | - [ ] apollo番人: ttyd 導入（localhost バインド・強クレデンシャル）の手順案を提示し Keita 承認後にインストール<br>- [ ] dev-logic: Apollo サーバに `/terminal` reverse proxy を追加（既存トークン/Cookie 認証の後ろ）<br>- [ ] dev-logic: Apollo web にナビ「ターミナル」追加＋モバイルレイアウト対応<br>- [ ] apollo番人: cloudflared 経路の確認（既存トンネル再利用）<br>- [ ] （オプション）Cloudflare Access を keita.urano@gmail.com 限定で上乗せ（Cloudflare 側設定は Keita 操作）<br>- [ ] test-functional: 無認証アクセス不可・localhost バインド・フル操作・スマホ打鍵を検証 |
+| 関連 | Apollo server（`/home/dev/projects/cxo-agent/server/src/index.ts` ＝reverse proxy 追加先, `.mc.env` の MC_TOKEN）, Apollo web（`web/` ナビ追加・`npm run build`）, ttyd（要導入）, cloudflared（`/usr/local/bin/cloudflared` 導入済）, tmux `main` セッション（林 CLI 常駐）, [[project-apollo-dashboard]], [[project-apollo-keeper]], [[project-vultr-second-server]], [[project-autonomous-rin]], MC-88 / MC-89（依存） |
+| note | Keita 指示由来（2026-06-01）。方向は Keita 明示で A（Web ターミナル＝最速）。実装は本起票では未着手（起票のみ）。着手は MC-88/89 完了後。 |
+| 更新日 | 2026-06-01 |
+
+---
+
+最終更新: 2026-06-01 / 管理: task-manager（棚町）。2026-06-01 Apollo Web ターミナルバッチ: MC-92 新規起票（Keita 指示・方向 A=Web ターミナル）。依存に MC-88/MC-89 を記載（cxo リポ競合回避のため着手はそれら完了後）。採番は next-task-id.sh 直列（pull --rebase 後、MC-91 既存を裏取りし MC-92 確定）。2026-06-01 Apollo inbox 棚卸しバッチ: MC-90 新規起票（Apollo inbox 滞留＝cxo スコープ autonomous ループが cron 未登録という根因を確定）。ブリーフ #1/#3/#4 は MC-77 の inbox 即タスク化機構で既に taskId 紐付き済み（MC-89/MC-82/MC-87）と判明したため新規採番せず、既存スタブを調査結果で充実（重複起票回避）。採番は next-task-id.sh 直列（pull --rebase 後）。
 
