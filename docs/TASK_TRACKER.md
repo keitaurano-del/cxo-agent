@@ -1418,8 +1418,9 @@ ID 採番: **AR-0x**。
 | タイトル | Apollo ターミナルから画像を添付して対話中の林に渡せるようにする（クリップボード貼付＋ファイル選択 両方） |
 | 種別 | feature |
 | 優先度 | 中 |
-| ステータス | TODO |
+| ステータス | DONE |
 | 担当 | dev-logic（設計詳細は着手時に詰める）。台帳更新は task-manager（棚町）管轄 |
+| 検証（2026-06-01 test-functional 試野） | 実機 E2E 全項目 PASS（修正要 FAIL なし）で DoD クリア＝DONE 化（[[feedback-review-agent-verify-then-done]]）。根拠: (a) ナビ全9項目巡回・/terminal-view 遷移・ttyd iframe 表示 OK、ルート変更（/terminal→/terminal-view）による波及なし・pageerror ゼロ。(b) /terminal/（ttyd 直）200 生存＝SPA と proxy の分離成立（index.ts の /terminal mount が SPA fallback より先に評価）。(c) 画像添付＝ファイル選択（単体/複数）・クリップボード貼付 とも 201・`data/terminal-uploads/` 保存・tmux main へリテラル注入・自動 Enter なしを実機確認。(d) バリデーション/認証＝Cookie 無し 401／0枚・不正 MIME・枚数超過・サイズ超過 400／いずれも tmux 未到達。(e) 非破壊性＝検証文字列は BSpace で消去し tmux main 原状復帰。(f) MC-93/94 非退行＝文字化けなし・Permissions-Policy 付与・paste-fix script 健在。実装 commit ded755e（未 push）。push / 本番反映は Keita 承認待ち（[[reference-deploy-commands]]）。 |
 | 背景 | Keita 要望（2026-06-01）。ターミナル（tmux main の claude=林）に画像を見せたい。クリップボードからの貼り付けとファイル選択の両方に対応したい。 |
 | 想定設計 | ターミナルビュー（`web/src/views/Terminal.tsx`）にオーバーレイ UI（添付ボタン＋ペースト受け）を追加 → 画像をサーバ保存（`data/terminal-uploads/`、新規 API `POST /api/terminal/upload`、multipart）→ 保存パスを tmux main に注入（`tmux send-keys` でパス文字列を流す）→ 林が Read で読む。クリップボード画像は secure context（https）前提で可。既存 inbox の画像添付実装（`server/src/inbox.ts`、`data/inbox-attachments/`）が流用の参考。 |
 | 受け入れ条件（DoD） | (1) ターミナル画面からファイル選択で画像アップロード→tmux main にパスが届き林が Read 可能。(2) クリップボードからの画像貼付も同様に動作。(3) 認証ゲート維持・サイズ/枚数制限・拡張子検証。(4) tsc green・restart 後 `/api/healthz` 200・実機検証。 |
@@ -1448,7 +1449,7 @@ ID 採番: **AR-0x**。
 
 ---
 
-最終更新: 2026-06-01 / 管理: task-manager（棚町）。2026-06-01 Apollo ターミナル PC コピペ修正完了: MC-94 を IN_PROGRESS→DONE。根因（実機確定）=iframe 内 navigator.clipboard.readText() が clipboard-read 権限ゲートで NotAllowedError 失敗、旧 MC-92 コードが catch で握りつぶしつつ Ctrl+V を無条件 preventDefault していたため native paste も殺され貼れなかった（window.term 未公開説は外れ）。修正=terminalProxy.ts:57-78 PASTE_FIX_SCRIPT で Ctrl+V に return false（xterm の SYN 送出のみ抑止・preventDefault は呼ばない）→ブラウザ native paste が xterm helper textarea に走り bracketed paste で PTY 送出、readText/clipboard 権限/ttyd 構造に非依存（commit 0e8e6d0 未 push）。DoD 4項目クリア（根因実機特定／Playwright chromium・clipboard-read 未付与＝実 PC 相当で Ctrl+V 貼付が bracketed paste で PTY 到達・SYN なし／非退行=通常打鍵 abc 素通り・Ctrl+Shift+V 素通り・MC-93 文字化け無し PASS／tsc --noEmit exit 0・restart 後 healthz 200・__apolloPasteFix 注入2箇所・readText 撤去確認）。[[feedback-review-agent-verify-then-done]] によりエージェント実機検証で DONE 化、Keita PC 確認は別途依頼中（なお不可なら再オープン）。push は Keita 承認待ち。2026-06-01 Apollo ターミナル PC コピペ修正 / 画像添付 / レスキュー画面バッチ: MC-94/95/96 新規起票。MC-94（高）=MC-92 の積み残し、PC ブラウザの Ctrl+V が実機で効かない。secure context はあるため HTTP 線は除外、根因候補 (a)ttyd が window.term 非公開で paste-fix 空振り (b)ブラウザ依存 (c)iframe clipboard 権限委譲未効、を実機 Playwright で確定→修正。dev-logic 蓮 着手。MC-95（中・TODO）=ターミナルから画像を tmux main の林に渡す feature、クリップボード貼付＋ファイル選択、新規 POST /api/terminal/upload・data/terminal-uploads/、inbox 実装流用。MC-94 と同じ Terminal.tsx/clipboard を触るため着手順序要調整。MC-96（高・TODO・設計 Keita 確認中）=Apollo 本体(:4317)が落ちても開ける独立レスキュー画面（別ポート 4318・別 systemd apollo-rescue.service・素の Node 単一ファイルで本体ビルド非依存）。死活表示/ワンクリック restart/ログ/リソース/ターミナル直リンク、MC_TOKEN 認証・cloudflared 別経路。非依存が肝、設計合意前は着手しない。3件とも台帳は task-manager 管轄（dev-logic はコードのみ）、採番は next-task-id.sh で MC-94/95/96 確定済み（再採番なし）。push は Keita 承認待ち。2026-06-01 Apollo Web ターミナル文字化け修正完了: MC-93 を IN_PROGRESS→DONE。修正=terminalProxy.ts:105 で proxyReq から accept-encoding 削除（ttyd 非圧縮化、commit d40459a 未 push）。DoD 4項目クリア（tsc green/healthz 200/Accept-Encoding:gzip 付き GET で content-encoding 無し・DOCTYPE 始まり・__apolloPasteFix 注入2箇所/Keita 実機「治った」確認）。非退行=Permissions-Policy 維持・401 認証ゲート維持・token 200・ws 101。後始末=_repro_*.mjs 6本削除・ワーキングツリー clean。push は Keita 承認待ち。2026-06-01 Apollo Web ターミナル文字化け修正バッチ: MC-93 新規起票（IN_PROGRESS）。Keita 実機遭遇の /terminal 文字化け＝MC-92 で入った selfHandleResponse 化が上流 ttyd の gzip body を破壊＋content-encoding 削除する回帰。根因確定済み。修正方針=proxyReq で Accept-Encoding 削除し非圧縮化（paste-fix 注入維持）。DoD=tsc green/healthz 200/Accept-Encoding:gzip 付き GET で content-encoding 無し・DOCTYPE 始まり・paste-fix 注入あり/実機で表示・打鍵・Ctrl+V 正常。担当 dev-logic（実装）、検証 dev-logic curl＋test-functional 実機。台帳は task-manager 管轄（dev-logic はコードのみ）。採番は next-task-id.sh で MC-93 取得済み（再採番なし）。push は Keita 承認待ち（ローカル編集＋restart まで）。2026-06-01 Apollo Web ターミナル実装（dev-logic 蓮）: MC-92 を IN_PROGRESS→DONE。ttyd 1.7.4（127.0.0.1 bind・writable・強 credential）を apollo-terminal.service で常駐、Apollo に /terminal reverse proxy（HTTP=auth ミドルウェア後ろ・WS=server.on('upgrade')＋isRequestAuthorized で同強度認証）を追加、web に「ターミナル」ナビ（iframe・/terminal-view・SVG アイコン・モバイル対応）を追加。検証 (a)未認証 HTTP/WS とも 401／(b)認証済 HTTP 200・WS 101・キー入力で shell 書込確認／(c)ttyd 公開 IP 直叩き拒否。restart 済・live。GitHub push は Keita 承認待ち（ローカル commit のみ）。2026-06-01 Apollo Web ターミナルバッチ: MC-92 新規起票（Keita 指示・方向 A=Web ターミナル）。依存に MC-88/MC-89 を記載（cxo リポ競合回避のため着手はそれら完了後）。採番は next-task-id.sh 直列（pull --rebase 後、MC-91 既存を裏取りし MC-92 確定）。2026-06-01 Apollo inbox 棚卸しバッチ: MC-90 新規起票（Apollo inbox 滞留＝cxo スコープ autonomous ループが cron 未登録という根因を確定）。ブリーフ #1/#3/#4 は MC-77 の inbox 即タスク化機構で既に taskId 紐付き済み（MC-89/MC-82/MC-87）と判明したため新規採番せず、既存スタブを調査結果で充実（重複起票回避）。採番は next-task-id.sh 直列（pull --rebase 後）。
+最終更新: 2026-06-01 / 管理: task-manager（棚町）。2026-06-01 台帳整理4点: (1) MC-95（ターミナル画像添付 feature）を TODO→DONE。test-functional 実機 E2E 全項目 PASS（ナビ9項目巡回・/terminal-view・ttyd iframe／/terminal 直 200 で SPA と proxy 分離／ファイル選択・クリップボード貼付とも 201・data/terminal-uploads/ 保存・tmux main リテラル注入・自動 Enter なし／Cookie 無し401・0枚/不正MIME/枚数超過/サイズ超過 400 で tmux 未到達／検証文字列 BSpace 消去で原状復帰／MC-93/94 非退行）、実装 commit ded755e 未 push、[[feedback-review-agent-verify-then-done]]。(2) MC-97（`__SMOKE_...__` 幽霊カード）を TODO→CANCELLED（林承認済）。inbox 即タスク化機構が投げたスモーク残骸で実害なし・コード/CI 非影響、行削除せず CANCELLED で履歴化。再発防止は MC-99。(3) テスト負債（Apollo e2e smoke 既存 fail を現状ナビ5項目に追従）は既起票の MC-98 と重複のため新規採番せず（脱線前の本来依頼＝MC-98 で充足）。(4) MC-99 新規起票（TODO）=inbox 即タスク化が `__SMOKE_...__` パターンを起票対象から除外する堅牢化、担当 dev-logic、DoD=SMOKE 投入で幽霊タスク生成なし。採番は next-task-id.sh で MC 2件予約（MC-99/MC-100）したが新規は MC-99 のみ（依頼3は MC-98 既存）＝MC-100 は未使用で返却（次回再利用）。push は Keita 承認待ち。2026-06-01 Apollo ターミナル PC コピペ修正完了: MC-94 を IN_PROGRESS→DONE。根因（実機確定）=iframe 内 navigator.clipboard.readText() が clipboard-read 権限ゲートで NotAllowedError 失敗、旧 MC-92 コードが catch で握りつぶしつつ Ctrl+V を無条件 preventDefault していたため native paste も殺され貼れなかった（window.term 未公開説は外れ）。修正=terminalProxy.ts:57-78 PASTE_FIX_SCRIPT で Ctrl+V に return false（xterm の SYN 送出のみ抑止・preventDefault は呼ばない）→ブラウザ native paste が xterm helper textarea に走り bracketed paste で PTY 送出、readText/clipboard 権限/ttyd 構造に非依存（commit 0e8e6d0 未 push）。DoD 4項目クリア（根因実機特定／Playwright chromium・clipboard-read 未付与＝実 PC 相当で Ctrl+V 貼付が bracketed paste で PTY 到達・SYN なし／非退行=通常打鍵 abc 素通り・Ctrl+Shift+V 素通り・MC-93 文字化け無し PASS／tsc --noEmit exit 0・restart 後 healthz 200・__apolloPasteFix 注入2箇所・readText 撤去確認）。[[feedback-review-agent-verify-then-done]] によりエージェント実機検証で DONE 化、Keita PC 確認は別途依頼中（なお不可なら再オープン）。push は Keita 承認待ち。2026-06-01 Apollo ターミナル PC コピペ修正 / 画像添付 / レスキュー画面バッチ: MC-94/95/96 新規起票。MC-94（高）=MC-92 の積み残し、PC ブラウザの Ctrl+V が実機で効かない。secure context はあるため HTTP 線は除外、根因候補 (a)ttyd が window.term 非公開で paste-fix 空振り (b)ブラウザ依存 (c)iframe clipboard 権限委譲未効、を実機 Playwright で確定→修正。dev-logic 蓮 着手。MC-95（中・TODO）=ターミナルから画像を tmux main の林に渡す feature、クリップボード貼付＋ファイル選択、新規 POST /api/terminal/upload・data/terminal-uploads/、inbox 実装流用。MC-94 と同じ Terminal.tsx/clipboard を触るため着手順序要調整。MC-96（高・TODO・設計 Keita 確認中）=Apollo 本体(:4317)が落ちても開ける独立レスキュー画面（別ポート 4318・別 systemd apollo-rescue.service・素の Node 単一ファイルで本体ビルド非依存）。死活表示/ワンクリック restart/ログ/リソース/ターミナル直リンク、MC_TOKEN 認証・cloudflared 別経路。非依存が肝、設計合意前は着手しない。3件とも台帳は task-manager 管轄（dev-logic はコードのみ）、採番は next-task-id.sh で MC-94/95/96 確定済み（再採番なし）。push は Keita 承認待ち。2026-06-01 Apollo Web ターミナル文字化け修正完了: MC-93 を IN_PROGRESS→DONE。修正=terminalProxy.ts:105 で proxyReq から accept-encoding 削除（ttyd 非圧縮化、commit d40459a 未 push）。DoD 4項目クリア（tsc green/healthz 200/Accept-Encoding:gzip 付き GET で content-encoding 無し・DOCTYPE 始まり・__apolloPasteFix 注入2箇所/Keita 実機「治った」確認）。非退行=Permissions-Policy 維持・401 認証ゲート維持・token 200・ws 101。後始末=_repro_*.mjs 6本削除・ワーキングツリー clean。push は Keita 承認待ち。2026-06-01 Apollo Web ターミナル文字化け修正バッチ: MC-93 新規起票（IN_PROGRESS）。Keita 実機遭遇の /terminal 文字化け＝MC-92 で入った selfHandleResponse 化が上流 ttyd の gzip body を破壊＋content-encoding 削除する回帰。根因確定済み。修正方針=proxyReq で Accept-Encoding 削除し非圧縮化（paste-fix 注入維持）。DoD=tsc green/healthz 200/Accept-Encoding:gzip 付き GET で content-encoding 無し・DOCTYPE 始まり・paste-fix 注入あり/実機で表示・打鍵・Ctrl+V 正常。担当 dev-logic（実装）、検証 dev-logic curl＋test-functional 実機。台帳は task-manager 管轄（dev-logic はコードのみ）。採番は next-task-id.sh で MC-93 取得済み（再採番なし）。push は Keita 承認待ち（ローカル編集＋restart まで）。2026-06-01 Apollo Web ターミナル実装（dev-logic 蓮）: MC-92 を IN_PROGRESS→DONE。ttyd 1.7.4（127.0.0.1 bind・writable・強 credential）を apollo-terminal.service で常駐、Apollo に /terminal reverse proxy（HTTP=auth ミドルウェア後ろ・WS=server.on('upgrade')＋isRequestAuthorized で同強度認証）を追加、web に「ターミナル」ナビ（iframe・/terminal-view・SVG アイコン・モバイル対応）を追加。検証 (a)未認証 HTTP/WS とも 401／(b)認証済 HTTP 200・WS 101・キー入力で shell 書込確認／(c)ttyd 公開 IP 直叩き拒否。restart 済・live。GitHub push は Keita 承認待ち（ローカル commit のみ）。2026-06-01 Apollo Web ターミナルバッチ: MC-92 新規起票（Keita 指示・方向 A=Web ターミナル）。依存に MC-88/MC-89 を記載（cxo リポ競合回避のため着手はそれら完了後）。採番は next-task-id.sh 直列（pull --rebase 後、MC-91 既存を裏取りし MC-92 確定）。2026-06-01 Apollo inbox 棚卸しバッチ: MC-90 新規起票（Apollo inbox 滞留＝cxo スコープ autonomous ループが cron 未登録という根因を確定）。ブリーフ #1/#3/#4 は MC-77 の inbox 即タスク化機構で既に taskId 紐付き済み（MC-89/MC-82/MC-87）と判明したため新規採番せず、既存スタブを調査結果で充実（重複起票回避）。採番は next-task-id.sh 直列（pull --rebase 後）。
 
 
 ### MC-97 — __SMOKE_20260530_1780292879903__
@@ -1456,11 +1457,12 @@ ID 採番: **AR-0x**。
 | フィールド | 値 |
 |---|---|
 | ID | MC-97 |
-| タイトル | __SMOKE_20260530_1780292879903__ |
+| タイトル | __SMOKE_20260530_1780292879903__（スモークテスト残骸） |
 | 優先度 | P2 |
-| ステータス | TODO |
+| ステータス | CANCELLED |
 | 担当 | 未定 |
 | 詳細 | 【Apollo投入】 __SMOKE_20260530_1780292879903__ |
+| 取り下げ理由（2026-06-01・林承認済） | inbox 即タスク化機構が投げたスモークテスト残骸（`__SMOKE_...__` パターン）。実タスクではないため取り下げ。実害なし・コード/CI 非影響。林が CANCELLED 化を承認した。再発防止は別タスク（MC-99）で対応。番号は歯抜けにせず CANCELLED で履歴を残す（行削除はしない）。 |
 | 更新日 | 2026-06-01 |
 
 ---
@@ -1481,5 +1483,24 @@ ID 採番: **AR-0x**。
 | 関連ファイル | `e2e/`（2026-05-30 smoke の spec 群、BottomNav 7項目想定の箇所）、`e2e/render-smoke-20260601-terminal-upload.spec.ts`（MC-95 で追加・4/4 pass）、`web/` のナビ（BottomNav・5項目） |
 | 依存 | なし（MC-95 とは無関係の既存ドリフト。MC-95 由来でないことは dev-logic 切り分け済み） |
 | 提言・抜けもれ | (1) **回帰の盲点が肝**: 既存 11 fail が常時赤だと新規 smoke の回帰が埋もれて検知できない。修正後は smoke 全体がグリーンであることを CI/手動の基準にする（赤が常態化しないよう）。(2) ナビ項目数を spec にハードコードしている箇所は、項目追加のたびに壊れる脆い前提。可能なら「想定項目の存在を個別に assert」する形（数の決め打ちでなくラベル単位）にして将来のドリフト耐性を上げるのを検討。(3) MC-94/95 で /terminal・/terminal-view・画像添付が増えたので、smoke の対象ナビに terminal 系も含まれているか確認（新ナビ要素が smoke 未カバーだと別の盲点になる）。(4) 検証は実機で smoke 全 spec を走らせて pass を確認し、根拠（pass/fail 件数・実行ログ）を DONE note に残す（[[feedback-review-agent-verify-then-done]]）。 |
+| 更新日 | 2026-06-01 |
+
+---
+
+### MC-99 — inbox 即タスク化が SMOKE テストパターン（__SMOKE_...__）を起票対象から除外する
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-99 |
+| タイトル | inbox 即タスク化が SMOKE テストパターン（`__SMOKE_...__`）を起票対象から除外する |
+| 種別 | chore / 堅牢化 |
+| 優先度 | 低〜中 |
+| ステータス | TODO |
+| 担当 | dev-logic（蓮）。台帳更新は task-manager（棚町）管轄 |
+| 背景 | 2026-06-01。MC-97 のように inbox スモーク（`__SMOKE_20260530_1780292879903__` 等）が即タスク化機構を通って TASK_TRACKER に幽霊カードとして起票される。即タスク化機構（MC-77 由来、server 側 inbox 消費ロジック）が text を素通しで起票しているため。 |
+| 対応方針 | inbox 消費ロジックで、text が `__SMOKE_..__` パターンに一致するものは TASK_TRACKER へ起票せず「スモーク扱い」で消費する（inbox-consumed.jsonl への記録は行い、台帳カード化はしない）フィルタを入れる。 |
+| 受け入れ条件（DoD） | SMOKE 投入（`__SMOKE_...__` パターン）で TASK_TRACKER に幽霊タスクが作られないこと。通常の task/instruction 投入は従来どおり起票されること（誤フィルタしない）。 |
+| 関連 | MC-97（本件の発端＝幽霊カード）、MC-77（inbox 即タスク化機構）、`server/src/inbox.ts` 周辺の消費ロジック、`data/inbox-consumed.jsonl`、[[project-apollo-dashboard]]、[[project-autonomous-rin]] |
+| 提言・抜けもれ | (1) パターン判定は前後空白・`【Apollo投入】` 等のプレフィックス付きでも拾えるように（MC-97 の詳細は `【Apollo投入】 __SMOKE_...__` 形式だった）。完全一致でなく「`__SMOKE_` で始まり `__` で終わる token を含む」で判定するのが堅い。(2) フィルタしたものは黙って捨てず inbox-consumed.jsonl に「smoke skip」理由付きで記録（後から監査可能に）。(3) 既存の幽霊カード（MC-97）は本タスクとは別に手動 CANCELLED 済み。フィルタ投入後の再発ゼロを確認する。(4) push / 本番反映は Keita 承認待ち（[[reference-deploy-commands]]）。 |
 | 更新日 | 2026-06-01 |
 
