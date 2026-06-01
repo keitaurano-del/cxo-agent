@@ -1,0 +1,28 @@
+[Unit]
+Description=Apollo Rescue Server (MC-96) — standalone recovery UI on :4318, no dependency on Apollo origin
+# After ではなく独立。Apollo(:4317) が死んでいてもレスキューは起動・稼働すること。
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dev
+Group=dev
+WorkingDirectory=/home/dev/projects/cxo-agent
+# Node 標準ライブラリのみの単一ファイル。npm install / tsx / web ビルド不要。
+ExecStart=/usr/bin/node /home/dev/projects/cxo-agent/deploy/apollo-rescue.mjs
+# MC_TOKEN を Apollo 本体と共有（.mc.env に MC_TOKEN=... が入っている）。
+# 先頭 '-' なしで必須扱い（token を確実に読ませて認証を有効化する）。
+EnvironmentFile=/home/dev/projects/cxo-agent/.mc.env
+# .mc.env の PORT=4317 が Apollo 用に入っているため、レスキュー側の listen ポートは
+# RESCUE_PORT で明示上書きする（EnvironmentFile より後の Environment が優先される）。
+Environment=RESCUE_PORT=4318
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+# プロセスが kill されても自動復活（レスキューが落ちていては意味がない）。
+Restart=always
+RestartSec=3
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target
