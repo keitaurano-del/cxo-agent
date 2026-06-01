@@ -1687,3 +1687,26 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ | (1) **mouse mode 判定の共有**: TAP_FIX と同じ `term._core.coreMouseService.areMouseEventsActive` で mouse mode 有無を見て、TUI 時は wheel シーケンス変換・通常シェル時はネイティブ PageUp/PageDown スクロールバックに分岐する。(2) **wheel シーケンスの行数**: 1ページ分（rows 相当）を wheel イベント複数回に分割して送るか、xterm の `scrollLines` API を直呼びするか、MC-105 の実装方式に合わせる。(3) **既存 Key イベントとの衝突**: xterm が PageUp/PageDown を別の用途（コピーモード等）に使っている場合は `stopPropagation`/`preventDefault` の順序に注意。(4) **MC-94/MC-104/MC-105 非退行**: 同一の TAP/SCROLL_FIX_SCRIPT を拡張する場合、既存ハンドラを上書きしないよう追記形式で足す。(5) push / 本番反映（apollo.service restart 含む）は Keita 承認済み。 |
 | 更新日 | 2026-06-01（起票・IN_PROGRESS → 2026-06-01 DONE化） |
 
+---
+
+## バッチ: 2026-06-01 roster 活動表示修正（MC-109）
+
+> Keita 依頼（2026-06-01）。Apollo の /api/roster で hayashi-rin と apollo の「活動なし」表示を修正。roster.ts に mergeLiveHayashiRin（親 session jsonl 最新 mtime → lastActivity/liveStatus）と mergeLiveApollo（systemctl is-active → liveStatus/lastActivity）を追加。commit cab3b68 で実装・本番反映済み。tsc green・restart 後 healthz 200・/api/roster で hayashi-rin liveStatus=active・lastActivity 実時刻・apollo liveStatus=active 確認済み。[[feedback-review-agent-verify-then-done]] 方針で DONE。
+
+### MC-109 — 林（hayashi-rin）とアポロ（apollo）のエージェント一覧「活動なし」表示を修正
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-109 |
+| タイトル | 林（hayashi-rin）とアポロ（apollo）のエージェント一覧「活動なし」表示を修正 |
+| 種別 | bug / UX |
+| 優先度 | 中 |
+| ステータス | DONE |
+| 担当 | dev-logic（蓮） |
+| 背景 | Apollo の /api/roster（エージェント一覧）で hayashi-rin と apollo が「活動なし」と表示されていた。hayashi-rin は親 session の jsonl を参照せず lastActivity が未設定、apollo は systemctl 状態を見ていなかったため。 |
+| 受け入れ条件（DoD） | (1) /api/roster で hayashi-rin の liveStatus=active・lastActivity が実時刻で返る。(2) apollo の liveStatus=active が返る。(3) 既存9体エージェントへの影響なし。(4) tsc green・restart 後 healthz 200。 |
+| 検証メモ（DONE 根拠） | roster.ts に mergeLiveHayashiRin（親 session jsonl の最新 mtime → lastActivity/liveStatus）と mergeLiveApollo（systemctl is-active → liveStatus/lastActivity）を追加。mine.length===0 の時のフォールバック対応済み。commit cab3b68。tsc green・restart 後 healthz 200・/api/roster で hayashi-rin liveStatus=active・lastActivity 実時刻・apollo liveStatus=active 確認済み。既存9体に影響なし。[[feedback-review-agent-verify-then-done]] でエージェント検証 DONE 化（Keita 承認済み）。 |
+| 関連ファイル | `server/src/collectors/roster.ts`、[[project-apollo-dashboard]] |
+| 依存 | なし |
+| 更新日 | 2026-06-01（起票・即 DONE 化） |
+
