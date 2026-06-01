@@ -110,6 +110,39 @@ export const TERMINAL_TMUX_PATH = env(
 /** tmux send-keys のタイムアウト（ミリ秒）。詰まっても Apollo を固めない。 */
 export const TERMINAL_TMUX_TIMEOUT_MS = envNum('TERMINAL_TMUX_TIMEOUT_MS', 5000);
 
+// ─── ターミナルバックエンド復旧（MC-100）──────────────────────────
+//
+// PC のターミナルが切断された後（tmux main セッション消失 / ttyd 停止）に、
+// Apollo の「ターミナルを開始」ボタンから tmux main（林 CLI）と ttyd を再起動して
+// 復旧する。GET /api/terminal/status で稼働状態を見て、POST /api/terminal/start で
+// 冪等に復旧する。本番 main が稼働中なら no-op。
+
+/**
+ * tmux main を作成するときに実行するコマンド（rin-terminal.sh と同じ形・林 CLI 起動を含む）。
+ * `tmux new-session -d -s <TARGET> <CMD>` の <CMD> 部分に渡す。
+ * 既存の rin-terminal.sh / @reboot crontab と揃えて「1つの林」を共有する。
+ */
+export const TERMINAL_TMUX_START_CMD = env(
+  'TERMINAL_TMUX_START_CMD',
+  'cd /home/dev/projects && exec /usr/bin/claude',
+);
+
+/**
+ * ttyd を起動/再起動する systemd ユニット名。
+ * status は `systemctl is-active <unit>`、start は `sudo -n systemctl start <unit>`。
+ * dev は NOPASSWD で systemctl を叩ける。
+ */
+export const TERMINAL_TTYD_SERVICE = env('TERMINAL_TTYD_SERVICE', 'apollo-terminal.service');
+
+/** ttyd が listen しているローカルポート（status の到達確認に使う）。proxy 側 TTYD_PORT と揃える。 */
+export const TERMINAL_TTYD_PORT = envNum('TERMINAL_TTYD_PORT', 7681);
+
+/** ttyd が bind しているホスト（status の到達確認に使う）。 */
+export const TERMINAL_TTYD_HOST = env('TERMINAL_TTYD_HOST', '127.0.0.1');
+
+/** systemctl / tmux 起動コマンドのタイムアウト（ミリ秒）。 */
+export const TERMINAL_CONTROL_TIMEOUT_MS = envNum('TERMINAL_CONTROL_TIMEOUT_MS', 8000);
+
 /** マークダウンのタスクソース（複数）。存在しないものは collector 側で無視。 */
 export const TASK_SOURCES = {
   logicTracker: join(PROJECTS_DIR, 'logic', 'docs', 'TASK_TRACKER.md'),

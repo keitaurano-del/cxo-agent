@@ -32,6 +32,7 @@ import { ALL_PROJECTS, type ProjectName } from './lib/projectMap.js';
 import { makeAuthMiddleware, authEnabled } from './lib/auth.js';
 import { inboxRouter } from './inbox.js';
 import { terminalUploadRouter } from './terminalUpload.js';
+import { terminalControlRouter } from './terminalControl.js';
 import { vaultWriteRouter } from './vaultWriteRouter.js';
 import { taskEditRouter } from './taskEditRouter.js';
 import { approvalRouter } from './approvalRouter.js';
@@ -270,6 +271,12 @@ app.use('/api/inbox', inboxRouter());
 // 保存先の絶対パスを send-keys でリテラル注入する（自動 Enter なし）。林はそのパスを
 // Read で画像として読める。auth ミドルウェア配下＝Cookie 必須。POST /api/terminal/upload。
 app.use('/api/terminal', terminalUploadRouter());
+
+// ─── ターミナルバックエンド復旧（MC-100）──────────────────────────
+// PC のターミナルが切断（tmux main 消失 / ttyd 停止）された後に、ブラウザの
+// 「ターミナルを開始」ボタンから tmux main（林 CLI）と ttyd を冪等に復旧する。
+// auth ミドルウェア配下＝Cookie 必須。GET /api/terminal/status・POST /api/terminal/start。
+app.use('/api/terminal', terminalControlRouter());
 
 // ─── Vault（Obsidian 一元化ビュー・read-only）────────────────────
 // すべてのパス入力は collectors/vault → lib/vaultPath で安全化される。

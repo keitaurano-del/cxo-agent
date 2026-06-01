@@ -17,7 +17,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '../components/PageHeader';
-import { ImageFileIcon, CloseIcon } from '../components/icons';
+import { ImageFileIcon, CloseIcon, TerminalIcon } from '../components/icons';
+import { Spinner } from '../components/ui';
 
 const ACCEPTED_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const MAX_IMAGES = 5;
@@ -29,9 +30,98 @@ type UploadState =
   | { kind: 'done'; count: number; injected: boolean; paths: string[] }
   | { kind: 'error'; message: string };
 
+// ターミナルバックエンド（tmux main + ttyd）の稼働状態（MC-100）。
+//   checking: 初回 status 取得中
+//   ready:    両方稼働中＝iframe をそのまま表示
+//   down:     切断/未起動＝「ターミナルを開始」ボタンを表示
+//   starting: start API 実行中
+//   start-error: start に失敗
+type BackendState =
+  | { kind: 'checking' }
+  | { kind: 'ready' }
+  | { kind: 'down' }
+  | { kind: 'starting' }
+  | { kind: 'start-error'; message: string };
+
+interface TerminalStatusResponse {
+  tmuxSession?: boolean;
+  ttydService?: boolean;
+  ttydReachable?: boolean;
+  ready?: boolean;
+}
+
 export default function Terminal() {
   const [state, setState] = useState<UploadState>({ kind: 'idle' });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ── バックエンド復旧（MC-100）─────────────────────────────
+  const [backend, setBackend] = useState<BackendState>({ kind: 'checking' });
+  // iframe を強制リロードするための key。start 成功後にインクリメントして src を貼り直す。
+  const [iframeKey, setIframeKey] = useState(0);
+  // ポーリングが start 進行中のステータス上書きを避けるため、最新 kind を ref で持つ。
+  const backendKindRef = useRef<BackendState['kind']>('checking');
+  backendKindRef.current = backend.kind;
+
+  // GET /api/terminal/status を叩いて ready/down を判定する。
+  const refreshStatus = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/terminal/status', { method: 'GET' });
+      if (!res.ok) {
+        // 認証切れ等。down 扱いにして「開始」ボタンを出す（再操作で復帰を促す）。
+        setBackend({ kind: 'down' });
+        return false;
+      }
+      const body = (await res.json()) as TerminalStatusResponse;
+      const ready = Boolean(body.ready);
+      setBackend(ready ? { kind: 'ready' } : { kind: 'down' });
+      return ready;
+    } catch {
+      setBackend({ kind: 'down' });
+      return false;
+    }
+  }, []);
+
+  // POST /api/terminal/start でバックエンドを復旧 → 成功なら iframe をリロード。
+  const startBackend = useCallback(async () => {
+    setBackend({ kind: 'starting' });
+    try {
+      const res = await fetch('/api/terminal/start', { method: 'POST' });
+      if (!res.ok) {
+        let message = `起動に失敗しました（HTTP ${res.status}）。`;
+        try {
+          const body = (await res.json()) as { error?: string };
+          if (body?.error) message = body.error;
+        } catch {
+          // JSON でない場合は既定メッセージ。
+        }
+        setBackend({ kind: 'start-error', message });
+        return;
+      }
+      // ttyd の listen が安定するまで少し待ってから状態を取り直す。
+      await new Promise((r) => setTimeout(r, 800));
+      const ready = await refreshStatus();
+      if (ready) {
+        // 切断中に張られていた iframe を貼り直して端末を再表示する。
+        setIframeKey((k) => k + 1);
+      }
+    } catch (e) {
+      setBackend({
+        kind: 'start-error',
+        message: e instanceof Error ? `起動に失敗しました。${e.message}` : '起動に失敗しました。',
+      });
+    }
+  }, [refreshStatus]);
+
+  // マウント時に状態確認、以降は定期ポーリングで切断を検知する。
+  useEffect(() => {
+    void refreshStatus();
+    const id = window.setInterval(() => {
+      // starting 中はポーリングしない（start 側が状態を握る）。
+      if (backendKindRef.current === 'starting') return;
+      void refreshStatus();
+    }, 15000);
+    return () => window.clearInterval(id);
+  }, [refreshStatus]);
 
   // 画像ファイル群を /api/terminal/upload へ送る。成功すると tmux main に
   // 保存パスが注入され、林の入力欄に絶対パス文字列が入る。
@@ -220,13 +310,61 @@ export default function Terminal() {
         で開くか、右上の「新しいタブで開く」をご利用ください。画像を貼り付け・選択すると、林の入力欄に画像の保存先パスが挿入されます（林はそのパスを画像として読み取れます）。
       </p>
       <div className="relative flex-1 overflow-hidden bg-bg">
-        <iframe
-          src="/terminal/"
-          title="Apollo ターミナル"
-          className="h-full w-full border-0"
-          // ttyd は同一オリジン。スクリプト・WebSocket・クリップボードを許可する。
-          allow="clipboard-read; clipboard-write"
-        />
+        {backend.kind === 'ready' ? (
+          <iframe
+            key={iframeKey}
+            src="/terminal/"
+            title="Apollo ターミナル"
+            className="h-full w-full border-0"
+            // ttyd は同一オリジン。スクリプト・WebSocket・クリップボードを許可する。
+            allow="clipboard-read; clipboard-write"
+          />
+        ) : (
+          // バックエンド（tmux main / ttyd）が切断・未起動・確認中のときの状態パネル（MC-100）。
+          <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+            {backend.kind === 'checking' ? (
+              <div className="flex items-center gap-2 text-sm text-text-muted">
+                <Spinner />
+                ターミナルの状態を確認しています…
+              </div>
+            ) : (
+              <>
+                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-surface-2 text-text-muted">
+                  <TerminalIcon width={22} height={22} />
+                </div>
+                <div className="max-w-sm space-y-1">
+                  <p className="text-sm font-medium text-text">ターミナルが切断されています</p>
+                  <p className="text-xs text-text-muted">
+                    tmux main（林セッション）または端末サーバ（ttyd）が停止しています。「ターミナルを開始」で復旧できます。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void startBackend()}
+                  disabled={backend.kind === 'starting'}
+                  className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm text-text hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {backend.kind === 'starting' ? (
+                    <>
+                      <Spinner />
+                      起動しています…
+                    </>
+                  ) : (
+                    <>
+                      <TerminalIcon width={15} height={15} />
+                      ターミナルを開始
+                    </>
+                  )}
+                </button>
+                {backend.kind === 'start-error' && (
+                  <p role="alert" className="max-w-sm text-xs" style={{ color: 'var(--mc-stalled)' }}>
+                    {backend.message}
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
