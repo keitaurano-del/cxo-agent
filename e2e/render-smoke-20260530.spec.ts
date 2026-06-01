@@ -15,6 +15,19 @@ const TOKEN = (() => {
 
 const SHOT_DIR = path.resolve(__dirname, '../docs/render-screenshots/smoke');
 
+// 正準ナビ契約（MC-98 で 7→5 ドリフトに追従）。
+// トップレベルナビ（サイドバー / ボトムナビ共通）は web/src/App.tsx の NAV 配列が単一の正本。
+// 数値ハードコードを避けるため shortLabel 配列の長さを期待値に使う。
+// ボトムナビは shortLabel、サイドバーは label を表示する。
+const TOP_NAV = [
+  { to: '/', shortLabel: 'ダッシュ', label: 'ダッシュボード' },
+  { to: '/tasks', shortLabel: 'ボード', label: 'タスクボード' },
+  { to: '/approvals', shortLabel: '承認', label: '承認フロー' },
+  { to: '/vault', shortLabel: 'Vault', label: 'Vault' },
+  { to: '/terminal-view', shortLabel: '端末', label: 'ターミナル' },
+];
+const EXPECTED_TAB_COUNT = TOP_NAV.length;
+
 const SCREENS = [
   { name: 'overview', urlPath: '/', label: '司令塔' },
   { name: 'agents', urlPath: '/agents', label: 'エージェント' },
@@ -129,7 +142,7 @@ for (const screen of SCREENS) {
     expect(overflow.overflowPx, `${screen.name}: horizontal overflow`).toBeLessThanOrEqual(1);
     expect(bottomVisible, `${screen.name}: bottom tab bar visible`).toBe(true);
     expect(sidebarVisible, `${screen.name}: sidebar hidden on mobile`).toBe(false);
-    expect(tabCount, `${screen.name}: 7 bottom tabs`).toBe(7);
+    expect(tabCount, `${screen.name}: ${EXPECTED_TAB_COUNT} bottom tabs`).toBe(EXPECTED_TAB_COUNT);
     expect(minTabHeight, `${screen.name}: tab touch target >= 44px`).toBeGreaterThanOrEqual(44);
     expect(minFont, `${screen.name}: min font >= 10px`).toBeGreaterThanOrEqual(10);
 
@@ -145,11 +158,18 @@ test('mobile 390px: bottom tab navigation works', async ({ browser }) => {
 
   const bottomNav = page.locator('nav[aria-label="主要ナビゲーション"]');
   await bottomNav.waitFor({ state: 'visible' });
+
+  // ボトムナビに実在するトップレベル項目で遷移を確認する（MC-98: 会話/feed は
+  // ダッシュボードのサブタブに移動したためボトムナビには無い）。
   await bottomNav.locator('a', { hasText: 'Vault' }).click();
   await expect(page).toHaveURL(/\/vault/);
 
-  await bottomNav.locator('a', { hasText: '会話' }).click();
-  await expect(page).toHaveURL(/\/feed/);
+  await bottomNav.locator('a', { hasText: 'ボード' }).click();
+  await expect(page).toHaveURL(/\/tasks/);
+
+  // ダッシュボードに戻れること（端末ルートは /terminal-view、proxy の /terminal とは別）。
+  await bottomNav.locator('a', { hasText: '端末' }).click();
+  await expect(page).toHaveURL(/\/terminal-view/);
 
   await context.close();
 });
