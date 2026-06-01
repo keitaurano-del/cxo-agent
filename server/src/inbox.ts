@@ -239,12 +239,12 @@ function readInboxEntries(): InboxEntry[] {
   return out;
 }
 
-/** inbox-consumed.jsonl から消費済み id の集合を返す。 */
-function readConsumedIds(): Set<string> {
+/** inbox-consumed.jsonl から消費済み id の集合を返す（テスト用に file を差し替え可）。 */
+export function readConsumedIds(file: string = INBOX_CONSUMED_FILE): Set<string> {
   const ids = new Set<string>();
   let raw: string;
   try {
-    raw = readFileSync(INBOX_CONSUMED_FILE, 'utf-8');
+    raw = readFileSync(file, 'utf-8');
   } catch {
     return ids;
   }
@@ -264,6 +264,17 @@ function readConsumedIds(): Set<string> {
     ids.add(t);
   }
   return ids;
+}
+
+/**
+ * inbox-consumed.jsonl へ消費済み id を 1 行追記する（追記専用・末尾改行付き）。
+ * readConsumedIds が読める JSON 形式（{"id","consumedAt","note"}）と完全整合。
+ * MC-59: 即タスク化に成功したエントリをサーバ自身がここに書き、GET /api/inbox の
+ * pending から即外す（ボード登録済みなのに pending 滞留する再発構造の恒久対策）。
+ */
+export function appendConsumed(id: string, note: string, file: string = INBOX_CONSUMED_FILE): void {
+  const line = JSON.stringify({ id, consumedAt: new Date().toISOString(), note }) + '\n';
+  appendFileSync(file, line, 'utf-8');
 }
 
 // ─── ハンドラ ───────────────────────────────────────────
@@ -386,6 +397,19 @@ async function handlePost(req: Request, res: Response): Promise<void> {
   };
 
   appendEntry(entry);
+
+  // MC-59: 即タスク化に成功（taskId 確定）した場合のみ、サーバ自身が consumed に追記し、
+  // ボード登録済みエントリを GET /api/inbox の pending から即外す。失敗（taskId 無し）は
+  // 追記せず pending のまま残し、autonomous-rin の後方互換フローに拾わせる。
+  // appendConsumed の失敗で投入（201）をブロックしないよう、例外はログに残して握り潰す。
+  if (taskId) {
+    try {
+      appendConsumed(id, `即タスク化により自動消し込み: ${taskId} (${trackerSource})`);
+    } catch (e) {
+      console.error('[inbox] appendConsumed failed:', String(e));
+    }
+  }
+
   res.status(201).json(entry);
 }
 
