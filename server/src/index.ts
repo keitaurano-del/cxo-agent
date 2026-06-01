@@ -16,6 +16,7 @@ import { collectNarrative } from './collectors/narrative.js';
 import { collectRoster } from './collectors/roster.js';
 import { collectUsage } from './collectors/usage.js';
 import { collectWorkflows, collectWorkflowDetail } from './collectors/workflows.js';
+import { collectDeploys } from './collectors/deploys.js';
 import { collectAlerts } from './collectors/alerts.js';
 import { linksForTask } from './collectors/taskLinks.js';
 import { search } from './collectors/search.js';
@@ -179,6 +180,16 @@ app.use('/api/approvals', approvalRouter());
 
 app.get('/api/usage', (_req, res) => {
   safeJson(res, () => collectUsage());
+});
+
+// ─── Deploys（deploy 連動 MC-64）──────────────────────────────
+// GitHub Actions の deploy 系 workflow（logic: deploy-production / android-deploy、
+// en-chakai: deploy-production）の直近 run 状態を gh CLI で取得し、TaskDetail に表示する。
+// 認証ミドルウェア（makeAuthMiddleware）配下。gh 不在・未認証・レート・タイムアウト・
+// parse 失敗でも repo 単位の空配列+error で 200 を返し（collector 側 fallback）、Apollo を落とさない。
+// 5 分キャッシュ（usage と同方式）で GitHub API レート対策。対象 repo は config.DEPLOY_REPOS に集約。
+app.get('/api/deploys', (_req, res) => {
+  safeJson(res, () => collectDeploys());
 });
 
 // ─── 横断検索（MC-73）──────────────────────────────────────

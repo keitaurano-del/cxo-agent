@@ -279,6 +279,36 @@ export interface SearchResponse {
   generatedAt: string;
 }
 
+// ─── deploy 連動（MC-64 / GET /api/deploys）──────────────────────
+// server/src/collectors/deploys.ts のレスポンス形と一致させる。
+
+export interface DeployRun {
+  id: number;
+  title: string;
+  status: string;
+  conclusion: string | null;
+  branch: string;
+  event: string;
+  workflow: string;
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+}
+
+export interface DeployRepo {
+  repo: string;
+  project: ProjectName;
+  runs: DeployRun[];
+  error?: string;
+}
+
+export interface DeploysResponse {
+  generatedAt: string;
+  source: string;
+  cached: boolean;
+  repos: DeployRepo[];
+}
+
 // ─── アラート（通知/アラート バッジ MC-63 / GET /api/alerts）──────────────
 // server/src/collectors/alerts.ts のレスポンス形と一致させる。
 

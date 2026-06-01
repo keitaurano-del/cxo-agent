@@ -265,6 +265,94 @@ export const USAGE_TTL_MS = envNum('USAGE_TTL_MS', 300000);
  */
 export const WATCH_DEBOUNCE_MS = envNum('WATCH_DEBOUNCE_MS', 600);
 
+// ─── deploy 連動（MC-64）──────────────────────────────────
+//
+// GitHub Actions の deploy 系 workflow の run 状態を gh CLI で取得し、
+// タスク詳細に「このタスクの実装が本番に出たか」を表示する。
+//
+// 対象 repo は logic / en-chakai に限定する（cxo-agent は Issue/deploy 用途に使わない方針
+// [[feedback-no-cxo-agent]] のため deploy 連動の対象に含めない）。
+// repo は projectMap の ProjectName（logic / en-chakai）に対応づけ、TaskDetail 側で
+// タスクの project と突合する。
+
+/** 1 deploy 連動対象の repo + workflow 定義。 */
+export interface DeployRepoConfig {
+  /** GitHub の owner/repo（gh --repo に渡す）。 */
+  repo: string;
+  /** projectMap の ProjectName。TaskDetail の task.project と突合する。 */
+  project: 'logic' | 'en-chakai';
+  /** 対象 workflow ファイル名（gh run list --workflow に渡す）。複数可。 */
+  workflows: string[];
+}
+
+/**
+ * deploy 連動対象 repo リスト（MC-64）。
+ * logic は本番 Render(deploy-production.yml) と Android 内部配信(android-deploy.yml)、
+ * en-chakai は本番 Render(deploy-production.yml) を対象にする。
+ * env DEPLOY_REPOS（JSON 配列）で差し替え可能。空/不正なら下記デフォルト。
+ */
+function parseDeployRepos(): DeployRepoConfig[] {
+  const raw = process.env.DEPLOY_REPOS;
+  if (raw && raw.trim() !== '') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const out: DeployRepoConfig[] = [];
+        for (const item of parsed) {
+          if (
+            item &&
+            typeof item.repo === 'string' &&
+            (item.project === 'logic' || item.project === 'en-chakai') &&
+            Array.isArray(item.workflows) &&
+            item.workflows.every((w: unknown) => typeof w === 'string')
+          ) {
+            out.push({ repo: item.repo, project: item.project, workflows: item.workflows });
+          }
+        }
+        if (out.length > 0) return out;
+      }
+    } catch {
+      // 不正な JSON はデフォルトにフォールバック。
+    }
+  }
+  return [
+    {
+      repo: 'keitaurano-del/logic',
+      project: 'logic',
+      workflows: ['deploy-production.yml', 'android-deploy.yml'],
+    },
+    {
+      repo: 'keitaurano-del/en-chakai',
+      project: 'en-chakai',
+      workflows: ['deploy-production.yml'],
+    },
+  ];
+}
+
+/** deploy 連動対象 repo リスト（MC-64）。 */
+export const DEPLOY_REPOS: DeployRepoConfig[] = parseDeployRepos();
+
+/** gh run list で取得する 1 workflow あたりの直近 run 件数。 */
+export const DEPLOY_RUN_LIMIT = envNum('DEPLOY_RUN_LIMIT', 5);
+
+/** gh コマンドのタイムアウト（ミリ秒）。レート/ネットワーク詰まりで Apollo を固めない。 */
+export const DEPLOY_GH_TIMEOUT_MS = envNum('DEPLOY_GH_TIMEOUT_MS', 12000);
+
+/**
+ * deploy run 取得のキャッシュ TTL（ミリ秒）。default 5 分（usage.ts と同方式）。
+ * GitHub API レート対策。gh を毎リクエスト叩かず 5 分に 1 回へ抑える。
+ */
+export const DEPLOY_TTL_MS = envNum('DEPLOY_TTL_MS', 300000);
+
+/**
+ * gh の PATH（systemd の env に PATH が無い/痩せている場合に gh を確実に解決させる）。
+ * VAULT_GIT_PATH と同方式。
+ */
+export const DEPLOY_GH_PATH = env(
+  'DEPLOY_GH_PATH',
+  '/usr/local/bin:/usr/bin:/bin:' + (process.env.PATH ?? ''),
+);
+
 // ─── 承認フロー（MC-79）──────────────────────────────────
 
 /**
