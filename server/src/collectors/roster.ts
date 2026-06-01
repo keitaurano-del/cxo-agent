@@ -5,7 +5,8 @@
 
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROSTER_DIR, ROSTER_VISIBLE } from '../config.js';
+import { execSync } from 'node:child_process';
+import { ROSTER_DIR, ROSTER_VISIBLE, CLAUDE_PROJECTS_DIR, STALL_MINUTES } from '../config.js';
 import { collectAgents, type AgentSummary } from './agents.js';
 import type { AgentStatus } from '../lib/stall.js';
 
@@ -53,14 +54,105 @@ function firstParagraph(md: string): string {
 }
 
 /**
+ * hayashi-rin 専用: 親セッション（subagents 配下でない *.jsonl）の最新 mtime を lastActivity に使う。
+ * サイズ 0 のファイルは除外。1 時間以内なら running（active）、今日以降 mtime があれば idle、
+ * それ以外は「活動なし」扱い（activeCount=0 idleCount=0）。
+ */
+function mergeLiveHayashiRin(): Partial<RosterEntry> {
+  if (!existsSync(CLAUDE_PROJECTS_DIR)) return { activeCount: 0, idleCount: 0 };
+
+  // 親セッション jsonl を再帰的に列挙（subagents 配下は除外）
+  let latestMtime = 0;
+  const walk = (dir: string) => {
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const p = join(dir, e);
+      let st;
+      try {
+        st = statSync(p);
+      } catch {
+        continue;
+      }
+      if (st.isDirectory()) {
+        // subagents ディレクトリは親セッションを含まないのでスキップ
+        if (e !== 'subagents') walk(p);
+      } else if (e.endsWith('.jsonl') && !e.startsWith('agent-') && st.size > 0) {
+        if (st.mtimeMs > latestMtime) latestMtime = st.mtimeMs;
+      }
+    }
+  };
+  walk(CLAUDE_PROJECTS_DIR);
+
+  if (latestMtime === 0) return { activeCount: 0, idleCount: 0 };
+
+  const lastActivity = new Date(latestMtime).toISOString();
+  const minsSince = (Date.now() - latestMtime) / 60000;
+
+  let liveStatus: AgentStatus;
+  let activeCount = 0;
+  let idleCount = 0;
+
+  if (minsSince < STALL_MINUTES) {
+    // 8 分以内 = running（active）
+    liveStatus = 'active';
+    activeCount = 1;
+  } else if (latestMtime > new Date().setHours(0, 0, 0, 0)) {
+    // 今日以降に活動あり = idle
+    liveStatus = 'idle';
+    idleCount = 1;
+  } else {
+    // 今日より前 = idle として扱う（活動はあるが古い）
+    liveStatus = 'idle';
+    idleCount = 1;
+  }
+
+  return { activeCount, idleCount, liveStatus, lastActivity };
+}
+
+/**
+ * apollo 専用: systemctl is-active で mission-control.service を確認。
+ * active なら running（active）、それ以外は idle。lastActivity は現在時刻。
+ */
+function mergeLiveApollo(): Partial<RosterEntry> {
+  try {
+    const result = execSync('systemctl is-active mission-control.service', {
+      encoding: 'utf8',
+      timeout: 3000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+
+    const now = new Date().toISOString();
+    if (result === 'active') {
+      return { activeCount: 1, idleCount: 0, liveStatus: 'active', lastActivity: now };
+    }
+    return { activeCount: 0, idleCount: 1, liveStatus: 'idle', lastActivity: now };
+  } catch {
+    // systemctl が使えない / サービス不明 = idle 扱い
+    const now = new Date().toISOString();
+    return { activeCount: 0, idleCount: 1, liveStatus: 'idle', lastActivity: now };
+  }
+}
+
+/**
  * roster 名 → agents の稼働を集計するためのマッチ。
  * subagentType（例 "dev-logic"）と roster ファイル名（"dev-logic"）を突き合わせる。
+ * hayashi-rin と apollo は専用ロジックにフォールバック。
  */
 function mergeLive(name: string, agents: AgentSummary[]): Partial<RosterEntry> {
   const mine = agents.filter(
     (a) => a.subagentType === name || a.subagentType.includes(name),
   );
-  if (mine.length === 0) return { activeCount: 0, idleCount: 0 };
+  if (mine.length === 0) {
+    // subagent マッチがゼロの場合: 専用フォールバック
+    if (name === 'hayashi-rin') return mergeLiveHayashiRin();
+    if (name === 'apollo') return mergeLiveApollo();
+    return { activeCount: 0, idleCount: 0 };
+  }
   const active = mine.filter((a) => a.status === 'active');
   const idle = mine.filter((a) => a.status === 'idle');
   // 最新活動のものを代表に
