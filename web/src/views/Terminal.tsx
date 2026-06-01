@@ -69,6 +69,55 @@ interface TerminalStatusResponse {
   ready?: boolean;
 }
 
+// ─── ターミナル出力コピーボタン（MC-92 コピー改善）────────────
+// /api/terminal/output?lines=100 を叩いてコンテンツを取得し、
+// navigator.clipboard.writeText() でクリップボードにコピーする。
+// コピー成功時はラベルを「コピー完了」に 1.5 秒間変更してフィードバック。
+function CopyOutputButton() {
+  const [state, setState] = useState<'idle' | 'copying' | 'done' | 'error'>('idle');
+
+  const handleCopy = async () => {
+    if (state === 'copying') return;
+    setState('copying');
+    try {
+      const res = await fetch('/api/terminal/output?lines=100');
+      const body = (await res.json()) as { ok: boolean; content?: string; error?: string };
+      if (!body.ok || !body.content) {
+        setState('error');
+        setTimeout(() => setState('idle'), 2000);
+        return;
+      }
+      await navigator.clipboard.writeText(body.content);
+      setState('done');
+      setTimeout(() => setState('idle'), 1500);
+    } catch {
+      setState('error');
+      setTimeout(() => setState('idle'), 2000);
+    }
+  };
+
+  const label =
+    state === 'done' ? 'コピー完了' : state === 'error' ? 'エラー' : '出力をコピー';
+
+  const colorClass =
+    state === 'done'
+      ? 'border-active/40 bg-active-bg text-active'
+      : state === 'error'
+        ? 'border-stalled/40 text-text-muted'
+        : 'border-border text-text-muted hover:bg-surface-2 hover:text-text';
+
+  return (
+    <button
+      type="button"
+      onClick={() => void handleCopy()}
+      disabled={state === 'copying'}
+      className={`rounded-md border px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${colorClass}`}
+    >
+      {state === 'copying' ? 'コピー中…' : label}
+    </button>
+  );
+}
+
 export default function Terminal() {
   const [state, setState] = useState<UploadState>({ kind: 'idle' });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -293,14 +342,17 @@ export default function Terminal() {
         title="ターミナル"
         subtitle="tmux main（林セッション）をブラウザから操作します。読み書き両方に対応しています。"
         right={
-          <a
-            href="/terminal/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-md border border-border px-2.5 py-1 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
-          >
-            新しいタブで開く
-          </a>
+          <div className="flex items-center gap-2">
+            <CopyOutputButton />
+            <a
+              href="/terminal/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-md border border-border px-2.5 py-1 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+            >
+              新しいタブで開く
+            </a>
+          </div>
         }
       />
 

@@ -47,7 +47,7 @@ function FeedRow({ a }: { a: AgentSummary }) {
               </span>
             </div>
             {a.lastAction && (
-              <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-text-muted">
+              <p className="mt-1 line-clamp-2 select-text text-[13px] leading-snug text-text-muted">
                 {a.lastAction}
               </p>
             )}

@@ -227,12 +227,50 @@ async function handleStart(_req: Request, res: Response): Promise<void> {
   }
 }
 
+// ─── ターミナル出力取得（MC-92 コピー改善）────────────────────
+//
+// GET /api/terminal/output?lines=N
+//   tmux capture-pane で main セッションの最近 N 行を取得する。
+//   モバイル / WebView では iframe 内のテキスト選択が難しいため、
+//   フロントの「出力をコピー」ボタンがこのエンドポイントを叩いて
+//   navigator.clipboard.writeText() に渡す。
+//   lines のデフォルトは 100、最大 500 に制限する。
+//   tmux セッションが無ければ ok:false + error を返す（常に 200）。
+
+async function collectOutput(lines: number): Promise<{ ok: true; content: string; lines: number } | { ok: false; error: string }> {
+  const exists = await tmuxSessionExists();
+  if (!exists) {
+    return { ok: false, error: `tmux セッション '${TERMINAL_TMUX_TARGET}' が見つかりません。` };
+  }
+  // -p: stdout 出力、-t: ターゲット、-S -N: 末尾から N 行（負の行数で末尾基点）。
+  const r = await run('tmux', ['capture-pane', '-p', '-t', TERMINAL_TMUX_TARGET, '-S', String(-lines)], tmuxEnv());
+  if (r.code !== 0) {
+    return { ok: false, error: `tmux capture-pane に失敗しました（code ${r.code}）: ${r.stderr.trim() || r.stdout.trim()}` };
+  }
+  return { ok: true, content: r.stdout, lines };
+}
+
+async function handleOutput(req: Request, res: Response): Promise<void> {
+  const raw = typeof req.query.lines === 'string' ? parseInt(req.query.lines, 10) : NaN;
+  const lines = isNaN(raw) || raw <= 0 ? 100 : Math.min(raw, 500);
+  try {
+    const result = await collectOutput(lines);
+    res.json(result);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('[terminal-control] output failed:', message);
+    // 常に 200 で返す（他エンドポイントと同様）。
+    res.json({ ok: false, error: message });
+  }
+}
+
 // ─── Router 組み立て ─────────────────────────────────────────
 
-/** /api/terminal 配下の status / start ルータ。index.ts で auth ミドルウェア配下に mount する。 */
+/** /api/terminal 配下の status / start / output ルータ。index.ts で auth ミドルウェア配下に mount する。 */
 export function terminalControlRouter(): Router {
   const router = Router();
   router.get('/status', (req, res) => void handleStatus(req, res));
   router.post('/start', (req, res) => void handleStart(req, res));
+  router.get('/output', (req, res) => void handleOutput(req, res));
   return router;
 }

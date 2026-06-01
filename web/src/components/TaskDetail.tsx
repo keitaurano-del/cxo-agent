@@ -987,7 +987,7 @@ function TaskDetailBody({
               <span className="font-mono text-[11px] text-text-faint">{view.id}</span>
               {view.stalled && <StalledBadge />}
             </div>
-            <h2 className="mt-1 text-[15px] font-bold leading-snug text-text">{view.title}</h2>
+            <h2 className="mt-1 select-text text-[15px] font-bold leading-snug text-text">{view.title}</h2>
           </div>
           <button
             type="button"
@@ -1092,7 +1092,7 @@ function TaskDetailBody({
             <section className="mb-5">
               <SectionHeading>詳細メモ</SectionHeading>
               <div className="rounded-lg border border-border bg-surface px-3 py-3">
-                <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-text-muted">
+                <p className="select-text whitespace-pre-wrap break-words text-[13px] leading-relaxed text-text-muted">
                   {view.detail}
                 </p>
               </div>
