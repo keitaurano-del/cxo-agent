@@ -337,25 +337,40 @@ export default function Terminal() {
         {staged.length > 0 && (
           <div className="mt-2.5 flex flex-wrap gap-2">
             {staged.map((s) => (
+              // 削除ボタンが角でクリップ/見切れないよう、コンテナ側は overflow-hidden にせず、
+              // 画像だけ角丸クリップする（rounded は img 側に持たせる）。
               <div
                 key={s.id}
-                className="group relative w-20 overflow-hidden rounded-md border border-border bg-surface-2"
+                className="relative w-20 rounded-md border border-border bg-surface-2"
               >
                 <img
                   src={s.url}
                   alt={s.file.name}
-                  className="h-16 w-full object-cover"
+                  className="h-16 w-full rounded-t-md object-cover"
                 />
+                {/* 個別削除（×）。常時表示・タップしやすい 28px ヒット領域・高コントラストのバッジ。
+                    モバイルのタップで確実に反応するよう touch-action: manipulation を付与し、
+                    アイコン SVG は pointer-events-none にしてヒットを必ずボタン本体に集める。
+                    クリック/タップが iframe など下層へ伝播しないよう stopPropagation。 */}
                 <button
                   type="button"
                   aria-label={`${s.file.name} を削除`}
-                  onClick={() => removeStaged(s.id)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    removeStaged(s.id);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
                   disabled={state.kind === 'uploading'}
-                  className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-bg/80 text-text-muted hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ touchAction: 'manipulation' }}
+                  className="absolute -right-2 -top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-surface text-text shadow-sm hover:bg-surface-3 hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <CloseIcon width={11} height={11} />
+                  <CloseIcon width={14} height={14} className="pointer-events-none" />
                 </button>
-                <div className="truncate px-1 py-0.5 text-[9px] text-text-faint" title={`${s.file.name}（${formatBytes(s.file.size)}）`}>
+                <div
+                  className="truncate rounded-b-md px-1 py-0.5 text-[9px] text-text-faint"
+                  title={`${s.file.name}（${formatBytes(s.file.size)}）`}
+                >
                   {formatBytes(s.file.size)}
                 </div>
               </div>

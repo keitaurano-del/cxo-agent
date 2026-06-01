@@ -151,16 +151,28 @@ test.describe('390px モバイル', () => {
     await expect.poll(() => thumbCount(page)).toBe(2);
   });
 
-  test('4. 個別削除 × でサムネが消える', async ({ page }) => {
+  test('4. 個別削除 × でサムネが1枚ずつ消える（実機ヒット領域）', async ({ page }) => {
     await stubUpload(page);
     await authedGoto(page, '/terminal-view');
 
-    await pickFiles(page, 2, 'del');
-    await expect.poll(() => thumbCount(page)).toBe(2);
+    await pickFiles(page, 3, 'del');
+    await expect.poll(() => thumbCount(page)).toBe(3);
 
-    // 1 枚目の削除ボタンを押す。
-    await page.getByRole('button', { name: /を削除$/ }).first().click();
-    await expect.poll(() => thumbCount(page)).toBe(1);
+    // 削除ボタンの中心を hit-test 経由の実座標クリックで押す（accessible-name 直叩きでなく
+    // 実ユーザー相当）。MC-102 の「実機で削除できない」回帰防止: ボタンが 20px と小さく角で
+    // 見切れていると hit-test がアイコン/隣接要素に逸れてこの座標クリックが効かなくなる。
+    for (const expected of [2, 1, 0]) {
+      const btn = page.getByRole('button', { name: /を削除$/ }).first();
+      const box = await btn.boundingBox();
+      expect(box, 'delete button has a layout box').not.toBeNull();
+      // ヒット領域は最低 24px 角を満たすこと（タップしやすさの担保）。
+      expect(box!.width, 'delete button width >= 24px').toBeGreaterThanOrEqual(24);
+      expect(box!.height, 'delete button height >= 24px').toBeGreaterThanOrEqual(24);
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+      await expect.poll(() => thumbCount(page)).toBe(expected);
+    }
+    // 全消し後は送信ボタンが消える。
+    await expect(page.getByRole('button', { name: /林に送る/ })).toHaveCount(0);
   });
 
   test('5. 合計 5 枚上限が抑止される', async ({ page }) => {
