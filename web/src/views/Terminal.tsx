@@ -291,20 +291,9 @@ export default function Terminal() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex justify-end px-4 py-2">
-        <a
-          href="/terminal/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="rounded-md border border-border px-2.5 py-1 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
-        >
-          新しいタブで開く
-        </a>
-      </div>
-
-      {/* 画像添付ツールバー（MC-95）。ファイル選択とクリップボード貼付で林に画像を渡す。 */}
-      <div className="mb-2 rounded-lg border border-border bg-surface px-3 py-2.5">
-        <div className="flex flex-wrap items-center gap-2">
+      {/* ツールバー: 画像を選択 + 新しいタブで開く を一行に */}
+      <div className="mb-2 border-b border-border bg-surface px-3 py-2">
+        <div className="flex items-center gap-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -318,14 +307,22 @@ export default function Terminal() {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={state.kind === 'uploading' || staged.length >= MAX_IMAGES}
-            className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-xs text-text hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded border border-border bg-surface-2 px-2 py-1 text-xs text-text hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <ImageFileIcon width={15} height={15} />
+            <ImageFileIcon width={13} height={13} />
             画像を選択
           </button>
-          <span className="ml-auto text-[11px] text-text-faint">
-            {staged.length} / {MAX_IMAGES} 枚
-          </span>
+          {staged.length > 0 && (
+            <span className="text-[11px] text-text-faint">{staged.length} / {MAX_IMAGES}</span>
+          )}
+          <a
+            href="/terminal/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-auto rounded border border-border px-2 py-1 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+          >
+            新しいタブで開く
+          </a>
         </div>
 
         {/* ステージング中のサムネ一覧。横並び・モバイルでも折り返して崩れない。 */}
