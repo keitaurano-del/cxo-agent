@@ -17,6 +17,7 @@ import { collectRoster } from './collectors/roster.js';
 import { collectUsage } from './collectors/usage.js';
 import { collectWorkflows, collectWorkflowDetail } from './collectors/workflows.js';
 import { collectDeploys } from './collectors/deploys.js';
+import { collectTicks } from './collectors/ticks.js';
 import { collectAlerts } from './collectors/alerts.js';
 import { linksForTask } from './collectors/taskLinks.js';
 import { search } from './collectors/search.js';
@@ -190,6 +191,20 @@ app.get('/api/usage', (_req, res) => {
 // 5 分キャッシュ（usage と同方式）で GitHub API レート対策。対象 repo は config.DEPLOY_REPOS に集約。
 app.get('/api/deploys', (_req, res) => {
   safeJson(res, () => collectDeploys());
+});
+
+// ─── Ticks（autonomous ループのティック可視化 MC-65）────────────────
+// 自律ループが追記する ~/logs/autonomous-*.log を末尾読みで解析し、直近ティック
+// （スコープ × 選んだタスク × 結果）を返す。認証ミドルウェア（makeAuthMiddleware）配下。
+// ファイル不在・空・壊れ行・自由文でも例外を投げず空配列で 200（collector 側 fail-soft）。
+// TICKS_TTL_MS（既定 30 秒）キャッシュ。?scope=cxo|logic 等で任意フィルタ。
+app.get('/api/ticks', (req, res) => {
+  safeJson(res, () => {
+    const scope = typeof req.query.scope === 'string' && req.query.scope.trim() !== ''
+      ? req.query.scope.trim()
+      : undefined;
+    return collectTicks(scope);
+  });
 });
 
 // ─── 横断検索（MC-73）──────────────────────────────────────

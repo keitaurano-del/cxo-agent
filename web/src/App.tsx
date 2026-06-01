@@ -24,6 +24,7 @@ import Tasks from './views/Tasks';
 import Narrative from './views/Narrative';
 import Vault from './views/Vault';
 import Usage from './views/Usage';
+import Ticks from './views/Ticks';
 import Approvals from './views/Approvals';
 import BottomNav from './components/BottomNav';
 import AddTaskFab from './components/AddTaskFab';
@@ -142,6 +143,7 @@ export default function App() {
               <Route path="/agents/:agentId" element={<Agents />} />
               <Route path="/feed" element={<Feed />} />
               <Route path="/today" element={<Narrative />} />
+              <Route path="/ticks" element={<Ticks />} />
               <Route path="/usage" element={<Usage />} />
             </Route>
             <Route path="/tasks" element={<Tasks />} />

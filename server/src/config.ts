@@ -353,6 +353,45 @@ export const DEPLOY_GH_PATH = env(
   '/usr/local/bin:/usr/bin:/bin:' + (process.env.PATH ?? ''),
 );
 
+// ─── autonomous ループのティック可視化（MC-65）──────────────────────
+//
+// 自律ループ（autonomous-worker.sh、cron */10）がスコープ別に追記する
+// /home/dev/logs/autonomous-*.log を末尾読みで解析し、直近ティック
+// （選んだタスク × 結果レーン）を /api/ticks で可視化する。
+//
+// すべて os.homedir() ベース（DATA_HOME 由来）で env override 可。
+// ハードコード散在を避け、ここに集約する。
+
+/** 自律ループ・ログのディレクトリ（既定 ~/logs）。env AUTONOMOUS_LOG_DIR で差し替え可。 */
+export const AUTONOMOUS_LOG_DIR = env('AUTONOMOUS_LOG_DIR', join(DATA_HOME, 'logs'));
+
+/**
+ * autonomous-*.log を拾う glob パターン（AUTONOMOUS_LOG_DIR 内、相対）。
+ * 既定 'autonomous-*.log'。将来スコープ別ログが増えても自動で拾う。
+ * env AUTONOMOUS_LOG_GLOB で差し替え可。
+ */
+export const AUTONOMOUS_LOG_GLOB = env('AUTONOMOUS_LOG_GLOB', 'autonomous-*.log');
+
+/**
+ * /api/ticks が返す直近ティックの上限件数（新しい順）。既定 50。
+ * env TICKS_LIMIT で差し替え可。
+ */
+export const TICKS_LIMIT = envNum('TICKS_LIMIT', 50);
+
+/**
+ * 各ログファイルの末尾から読むバイト数（既定 256KB）。
+ * 214KB 級ログをフル読みせず tail で済ませ、I/O とメモリを抑える。
+ * env TICKS_TAIL_BYTES で差し替え可。
+ */
+export const TICKS_TAIL_BYTES = envNum('TICKS_TAIL_BYTES', 256 * 1024);
+
+/**
+ * ティック解析のキャッシュ TTL（ミリ秒）。既定 30 秒。
+ * ログは数十秒〜分粒度の追記なのでリアルタイム不要。連続要求は再走査を抑える。
+ * env TICKS_TTL_MS で差し替え可。
+ */
+export const TICKS_TTL_MS = envNum('TICKS_TTL_MS', 30000);
+
 // ─── 承認フロー（MC-79）──────────────────────────────────
 
 /**

@@ -190,6 +190,18 @@ export function UsageIcon(props: IconProps) {
   );
 }
 
+// 自律ループのティック（周回/サイクル）を表す。
+export function LoopIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3.5 12a8.5 8.5 0 0 1 14.5-6" />
+      <path d="M20.5 12a8.5 8.5 0 0 1-14.5 6" />
+      <path d="M18 2.5V6h-3.5" />
+      <path d="M6 21.5V18h3.5" />
+    </svg>
+  );
+}
+
 export function PlusIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

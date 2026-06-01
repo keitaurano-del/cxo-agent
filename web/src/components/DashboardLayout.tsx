@@ -5,7 +5,7 @@
 // PC は横並び tablist、モバイルは横スクロール（Tasks のステータスタブと同じパターン）。
 import { NavLink, Outlet } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { GridIcon, NoteIcon, StreamIcon, UsersIcon, UsageIcon } from './icons';
+import { GridIcon, NoteIcon, StreamIcon, UsersIcon, UsageIcon, LoopIcon } from './icons';
 
 interface DashTab {
   to: string;
@@ -19,6 +19,7 @@ const DASH_TABS: DashTab[] = [
   { to: '/today', label: '今日', icon: <NoteIcon width={16} height={16} /> },
   { to: '/feed', label: '会話', icon: <StreamIcon width={16} height={16} /> },
   { to: '/agents', label: 'エージェント', icon: <UsersIcon width={16} height={16} /> },
+  { to: '/ticks', label: 'ティック', icon: <LoopIcon width={16} height={16} /> },
   { to: '/usage', label: '消費量', icon: <UsageIcon width={16} height={16} /> },
 ];
 
