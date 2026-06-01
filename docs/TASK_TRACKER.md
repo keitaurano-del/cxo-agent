@@ -662,7 +662,10 @@ ID 採番: **AR-0x**。
 ソース: 社内ドッグフーディング(dogfood)で投入した feedback 全20件のトリアージ中に検出した Apollo 運用上の不整合1件。logic 系の actionable は `logic/docs/TASK_TRACKER.md` のバッチ「2026-05-31 ドッグフーディング feedback トリアージ」（FB-01〜FB-10＋既存 DF-F 系への dedup 寄せ）に登録済み。本ファイルには Apollo 運用ミス1件のみ。ID は既存 MC-01〜58/G0〜G5・AR-0x と衝突しない **MC-59**。
 
 ### MC-59 — inbox.jsonl の消し込み漏れ修正（フェルミCTA件）
-- 優先度: P2（重大度: 低）/ ステータス: TODO / 担当案: dev-logic
+- 優先度: P2（重大度: 低）/ ステータス: DONE（2026-06-01 cxo ティック 林）/ 担当: dev-logic（蓮）
+  - DoD(1) 表示整合は既に充足: GET /api/inbox（`server/src/inbox.ts:392-396` handleList）が inbox-consumed.jsonl を `readConsumedIds` で突合し consumed を pending から除外済み＝フェルミCTA件（id `2026-05-30T22-51-15...`）含む既消費分は UI に pending として出ない（DoD の「または inbox-consumed との突合で pending 表示が消える」を満たす）。inbox.jsonl の status フィールドは追記専用の監査データで表示には未使用のため書き換えない（並行書き込みレース回避）。
+  - 恒久対策（再発防止）実装: 即タスク化（taskId 付与）成功時にサーバ自身が当該 id を inbox-consumed.jsonl へ自動追記するようにした（`appendConsumed()` 新設、handlePost で taskId 確定時のみ呼出・失敗は握り潰し 201 非ブロック）。これでボード登録済みなのに inbox pending が滞留する構造を解消。即タスク化失敗（taskId 無し）は従来どおり pending を残し autonomous-rin の後方互換フローに委ねる。
+  - 検証: server `tsc --noEmit` EXIT0 / 新規 `inbox.autoConsume.test.ts` 4/4 / 全 test files green（normStatus 31・ticks・approvals 9・summaryTable 3・priority 16）。林が独立に裏取り。ローカル commit `0338706`。**本番反映は apollo.service restart＝Keita 承認待ち（restart まで実挙動は未変化。push も Keita 承認領域）。**
 - 詳細: フェルミCTA件（inbox id `2026-05-30T22-51-15...`）は logic 側で UI-14 として実装・push（commit `d05e454`）・本番 deploy まで完了済みなのに、`cxo-agent/data/inbox.jsonl` 側の当該レコードが `status: pending` のまま残っている。実体は consumed 済み（自律林が `inbox-consumed.jsonl` に id 追記する運用＝project_autonomous_rin）なので台帳と実態が乖離している。
 - DoD: 当該 inbox レコードの status が consumed 済み実態と整合する（`status: pending` 解消、または `inbox-consumed.jsonl` との突き合わせで pending 表示が消える）。さらに、実装・deploy 完了時に inbox 側を自動で消し込む処理が入っていれば再発しない。
 - 関連: `cxo-agent/data/inbox.jsonl`、`cxo-agent/data/inbox-consumed.jsonl`、logic UI-14（実装済 commit `d05e454`）、自律林の消費ロジック（project_autonomous_rin）
@@ -679,7 +682,7 @@ ID 採番: **AR-0x**。
 - inbox.jsonl の status 管理は手動消し込み運用だと乖離が再発する。実装/deploy 完了と連動した自動消し込みを恒久対策として検討すべき。
 
 #### 次アクション（MC-59）
-- dev-logic が当該レコードの status 整合を修正。自動消し込み化の要否は Keita 判断。
+- 完了（2026-06-01）。表示整合は consumed 突合で既充足、恒久対策＝即タスク化時のサーバ自動消し込みを実装・green・ローカル commit `0338706`。残は apollo.service restart（Keita 承認領域）で本番反映するのみ。
 
 ---
 
