@@ -43,31 +43,38 @@ const proxy = httpProxy.createProxyServer({
   // proxy 側で /terminal プレフィックスを剥がすのは proxyReq/手前で行う（下記参照）。
 });
 
-// ─── PC ブラウザの Ctrl+V 貼り付け対応（MC-92）──────────────────────────
-// 根因: xterm.js は非 Mac で Ctrl+V を端末キーストロークとして扱い、SYN(0x16) を PTY に
-//   送って keydown の default（ブラウザのネイティブ paste）を preventDefault する。結果
-//   PC で Ctrl+V を押しても貼り付かない（control char だけ送られる）。Mac は Cmd+V が
-//   OS ショートカットでブラウザが先に paste するため動き、スマホは paste メニュー経由の
-//   DOM paste イベントで動く（＝PC の Ctrl+V だけ落ちる、という報告と一致）。
-// 修正: ttyd の window.term に customKeyEventHandler を仕込み、Ctrl+V（Shift 無し）を
-//   navigator.clipboard.readText() → term.paste() に置き換える。paste() が bracketed
-//   paste でラップして送るので claude(林) TUI も正しく受ける。Ctrl+Shift+V（既存の
-//   ネイティブ paste）と通常打鍵は素通りで非退行。clipboard 権限は Permissions-Policy で
-//   self 許可済み・同一オリジンの iframe にも委譲済み。
+// ─── PC ブラウザの Ctrl+V 貼り付け対応（MC-92 / MC-94）──────────────────────
+// 根因（MC-94 実機確定）: xterm.js は非 Mac で Ctrl+V keydown を端末キーストロークとして
+//   扱い、SYN(0x16) を PTY に送る（＝Ctrl+V で制御文字だけ飛び、何も貼り付かない）。
+//   MC-92 の旧修正は customKeyEventHandler で Ctrl+V を捕まえて e.preventDefault() し
+//   navigator.clipboard.readText() → term.paste() に置き換えていたが、Apollo は
+//   /terminal を iframe（web/src/views/Terminal.tsx）で埋め込んでおり、実 PC ブラウザの
+//   iframe 内 readText() は clipboard-read 権限ゲートで NotAllowedError になる（Permissions
+//   -Policy で委譲済みでもユーザー許可が無ければ Chrome がブロック）。readText が失敗しても
+//   旧コードは .catch で握りつぶし、かつ keydown を preventDefault 済みのため、ネイティブ
+//   paste も殺され「Ctrl+V で何も貼れない」状態になっていた（Playwright で
+//   permissions:['clipboard-write'] = clipboard-read 未付与＝実ブラウザ相当で再現）。
+// 修正（権限不要・ttyd 内部構造非依存）: customKeyEventHandler は Ctrl+V（Shift 無し）に
+//   対し return false を返す（xterm に「このキーを端末入力として送るな」＝SYN 抑止）。
+//   ただし e.preventDefault() は呼ばない。これでブラウザのネイティブ paste が helper
+//   textarea（xterm-helper-textarea）に走り、xterm 組み込みの paste ハンドラが DOM 'paste'
+//   イベントを拾って bracketed paste（ESC[200~ … ESC[201~）で PTY へ送る＝term.paste() と
+//   同じ出力で claude(林) TUI も正しく受ける。clipboard.readText() / clipboard-read 権限は
+//   一切使わない（ネイティブ paste の clipboardData は paste アクション自体に紐づくため権限
+//   ゲートを通らない）。Ctrl+Shift+V（既存ネイティブ paste）・通常打鍵は素通りで非退行。
+//   実機検証（Playwright chromium、clipboard-read 未付与＝実 PC ブラウザ相当）で
+//   synthetic paste → onData が ESC[200~<text>ESC[201~ を送ることを確認済み（MC-94）。
 const PASTE_FIX_SCRIPT = `<script>(function(){
   function install(){
     var t=window.term;
     if(!t||typeof t.attachCustomKeyEventHandler!=='function'){return false;}
     if(t.__apolloPasteFix){return true;}
     t.__apolloPasteFix=true;
-    var pasting=false;
     t.attachCustomKeyEventHandler(function(e){
+      // Ctrl+V（Shift/Alt/Meta 無し）: xterm に端末入力（SYN）として送らせない（return false）。
+      // preventDefault は呼ばない＝ブラウザのネイティブ paste を生かし、xterm 組み込みの
+      // paste ハンドラ（helper textarea の 'paste' DOM イベント）が bracketed paste で送る。
       if(e.type==='keydown'&&e.ctrlKey&&!e.shiftKey&&!e.altKey&&!e.metaKey&&(e.key==='v'||e.key==='V')){
-        if(e.preventDefault){e.preventDefault();}
-        if(pasting){return false;}
-        if(!navigator.clipboard||!navigator.clipboard.readText){return false;}
-        pasting=true;
-        navigator.clipboard.readText().then(function(txt){if(txt){t.paste(txt);}}).catch(function(){}).then(function(){pasting=false;});
         return false;
       }
       return true;
