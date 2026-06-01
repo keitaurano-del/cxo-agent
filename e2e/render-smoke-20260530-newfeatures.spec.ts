@@ -8,7 +8,7 @@
 //
 // 浅く速くが原則。深い挙動検証は test-functional 領域。
 import { test, expect, type Page } from '@playwright/test';
-import { readFileSync, appendFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -21,6 +21,11 @@ const TOKEN = (() => {
   if (!m) throw new Error('MC_TOKEN not found in .mc.env');
   return m[1].trim();
 })();
+
+// 正準ナビ契約（MC-98 で 7→5 ドリフトに追従）。
+// トップレベルのボトムナビ短ラベルは web/src/App.tsx の NAV 配列が単一の正本。
+// 消費量(/usage) はボトムナビから外れ、ダッシュボードのタブ帯に移動した。
+const BOTTOM_NAV_SHORT_LABELS = ['ダッシュ', 'ボード', '承認', 'Vault', '端末'];
 
 // 1x1 透明 PNG。FAB の画像 input 用テスト素材。
 const PNG_1x1 = Buffer.from(
@@ -88,16 +93,18 @@ test.describe('390px モバイル', () => {
     await page.screenshot({ path: path.join(SHOT_DIR, '390-usage.png'), fullPage: true });
   });
 
-  test('2. ボトムナビ 7 項目が 390px で潰れず表示・遷移できる', async ({ page }) => {
+  test(`2. ボトムナビ ${BOTTOM_NAV_SHORT_LABELS.length} 項目が 390px で潰れず表示・遷移でき、消費量はダッシュタブから開ける`, async ({ page }) => {
     await authedGoto(page, '/');
     const nav = page.locator('nav[aria-label="主要ナビゲーション"]');
     await nav.waitFor({ state: 'visible' });
 
+    // MC-98: ボトムナビは 5 トップレベル項目に集約（旧 7 項目から変更）。
+    // 消費量(/usage) はボトムナビから外れ、ダッシュボードのタブ帯に移動した。
     const items = nav.locator('a');
-    await expect(items).toHaveCount(7);
-
-    // 追加された「消費」項目。
-    await expect(nav.getByText('消費', { exact: true })).toBeVisible();
+    await expect(items).toHaveCount(BOTTOM_NAV_SHORT_LABELS.length);
+    for (const label of BOTTOM_NAV_SHORT_LABELS) {
+      await expect(nav.getByText(label, { exact: true })).toBeVisible();
+    }
 
     // 各項目が潰れていない（幅 > 20px / 高さ >= 44px）。
     const count = await items.count();
@@ -110,15 +117,16 @@ test.describe('390px モバイル', () => {
 
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
 
-    // 消費タブで遷移。
-    await nav.getByText('消費', { exact: true }).click();
+    // 消費量はダッシュボードのタブ帯（俯瞰/今日/会話/エージェント/ティック/消費量）から開く。
+    const dashTabs = page.locator('nav[aria-label="ダッシュボードのタブ"]');
+    await dashTabs.getByRole('tab', { name: '消費量' }).click();
     await expect(page).toHaveURL(/\/usage$/);
     await expect(page.getByRole('heading', { name: 'プロジェクト別' })).toBeVisible();
 
     await page.screenshot({ path: path.join(SHOT_DIR, '390-bottomnav.png'), fullPage: true });
   });
 
-  test('3. FAB が表示され、フォーム（kind/project/text/画像input）が開き text 必須が効く', async ({ page }) => {
+  test('3. FAB が表示され、フォーム（project/agent/priority/text/画像input）が開き text 必須が効く', async ({ page }) => {
     await authedGoto(page, '/');
 
     const fab = page.getByRole('button', { name: '受信箱に追加' });
@@ -128,10 +136,13 @@ test.describe('390px モバイル', () => {
     const dialog = page.getByRole('dialog', { name: '受信箱に追加' });
     await expect(dialog).toBeVisible();
 
-    // kind トグル / project セレクト / text。
-    await expect(dialog.getByRole('button', { name: 'タスク' })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: '指示' })).toBeVisible();
+    // MC-77: タスク/指示の kind トグルは廃止（投入は全て「タスク」として送る）。
+    // 現状のフォームは project / 担当エージェント / 優先度 / text セレクト群。
+    await expect(dialog.getByRole('button', { name: 'タスク' })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: '指示' })).toHaveCount(0);
     await expect(dialog.locator('#inbox-project')).toBeVisible();
+    await expect(dialog.locator('#inbox-agent')).toBeVisible();
+    await expect(dialog.locator('#inbox-priority')).toBeVisible();
     await expect(dialog.locator('#inbox-text')).toBeVisible();
 
     // 画像 file input（accept に image を含む）。
@@ -153,7 +164,9 @@ test.describe('390px モバイル', () => {
     await page.screenshot({ path: path.join(SHOT_DIR, '390-fab-form.png') });
   });
 
-  test('4. text のみで実 POST → 201 → GET /api/inbox pending に出る → consumed で後始末', async ({ page, request }) => {
+  // MC-99: SMOKE マーカーはサーバ側で「起票せず即 consumed」になった（台帳の幽霊カード化を防止）。
+  // よって 201 で投入できるが pending には出ず、TASK_TRACKER にも幽霊カードが作られない。
+  test('4. SMOKE text を実 POST → 201 → 起票されず（taskId 無し）→ pending に出ない（MC-99）', async ({ page, request }) => {
     await authedGoto(page, '/');
 
     const marker = `__SMOKE_20260530_${Date.now()}__`;
@@ -169,36 +182,26 @@ test.describe('390px モバイル', () => {
       dialog.getByRole('button', { name: '追加する' }).click(),
     ]);
     expect(resp.status(), 'POST /api/inbox status').toBe(201);
-    const created = (await resp.json()) as { id: string; status: string };
+    const created = (await resp.json()) as { id: string; status: string; taskId?: string };
     expect(created.id, 'created id').toBeTruthy();
     expect(created.status).toBe('pending');
+    // MC-99: SMOKE は起票しない＝台帳の幽霊カードを作らない。
+    expect(created.taskId, 'SMOKE は taskId を持たない（起票スキップ）').toBeUndefined();
 
     // 成功トースト。
     await expect(
       page.getByRole('status').filter({ hasText: 'タスクを追加しました' }),
     ).toBeVisible();
 
-    // GET /api/inbox の pending に含まれる。
+    // MC-99: サーバが SMOKE skip として consumed 済みにするため、pending には出ない。
     const listRes = await request.get('/api/inbox', {
       headers: { Authorization: `Bearer ${TOKEN}` },
     });
     expect(listRes.status()).toBe(200);
     const list = (await listRes.json()) as { pending: { id: string; text: string }[] };
-    const found = list.pending.find((e) => e.id === created.id);
-    expect(found, 'created entry present in pending').toBeTruthy();
-    expect(found!.text).toBe(marker);
-
-    // 後始末: consumed.jsonl に id を追記してデータ汚染を防ぐ。
-    appendFileSync(path.join(REPO_ROOT, 'data', 'inbox-consumed.jsonl'), created.id + '\n', 'utf-8');
-
-    // 掃除後は pending から消える。
-    const after = await request.get('/api/inbox', {
-      headers: { Authorization: `Bearer ${TOKEN}` },
-    });
-    const afterList = (await after.json()) as { pending: { id: string }[] };
     expect(
-      afterList.pending.find((e) => e.id === created.id),
-      'consumed entry gone',
+      list.pending.find((e) => e.id === created.id),
+      'SMOKE entry auto-consumed (not in pending)',
     ).toBeFalsy();
   });
 });
@@ -212,7 +215,10 @@ test.describe('1280px デスクトップ回帰', () => {
     const sidebar = page.locator('aside');
     await sidebar.waitFor({ state: 'visible' });
     await expect(sidebar.getByText('Apollo', { exact: true })).toBeVisible();
-    await expect(sidebar.getByRole('link', { name: '消費量' })).toBeVisible();
+    // MC-98: サイドバーはトップレベル 5 項目。消費量はサイドバーから外れ、
+    // ダッシュボードのタブ帯に移動したので、サイドバーには「ダッシュボード」リンクが在ることを確認する。
+    await expect(sidebar.getByRole('link', { name: 'ダッシュボード' })).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: 'ターミナル' })).toBeVisible();
 
     // ボトムナビは md+ で非表示。
     await expect(page.locator('nav[aria-label="主要ナビゲーション"]')).toBeHidden();
@@ -220,8 +226,11 @@ test.describe('1280px デスクトップ回帰', () => {
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
     await page.screenshot({ path: path.join(SHOT_DIR, '1280-overview.png'), fullPage: true });
 
-    // /usage デスクトップ表示。
-    await page.getByRole('link', { name: '消費量' }).click();
+    // /usage デスクトップ表示はダッシュボードのタブ帯から開く（消費量はサブタブに移動）。
+    await page
+      .locator('nav[aria-label="ダッシュボードのタブ"]')
+      .getByRole('tab', { name: '消費量' })
+      .click();
     await expect(page).toHaveURL(/\/usage$/);
     await expect(page.getByRole('heading', { name: 'プロジェクト別' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'モデル別' })).toBeVisible();

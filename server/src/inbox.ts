@@ -140,6 +140,16 @@ function parseText(v: unknown): string | { error: string } {
   return v;
 }
 
+// MC-99: スモークテストマーカー検出。ヘルスチェック（e2e render-smoke 等）が疎通確認のために
+// 投入する `__SMOKE_<日付>_<epoch>__` トークンを検出する。プレフィックス付き
+// （例「【Apollo投入】 __SMOKE_...__」）でも検出できるよう、完全一致でなく「__SMOKE_ で始まり
+// __ で終わる token を含む」で判定する。これにマッチするエントリは TASK_TRACKER への即タスク化を
+// スキップし、台帳に幽霊カードが湧くのを防ぐ（疎通用の消費記録は残す）。
+const SMOKE_PATTERN = /__SMOKE_[^_]*(?:_[^_]+)*__/;
+export function isSmokeText(text: string): boolean {
+  return SMOKE_PATTERN.test(text);
+}
+
 // MC-86: 担当エージェント指定（任意）。指定があればホワイトリスト（INBOX_AGENTS）の
 // 既知 subagentType のみ受理する。未知の agent 名は 400 で拒否し、任意プロンプト実行の
 // 踏み台にされないようにする。未指定（'' / 'null' / 省略）は自動割当 = null を返す。
@@ -353,34 +363,40 @@ async function handlePost(req: Request, res: Response): Promise<void> {
   // 採番は next-task-id.sh 相当（server 内 grep）、書き戻しは fail-closed の追記層。
   // 失敗しても inbox 投入自体は成功扱いにする（taskId を付けず残し、autonomous-rin の
   // 従来フローが後で拾える）。添付画像フローは inbox.jsonl 側に温存される。
+  // MC-99: スモークマーカーは即タスク化しない（台帳の幽霊カード化を防ぐ）。
+  // 疎通記録だけ残すため、後段で consumed に「SMOKE skip」を追記して pending から外す。
+  const isSmoke = isSmokeText(text);
+
   let taskId: string | undefined;
   let trackerSource: string | undefined;
-  try {
-    const newId = nextTaskId(prefixForProject(projectVal));
-    // タイトルは text の 1 行目（長すぎる場合は丸める）。詳細に全文を残す。
-    const firstLine = text.split(/\r?\n/)[0].trim() || text.trim();
-    const title = firstLine.length > 80 ? `${firstLine.slice(0, 79)}…` : firstLine;
-    const result = appendTask({
-      project: projectVal,
-      task: {
-        id: newId,
-        title,
-        status: 'TODO',
-        // MC-86: 担当エージェント指定があれば台帳の担当（owner）に反映。未指定は従来どおり未定。
-        owner: agentVal ?? '未定',
-        // MC-84: 投入時に選択された優先度を台帳登録に引き継ぐ（旧ハードコード 'P2' を置換）。
-        priority: priorityVal,
-        detail: text.trim(),
-        source: 'Apollo投入',
-      },
-    });
-    taskId = result.task.id;
-    trackerSource = result.trackerSource;
-  } catch (e) {
-    // 即タスク化に失敗（採番衝突・検証失敗等）。投入自体は通し、autonomous-rin の
-    // 後方互換フローに委ねる。サーバログに残すのみ（ユーザー投入はブロックしない）。
-    const msg = e instanceof TaskAppendError ? `${e.code}: ${e.message}` : String(e);
-    console.error('[inbox] immediate task append failed:', msg);
+  if (!isSmoke) {
+    try {
+      const newId = nextTaskId(prefixForProject(projectVal));
+      // タイトルは text の 1 行目（長すぎる場合は丸める）。詳細に全文を残す。
+      const firstLine = text.split(/\r?\n/)[0].trim() || text.trim();
+      const title = firstLine.length > 80 ? `${firstLine.slice(0, 79)}…` : firstLine;
+      const result = appendTask({
+        project: projectVal,
+        task: {
+          id: newId,
+          title,
+          status: 'TODO',
+          // MC-86: 担当エージェント指定があれば台帳の担当（owner）に反映。未指定は従来どおり未定。
+          owner: agentVal ?? '未定',
+          // MC-84: 投入時に選択された優先度を台帳登録に引き継ぐ（旧ハードコード 'P2' を置換）。
+          priority: priorityVal,
+          detail: text.trim(),
+          source: 'Apollo投入',
+        },
+      });
+      taskId = result.task.id;
+      trackerSource = result.trackerSource;
+    } catch (e) {
+      // 即タスク化に失敗（採番衝突・検証失敗等）。投入自体は通し、autonomous-rin の
+      // 後方互換フローに委ねる。サーバログに残すのみ（ユーザー投入はブロックしない）。
+      const msg = e instanceof TaskAppendError ? `${e.code}: ${e.message}` : String(e);
+      console.error('[inbox] immediate task append failed:', msg);
+    }
   }
 
   const entry: InboxEntry = {
@@ -402,7 +418,15 @@ async function handlePost(req: Request, res: Response): Promise<void> {
   // ボード登録済みエントリを GET /api/inbox の pending から即外す。失敗（taskId 無し）は
   // 追記せず pending のまま残し、autonomous-rin の後方互換フローに拾わせる。
   // appendConsumed の失敗で投入（201）をブロックしないよう、例外はログに残して握り潰す。
-  if (taskId) {
+  // MC-99: SMOKE は起票しないが、疎通確認のため consumed に「SMOKE skip」を記録して
+  // pending から即外す（autonomous-rin の再処理ループ・幽霊カード再発を防ぐ）。
+  if (isSmoke) {
+    try {
+      appendConsumed(id, 'SMOKE skip: スモークマーカーのため起票せず消費');
+    } catch (e) {
+      console.error('[inbox] appendConsumed (SMOKE) failed:', String(e));
+    }
+  } else if (taskId) {
     try {
       appendConsumed(id, `即タスク化により自動消し込み: ${taskId} (${trackerSource})`);
     } catch (e) {
