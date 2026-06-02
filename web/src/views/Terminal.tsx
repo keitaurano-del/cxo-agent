@@ -315,7 +315,7 @@ export default function Terminal() {
   }, [addToStaging]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col" style={{ overscrollBehavior: 'none' }}>
       {/* ツールバー: 画像を選択 + 新しいタブで開く を一行に */}
       <div className="mb-2 border-b border-border bg-surface px-3 py-2">
         <div className="flex items-center gap-2">
@@ -459,7 +459,7 @@ export default function Terminal() {
         )}
       </div>
 
-      <div className="relative flex-1 overflow-clip bg-bg">
+      <div className="relative flex-1 overflow-hidden bg-bg" style={{ overscrollBehavior: 'none', touchAction: 'none' }}>
         {backend.kind === 'ready' ? (
           <iframe
             key={iframeKey}
@@ -468,7 +468,7 @@ export default function Terminal() {
             className="h-full w-full border-0"
             // ttyd は同一オリジン。スクリプト・WebSocket・クリップボードを許可する。
             allow="clipboard-read; clipboard-write"
-            style={{ touchAction: 'pan-y pinch-zoom' }}
+            style={{ touchAction: 'pan-y pinch-zoom', overscrollBehavior: 'none' }}
           />
         ) : (
           // バックエンド（tmux main / ttyd）が切断・未起動・確認中のときの状態パネル（MC-100）。

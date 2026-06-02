@@ -188,7 +188,7 @@ export default function App() {
   // /terminal-standalone はサイドバー・ナビなしでターミナルのみ表示
   if (pathname === '/terminal-standalone') {
     return (
-      <div className="h-screen overflow-hidden bg-bg text-text">
+      <div className="h-screen overflow-hidden bg-bg text-text" style={{ overscrollBehavior: 'none' }}>
         <Terminal />
       </div>
     );
