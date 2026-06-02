@@ -245,3 +245,50 @@ journalctl -u mission-control.service --no-pager -n 20
 
 restart / build をしたら、必ず healthz と主要 API の再疎通で復旧を確認します。
 直らなければ Keita にエスカレーションします。
+
+---
+
+## 7. トンネル（スマホアクセス）
+
+外出先のスマホや外部ネットワークから Apollo にアクセスしたい場合、cloudflared の quick tunnel を使います。
+
+### quick tunnel の起動
+
+```bash
+bash /home/dev/projects/cxo-agent/deploy/apollo-tunnel.sh
+```
+
+起動すると以下のように URL が表示されます:
+
+```
+Tunnel URL : https://xxxx-xxxx.trycloudflare.com
+Mobile URL : https://xxxx-xxxx.trycloudflare.com/?token=<MC_TOKEN>
+```
+
+- `Mobile URL` をスマホのブラウザで開けばそのまま認証済み状態でアクセスできます
+- トークン値は `.mc.env` の `MC_TOKEN` から自動取得します（スクリプト内にハードコードしていません）
+
+### mobile URL の形式
+
+```
+https://xxxx-xxxx.trycloudflare.com/?token=<MC_TOKEN>
+```
+
+このリンクをスマホに送ってタップすると、Cookie が発行されて以降の操作ではトークン入力不要です。
+
+### 停止方法
+
+```bash
+# --stop オプションで停止
+bash /home/dev/projects/cxo-agent/deploy/apollo-tunnel.sh --stop
+
+# または PID ファイルを使って直接 kill
+kill $(cat /tmp/apollo-tunnel.pid)
+```
+
+### 注意事項
+
+- quick tunnel の URL（`*.trycloudflare.com`）は毎回起動するたびに変わります
+- 安定した固定ドメイン（例: `apollo.keita.dev`）で使いたい場合は、Cloudflare アカウントでの認証と名前付きトンネルの設定が必要です。これには Keita の Cloudflare アカウントへのログインが必要です（現在は未ログイン状態のため quick tunnel のみ利用可能）
+- cloudflared は `/usr/local/bin/cloudflared` にインストール済みです
+- tunnel ログは `/tmp/apollo-tunnel.log` に出力されます
