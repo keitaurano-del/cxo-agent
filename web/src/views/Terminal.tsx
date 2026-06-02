@@ -579,8 +579,7 @@ export default function Terminal() {
           レイアウト: [テキスト入力 flex-1] [↑] [↓] [↵] [Esc] [送信]
           入力フィールドを左（親指で届きやすい中央寄り）、↑↓ を入力の右隣、Esc・送信を右端に配置。
           矢印を左端から右寄りに移動することで片手操作時の操作性を改善（Bug 2 修正）。 */}
-      {backend.kind === 'ready' && (
-        <div className="flex items-center gap-1.5 border-t border-border bg-surface px-2 py-2 md:hidden">
+      <div className="flex items-center gap-1.5 border-t border-border bg-surface px-2 py-2 md:hidden">
           {/* テキスト入力（flex-1 で残りスペースを占有）*/}
           <input
             type="text"
@@ -648,8 +647,24 @@ export default function Terminal() {
           >
             送信
           </button>
+          {/* 履歴スクロール: copy-mode で上下スクロール。Esc で通常入力に戻る */}
+          <button
+            type="button"
+            onClick={() => void postSendKeys('scroll-up')}
+            className="shrink-0 rounded border border-border bg-surface-2 px-2 py-1.5 text-xs text-text-muted hover:bg-surface-3 active:bg-surface-3"
+            title="履歴を上にスクロール"
+          >
+            ⇡
+          </button>
+          <button
+            type="button"
+            onClick={() => void postSendKeys('scroll-down')}
+            className="shrink-0 rounded border border-border bg-surface-2 px-2 py-1.5 text-xs text-text-muted hover:bg-surface-3 active:bg-surface-3"
+            title="履歴を下にスクロール"
+          >
+            ⇣
+          </button>
         </div>
-      )}
     </div>
   );
 }
