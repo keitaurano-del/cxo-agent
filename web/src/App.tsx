@@ -188,7 +188,7 @@ export default function App() {
   // /terminal-standalone はサイドバー・ナビなしでターミナルのみ表示
   if (pathname === '/terminal-standalone') {
     return (
-      <div className="h-screen overflow-hidden bg-bg text-text" style={{ overscrollBehavior: 'none' }}>
+      <div className="h-dvh overflow-hidden bg-bg text-text" style={{ overscrollBehavior: 'none' }}>
         <Terminal />
       </div>
     );
@@ -196,7 +196,7 @@ export default function App() {
 
   return (
     <LiveContext.Provider value={{ ticks }}>
-      <div className="flex h-screen overflow-hidden bg-bg text-text">
+      <div className="flex h-dvh overflow-hidden bg-bg text-text">
         <Sidebar connected={connected} badges={badges} open={sidebarOpen} onToggle={toggleSidebar} />
         <main className="flex-1 overflow-hidden">
           <Routes>

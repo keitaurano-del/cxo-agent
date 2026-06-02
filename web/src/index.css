@@ -73,8 +73,8 @@ body,
 }
 
 body {
-  min-height: 100dvh;
-  /* モバイルのプルトゥリフレッシュを抑止（ターミナル画面でのスクロール誤爆防止） */
+  height: 100dvh;
+  overflow: hidden;
   overscroll-behavior: none;
 }
 
