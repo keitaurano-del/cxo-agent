@@ -81,11 +81,36 @@ interface TerminalStatusResponse {
   ready?: boolean;
 }
 
-// ─── ターミナル出力コピーボタン（MC-92 コピー改善）────────────
-// /api/terminal/output?lines=100 を叩いてコンテンツを取得し、
+/** 出力表示モーダル: 最近の出力を通常テキストで表示→選択・コピー可 */
+function OutputModal({ onClose }: { onClose: () => void }) {
+  const [content, setContent] = useState<string>('読み込み中...');
+  useEffect(() => {
+    fetch('/api/terminal/output?lines=200')
+      .then((r) => r.json())
+      .then((b: { ok: boolean; content?: string }) => setContent(b.content ?? '（取得できませんでした）'))
+      .catch(() => setContent('（エラー）'));
+  }, []);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-bg/95 backdrop-blur"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+    >
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <span className="text-sm font-semibold text-text">出力（選択してコピー）</span>
+        <button type="button" onClick={onClose} className="rounded p-1 text-text-muted hover:text-text">
+          <CloseIcon width={18} height={18} />
+        </button>
+      </div>
+      <pre className="flex-1 overflow-auto whitespace-pre-wrap break-all p-4 text-xs leading-relaxed text-text select-text font-mono">
+        {content}
+      </pre>
+    </div>
+  );
+}
 
 export default function Terminal() {
   const [state, setState] = useState<UploadState>({ kind: 'idle' });
+  const [showOutput, setShowOutput] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // ── モバイル仮想キーバー（スマホ専用）──────────────────────
@@ -395,6 +420,13 @@ export default function Terminal() {
           {staged.length > 0 && (
             <span className="text-[11px] text-text-faint">{staged.length} / {MAX_IMAGES}</span>
           )}
+          <button
+            type="button"
+            onClick={() => setShowOutput(true)}
+            className="rounded border border-border px-2 py-1 text-xs text-text-muted hover:bg-surface-2 hover:text-text"
+          >
+            出力を見る
+          </button>
           <a
             href="/terminal-standalone"
             target="_blank"
@@ -665,6 +697,7 @@ export default function Terminal() {
             ⇣
           </button>
         </div>
+      {showOutput && <OutputModal onClose={() => setShowOutput(false)} />}
     </div>
   );
 }
