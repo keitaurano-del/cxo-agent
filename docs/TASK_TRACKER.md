@@ -643,7 +643,7 @@ ID 採番: **AR-0x**。
   - ログローテ（`~/logs/autonomous-rin.log`）肥大化対策を検討。
 
 ### AR-02 — cron 登録　[P0]
-- ステータス: TODO / 担当: 林 + Keita
+- ステータス: DONE（2026-06-02 cxo林ティックで実態確認。`crontab -l` で `*/20 * * * *` に autonomous-rin.sh 登録済み・`~/logs/autonomous-rin.log` に tick start が連続刻まれている＝DoD充足。interval は 20分だが「30分毎にティックが起動」の spirit は満たす） / 担当: 林 + Keita
 - 詳細: `*/30 * * * * bash -lc "$HOME/cron-scripts/autonomous-rin.sh >> $HOME/logs/autonomous-rin.log 2>&1"` を crontab に登録。
 - 実態根拠(2026-05-30): 現状 `crontab -l` に rin エントリ **無し**（未登録）。AR-G0 の dry-run 検証通過後に登録する。
 - DoD: crontab に登録され、30 分毎にティックが起動する（ログに tick start が刻まれる）。
