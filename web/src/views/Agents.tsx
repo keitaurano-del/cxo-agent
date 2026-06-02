@@ -3,7 +3,8 @@
 // マージし、231 件の稼働インスタンスを人格保有エージェント中心の数件に畳んで表示する。
 // 各カードは稼働内訳（稼働/待機/完了/未稼働の件数）・最終活動・現在のタスクを出す。
 // カードクリックで最新インスタンスの会話タイムライン（/api/agents/:id/feed）をドロワー表示。
-import { useMemo, useState } from 'react';
+// MC-86: 各カードに「起動」ボタンを追加し、headless claude を spawn できるモーダルを提供。
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLiveResource } from '../lib/useLiveData';
 import { useLiveTick } from '../lib/liveContext';
@@ -13,7 +14,7 @@ import { relativeTime } from '../lib/time';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, StatusDot, Badge } from '../components/ui';
 import { AgentFeed } from '../components/AgentFeed';
-import { CloseIcon } from '../components/icons';
+import { CloseIcon, PlusIcon } from '../components/icons';
 
 const STATUS_FILTERS: { value: AgentStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'すべて' },
@@ -99,21 +100,32 @@ function buildCards(groups: AgentGroup[], roster: RosterEntry[]): DisplayCard[] 
   return cards;
 }
 
-function AgentCard({ card, onOpen }: { card: DisplayCard; onOpen: () => void }) {
+function AgentCard({
+  card,
+  onOpen,
+  onSpawn,
+}: {
+  card: DisplayCard;
+  onOpen: () => void;
+  onSpawn: () => void;
+}) {
   const meta = agentStatusMeta(card.status);
   const clickable = !!card.agentId;
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      disabled={!clickable}
-      className={`flex flex-col rounded-xl border border-border bg-surface p-4 text-left transition-colors ${
-        clickable ? 'hover:border-border-strong hover:bg-surface-2' : 'cursor-default opacity-80'
-      }`}
+    <div
+      className="flex flex-col rounded-xl border border-border bg-surface p-4 transition-colors"
       style={{ borderLeft: `3px solid ${meta.color}` }}
-      aria-label={`${card.persona || card.name}（${meta.label}）${clickable ? ' — 会話を表示' : ''}`}
     >
-      <div className="flex items-start justify-between gap-2">
+      {/* カードヘッダ（クリックで会話ドロワー） */}
+      <button
+        type="button"
+        onClick={onOpen}
+        disabled={!clickable}
+        className={`flex items-start justify-between gap-2 text-left ${
+          clickable ? 'cursor-pointer' : 'cursor-default opacity-80'
+        }`}
+        aria-label={`${card.persona || card.name}（${meta.label}）${clickable ? ' — 会話を表示' : ''}`}
+      >
         <div className="min-w-0">
           <div className="truncate text-sm font-bold text-text">{card.persona || card.name}</div>
           {card.persona && (
@@ -124,7 +136,7 @@ function AgentCard({ card, onOpen }: { card: DisplayCard; onOpen: () => void }) 
           )}
         </div>
         <StatusDot status={card.status} />
-      </div>
+      </button>
 
       {card.personality && (
         <p className="mt-2 line-clamp-2 text-[11px] leading-snug text-text-muted">
@@ -165,7 +177,20 @@ function AgentCard({ card, onOpen }: { card: DisplayCard; onOpen: () => void }) 
       <div className="mt-2 text-[11px] text-text-faint">
         最終活動: {relativeTime(card.lastActivity)}
       </div>
-    </button>
+
+      {/* 起動ボタン（MC-86） */}
+      <div className="mt-3 border-t border-border pt-3">
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onSpawn(); }}
+          className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs text-text-muted hover:bg-surface-2 hover:text-text transition-colors"
+          aria-label={`${card.persona || card.name} を起動する`}
+        >
+          <PlusIcon width={14} height={14} />
+          起動する
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -201,11 +226,303 @@ function Drawer({ agentId, name, onClose }: { agentId: string; name: string; onC
   );
 }
 
+// ─── SpawnModal（MC-86）──────────────────────────────────────────────
+// エージェントを headless claude で起動するモーダル。
+// タブ: 「自由入力」と「タスクID指定」。起動後に状態をポーリング（3秒間隔）。
+
+type SpawnTab = 'free' | 'task';
+
+interface SpawnResult {
+  id: string;
+  pid?: number;
+  status: 'running' | 'done' | 'failed';
+  message: string;
+}
+
+function SpawnModal({
+  agentName,
+  agentType,
+  onClose,
+}: {
+  agentName: string;
+  agentType: string;
+  onClose: () => void;
+}) {
+  const [tab, setTab] = useState<SpawnTab>('free');
+  const [freePrompt, setFreePrompt] = useState('');
+  const [taskId, setTaskId] = useState('');
+  const [taskExtra, setTaskExtra] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<SpawnResult | null>(null);
+  const [error, setError] = useState('');
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ポーリング停止クリーンアップ
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  // ポーリング: 3秒ごとに spawn/:id を叩く
+  function startPolling(spawnId: string) {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const resp = await fetch(`/api/agents/spawn/${spawnId}`);
+        if (!resp.ok) return;
+        const data = await resp.json() as {
+          ok: boolean;
+          status: 'running' | 'done' | 'failed';
+          pid?: number;
+        };
+        if (!data.ok) return;
+        setResult((prev) => prev ? { ...prev, status: data.status } : null);
+        if (data.status !== 'running') {
+          if (pollRef.current) clearInterval(pollRef.current);
+        }
+      } catch {
+        // ネットワークエラーは無視して継続
+      }
+    }, 3000);
+  }
+
+  async function handleSpawn() {
+    setError('');
+    setResult(null);
+    setLoading(true);
+
+    const body: Record<string, string> = { agentType };
+    if (tab === 'free') {
+      if (!freePrompt.trim()) {
+        setError('指示内容を入力してください。');
+        setLoading(false);
+        return;
+      }
+      body.prompt = freePrompt;
+    } else {
+      if (!taskId.trim()) {
+        setError('タスクIDを入力してください（例: MC-85）。');
+        setLoading(false);
+        return;
+      }
+      body.taskId = taskId.trim();
+      if (taskExtra.trim()) body.prompt = taskExtra;
+    }
+
+    try {
+      const resp = await fetch('/api/agents/spawn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json() as {
+        ok: boolean;
+        id?: string;
+        pid?: number;
+        error?: string;
+      };
+      if (!data.ok || !data.id) {
+        setError(data.error ?? '起動に失敗しました。');
+        setLoading(false);
+        return;
+      }
+      const r: SpawnResult = {
+        id: data.id,
+        pid: data.pid,
+        status: 'running',
+        message: `起動しました（PID: ${data.pid ?? '不明'}）`,
+      };
+      setResult(r);
+      startPolling(data.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '通信エラー');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const instruction = tab === 'free' ? freePrompt : (taskId + (taskExtra ? '\n' + taskExtra : ''));
+  const tooLong = instruction.length > 2000;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center md:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${agentName} を起動する`}
+    >
+      {/* 背景オーバーレイ */}
+      <div
+        className="absolute inset-0 bg-bg/70"
+        onClick={onClose}
+        aria-hidden
+      />
+      {/* モーダル本体 */}
+      <div
+        className="relative w-full max-w-lg rounded-t-2xl border border-border bg-surface p-5 pb-[calc(env(safe-area-inset-bottom)+20px)] shadow-xl md:rounded-2xl md:pb-5"
+        style={{ maxHeight: '90vh', overflowY: 'auto' }}
+      >
+        {/* ヘッダ */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="text-sm font-bold text-text">{agentName} を起動する</div>
+            <div className="text-[11px] text-text-faint">{agentType}</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-text-muted hover:bg-surface-2 hover:text-text"
+            aria-label="閉じる"
+          >
+            <CloseIcon />
+          </button>
+        </div>
+
+        {/* タブ切替 */}
+        {!result && (
+          <div className="mb-4 flex rounded-lg bg-surface-2 p-0.5 gap-0.5">
+            {(['free', 'task'] as SpawnTab[]).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => { setTab(t); setError(''); }}
+                className={`flex-1 rounded-md py-1.5 text-xs transition-colors ${
+                  tab === t
+                    ? 'bg-surface-3 font-semibold text-text'
+                    : 'text-text-muted hover:text-text'
+                }`}
+                aria-pressed={tab === t}
+              >
+                {t === 'free' ? '自由入力' : 'タスクID指定'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* フォーム（起動前） */}
+        {!result && (
+          <>
+            {tab === 'free' ? (
+              <div className="mb-4">
+                <label className="mb-1.5 block text-xs text-text-muted" htmlFor="spawn-free-prompt">
+                  指示内容（最大 2000 字）
+                </label>
+                <textarea
+                  id="spawn-free-prompt"
+                  value={freePrompt}
+                  onChange={(e) => setFreePrompt(e.target.value)}
+                  placeholder="指示内容を入力してください..."
+                  rows={5}
+                  maxLength={2100}
+                  className="w-full resize-y rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder-text-faint focus:border-accent focus:outline-none"
+                />
+                <div className={`mt-1 text-right text-[10px] ${tooLong ? 'text-stalled' : 'text-text-faint'}`}>
+                  {freePrompt.length} / 2000
+                </div>
+              </div>
+            ) : (
+              <div className="mb-4 space-y-3">
+                <div>
+                  <label className="mb-1.5 block text-xs text-text-muted" htmlFor="spawn-task-id">
+                    タスクID（例: MC-85, DF-F3）
+                  </label>
+                  <input
+                    id="spawn-task-id"
+                    type="text"
+                    value={taskId}
+                    onChange={(e) => setTaskId(e.target.value)}
+                    placeholder="MC-85"
+                    className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder-text-faint focus:border-accent focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs text-text-muted" htmlFor="spawn-task-extra">
+                    追加指示（任意）
+                  </label>
+                  <textarea
+                    id="spawn-task-extra"
+                    value={taskExtra}
+                    onChange={(e) => setTaskExtra(e.target.value)}
+                    placeholder="追加の指示があれば入力..."
+                    rows={3}
+                    className="w-full resize-y rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder-text-faint focus:border-accent focus:outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <p className="mb-3 rounded-lg bg-stalled/10 px-3 py-2 text-xs text-stalled">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={handleSpawn}
+              disabled={loading || tooLong}
+              className="w-full rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors"
+              style={{
+                background: 'var(--mc-accent)',
+                color: '#fff',
+                opacity: loading || tooLong ? 0.6 : 1,
+                cursor: loading || tooLong ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {loading ? '起動中...' : '起動する'}
+            </button>
+          </>
+        )}
+
+        {/* 起動後ステータス */}
+        {result && (
+          <div className="space-y-3">
+            <div
+              className="rounded-lg px-4 py-3 text-sm"
+              style={{
+                background:
+                  result.status === 'done'
+                    ? 'var(--mc-active-bg)'
+                    : result.status === 'failed'
+                    ? 'var(--mc-stalled-bg)'
+                    : 'var(--mc-surface-2)',
+                color:
+                  result.status === 'done'
+                    ? 'var(--mc-active)'
+                    : result.status === 'failed'
+                    ? 'var(--mc-stalled)'
+                    : 'var(--mc-text-muted)',
+              }}
+            >
+              {result.status === 'running' && '実行中...'}
+              {result.status === 'done' && '完了しました。'}
+              {result.status === 'failed' && '失敗しました。'}
+            </div>
+            <div className="text-[11px] text-text-faint space-y-0.5">
+              <div>{result.message}</div>
+              <div>ID: {result.id}</div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full rounded-lg border border-border px-4 py-2 text-sm text-text-muted hover:bg-surface-2 hover:text-text transition-colors"
+            >
+              閉じる
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Agents() {
   const tick = useLiveTick('agents');
   const navigate = useNavigate();
   const { agentId: routeAgentId } = useParams();
   const [filter, setFilter] = useState<AgentStatus | 'all'>('all');
+  const [spawnTarget, setSpawnTarget] = useState<{ name: string; type: string } | null>(null);
 
   const groupsRes = useLiveResource<{ groups: AgentGroup[] }>('/api/agents/grouped', tick);
   const rosterRes = useLiveResource<{ roster: RosterEntry[] }>('/api/roster', tick);
@@ -269,6 +586,7 @@ export default function Agents() {
                 key={card.key}
                 card={card}
                 onOpen={() => card.agentId && navigate(`/agents/${card.agentId}`)}
+                onSpawn={() => setSpawnTarget({ name: card.persona || card.name, type: card.name })}
               />
             ))}
           </div>
@@ -283,6 +601,15 @@ export default function Agents() {
           agentId={openCard.agentId}
           name={openCard.persona || openCard.name}
           onClose={() => navigate('/agents')}
+        />
+      )}
+
+      {/* MC-86: エージェント起動モーダル */}
+      {spawnTarget && (
+        <SpawnModal
+          agentName={spawnTarget.name}
+          agentType={spawnTarget.type}
+          onClose={() => setSpawnTarget(null)}
         />
       )}
     </div>

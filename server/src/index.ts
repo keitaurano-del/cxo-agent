@@ -36,6 +36,7 @@ import { terminalControlRouter } from './terminalControl.js';
 import { vaultWriteRouter } from './vaultWriteRouter.js';
 import { taskEditRouter } from './taskEditRouter.js';
 import { approvalRouter } from './approvalRouter.js';
+import { spawnRouter } from './spawnRouter.js';
 import { terminalHttpHandler, attachUpgrade } from './terminalProxy.js';
 import { startWatch } from './watch.js';
 
@@ -127,6 +128,14 @@ app.get('/api/agents', (_req, res) => {
 app.get('/api/agents/grouped', (_req, res) => {
   safeJson(res, () => ({ groups: collectAgentGroups() }));
 });
+
+// ─── エージェント spawn（MC-86）──────────────────────────────────
+// POST /api/agents/spawn  → headless claude --agent <type> を spawn
+// GET  /api/agents/spawn/:id → プロセス状態 + ログ末尾 100 行
+// GET  /api/agents/spawn → 全スポーン一覧
+// 認証ミドルウェア配下。agentType ホワイトリスト・同時2プロセス上限・30分タイムアウト。
+// /api/agents/spawn は :agentId パターンと衝突しないよう :agentId の前に登録する。
+app.use('/api/agents/spawn', spawnRouter());
 
 app.get('/api/agents/:agentId/feed', (req, res) => {
   safeJson(res, () => {
