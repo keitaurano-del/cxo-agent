@@ -1711,6 +1711,22 @@ ID 採番: **AR-0x**。
 | 更新日 | 2026-06-01（起票・即 DONE 化） |
 
 
+### MC-111 — Apollo / レスキュー画面の固定ドメイン化（Cloudflare Named Tunnel）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-111 |
+| タイトル | Cloudflare Named Tunnel で Apollo と Rescue 画面に固定 URL を割り当て |
+| 優先度 | P1 |
+| ステータス | TODO |
+| 担当 | Keita（Cloudflare ドメイン/設定）+ dev-logic（systemd 設定） |
+| 詳細 | 現状 quick tunnel（*.trycloudflare.com）のため再起動のたびに URL が変わる。Cloudflare Named Tunnel を使って Apollo(:4317) と Rescue(:4318) に固定 URL（例: apollo.yourdomain.com / rescue.yourdomain.com）を割り当てる。Keita が Cloudflare アカウントでドメインを管理している場合は Named Tunnel + DNS CNAME で実現可能。 |
+| 受け入れ条件（DoD） | (1) Apollo が固定 URL でアクセスできる。(2) Rescue 画面も固定 URL でアクセスできる。(3) サーバ再起動後も URL が変わらない。(4) cloudflared systemd サービスが自動起動する。 |
+| 次アクション | Keita が Cloudflare アカウントにドメインを持っているか確認 → Named Tunnel 作成（`cloudflared tunnel create apollo`）→ DNS 設定 → systemd 更新。 |
+| 更新日 | 2026-06-02 |
+
+---
+
 ### MC-110 — ターミナルのスクロールがいけてなさすぎる。
 
 | フィールド | 値 |
