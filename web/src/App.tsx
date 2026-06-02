@@ -198,7 +198,7 @@ export default function App() {
     <LiveContext.Provider value={{ ticks }}>
       <div className="flex h-screen overflow-hidden bg-bg text-text">
         <Sidebar connected={connected} badges={badges} open={sidebarOpen} onToggle={toggleSidebar} />
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-hidden">
           <Routes>
             {/* ダッシュボード（/）配下に 5 タブを入れ子。各子ビューの URL は従来どおり。 */}
             <Route element={<DashboardLayout />}>
@@ -213,7 +213,7 @@ export default function App() {
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/approvals" element={<Approvals />} />
             <Route path="/vault" element={<Vault />} />
-            <Route path="/terminal-view" element={<Terminal />} />
+            <Route path="/terminal-view" element={<div className="flex h-full flex-col overflow-hidden"><Terminal /></div>} />
             <Route path="/terminal-standalone" element={<Terminal />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
