@@ -24,6 +24,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ImageFileIcon, CloseIcon, TerminalIcon, PlusIcon } from '../components/icons';
 import { Spinner } from '../components/ui';
 
+// ─── モバイル仮想キーバー用 API helper ───────────────────────
+async function postSendKeys(keys: string): Promise<void> {
+  try {
+    await fetch('/api/terminal/send-keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys }),
+    });
+  } catch {
+    // 送信失敗はサイレント（ユーザーに見える形ではなく、ttyd 画面側で確認できる）
+  }
+}
+
 const ACCEPTED_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const MAX_IMAGES = 5;
 const MAX_BYTES = 10 * 1024 * 1024; // 10MB / 枚
@@ -74,6 +87,18 @@ interface TerminalStatusResponse {
 export default function Terminal() {
   const [state, setState] = useState<UploadState>({ kind: 'idle' });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ── モバイル仮想キーバー（スマホ専用）──────────────────────
+  const [keyInput, setKeyInput] = useState('');
+
+  const sendKey = useCallback((key: string) => {
+    void postSendKeys(key);
+  }, []);
+
+  const sendText = useCallback((text: string) => {
+    if (text.length === 0) return;
+    void postSendKeys(text);
+  }, []);
 
   // ── 画像ステージング（MC-102）────────────────────────────
   // 選択/貼付した画像をここに貯め、サムネ表示する。送信は「林に送る」で一括。
@@ -434,7 +459,7 @@ export default function Terminal() {
         )}
       </div>
 
-      <div className="relative flex-1 overflow-hidden bg-bg">
+      <div className="relative flex-1 overflow-clip bg-bg">
         {backend.kind === 'ready' ? (
           <iframe
             key={iframeKey}
@@ -443,6 +468,7 @@ export default function Terminal() {
             className="h-full w-full border-0"
             // ttyd は同一オリジン。スクリプト・WebSocket・クリップボードを許可する。
             allow="clipboard-read; clipboard-write"
+            style={{ touchAction: 'pan-y pinch-zoom' }}
           />
         ) : (
           // バックエンド（tmux main / ttyd）が切断・未起動・確認中のときの状態パネル（MC-100）。
@@ -491,6 +517,66 @@ export default function Terminal() {
           </div>
         )}
       </div>
+
+      {/* モバイル専用 仮想キーバー（md 以上では非表示）。backend が ready のときのみ表示。 */}
+      {backend.kind === 'ready' && (
+        <div className="flex items-center gap-1.5 border-t border-border bg-surface px-2 py-2 md:hidden">
+          {/* 矢印・特殊キー */}
+          <button
+            type="button"
+            onClick={() => sendKey('Up')}
+            className="rounded border border-border bg-surface-2 px-2.5 py-1.5 text-sm text-text hover:bg-surface-3 active:bg-surface-3"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            onClick={() => sendKey('Down')}
+            className="rounded border border-border bg-surface-2 px-2.5 py-1.5 text-sm text-text hover:bg-surface-3 active:bg-surface-3"
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            onClick={() => sendKey('Enter')}
+            className="rounded border border-border bg-surface-2 px-2.5 py-1.5 font-mono text-sm text-text hover:bg-surface-3 active:bg-surface-3"
+          >
+            ↵
+          </button>
+          <button
+            type="button"
+            onClick={() => sendKey('Escape')}
+            className="rounded border border-border bg-surface-2 px-2 py-1.5 text-xs text-text hover:bg-surface-3 active:bg-surface-3"
+          >
+            Esc
+          </button>
+
+          {/* テキスト入力 + 送信 */}
+          <input
+            type="text"
+            value={keyInput}
+            onChange={(e) => setKeyInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                sendText(keyInput);
+                setKeyInput('');
+              }
+            }}
+            placeholder="テキスト入力..."
+            className="min-w-0 flex-1 rounded border border-border bg-surface-2 px-2 py-1.5 text-xs text-text placeholder:text-text-faint focus:outline-none focus:ring-1 focus:ring-active/40"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              sendText(keyInput);
+              setKeyInput('');
+            }}
+            className="shrink-0 rounded border border-border bg-surface-2 px-2.5 py-1.5 text-xs text-text hover:bg-surface-3 active:bg-surface-3"
+          >
+            送信
+          </button>
+        </div>
+      )}
     </div>
   );
 }

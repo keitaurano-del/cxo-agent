@@ -264,13 +264,61 @@ async function handleOutput(req: Request, res: Response): Promise<void> {
   }
 }
 
+// ─── send-keys（MC-スマホターミナル）────────────────────────
+//
+// POST /api/terminal/send-keys
+// body: { keys: 'Up' | 'Down' | 'Left' | 'Right' | 'Enter' | 'Escape' | 'Tab' | 'Space' | <任意テキスト> }
+//
+// スマホの仮想キーバーからターミナルへキー/テキストを送る。
+// tmux send-keys はすべて execFile（argv 直渡し）でシェルインジェクション不可。
+// 特殊キーは tmux のキー名としてそのまま渡し、任意テキストは '' でラップして 1 引数にする。
+// 400 文字以上は拒否する（悪意ある長文コマンド注入対策）。
+
+const TMUX_SPECIAL_KEYS = new Set([
+  'Up', 'Down', 'Left', 'Right',
+  'Enter', 'Escape', 'Tab', 'Space',
+  'BSpace', 'DC', // Backspace / Delete
+]);
+
+async function handleSendKeys(req: Request, res: Response): Promise<void> {
+  const { keys } = req.body as { keys?: unknown };
+
+  // バリデーション
+  if (typeof keys !== 'string' || keys.length === 0 || keys.length > 400) {
+    res.status(400).json({ ok: false, error: 'keys must be a non-empty string (max 400 chars)' });
+    return;
+  }
+
+  try {
+    // 特殊キーは tmux のキー名として渡す（"-l" リテラル修飾子なし）。
+    // 任意テキストは "-l" フラグ付きでリテラル送信し、tmux がキー名として解釈しないようにする。
+    const args = TMUX_SPECIAL_KEYS.has(keys)
+      ? ['send-keys', '-t', TERMINAL_TMUX_TARGET, keys]
+      : ['send-keys', '-t', TERMINAL_TMUX_TARGET, '-l', keys];
+
+    const r = await run('tmux', args, tmuxEnv());
+    if (r.code !== 0) {
+      const msg = `tmux send-keys failed (code ${r.code}): ${r.stderr.trim() || r.stdout.trim()}`;
+      console.error('[terminal-control] send-keys:', msg);
+      res.status(500).json({ ok: false, error: msg });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('[terminal-control] send-keys exception:', message);
+    res.status(500).json({ ok: false, error: message });
+  }
+}
+
 // ─── Router 組み立て ─────────────────────────────────────────
 
-/** /api/terminal 配下の status / start / output ルータ。index.ts で auth ミドルウェア配下に mount する。 */
+/** /api/terminal 配下の status / start / output / send-keys ルータ。index.ts で auth ミドルウェア配下に mount する。 */
 export function terminalControlRouter(): Router {
   const router = Router();
   router.get('/status', (req, res) => void handleStatus(req, res));
   router.post('/start', (req, res) => void handleStart(req, res));
   router.get('/output', (req, res) => void handleOutput(req, res));
+  router.post('/send-keys', (req, res) => void handleSendKeys(req, res));
   return router;
 }
