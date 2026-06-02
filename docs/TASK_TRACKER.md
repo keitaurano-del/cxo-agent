@@ -1250,7 +1250,7 @@ ID 採番: **AR-0x**。
 | ID | MC-87 |
 | タイトル | IN_PROGRESS のまま停滞しているタスクの洗い出しと再開 |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | DONE（2026-06-02 cxo ティック（林）。DoD(1)(2)(3) 充足確認: (1) `apollo-task-stall-check.sh` 実行 exit 0＝cxo を含む全 TASK_TRACKER で IN_PROGRESS 停滞ゼロ (2) 前回ティックで cxo 台帳 status 不整合を是正（MC-85/86 は BLOCKED→DONE、現状 IN_PROGRESS タスクなし） (3) apollo-keeper.sh（cron 15,45）が apollo-task-stall-check.sh を呼ぶ stall 検知導線が稼働中。[[feedback-review-agent-verify-then-done]] でエージェント検証 DONE 化） |
 | 担当 | task-manager（停滞タスクの洗い出し・棚卸し）→ 各実装エージェント（再開） |
 | 詳細 | 【Apollo投入】 止まってる進行中のタスク再開して。全 TASK_TRACKER（logic / cxo-agent / en-chakai / 西丸町）を走査し、IN_PROGRESS のまま長期停滞しているタスクを洗い出して再開する。apollo番人の停滞検知（apollo-task-stall-check.sh、`TASK_STALL_DAYS=3`）と連動させ、3日以上更新の無い IN_PROGRESS を検出→担当へ再アサイン or 状態整理（実は DONE/REVIEW/BLOCKED だったものは正しい状態へ修正）する運用にする。 |
 | 受け入れ条件（DoD） | (1) 全 TASK_TRACKER の IN_PROGRESS タスクを棚卸しし、停滞（3日以上 mtime 更新なし等）を一覧化。(2) 各停滞タスクを「再開（担当アサイン→着手）」「状態修正（実態は DONE/REVIEW/BLOCKED）」のいずれかに振り分け、台帳を実態に整合させる。(3) 以後 apollo番人の stall 検知（TASK_STALL_DAYS=3）がティック毎に停滞を拾い task-manager に提言する導線が機能する。 |
