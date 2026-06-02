@@ -625,7 +625,7 @@ ID 採番: **AR-0x**。
 | ID | タイトル | 優先度 | ステータス | 担当 | 依存 |
 |----|---------|--------|-----------|------|------|
 | AR-01 | autonomous-rin.sh（ティック駆動スクリプト・ガードレール） | P0 | DONE | 林 + Keita | なし |
-| AR-02 | cron 登録（*/30 で常時駆動） | P0 | TODO | 林 + Keita | AR-01 |
+| AR-02 | cron 登録（*/30 で常時駆動） | P0 | DONE（2026-06-02 apollo番人リコンサイル。crontab 実確認: `*/10 * * * * autonomous-rin.sh` 登録・稼働済み。AR-G0 note の「本番 cron `*/10` でアーム稼働・green tick 連続完走」と一致＝DoD 充足。） | 林 + Keita | AR-01 |
 | AR-G0 | dry-run 検証（DRY_RUN=1 で選定→1歩・push/deploy 無し） | P0 | DONE（2026-06-01 cxo林ティック検証完結。実体 autonomous-worker.sh を実読し DoD4点を物理実装で裏取り: ①選定→SELECTED_TASK_ID 出力(L158-168) ②1ティック1タスク(L168/174) ③DRY_RUN/NO_PUSH 時 `git push`/`gh` を no-op shim 化(L113-131)＝指示違反でも物理的に push/deploy 不可 ④kill-switch `~/.autonomous-rin.disabled` ＋ `~/.autonomous-<scope>.disabled` をティック開始時判定で即 skip(L72-81)。加えて汎用ループは既に本番 cron `*/10` でアーム稼働(DRY_RUN=0)し green tick を連続完走〔例 18:17 T-Q検証 commit 5618eb1／AF-07 deploy run26730917519 success〕＝dry-run ゲートの目的は本番実績で超過達成。ネスト実行は対話/他セッション競合・スコープ外編集の危険ゆえ走らせず実読＋本番ログで裏取り） | 林 | AR-01 |
 
 ### AR-01 — autonomous-rin.sh　[P0]
