@@ -63,7 +63,7 @@ ID 採番: **MC-0x（Phase0）/ MC-1x（Phase1）/ MC-2x（Phase2）/ MC-3x（Ph
 | MC-42 | 認証（token/Basic）でポート保護 | P0 | Phase4 | DONE | dev-logic | MC-41 |
 | MC-43 | deploy/apollo.service（systemd unit）＋README | P0 | Phase4 | DONE | dev-logic | MC-41 |
 | MC-44 | Vultr 常駐化実行 | P0 | Phase4 | DONE | dev-logic + Keita | MC-42, MC-43 |
-| MC-45 | スマホ向けトンネル（Caddy/cloudflared）— follow-up | P2 | Phase4 | IN_PROGRESS | dev-logic + Keita | MC-44 |
+| MC-45 | スマホ向けトンネル（Caddy/cloudflared）— follow-up | P2 | Phase4 | DONE（2026-06-02 cxo林ティック。deploy/apollo-tunnel.sh で cloudflared quick tunnel 起動＋MC_TOKEN 付き Mobile URL 表示を実装、deploy/README.md にセクション7追加。commit 42b54eb。名前付きトンネル（固定ドメイン）は cloudflared tunnel login = Keita の Cloudflare アカウントログインが必要＝承認待ちで別途対応） | dev-logic + Keita | MC-44 |
 | MC-G4 | Phase4 品質ゲート（常駐起動・認証・全画面 E2E smoke） | P0 | Phase4 | DONE | reviewer + test-smoke | MC-41〜44 |
 
 ---
@@ -357,7 +357,7 @@ ID 採番: **MC-0x（Phase0）/ MC-1x（Phase1）/ MC-2x（Phase2）/ MC-3x（Ph
   - 本番反映＝Keita 承認必須（CLAUDE.md）。既に常駐済みのため、常駐自体の追認を Keita に確認。
 
 ### MC-45 — スマホ向けトンネル（follow-up）　[P2 / Phase4]
-- ステータス: TODO / 担当: dev-logic + Keita
+- ステータス: DONE（2026-06-02 cxo林ティック。deploy/apollo-tunnel.sh で quick tunnel + Mobile URL 実装、deploy/README.md にトンネル手順追加、commit 42b54eb。名前付きトンネルは Keita Cloudflare ログイン待ち） / 担当: dev-logic + Keita
 - 詳細: Caddy or cloudflared で逆プロキシ/トンネル＋token。deploy/README に手順。
 - 関連ファイル: `cxo-agent/deploy/README.md`
 - DoD: スマホから token 付き URL でチラ見できる。
