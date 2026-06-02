@@ -290,6 +290,18 @@ async function handleSendKeys(req: Request, res: Response): Promise<void> {
   }
 
   try {
+    // scroll-up / scroll-down: tmux copy-mode でスクロール（履歴表示用）
+    if (keys === 'scroll-up' || keys === 'scroll-down') {
+      const direction = keys === 'scroll-up' ? 'scroll-up' : 'scroll-down';
+      // copy-mode に入ってスクロール、3行分
+      await run('tmux', ['copy-mode', '-t', TERMINAL_TMUX_TARGET], tmuxEnv());
+      for (let i = 0; i < 3; i++) {
+        await run('tmux', ['send-keys', '-t', TERMINAL_TMUX_TARGET, '-X', direction], tmuxEnv());
+      }
+      res.json({ ok: true });
+      return;
+    }
+
     // 特殊キーは tmux のキー名として渡す（"-l" リテラル修飾子なし）。
     // 任意テキストは "-l" フラグ付きでリテラル送信し、tmux がキー名として解釈しないようにする。
     const args = TMUX_SPECIAL_KEYS.has(keys)

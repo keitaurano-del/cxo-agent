@@ -461,15 +461,44 @@ export default function Terminal() {
 
       <div className="relative flex-1 overflow-hidden bg-bg" style={{ overscrollBehavior: 'none' }}>
         {backend.kind === 'ready' ? (
-          <iframe
-            key={iframeKey}
-            src="/terminal/"
-            title="Apollo ターミナル"
-            className="h-full w-full border-0"
-            // ttyd は同一オリジン。スクリプト・WebSocket・クリップボードを許可する。
-            allow="clipboard-read; clipboard-write"
-            style={{ touchAction: 'pan-y pinch-zoom', overscrollBehavior: 'none' }}
-          />
+          <>
+            <iframe
+              key={iframeKey}
+              src="/terminal/"
+              title="Apollo ターミナル"
+              className="h-full w-full border-0"
+              allow="clipboard-read; clipboard-write"
+              style={{ overscrollBehavior: 'none' }}
+            />
+            {/* モバイル専用: 右端スクロールバー（履歴スクロール用） */}
+            <div
+              className="absolute right-0 top-0 flex h-full w-8 flex-col md:hidden"
+              style={{ background: 'rgba(0,0,0,0.25)' }}
+            >
+              <button
+                type="button"
+                aria-label="上にスクロール"
+                onPointerDown={(e) => { e.preventDefault(); void postSendKeys('scroll-up'); }}
+                className="flex flex-1 items-start justify-center pt-2 text-white/60 active:text-white"
+                style={{ touchAction: 'none' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                  <path d="M4 10l4-4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              <button
+                type="button"
+                aria-label="下にスクロール"
+                onPointerDown={(e) => { e.preventDefault(); void postSendKeys('scroll-down'); }}
+                className="flex flex-1 items-end justify-center pb-2 text-white/60 active:text-white"
+                style={{ touchAction: 'none' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                  <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </div>
+          </>
         ) : (
           // バックエンド（tmux main / ttyd）が切断・未起動・確認中のときの状態パネル（MC-100）。
           <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
