@@ -459,7 +459,7 @@ export default function Terminal() {
         )}
       </div>
 
-      <div className="relative flex-1 overflow-hidden bg-bg" style={{ overscrollBehavior: 'none', touchAction: 'none' }}>
+      <div className="relative flex-1 overflow-hidden bg-bg" style={{ overscrollBehavior: 'none' }}>
         {backend.kind === 'ready' ? (
           <iframe
             key={iframeKey}
