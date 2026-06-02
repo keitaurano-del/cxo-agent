@@ -316,7 +316,7 @@ export default function Terminal() {
             <span className="text-[11px] text-text-faint">{staged.length} / {MAX_IMAGES}</span>
           )}
           <a
-            href="/terminal/"
+            href="/terminal-standalone"
             target="_blank"
             rel="noopener noreferrer"
             className="ml-auto rounded border border-border px-2 py-1 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text"

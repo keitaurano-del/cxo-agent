@@ -185,6 +185,15 @@ export default function App() {
     });
   };
 
+  // /terminal-standalone はサイドバー・ナビなしでターミナルのみ表示
+  if (pathname === '/terminal-standalone') {
+    return (
+      <div className="flex h-screen overflow-hidden bg-bg text-text">
+        <Terminal />
+      </div>
+    );
+  }
+
   return (
     <LiveContext.Provider value={{ ticks }}>
       <div className="flex h-screen overflow-hidden bg-bg text-text">
@@ -205,6 +214,7 @@ export default function App() {
             <Route path="/approvals" element={<Approvals />} />
             <Route path="/vault" element={<Vault />} />
             <Route path="/terminal-view" element={<Terminal />} />
+            <Route path="/terminal-standalone" element={<Terminal />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
