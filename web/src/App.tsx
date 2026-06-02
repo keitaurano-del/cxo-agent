@@ -198,7 +198,7 @@ export default function App() {
     <LiveContext.Provider value={{ ticks }}>
       <div className="flex h-screen overflow-hidden bg-bg text-text">
         <Sidebar connected={connected} badges={badges} open={sidebarOpen} onToggle={toggleSidebar} />
-        <main className="flex-1 overflow-y-auto pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
+        <main className="flex-1 overflow-y-auto">
           <Routes>
             {/* ダッシュボード（/）配下に 5 タブを入れ子。各子ビューの URL は従来どおり。 */}
             <Route element={<DashboardLayout />}>
