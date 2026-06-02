@@ -1213,7 +1213,7 @@ ID 採番: **AR-0x**。
 | ID | MC-85 |
 | タイトル | 複数の開発独立エージェントが並行で自律稼働する仕組み（autonomous-rin 群への拡張・dev-logic 以外の開発エージェント増設） |
 | 優先度 | P0 |
-| ステータス | IN_PROGRESS（設計フェーズ着手。Keita 2026-06-01 決定：複数エージェント並行を本格設計。現状2スコープ(logic autonomous-rin */10 / cxo autonomous-cxo */15)を土台に拡張。まず設計案ドキュメント作成→Keita レビュー→実装の段階を踏む（いきなり実装しない）。BLOCKED→IN_PROGRESS。以下は経緯: 2026-05-31 Keita設計確定: プロジェクト別に複数自律ループ。logic専用/cxo(Apollo)専用/en-chakai専用を独立cronで並行、各自のTASK_TRACKERのみ見てファイル重複をプロジェクト単位で分離→二重push回避。cron時刻ずらし+flock+同時実行上限で529制御。汎用autonomous-rinは残す。林設計→dev-logic実装） |
+| ステータス | DONE（2026-06-02 完了。Keita決定: cxo スコープのみ追加（logic は*/10 維持）。autonomous-cxo.sh は既に */15 cron 登録済みで kill-switch を解除し有効化。logic+cxo の2ループ並行稼働中。en-chakai は追加しない方針確定） |
 | 担当 | 林（設計） + dev-logic（cron スクリプト/エージェント定義） |
 | 詳細 | Keita「開発エージェントは基本的に動き続けるようにしてほしい。自律して判断して動き続けるようにしてほしい。あと必要であれば dev-logic 以外にも開発の独立エージェントを増やして」。現状 autonomous-rin（headless 林、10分毎 cron、1ティック1タスク）が唯一の自律ループ。これを「複数の開発独立エージェントが並行で自律稼働」に拡張する。dev-logic 的な実装エージェントを複数立て（例: dev-logic-2 や領域別）、各々が独立 cron ループでタスクボードから拾って進める。並行時の二重 push/競合回避（プロジェクト/ファイル分担、flock）。林が設計。 |
 | 関連 | [[project-autonomous-rin]]（既存ループ）, [[project-agent-roster-20260531]]（開発9体）, `/home/dev/cron-scripts/autonomous-rin.sh`, `next-task-id.sh`, 各 docs/TASK_TRACKER.md, [[reference-subagent-slow-not-dead]] |
@@ -1231,7 +1231,7 @@ ID 採番: **AR-0x**。
 | ID | MC-86 |
 | タイトル | Apollo からアイドルなエージェントを選んで指令を出し起動する機能 |
 | 優先度 | P0 |
-| ステータス | IN_PROGRESS（設計フェーズ着手。Keita 2026-06-01 決定：サーバ直接 spawn 方式を採用（inbox 経由でなく Apollo サーバが claude --print --agent を起動）。セキュリティ境界・リソース管理・同時実行上限の設計が前提。MC-85 とセットで設計案を作る。BLOCKED→IN_PROGRESS。※2026-05-31 時点の暫定案「inbox 経由起動」は Keita 6/01 決定で「サーバ直接 spawn」に上書き＝起動方式が確定したため設計フェーズへ前進。） |
+| ステータス | DONE（2026-06-02 完了。commit `ab7cedf`。サーバ直接 spawn 方式。/api/agents/spawn POST+GET実装（9体ホワイトリスト・2000字制限・同時2プロセス上限・30分タイムアウト・spawn-logs保存）。Apollo Agents 画面に「起動する」ボタン+SpawnModal（自由入力/タスクID指定の2タブ・ポーリング状態表示）。tsc 0/build OK/healthz 200。push済み・Apollo restart済み） |
 | 担当 | 林（設計） + dev-logic |
 | 詳細 | Keita「稼働していないエージェントを動かして指令を出す、という機能がほしい」。Apollo から、今アイドルなエージェント（roster/agents）を選んで指令（プロンプト/タスク）を出し起動する。Apollo UI に「エージェント選択→指令入力→headless 起動」の導線。技術的には headless claude（`--print --agent <type>`）をサーバから起動、もしくは inbox 経由で autonomous 系に渡す。任意プロンプト実行のセキュリティとプロセス管理に注意。 |
 | 関連 | [[project-apollo-dashboard]]（roster/agents/inbox）, `/api/roster`・`/api/inbox`, [[project-autonomous-rin]], MC-85（自律エージェント群・起動機構が重なる）, headless `claude --print --agent` |
