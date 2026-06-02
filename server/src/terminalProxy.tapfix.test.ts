@@ -118,7 +118,11 @@ function makeTerm(mouseActive: boolean): {
 
 // TAP_FIX_BODY を window.term 付きのスコープで eval してインストールする。
 function install(term: Record<string, unknown>): void {
-  const win = { term } as Record<string, unknown>;
+  const win: Record<string, unknown> = {
+    term,
+    // PostMessage リスナが window.addEventListener('message', ...) を呼ぶので no-op を渡す。
+    addEventListener: () => {},
+  };
   // setInterval は install() 即成功時には呼ばれない（戻り値 true）。保険で no-op を渡す。
   const fn = new Function('window', 'setInterval', 'clearInterval', TAP_FIX_BODY);
   fn(
@@ -262,7 +266,29 @@ check('二重インストールしない（__apolloTapFix ガード）', () => {
   assert.equal(after, before, '2 回目はリスナを重複登録しない');
 });
 
-const total = 9;
+// ── 6) PostMessage scroll ─────────────────────────────────────────────────
+check('PostMessage apollo-scroll up (mouse mode): sendWheel up が呼ばれる', () => {
+  const { term, mouse } = makeTerm(true);
+  let msgHandler: ((e: { data: unknown }) => void) | null = null;
+  const win: Record<string, unknown> = {
+    term,
+    addEventListener: (_type: string, fn: (e: { data: unknown }) => void) => {
+      if (_type === 'message') msgHandler = fn;
+    },
+  };
+  const fn = new Function('window', 'setInterval', 'clearInterval', TAP_FIX_BODY);
+  fn(win, () => 0, () => undefined);
+
+  assert.ok(msgHandler !== null, 'message listener が登録された');
+  (msgHandler as (e: { data: unknown }) => void)({ data: { type: 'apollo-scroll', direction: 'up', steps: 3 } });
+  assert.ok(mouse.events.length >= 1, 'wheel イベントが撃たれる');
+  assert.ok(
+    mouse.events.every((m) => m.button === 4 && m.action === 0),
+    'up → wheel up (button:4, action:0)',
+  );
+});
+
+const total = 10;
 console.log(`\nterminalProxy TAP_FIX: ${total - failures}/${total} passed`);
 if (failures > 0) {
   process.exit(1);

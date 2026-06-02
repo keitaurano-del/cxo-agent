@@ -324,6 +324,19 @@ export const TAP_FIX_BODY = `(function(){
         if(typeof e.preventDefault==='function'){e.preventDefault();}
       }
     },{passive:false});
+    // PostMessage-based scroll from Apollo parent (Terminal.tsx) — avoids copy-mode entirely.
+    // The parent sends {type:'apollo-scroll', direction:'up'|'down', steps:N} via postMessage.
+    window.addEventListener('message',function(evt){
+      if(!evt.data||evt.data.type!=='apollo-scroll'){return;}
+      var up=(evt.data.direction==='up');
+      var steps=(typeof evt.data.steps==='number'&&evt.data.steps>0)?Math.min(evt.data.steps,20):3;
+      var cell={col:0,row:0};
+      if(mouseActive()){
+        sendWheel(cell,up,steps);
+      } else {
+        try{if(typeof t.scrollLines==='function'){t.scrollLines(up?-steps:steps);}}catch(_e){}
+      }
+    });
     return true;
   }
   if(!install()){

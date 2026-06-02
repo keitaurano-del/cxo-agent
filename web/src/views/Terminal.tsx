@@ -91,6 +91,55 @@ export default function Terminal() {
   // ── モバイル仮想キーバー（スマホ専用）──────────────────────
   const [keyInput, setKeyInput] = useState('');
 
+  // ── iframe ref（PostMessage スクロール用）──────────────────
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  const postScrollMessage = useCallback((direction: 'up' | 'down', steps = 3) => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) return;
+    iframe.contentWindow.postMessage({ type: 'apollo-scroll', direction, steps }, '*');
+  }, []);
+
+  // ── ↑↓ キーの長押しスクロール（copy-mode 不使用・連続反応）─────────
+  const scrollPressTimerRef = useRef<number | null>(null);
+  const scrollPressIntervalRef = useRef<number | null>(null);
+  const scrollPressActiveRef = useRef(false);
+
+  const handleArrowPointerDown = useCallback((direction: 'up' | 'down') => {
+    scrollPressActiveRef.current = false;
+    scrollPressTimerRef.current = window.setTimeout(() => {
+      scrollPressActiveRef.current = true;
+      postScrollMessage(direction);
+      scrollPressIntervalRef.current = window.setInterval(() => {
+        postScrollMessage(direction);
+      }, 150);
+    }, 200);
+  }, [postScrollMessage]);
+
+  const handleArrowPointerUp = useCallback((direction: 'up' | 'down') => {
+    if (scrollPressTimerRef.current !== null) {
+      clearTimeout(scrollPressTimerRef.current);
+      scrollPressTimerRef.current = null;
+    }
+    if (scrollPressIntervalRef.current !== null) {
+      clearInterval(scrollPressIntervalRef.current);
+      scrollPressIntervalRef.current = null;
+    }
+    if (!scrollPressActiveRef.current) {
+      // Short tap — send arrow key
+      void postSendKeys(direction === 'up' ? 'Up' : 'Down');
+    }
+    scrollPressActiveRef.current = false;
+  }, []);
+
+  // unmount 時にタイマー・インターバルを確実にクリアする。
+  useEffect(() => {
+    return () => {
+      if (scrollPressTimerRef.current !== null) clearTimeout(scrollPressTimerRef.current);
+      if (scrollPressIntervalRef.current !== null) clearInterval(scrollPressIntervalRef.current);
+    };
+  }, []);
+
   const sendKey = useCallback((key: string) => {
     void postSendKeys(key);
   }, []);
@@ -464,40 +513,13 @@ export default function Terminal() {
           <>
             <iframe
               key={iframeKey}
+              ref={iframeRef}
               src="/terminal/"
               title="Apollo ターミナル"
               className="h-full w-full border-0"
               allow="clipboard-read; clipboard-write"
               style={{ overscrollBehavior: 'none' }}
             />
-            {/* モバイル専用: 右端スクロールバー（履歴スクロール用） */}
-            <div
-              className="absolute right-0 top-0 flex h-full w-8 flex-col md:hidden"
-              style={{ background: 'rgba(0,0,0,0.25)' }}
-            >
-              <button
-                type="button"
-                aria-label="上にスクロール"
-                onPointerDown={(e) => { e.preventDefault(); void postSendKeys('scroll-up'); }}
-                className="flex flex-1 items-start justify-center pt-2 text-white/60 active:text-white"
-                style={{ touchAction: 'none' }}
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-                  <path d="M4 10l4-4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-              <button
-                type="button"
-                aria-label="下にスクロール"
-                onPointerDown={(e) => { e.preventDefault(); void postSendKeys('scroll-down'); }}
-                className="flex flex-1 items-end justify-center pb-2 text-white/60 active:text-white"
-                style={{ touchAction: 'none' }}
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-                  <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            </div>
           </>
         ) : (
           // バックエンド（tmux main / ttyd）が切断・未起動・確認中のときの状態パネル（MC-100）。
@@ -550,17 +572,25 @@ export default function Terminal() {
       {/* モバイル専用 仮想キーバー（md 以上では非表示）。backend が ready のときのみ表示。 */}
       {backend.kind === 'ready' && (
         <div className="flex items-center gap-1.5 border-t border-border bg-surface px-2 py-2 md:hidden">
-          {/* 矢印・特殊キー */}
+          {/* 矢印・特殊キー（短タップ: 矢印キー送信、長押し: scroll via PostMessage） */}
           <button
             type="button"
-            onClick={() => sendKey('Up')}
+            onPointerDown={() => handleArrowPointerDown('up')}
+            onPointerUp={() => handleArrowPointerUp('up')}
+            onPointerLeave={() => handleArrowPointerUp('up')}
+            onPointerCancel={() => handleArrowPointerUp('up')}
+            style={{ touchAction: 'none' }}
             className="rounded border border-border bg-surface-2 px-2.5 py-1.5 text-sm text-text hover:bg-surface-3 active:bg-surface-3"
           >
             ↑
           </button>
           <button
             type="button"
-            onClick={() => sendKey('Down')}
+            onPointerDown={() => handleArrowPointerDown('down')}
+            onPointerUp={() => handleArrowPointerUp('down')}
+            onPointerLeave={() => handleArrowPointerUp('down')}
+            onPointerCancel={() => handleArrowPointerUp('down')}
+            style={{ touchAction: 'none' }}
             className="rounded border border-border bg-surface-2 px-2.5 py-1.5 text-sm text-text hover:bg-surface-3 active:bg-surface-3"
           >
             ↓
