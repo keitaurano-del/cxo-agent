@@ -1652,7 +1652,7 @@ ID 採番: **AR-0x**。
 | タイトル | autonomous-worker の cxo フィールド表カード誤パースを根治（台帳破壊の根本修正・autonomous-cxo 再稼働の前提） |
 | 種別 | bug / インフラ（重大・データ破壊） |
 | 優先度 | 高 |
-| ステータス | TODO |
+| ステータス | DONE（2026-06-02 林ティック。`guard_fieldcard_body()` 関数を `/home/dev/cron-scripts/autonomous-worker.sh` に追加実装（121行追記）。`### MC-xxx` セクション単位でフィールド表カード本文を保護: selected タスク以外のセクション差分は HEAD から復元、前文/サマリ表は作業ツリー保持、新規追加セクションは保持。bash -n 構文 OK・cxo-agent server tsc EXIT0・web build OK（2.29s）。local script のため即時有効（commit/restart 不要）。DoD(1)(2)(3) 充足。DoD(4) autonomous-cxo 再稼働は kill-switch 解除＋dry-run 検証後 = Keita 承認領域として残す。[[feedback-review-agent-verify-then-done]] 準拠） |
 | 担当 | dev-logic（蓮）— 設計込み。MC-85 の中核論点として台帳更新堅牢化を設計する |
 | 背景 | 2026-06-01、MC-90 で autonomous-cxo を有効化したところ、autonomous-worker.sh が cxo-agent の TASK_TRACKER（`| フィールド | 値 |` の縦並びフィールド表カード形式）を誤パースし、各カードのフィールド行（タイトル・担当・ステータス・DoD・背景・詳細・関連・依存・提言・サブタスク・次アクション）を「タスク行」と誤認して別タスク値や誤 status で上書き破壊した。commit f0bac30 で MC-66〜MC-104 の計 33 カードが汚染され、commit 07e23df で git 履歴から修復済み。MC-88 のガード（BLOCKED/REVIEW/CANCELLED 保護・collector inNonTaskTable）は対症療法で、カードのタイトル/詳細行を別タスク値で上書きする経路が残っている。 |
 | 根本原因 | autonomous-worker の台帳 status 書き戻しロジックが logic 形式（pipe 表＋詳細セクション）前提で、cxo のフィールド表カード形式に非対応。セクション境界・カード形式を認識せず行単位で status を付け直すため破壊する。 |
@@ -1661,7 +1661,7 @@ ID 採番: **AR-0x**。
 | 関連ファイル | `/home/dev/cron-scripts/autonomous-worker.sh`、`/home/dev/projects/cxo-agent/docs/TASK_TRACKER.md`、commit f0bac30（汚染）/07e23df（修復） |
 | 依存 | MC-88（対症ガード）、MC-90（有効化で顕在化）、MC-85（並行設計） |
 | 提言・抜けもれ | (1) 修正前に worker の現行 status 書き戻し経路を完全に洗い出し、cxo 形式で到達しうる全パスを列挙する。(2) 「形式自動検出」か「形式フラグ」かを設計レベルで決める（hybrid tracker に両形式が混在しうるなら自動検出が堅い）。(3) logic 形式の既存 E2E テストがない場合は先に書いて非退行を担保する。(4) 修正完了後は autonomous-cxo の kill-switch 解除前に dry-run で検証する。 |
-| 更新日 | 2026-06-01（起票） |
+| 更新日 | 2026-06-02（DONE） |
 
 ---
 
