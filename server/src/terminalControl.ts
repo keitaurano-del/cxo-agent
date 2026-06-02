@@ -302,6 +302,14 @@ async function handleSendKeys(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    // exit-copy-mode: スクロール終了後に copy-mode を抜いて通常入力に戻す。
+    // copy-mode でない場合は cancel が失敗するが、常に ok を返す（入力を塞がない）。
+    if (keys === 'exit-copy-mode') {
+      await run('tmux', ['send-keys', '-t', TERMINAL_TMUX_TARGET, '-X', 'cancel'], tmuxEnv());
+      res.json({ ok: true });
+      return;
+    }
+
     // 特殊キーは tmux のキー名として渡す（"-l" リテラル修飾子なし）。
     // 任意テキストは "-l" フラグ付きでリテラル送信し、tmux がキー名として解釈しないようにする。
     const args = TMUX_SPECIAL_KEYS.has(keys)

@@ -91,30 +91,28 @@ export default function Terminal() {
   // ── モバイル仮想キーバー（スマホ専用）──────────────────────
   const [keyInput, setKeyInput] = useState('');
 
-  // ── iframe ref（PostMessage スクロール用）──────────────────
+  // ── iframe ref（iframe 要素への参照用）──────────────────────
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
-  const postScrollMessage = useCallback((direction: 'up' | 'down', steps = 3) => {
-    const iframe = iframeRef.current;
-    if (!iframe?.contentWindow) return;
-    iframe.contentWindow.postMessage({ type: 'apollo-scroll', direction, steps }, '*');
-  }, []);
-
-  // ── ↑↓ キーの長押しスクロール（copy-mode 不使用・連続反応）─────────
+  // ── ↑↓ キーの長押し連続入力（短タップ: 矢印キー1回、長押し: 矢印キー連続送信）──
   const scrollPressTimerRef = useRef<number | null>(null);
   const scrollPressIntervalRef = useRef<number | null>(null);
   const scrollPressActiveRef = useRef(false);
 
   const handleArrowPointerDown = useCallback((direction: 'up' | 'down') => {
     scrollPressActiveRef.current = false;
+    // 長押し検出: 150ms 後に連続送信モードに入る（初回遅延を 200ms→150ms に短縮）。
+    // 連続送信は postScrollMessage（postMessage→scrollLines）ではなく postSendKeys で行う。
+    // TUI（alternate screen）では scrollLines が効かないため、矢印キーを API 経由で連続送信する
+    // 方式に変更（Bug 3 修正）。
     scrollPressTimerRef.current = window.setTimeout(() => {
       scrollPressActiveRef.current = true;
-      postScrollMessage(direction);
+      void postSendKeys(direction === 'up' ? 'Up' : 'Down');
       scrollPressIntervalRef.current = window.setInterval(() => {
-        postScrollMessage(direction);
+        void postSendKeys(direction === 'up' ? 'Up' : 'Down');
       }, 150);
-    }, 200);
-  }, [postScrollMessage]);
+    }, 150);
+  }, []);
 
   const handleArrowPointerUp = useCallback((direction: 'up' | 'down') => {
     if (scrollPressTimerRef.current !== null) {
@@ -343,8 +341,16 @@ export default function Terminal() {
   // クリップボード貼付（Ctrl+V / ⌘+V）。Apollo SPA 側（同一オリジン・secure context）で
   // paste を拾い、clipboardData.items から画像 Blob を取り出して送る。iframe 内の ttyd には
   // 流さず、この親ドキュメントで受ける。window レベルで購読し、どこにフォーカスがあっても拾う。
+  // ただし、テキスト入力フィールド（仮想キーバーの input）にフォーカスがある場合は介入しない。
+  // モバイルで仮想キーバーから文字をペーストしようとしたとき e.preventDefault() が走ると
+  // テキスト入力が妨害されて「入力できない」状態になるため（Bug 1 修正）。
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
+      // 仮想キーバーの input[type=text] にフォーカスが当たっている場合はスキップ。
+      // input/textarea 要素へのペーストはブラウザのネイティブ動作に委ねる。
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return;
+
       const items = e.clipboardData?.items;
       if (!items) return;
       const files: File[] = [];
@@ -569,50 +575,20 @@ export default function Terminal() {
         )}
       </div>
 
-      {/* モバイル専用 仮想キーバー（md 以上では非表示）。backend が ready のときのみ表示。 */}
+      {/* モバイル専用 仮想キーバー（md 以上では非表示）。backend が ready のときのみ表示。
+          レイアウト: [テキスト入力 flex-1] [↑] [↓] [↵] [Esc] [送信]
+          入力フィールドを左（親指で届きやすい中央寄り）、↑↓ を入力の右隣、Esc・送信を右端に配置。
+          矢印を左端から右寄りに移動することで片手操作時の操作性を改善（Bug 2 修正）。 */}
       {backend.kind === 'ready' && (
         <div className="flex items-center gap-1.5 border-t border-border bg-surface px-2 py-2 md:hidden">
-          {/* 矢印・特殊キー（短タップ: 矢印キー送信、長押し: scroll via PostMessage） */}
-          <button
-            type="button"
-            onPointerDown={() => handleArrowPointerDown('up')}
-            onPointerUp={() => handleArrowPointerUp('up')}
-            onPointerLeave={() => handleArrowPointerUp('up')}
-            onPointerCancel={() => handleArrowPointerUp('up')}
-            style={{ touchAction: 'none' }}
-            className="rounded border border-border bg-surface-2 px-2.5 py-1.5 text-sm text-text hover:bg-surface-3 active:bg-surface-3"
-          >
-            ↑
-          </button>
-          <button
-            type="button"
-            onPointerDown={() => handleArrowPointerDown('down')}
-            onPointerUp={() => handleArrowPointerUp('down')}
-            onPointerLeave={() => handleArrowPointerUp('down')}
-            onPointerCancel={() => handleArrowPointerUp('down')}
-            style={{ touchAction: 'none' }}
-            className="rounded border border-border bg-surface-2 px-2.5 py-1.5 text-sm text-text hover:bg-surface-3 active:bg-surface-3"
-          >
-            ↓
-          </button>
-          <button
-            type="button"
-            onClick={() => sendKey('Enter')}
-            className="rounded border border-border bg-surface-2 px-2.5 py-1.5 font-mono text-sm text-text hover:bg-surface-3 active:bg-surface-3"
-          >
-            ↵
-          </button>
-          <button
-            type="button"
-            onClick={() => sendKey('Escape')}
-            className="rounded border border-border bg-surface-2 px-2 py-1.5 text-xs text-text hover:bg-surface-3 active:bg-surface-3"
-          >
-            Esc
-          </button>
-
-          {/* テキスト入力 + 送信 */}
+          {/* テキスト入力（flex-1 で残りスペースを占有）*/}
           <input
             type="text"
+            inputMode="text"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
             value={keyInput}
             onChange={(e) => setKeyInput(e.target.value)}
             onKeyDown={(e) => {
@@ -624,6 +600,44 @@ export default function Terminal() {
             placeholder="テキスト入力..."
             className="min-w-0 flex-1 rounded border border-border bg-surface-2 px-2 py-1.5 text-xs text-text placeholder:text-text-faint focus:outline-none focus:ring-1 focus:ring-active/40"
           />
+
+          {/* 矢印・特殊キー（短タップ: 矢印キー送信、長押し ≥150ms: 矢印キーを連続送信） */}
+          <button
+            type="button"
+            onPointerDown={() => handleArrowPointerDown('up')}
+            onPointerUp={() => handleArrowPointerUp('up')}
+            onPointerLeave={() => handleArrowPointerUp('up')}
+            onPointerCancel={() => handleArrowPointerUp('up')}
+            style={{ touchAction: 'none' }}
+            className="shrink-0 rounded border border-border bg-surface-2 px-2.5 py-1.5 text-sm text-text hover:bg-surface-3 active:bg-surface-3"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            onPointerDown={() => handleArrowPointerDown('down')}
+            onPointerUp={() => handleArrowPointerUp('down')}
+            onPointerLeave={() => handleArrowPointerUp('down')}
+            onPointerCancel={() => handleArrowPointerUp('down')}
+            style={{ touchAction: 'none' }}
+            className="shrink-0 rounded border border-border bg-surface-2 px-2.5 py-1.5 text-sm text-text hover:bg-surface-3 active:bg-surface-3"
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            onClick={() => sendKey('Enter')}
+            className="shrink-0 rounded border border-border bg-surface-2 px-2.5 py-1.5 font-mono text-sm text-text hover:bg-surface-3 active:bg-surface-3"
+          >
+            ↵
+          </button>
+          <button
+            type="button"
+            onClick={() => sendKey('Escape')}
+            className="shrink-0 rounded border border-border bg-surface-2 px-2 py-1.5 text-xs text-text hover:bg-surface-3 active:bg-surface-3"
+          >
+            Esc
+          </button>
           <button
             type="button"
             onClick={() => {
