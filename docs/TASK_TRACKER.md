@@ -716,6 +716,40 @@ ID 採番: **AR-0x**。
 | MC-103 | ターミナル画像添付の「送る前のプレビュー」を確実に個別削除できるようにする（MC-102 の削除 UX 修正） | 中〜高 | bug / UX 修正 | DONE（2026-06-01 dev-logic 実機検証グリーンで IN_PROGRESS→DONE。原因=削除ボタンが 20px(h-5 w-5)・サムネ角に埋もれ・当たり判定が SVG path のみでモバイルタップで外れていた（実装はあったが押せない／dist 反映漏れ・ハンドラバグ・z-index は実機切り分けでシロ）。修正=Terminal.tsx の削除ボタンを 28px(h-7 w-7)・-right-2 -top-2 z-10 で角に持ち出し・border/bg/shadow で常時高コントラスト（ホバー非依存）・touch-action:manipulation・SVG を pointer-events-none でヒットをボタン本体に集約・onClick/onPointerDown で preventDefault+stopPropagation（iframe へ伝播させない）・removeStaged＋revokeObjectURL 維持。smoke test4 を実座標クリック＋>=24px 検証に強化（回帰防止）。検証=web build green（index-CDy1vmXI.js）・server/web tsc 0・restart 後 healthz 200・live bundle 更新確認・Playwright 実機で PC クリック＋モバイル390px タップ両方で 3→2→1→0 個別削除＋全消し・「林に送る」枚数追従・MC-102 upload smoke 7/7・MC-100 start smoke 5/5 非退行・認証 401・本番 main 非破壊。commit 6118a7a。[[feedback-review-agent-verify-then-done]]） | dev-logic（実機確認→修正） | MC-102、MC-95 |
 | MC-99 | inbox 即タスク化が SMOKE テストパターン（`__SMOKE_...__`）を起票対象から除外する | 中 | chore / 堅牢化 | DONE（2026-06-01 検証グリーンで TODO→DONE。server/src/inbox.ts:144 付近 isSmokeText()＝/__SMOKE_[^_]*(?:_[^_]+)*__/ でプレフィックス付きも検出、handlePost で SMOKE は appendTask スキップ＋appendConsumed に「SMOKE skip」記録。tsc green・単体 isSmokeText 3/3/autoConsume 4/4/priority 16/16・restart 後 healthz 200・live で SMOKE 投入→taskId 無し/pending 0/幽霊 0・通常タスクは起票＋自動消し込み正常・cron healthcheck の SMOKE 2件も実トラフィックで skip 確認。commit c6614ce。[[feedback-review-agent-verify-then-done]]） | dev-logic（蓮）。台帳更新は task-manager（棚町） | MC-77（inbox 即タスク化機構） |
 | MC-104 | Apollo ターミナルで claude TUI の選択肢がモバイルのタップで選べない不具合の修正 | 高 | bug / UX | DONE（2026-06-01 dev-logic 実機検証グリーンで DONE 化。原因: ttyd 1.7.4 同梱 xterm.js が mouse reporting 有効時、PC マウスは coreMouseService.triggerMouseEvent で SGR 化して送るが touch には mouse report を張っていない〔bindMouse は mousedown/up/wheel のみ〕。修正: terminalProxy.ts:89-159 に TAP_FIX_SCRIPT 追加、.xterm-screen の touchstart/move/end を拾い mouse mode 有効時のみタップ座標を col/row 換算→triggerMouseEvent で press/release、スワイプ>10px/長押し>700ms は除外、mode 無効時非介入。commit 484d908。検証: tsc exit 0・restart 後 healthz 200・注入確認・Playwright モバイル〔390px/hasTouch〕で別名 ttyd:7682 へタップ→PTY に SGR press/release 着弾座標一致・PC 非退行・mode 無効時 0 件・MC-93/94/100/102/103 非退行、本番 tmux main 不触） | dev-logic | MC-92/93/94（ターミナル系・script 注入）、ttyd 1.7.4 |
+| MC-112 | Apollo ターミナルを定期的に新セッションへ自動切替（前セッションを引き継いだ上でリフレッシュ） | 高 | feature / 安定性 | TODO（2026-06-03 Keita 依頼。設計検討中） | dev-logic + 林（設計）+ apollo番人（運用） | tmux main / 常駐林 / autonomous-rin |
+| MC-113 | Apollo ターミナルの仮想キーバー改善（矢印が1つずつ効かない/小さい/常時表示が邪魔→キーボードアイコンでトグル/右端の履歴矢印2つ削除） | 高 | bug / UX | DONE（2026-06-03 dev-logic 実機検証グリーンで TODO→DONE。①矢印=初回送信を pointerDown に移し短タップで Up/Down を必ず1回送信、長押し閾値 150→450ms・リピート間隔 180ms に分離、pointerId 対応付けで pointerLeave 誤キャンセル防止。サーバ send-keys は 'Up'/'Down' を tmux named key で1回送出（terminalControl.ts:317-319 健全）＝TUI/copy-mode で1行ずつ移動。②全ボタン h-11 min-w-11（44x44px 確保）。③既定非表示・ターミナル右下の KeyboardIcon トグルで開閉・localStorage 'apollo.terminal.keybarOpen' で永続。④履歴スクロール矢印[⇡][⇣]削除。検証=web tsc -b 0・build green（index-udgsO0k4.js）・Playwright 390px/hasTouch で 9/9 PASS〔既定非表示/トグル存在/トグル表示/↑↓短タップ各1回/↑44x44/⇡⇣無し/既存↵Esc送信入力非退行/長押しリピート〕＋localStorage 永続 reload 復元 PASS。dist 更新で実機反映（restart 不要）。commit 後 push 保留。[[feedback-review-agent-verify-then-done]]） | dev-logic | Terminal.tsx・MC-104（モバイルタップ系） |
+
+---
+
+### MC-112 — Apollo ターミナルの定期自動セッション切替（引き継ぎ付きリフレッシュ）　[高 / feature・安定性]
+- ステータス: TODO（2026-06-03 Keita 依頼。タイミングは林に一任）
+- 詳細: Keita 依頼「定期的に自動でこのターミナルを新しいセッションにしてほしい。ずっとそのままだと動かなくなっちゃうから。前のセッションを引き継いだ上で新しいセッションに自動で切り替える仕組みをいれて。タイミングはまかせる」。Apollo のターミナルビュー（ttyd→tmux `main` で常駐対話林 `claude`）は長時間同一セッションのままだとコンテキスト肥大・応答劣化・ハングで「動かなくなる」。一定間隔で (1) 現セッションの状態を引き継ぎ（要約/handoff）、(2) 新しい claude セッションに自動で切り替える、を入れる。
+- 設計の論点（着手前に確定する）: (a) 引き継ぎ方法 — `claude --continue`/`--resume` で直近セッションを継続するか、handoff 要約を生成して新セッションの初期プロンプトに流すか、Claude Code の /compact 相当で圧縮継続するか。(b) 切替トリガ — 時間間隔（例 N時間毎）か、アイドル検知（一定時間 Keita 入力なし）か、コンテキスト量しきい値か。Keita「タイミングはまかせる」なのでアイドル時を狙って無停止で入れ替えるのが安全（作業中の強制切替を避ける）。(c) 実装場所 — tmux main の pane で実行している claude を、ラッパースクリプト（既存 `dev:~/.bashrc` の `cd ~/projects && claude` 自動起動、[[project-vultr-second-server]]）側で「終了→handoff 引き継ぎ→再起動」ループにするのが筋。session-cleanup.sh が tmux main 配下の常駐林を保護している点（同 memory）との整合に注意＝この自動切替は cleanup とは別系統で main pane 自身が自己リフレッシュする形にする。(d) Keita が作業中に切れない安全装置（直近入力からのアイドル猶予、kill-switch）。
+- DoD: ターミナルが定期的に新セッションへ自動で切り替わり、切替後も前の文脈を引き継いでいる。Keita 操作中に勝手に切れない。ハングしても次サイクルで自動復帰する。手動の kill-switch あり。
+- 関連: tmux `main`、`dev:~/.bashrc`（claude 自動起動）、`dev:~/cron-scripts/session-cleanup.sh`（保護ルールとの整合）、Apollo ターミナル proxy（`server/src/.../terminalProxy.ts`）、[[project-vultr-second-server]]、[[project-autonomous-rin]]
+- 依存: なし（インフラ系・Apollo 番人と協調）
+- note: 2026-06-03 Keita 依頼（terminal-uploads と同タイミングの実機セッション）。林が設計を詰めてから dev-logic / apollo番人で実装・運用。
+
+---
+
+### MC-113 — Apollo ターミナル仮想キーバーの改善　[高 / bug・UX]
+- ステータス: DONE（2026-06-03 実機検証グリーンで TODO→DONE）/ 担当: dev-logic
+- 詳細: Keita 実機FB「仮想キーボードの矢印効かない。ちゃんと1つずつ動いていかない。たと小さくてタップしにくい。常時あると邪魔だからキーボードマーク出してタップしたら出てくるようにしてほしい。あと右2つの小さい矢印はいらないよね」。対象は `web/src/views/Terminal.tsx` のモバイル専用仮想キーバー（現状レイアウト: [テキスト入力][↑][↓][↵][Esc][送信][⇡][⇣]、line 615-700）。
+- 直す4点:
+  1. **矢印が1つずつ効かない**: ↑↓ は `handleArrowPointerDown/Up` で長押し(≥150ms)連続送信＝オートリピート方式（Terminal.tsx:123-131,636-658）。閾値150msが短く、通常タップが連射化 or 単発が不発で「1つずつ動かない」。短タップ＝確実に矢印1回だけ送る挙動に直す（長押しリピート閾値を上げる/単発送信を確実化。tmux copy-mode や claude TUI の選択移動で1行ずつ動くこと）。
+  2. **ボタンが小さくてタップしにくい**: px-2.5 py-1.5 text-sm。モバイルのタップターゲットを十分大きく（最低44px相当）。
+  3. **常時表示が邪魔→トグル化**: 仮想キーバーを既定で隠し、キーボードアイコンのボタンをタップすると出てくる方式にする（ttyd ターミナル領域を広く使える）。トグル状態は保持されると親切。
+  4. **右端の履歴矢印2つ[⇡][⇣]削除**: scroll-up/scroll-down（履歴スクロール、line 684-699）は不要。削除する。
+- DoD: ①矢印短タップで1ステップずつ確実に移動 ②キーは指でタップしやすいサイズ ③既定で非表示、キーボードアイコンでトグル表示 ④[⇡][⇣]削除。実機モバイル(390px)で検証。PC操作・既存の入力/送信/Esc/Enter は非退行。tsc/build green・restart後 healthz 200。
+- 関連: `web/src/views/Terminal.tsx`（仮想キーバー 611-700、矢印ハンドラ 123-131）、MC-104（モバイルタップ系の修正）、MC-95/100/102/103（ターミナル系）
+- 依存: なし
+- note: 2026-06-03 Keita 実機FB。Apollo web 変更なので `cd web && npm run build` で dist 更新（server restart 不要）。[[project-apollo-dashboard]]。
+- 解決（2026-06-03 dev-logic）: `web/src/views/Terminal.tsx` と `web/src/components/icons.tsx`（KeyboardIcon 追加）を修正。
+  - ①矢印1回送信: 初回送信を pointerDown に移動（短タップで Up/Down を必ず1回送る）。長押し閾値 150→450ms、リピート間隔 180ms に上げて分離。pointerId を ref で対応付け、pointerLeave 取りこぼしによる誤キャンセル/二重発火を防止。サーバ `server/src/terminalControl.ts:317-319` は 'Up'/'Down' を TMUX_SPECIAL_KEYS として named key で1回 send-keys する健全な実装（＝1 POST = 矢印1回 = TUI/copy-mode で1行移動）なので server 変更不要、フロントのみ修正。
+  - ②サイズ: 全キーを `h-11 min-w-11`（44x44px）に。入力も `h-11`。
+  - ③トグル: 既定非表示。ターミナル右下隅に KeyboardIcon の常設トグルボタン（md:hidden）、localStorage `apollo.terminal.keybarOpen` で開閉状態を永続。
+  - ④[⇡][⇣] 削除（postSendKeys('scroll-up'/'scroll-down') ボタン2つ）。
+  - 検証: web `tsc -b` 0、`npm run build` green（index-udgsO0k4.js）。Playwright 390px/hasTouch で 9 アサーション全 PASS（既定非表示・トグル存在・トグルで表示・↑↓短タップ各1回送信・↑ボタン 44x44・⇡⇣ 不在・既存 ↵/Esc/送信/入力 非退行・長押しオートリピート発火）＋ localStorage 永続（reload で開状態復元）PASS。dist 更新で実機反映。commit 後 push は林の判断で保留。
 
 ---
 

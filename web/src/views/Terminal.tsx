@@ -21,7 +21,7 @@
 //   objectURL は unmount／削除／送信成功時に revoke してメモリリークを防ぐ。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ImageFileIcon, CloseIcon, TerminalIcon, PlusIcon } from '../components/icons';
+import { ImageFileIcon, CloseIcon, TerminalIcon, PlusIcon, KeyboardIcon } from '../components/icons';
 import { Spinner } from '../components/ui';
 
 // ─── モバイル仮想キーバー用 API helper ───────────────────────
@@ -117,52 +117,85 @@ export default function Terminal() {
   // ── モバイル仮想キーバー（スマホ専用）──────────────────────
   const [keyInput, setKeyInput] = useState('');
 
+  // 仮想キーバーの表示トグル（MC-113）。既定は非表示で、キーボードアイコンのボタンで開閉する。
+  // 状態は localStorage に保持して、再訪時に前回の開閉状態を復元する。
+  const KEYBAR_STORAGE_KEY = 'apollo.terminal.keybarOpen';
+  const [keybarOpen, setKeybarOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(KEYBAR_STORAGE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleKeybar = useCallback(() => {
+    setKeybarOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(KEYBAR_STORAGE_KEY, next ? '1' : '0');
+      } catch {
+        // localStorage 不可（プライベートモード等）でもトグル自体は機能させる。
+      }
+      return next;
+    });
+  }, []);
+
   // ── iframe ref（iframe 要素への参照用）──────────────────────
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
-  // ── ↑↓ キーの長押し連続入力（短タップ: 矢印キー1回、長押し: 矢印キー連続送信）──
-  const scrollPressTimerRef = useRef<number | null>(null);
-  const scrollPressIntervalRef = useRef<number | null>(null);
-  const scrollPressActiveRef = useRef(false);
+  // ── ↑↓ キーの送信ロジック（MC-113 修正）─────────────────────────
+  // 方針: pointerDown 時点で矢印キーを「必ず1回」送る（＝短タップは確実に1ステップ移動）。
+  // その後、指を 450ms 以上押し続けたときだけオートリピートに入り、180ms 間隔で追加送信する。
+  // 旧実装は「150ms タイマー発火で初回送信」だったため、(a) 閾値が短くて通常タップが連射化、
+  // (b) pointerUp/pointerLeave のタイミングで単発が不発になり「1つずつ動かない」事象が出ていた。
+  // 初回送信を pointerDown に移し、リピートは閾値後の interval のみが担う形に分離して解消する。
+  const REPEAT_DELAY_MS = 450; // この時間以上押し続けたらオートリピート開始
+  const REPEAT_INTERVAL_MS = 180; // オートリピートの送信間隔
+  const arrowRepeatTimerRef = useRef<number | null>(null);
+  const arrowRepeatIntervalRef = useRef<number | null>(null);
+  // 同一ポインタの down→up を対応付け、pointerLeave の取りこぼしで二重発火しないようにする。
+  const arrowPointerIdRef = useRef<number | null>(null);
 
-  const handleArrowPointerDown = useCallback((direction: 'up' | 'down') => {
-    scrollPressActiveRef.current = false;
-    // 長押し検出: 150ms 後に連続送信モードに入る（初回遅延を 200ms→150ms に短縮）。
-    // 連続送信は postScrollMessage（postMessage→scrollLines）ではなく postSendKeys で行う。
-    // TUI（alternate screen）では scrollLines が効かないため、矢印キーを API 経由で連続送信する
-    // 方式に変更（Bug 3 修正）。
-    scrollPressTimerRef.current = window.setTimeout(() => {
-      scrollPressActiveRef.current = true;
-      void postSendKeys(direction === 'up' ? 'Up' : 'Down');
-      scrollPressIntervalRef.current = window.setInterval(() => {
-        void postSendKeys(direction === 'up' ? 'Up' : 'Down');
-      }, 150);
-    }, 150);
+  const stopArrowRepeat = useCallback(() => {
+    if (arrowRepeatTimerRef.current !== null) {
+      clearTimeout(arrowRepeatTimerRef.current);
+      arrowRepeatTimerRef.current = null;
+    }
+    if (arrowRepeatIntervalRef.current !== null) {
+      clearInterval(arrowRepeatIntervalRef.current);
+      arrowRepeatIntervalRef.current = null;
+    }
+    arrowPointerIdRef.current = null;
   }, []);
 
-  const handleArrowPointerUp = useCallback((direction: 'up' | 'down') => {
-    if (scrollPressTimerRef.current !== null) {
-      clearTimeout(scrollPressTimerRef.current);
-      scrollPressTimerRef.current = null;
-    }
-    if (scrollPressIntervalRef.current !== null) {
-      clearInterval(scrollPressIntervalRef.current);
-      scrollPressIntervalRef.current = null;
-    }
-    if (!scrollPressActiveRef.current) {
-      // Short tap — send arrow key
-      void postSendKeys(direction === 'up' ? 'Up' : 'Down');
-    }
-    scrollPressActiveRef.current = false;
-  }, []);
+  const handleArrowPointerDown = useCallback(
+    (direction: 'up' | 'down', pointerId: number) => {
+      // 既存の押下が残っていれば必ずクリア（取りこぼし対策）。
+      stopArrowRepeat();
+      arrowPointerIdRef.current = pointerId;
+      const key = direction === 'up' ? 'Up' : 'Down';
+      // 短タップでも確実に1回だけ送る。
+      void postSendKeys(key);
+      // 長押し: 閾値経過後にオートリピート開始。
+      arrowRepeatTimerRef.current = window.setTimeout(() => {
+        arrowRepeatIntervalRef.current = window.setInterval(() => {
+          void postSendKeys(key);
+        }, REPEAT_INTERVAL_MS);
+      }, REPEAT_DELAY_MS);
+    },
+    [stopArrowRepeat],
+  );
+
+  const handleArrowPointerUp = useCallback(
+    (pointerId: number) => {
+      // 別ポインタの up/leave では止めない（誤キャンセル防止）。
+      if (arrowPointerIdRef.current !== null && arrowPointerIdRef.current !== pointerId) return;
+      stopArrowRepeat();
+    },
+    [stopArrowRepeat],
+  );
 
   // unmount 時にタイマー・インターバルを確実にクリアする。
-  useEffect(() => {
-    return () => {
-      if (scrollPressTimerRef.current !== null) clearTimeout(scrollPressTimerRef.current);
-      if (scrollPressIntervalRef.current !== null) clearInterval(scrollPressIntervalRef.current);
-    };
-  }, []);
+  useEffect(() => stopArrowRepeat, [stopArrowRepeat]);
 
   const sendKey = useCallback((key: string) => {
     void postSendKeys(key);
@@ -559,6 +592,24 @@ export default function Terminal() {
               allow="clipboard-read; clipboard-write"
               style={{ overscrollBehavior: 'none' }}
             />
+            {/* キーバー開閉トグル（モバイル専用 / md 以上では非表示）。
+                右下の隅に常設し、タップで仮想キーバーを出し入れする（MC-113）。
+                邪魔にならないよう半透明＋小さめだが、ヒット領域は 44x44 を確保。 */}
+            <button
+              type="button"
+              onClick={toggleKeybar}
+              aria-label={keybarOpen ? 'キーバーを閉じる' : 'キーバーを開く'}
+              aria-pressed={keybarOpen}
+              title={keybarOpen ? 'キーバーを閉じる' : 'キーバーを開く'}
+              style={{ touchAction: 'manipulation' }}
+              className={`absolute bottom-3 right-3 z-10 flex h-11 w-11 items-center justify-center rounded-full border shadow-md md:hidden ${
+                keybarOpen
+                  ? 'border-active/50 bg-active-bg text-active'
+                  : 'border-border bg-surface/90 text-text-muted backdrop-blur hover:text-text'
+              }`}
+            >
+              <KeyboardIcon width={20} height={20} />
+            </button>
           </>
         ) : (
           // バックエンド（tmux main / ttyd）が切断・未起動・確認中のときの状態パネル（MC-100）。
@@ -608,11 +659,15 @@ export default function Terminal() {
         )}
       </div>
 
-      {/* モバイル専用 仮想キーバー（md 以上では非表示）。backend が ready のときのみ表示。
+      {/* モバイル専用 仮想キーバー（md 以上では常時非表示）。
+          MC-113: 既定は非表示で、ターミナル右下のキーボードアイコンで開閉する（keybarOpen）。
+          backend が ready のときだけ出す。
           レイアウト: [テキスト入力 flex-1] [↑] [↓] [↵] [Esc] [送信]
-          入力フィールドを左（親指で届きやすい中央寄り）、↑↓ を入力の右隣、Esc・送信を右端に配置。
-          矢印を左端から右寄りに移動することで片手操作時の操作性を改善（Bug 2 修正）。 */}
-      <div className="flex items-center gap-1.5 border-t border-border bg-surface px-2 py-2">
+          タップターゲットは最低 44x44px（min-h-11 min-w-11）を確保してタップしやすくした。
+          矢印は短タップで確実に1回送信、長押し（≥450ms）でオートリピート。
+          右端の履歴スクロール矢印（⇡⇣）は MC-113 で削除。 */}
+      {keybarOpen && backend.kind === 'ready' && (
+        <div className="flex items-center gap-1.5 border-t border-border bg-surface px-2 py-2 md:hidden">
           {/* テキスト入力（flex-1 で残りスペースを占有）*/}
           <input
             type="text"
@@ -630,43 +685,47 @@ export default function Terminal() {
               }
             }}
             placeholder="テキスト入力..."
-            className="min-w-0 flex-1 rounded border border-border bg-surface-2 px-2 py-1.5 text-xs text-text placeholder:text-text-faint focus:outline-none focus:ring-1 focus:ring-active/40"
+            className="h-11 min-w-0 flex-1 rounded border border-border bg-surface-2 px-2.5 text-sm text-text placeholder:text-text-faint focus:outline-none focus:ring-1 focus:ring-active/40"
           />
 
-          {/* 矢印・特殊キー（短タップ: 矢印キー送信、長押し ≥150ms: 矢印キーを連続送信） */}
+          {/* 矢印キー（短タップ: 1回送信、長押し ≥450ms: オートリピート） */}
           <button
             type="button"
-            onPointerDown={() => handleArrowPointerDown('up')}
-            onPointerUp={() => handleArrowPointerUp('up')}
-            onPointerLeave={() => handleArrowPointerUp('up')}
-            onPointerCancel={() => handleArrowPointerUp('up')}
+            onPointerDown={(e) => handleArrowPointerDown('up', e.pointerId)}
+            onPointerUp={(e) => handleArrowPointerUp(e.pointerId)}
+            onPointerLeave={(e) => handleArrowPointerUp(e.pointerId)}
+            onPointerCancel={(e) => handleArrowPointerUp(e.pointerId)}
+            aria-label="上"
             style={{ touchAction: 'none' }}
-            className="shrink-0 rounded border border-border bg-surface-2 px-2.5 py-1.5 text-sm text-text hover:bg-surface-3 active:bg-surface-3"
+            className="flex h-11 min-w-11 shrink-0 items-center justify-center rounded border border-border bg-surface-2 px-2 text-base text-text active:bg-surface-3"
           >
             ↑
           </button>
           <button
             type="button"
-            onPointerDown={() => handleArrowPointerDown('down')}
-            onPointerUp={() => handleArrowPointerUp('down')}
-            onPointerLeave={() => handleArrowPointerUp('down')}
-            onPointerCancel={() => handleArrowPointerUp('down')}
+            onPointerDown={(e) => handleArrowPointerDown('down', e.pointerId)}
+            onPointerUp={(e) => handleArrowPointerUp(e.pointerId)}
+            onPointerLeave={(e) => handleArrowPointerUp(e.pointerId)}
+            onPointerCancel={(e) => handleArrowPointerUp(e.pointerId)}
+            aria-label="下"
             style={{ touchAction: 'none' }}
-            className="shrink-0 rounded border border-border bg-surface-2 px-2.5 py-1.5 text-sm text-text hover:bg-surface-3 active:bg-surface-3"
+            className="flex h-11 min-w-11 shrink-0 items-center justify-center rounded border border-border bg-surface-2 px-2 text-base text-text active:bg-surface-3"
           >
             ↓
           </button>
           <button
             type="button"
             onClick={() => sendKey('Enter')}
-            className="shrink-0 rounded border border-border bg-surface-2 px-2.5 py-1.5 font-mono text-sm text-text hover:bg-surface-3 active:bg-surface-3"
+            aria-label="Enter"
+            className="flex h-11 min-w-11 shrink-0 items-center justify-center rounded border border-border bg-surface-2 px-2 font-mono text-base text-text active:bg-surface-3"
           >
             ↵
           </button>
           <button
             type="button"
             onClick={() => sendKey('Escape')}
-            className="shrink-0 rounded border border-border bg-surface-2 px-2 py-1.5 text-xs text-text hover:bg-surface-3 active:bg-surface-3"
+            aria-label="Escape"
+            className="flex h-11 min-w-11 shrink-0 items-center justify-center rounded border border-border bg-surface-2 px-2 text-xs text-text active:bg-surface-3"
           >
             Esc
           </button>
@@ -676,28 +735,12 @@ export default function Terminal() {
               sendText(keyInput);
               setKeyInput('');
             }}
-            className="shrink-0 rounded border border-border bg-surface-2 px-2.5 py-1.5 text-xs text-text hover:bg-surface-3 active:bg-surface-3"
+            className="flex h-11 min-w-11 shrink-0 items-center justify-center rounded border border-border bg-surface-2 px-2 text-xs text-text active:bg-surface-3"
           >
             送信
           </button>
-          {/* 履歴スクロール: copy-mode で上下スクロール。Esc で通常入力に戻る */}
-          <button
-            type="button"
-            onClick={() => void postSendKeys('scroll-up')}
-            className="shrink-0 rounded border border-border bg-surface-2 px-2 py-1.5 text-xs text-text-muted hover:bg-surface-3 active:bg-surface-3"
-            title="履歴を上にスクロール"
-          >
-            ⇡
-          </button>
-          <button
-            type="button"
-            onClick={() => void postSendKeys('scroll-down')}
-            className="shrink-0 rounded border border-border bg-surface-2 px-2 py-1.5 text-xs text-text-muted hover:bg-surface-3 active:bg-surface-3"
-            title="履歴を下にスクロール"
-          >
-            ⇣
-          </button>
         </div>
+      )}
       {showOutput && <OutputModal onClose={() => setShowOutput(false)} />}
     </div>
   );
