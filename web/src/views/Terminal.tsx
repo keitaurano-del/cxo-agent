@@ -108,21 +108,10 @@ function OutputModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)');
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-  return isMobile;
-}
 
 export default function Terminal() {
   const [state, setState] = useState<UploadState>({ kind: 'idle' });
   const [showOutput, setShowOutput] = useState(false);
-  const isMobile = useIsMobile();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // ── モバイル仮想キーバー（スマホ専用）──────────────────────
@@ -623,7 +612,7 @@ export default function Terminal() {
           レイアウト: [テキスト入力 flex-1] [↑] [↓] [↵] [Esc] [送信]
           入力フィールドを左（親指で届きやすい中央寄り）、↑↓ を入力の右隣、Esc・送信を右端に配置。
           矢印を左端から右寄りに移動することで片手操作時の操作性を改善（Bug 2 修正）。 */}
-      {isMobile && <div className="flex items-center gap-1.5 border-t border-border bg-surface px-2 py-2">
+      <div className="flex items-center gap-1.5 border-t border-border bg-surface px-2 py-2">
           {/* テキスト入力（flex-1 で残りスペースを占有）*/}
           <input
             type="text"
@@ -708,7 +697,7 @@ export default function Terminal() {
           >
             ⇣
           </button>
-        </div>}
+        </div>
       {showOutput && <OutputModal onClose={() => setShowOutput(false)} />}
     </div>
   );
