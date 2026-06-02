@@ -1718,7 +1718,7 @@ ID 採番: **AR-0x**。
 | ID | MC-110 |
 | タイトル | Apollo ターミナルのスクロール・入力不具合の修正（入力不能・矢印端すぎ・連続反応なし） |
 | 優先度 | P0 |
-| ステータス | IN_PROGRESS（2026-06-02 cxo林ティック着手。旧 CANCELLED は誤記＝2026-06-01 棚卸しのコピペ誤用で本タスクは 2026-06-02 inbox 新規登録済み） |
+| ステータス | DONE（2026-06-02 cxo林ティック。dev-logic が3バグを修正＝①paste handler を input/textarea フォーカス中にスキップして入力妨害を解消、②キーバーレイアウトを [input flex-1][↑][↓][↵][Esc][送信] に変更、③長押し時の連続送信を postScrollMessage→postSendKeys に変更。server tsc 0err/web build green/healthz 200。commit 2ad8e3f。web 変更は dist 更新済みで即反映。server コード(exit-copy-mode handler 追加)は mission-control.service restart で反映＝Keita 承認待ち） |
 | 担当 | dev-logic（実装）、test-functional（検証） |
 | 詳細 | Keita 報告（2026-06-02 inbox P0）: ① ターミナルに入力できなくなった、② 上下矢印ボタンが端にありすぎる、③ 矢印ボタンが連続で反応しない。対象: web/src/views/Terminal.tsx のモバイル仮想キーバー UI + server/src/terminalProxy.ts の TAP_FIX_SCRIPT 注入機構。 |
 | 受け入れ条件（DoD） | (1) モバイルでテキスト入力フィールドからターミナルへキー送信できる。(2) ↑↓ ボタンが押しやすい位置（端すぎない）に配置される。(3) ボタンを連続タップ or 長押しで連続応答する。(4) tsc/build green・restart 後 healthz 200・非退行（MC-92/93/94/95/102/103/104 smoke 通過）。 |
