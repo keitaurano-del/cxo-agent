@@ -18,11 +18,60 @@ import type { Request, Response, NextFunction } from 'express';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { isRequestAuthorized } from './lib/auth.js';
+import { TERMINALS, terminalTarget } from './config.js';
 
 const TTYD_HOST = process.env.TTYD_HOST ?? '127.0.0.1';
-const TTYD_PORT = process.env.TTYD_PORT ?? '7681';
+// 後方互換: 旧 TTYD_PORT env（既定 7681）= ターミナル1のフォールバック。
+const TTYD_PORT = process.env.TTYD_PORT ?? String(TERMINALS[0]?.port ?? 7681);
 const TTYD_TARGET = `http://${TTYD_HOST}:${TTYD_PORT}`;
 const TERMINAL_PREFIX = '/terminal';
+
+// ─── 3ターミナル振り分け（MC-119）──────────────────────────────────
+// ベースパス → ttyd ポートの対応:
+//   /terminal      → TERMINALS[id=1].port（7681、後方互換）
+//   /terminal/2    → TERMINALS[id=2].port（7682）
+//   /terminal/3    → TERMINALS[id=3].port（7683）
+// ttyd は root(/) 配信なので、各ベースパスを ttyd の '/' に rewrite して中継する。
+// iframe src は末尾スラッシュ付き（例 /terminal/2/）にして、相対パスの ttyd アセット
+// （xterm.js / token / ws）が /terminal/2/... に解決されるようにする（ここで /2 を剥がす）。
+//
+// パス解決ルール（HTTP は mount 後に /terminal が剥がれた req.url、WS は完全 URL を渡す）:
+//   - 先頭が「/<id>」（id は 2 以上）で、その後が末尾 or '/' なら そのターミナル（/<id> を剥がす）
+//   - それ以外は ターミナル1（ttyd 1 のルート相対アセットは剥がさず素通し）
+// ttyd のアセットはすべて相対パスなので、/2 /3 以外の絶対パスを ttyd が要求することはない。
+
+interface ResolvedTerminal {
+  /** 振り分け先 ttyd の origin（http://host:port）。 */
+  target: string;
+  /** ttyd へ渡す rewrite 後のパス（ベースプレフィックスを剥がしたもの）。 */
+  ttydPath: string;
+}
+
+/**
+ * /terminal を mount で剥がした後の相対パス（HTTP）または完全 URL（WS は別関数）から、
+ * どのターミナルの ttyd へ振り分けるか・rewrite 後パスを解決する。
+ * @param relPath 例: '/' '/token' '/ws'（=1）, '/2' '/2/token' '/2/ws'（=2）, '/3/...'（=3）
+ */
+function resolveByRelPath(relPath: string): ResolvedTerminal {
+  const url = relPath || '/';
+  // クエリ/フラグメントを保持したまま、パス部分だけでマッチする。
+  const qIndex = url.search(/[?#]/);
+  const pathOnly = qIndex >= 0 ? url.slice(0, qIndex) : url;
+  const suffix = qIndex >= 0 ? url.slice(qIndex) : '';
+
+  for (const t of TERMINALS) {
+    if (t.id === 1) continue; // id=1 はデフォルト（フォールバック）
+    const base = `/${t.id}`;
+    if (pathOnly === base || pathOnly.startsWith(base + '/')) {
+      // /<id> を剥がす。/<id> 単体（末尾スラッシュ無し）は '/' に正規化する。
+      const stripped = pathOnly.slice(base.length) || '/';
+      return { target: terminalTarget(t, TTYD_HOST), ttydPath: stripped + suffix };
+    }
+  }
+  // デフォルト = ターミナル1。ttyd 1 のルート相対アセットはそのまま渡す。
+  const t1 = TERMINALS.find((t) => t.id === 1);
+  return { target: t1 ? terminalTarget(t1, TTYD_HOST) : TTYD_TARGET, ttydPath: url };
+}
 
 /** ttyd の Basic 認証ヘッダ（user:pass を base64）。未設定なら null（付与しない）。 */
 function ttydAuthHeader(): string | null {
@@ -415,15 +464,18 @@ proxy.on('proxyRes', (proxyRes, _req, res) => {
 });
 
 /**
- * /terminal の HTTP リクエストを ttyd へ中継する Express ハンドラ。
+ * /terminal の HTTP リクエストを ttyd へ中継する Express ハンドラ（3ターミナル対応 MC-119）。
  * index.ts で makeAuthMiddleware の後ろにマウントするので、ここに来る時点で認証済み。
- * ttyd はルート相対パス（/token, /ws 等）で配信するため、/terminal プレフィックスを剥がす。
+ * ttyd はルート配信なので、/terminal プレフィックス（mount で剥離済み）と、ターミナル番号
+ * のサブプレフィックス（/2 /3）を resolveByRelPath で剥がし、対応 ttyd ポートへ振り分ける。
  */
 export function terminalHttpHandler(req: Request, res: Response, next: NextFunction): void {
   // express の req.url は mount 後プレフィックスが剥がれる（app.use('/terminal', ...) 前提）。
-  // ttyd はルート配信なので、剥がれた req.url をそのまま target に渡せばよい。
   void next; // next は使わないが Express ハンドラ signature 維持
-  proxy.web(req, res, { target: TTYD_TARGET });
+  const { target, ttydPath } = resolveByRelPath(req.url ?? '/');
+  // ターミナル番号サブプレフィックスを剥がした path を ttyd（root 配信）へ渡す。
+  req.url = ttydPath;
+  proxy.web(req, res, { target });
 }
 
 /**
@@ -433,7 +485,8 @@ export function terminalHttpHandler(req: Request, res: Response, next: NextFunct
  */
 export function attachUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): boolean {
   const url = req.url ?? '';
-  if (!url.startsWith(TERMINAL_PREFIX)) return false; // /terminal 以外は扱わない
+  // WS は upgrade 経路で mount が走らないため、完全 URL（/terminal... or /terminal/2...）が来る。
+  if (url !== TERMINAL_PREFIX && !url.startsWith(TERMINAL_PREFIX + '/')) return false; // /terminal 以外は扱わない
 
   // 最重要: WS upgrade でも token/Cookie/Bearer を検証。未認証は即切断。
   if (!isRequestAuthorized({ headers: req.headers, url })) {
@@ -442,8 +495,11 @@ export function attachUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer
     return true;
   }
 
-  // /terminal プレフィックスを剥がして ttyd のルート相対パスへ。
-  req.url = url.slice(TERMINAL_PREFIX.length) || '/';
-  proxy.ws(req, socket, head, { target: TTYD_TARGET });
+  // /terminal プレフィックスを剥がした相対パスから、ターミナル番号（/2 /3）を判定して
+  // 対応 ttyd ポートへ振り分ける。HTTP 経路と同じ resolveByRelPath を再利用する。
+  const relPath = url.slice(TERMINAL_PREFIX.length) || '/';
+  const { target, ttydPath } = resolveByRelPath(relPath);
+  req.url = ttydPath;
+  proxy.ws(req, socket, head, { target });
   return true;
 }

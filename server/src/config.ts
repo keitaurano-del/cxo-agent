@@ -174,6 +174,60 @@ export const TERMINAL_TTYD_HOST = env('TERMINAL_TTYD_HOST', '127.0.0.1');
 /** systemctl / tmux 起動コマンドのタイムアウト（ミリ秒）。 */
 export const TERMINAL_CONTROL_TIMEOUT_MS = envNum('TERMINAL_CONTROL_TIMEOUT_MS', 8000);
 
+// ─── 3ターミナル定義（MC-119）──────────────────────────────────
+//
+// Apollo ターミナルを「3つの独立ターミナル（タブ切替）」にする。各ターミナルは
+// 独立した ttyd（127.0.0.1 の別ポート）に対応し、proxy がベースパスで振り分ける:
+//   id=1 /terminal      port 7681 apollo-terminal.service   = この箱の tmux main（林）※既存
+//   id=2 /terminal/2    port 7682 apollo-terminal-2.service = 旧箱(139.180.202.62)へ ssh して claude
+//   id=3 /terminal/3    port 7683 apollo-terminal-3.service = この箱の予備 claude（spare）
+//
+// 3つとも同じ ttyd Basic 認証 credential（.terminal.env の TTYD_USER/TTYD_PASS）を使う。
+// env 上書き例: TERMINAL_2_PORT / TERMINAL_2_SERVICE / TERMINAL_2_LABEL。
+
+export interface TerminalDef {
+  /** ターミナル番号（1 始まり）。1 はベースパス /terminal、2 以降は /terminal/<id>。 */
+  id: number;
+  /** 振り分け先 ttyd のローカルポート。 */
+  port: number;
+  /** 復旧（restart / status）対象の systemd ユニット名。 */
+  service: string;
+  /** UI のタブに表示するラベル（中立的な丁寧体・絵文字なし）。 */
+  label: string;
+}
+
+/** 3ターミナルの定義（env で個別上書き可、最低限はハードコード既定で動く）。 */
+export const TERMINALS: TerminalDef[] = [
+  {
+    id: 1,
+    port: envNum('TERMINAL_1_PORT', 7681),
+    service: env('TERMINAL_1_SERVICE', 'apollo-terminal.service'),
+    label: env('TERMINAL_1_LABEL', 'ターミナル1'),
+  },
+  {
+    id: 2,
+    port: envNum('TERMINAL_2_PORT', 7682),
+    service: env('TERMINAL_2_SERVICE', 'apollo-terminal-2.service'),
+    label: env('TERMINAL_2_LABEL', 'ターミナル2'),
+  },
+  {
+    id: 3,
+    port: envNum('TERMINAL_3_PORT', 7683),
+    service: env('TERMINAL_3_SERVICE', 'apollo-terminal-3.service'),
+    label: env('TERMINAL_3_LABEL', 'ターミナル3'),
+  },
+];
+
+/** ターミナル定義から ttyd の origin（http://host:port）を作る。host 既定は TERMINAL_TTYD_HOST。 */
+export function terminalTarget(t: TerminalDef, host: string = TERMINAL_TTYD_HOST): string {
+  return `http://${host}:${t.port}`;
+}
+
+/** id からターミナル定義を引く（未定義 id は undefined）。 */
+export function terminalById(id: number): TerminalDef | undefined {
+  return TERMINALS.find((t) => t.id === id);
+}
+
 /** マークダウンのタスクソース（複数）。存在しないものは collector 側で無視。 */
 export const TASK_SOURCES = {
   logicTracker: join(PROJECTS_DIR, 'logic', 'docs', 'TASK_TRACKER.md'),

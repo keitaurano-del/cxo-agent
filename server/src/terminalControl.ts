@@ -29,10 +29,11 @@ import {
   TERMINAL_TMUX_TARGET,
   TERMINAL_TMUX_PATH,
   TERMINAL_TMUX_START_CMD,
-  TERMINAL_TTYD_SERVICE,
-  TERMINAL_TTYD_PORT,
   TERMINAL_TTYD_HOST,
   TERMINAL_CONTROL_TIMEOUT_MS,
+  TERMINALS,
+  terminalById,
+  type TerminalDef,
 } from './config.js';
 
 // ─── 子プロセス実行ヘルパ（execFile を Promise 化）────────────────
@@ -80,15 +81,15 @@ async function tmuxSessionExists(): Promise<boolean> {
   return r.code === 0;
 }
 
-/** ttyd の systemd ユニットが active か。 */
-async function ttydServiceActive(): Promise<boolean> {
-  const r = await run('systemctl', ['is-active', TERMINAL_TTYD_SERVICE]);
+/** 指定した systemd ユニットが active か。 */
+async function serviceActive(service: string): Promise<boolean> {
+  const r = await run('systemctl', ['is-active', service]);
   // is-active は active なら exit 0 / stdout "active"。inactive/failed は非 0。
   return r.code === 0 && r.stdout.trim() === 'active';
 }
 
-/** ttyd のポートへ TCP 接続できるか（プロセスが実際に listen しているか）。 */
-function ttydPortReachable(): Promise<boolean> {
+/** 指定ポートへ TCP 接続できるか（プロセスが実際に listen しているか）。 */
+function portReachable(port: number, host: string = TERMINAL_TTYD_HOST): Promise<boolean> {
   return new Promise((resolve) => {
     // 動的 import を避け、トップで import すると node:net 依存が増えるだけなので require 同様に。
     import('node:net')
@@ -105,37 +106,48 @@ function ttydPortReachable(): Promise<boolean> {
         socket.once('connect', () => finish(true));
         socket.once('timeout', () => finish(false));
         socket.once('error', () => finish(false));
-        socket.connect(TERMINAL_TTYD_PORT, TERMINAL_TTYD_HOST);
+        socket.connect(port, host);
       })
       .catch(() => resolve(false));
   });
 }
 
+
 interface TerminalStatus {
-  tmuxSession: boolean; // tmux main が存在するか
+  id: number; // ターミナル番号
+  tmuxSession: boolean; // tmux main が存在するか（ターミナル1のみ意味を持つ）
   ttydService: boolean; // ttyd の systemd ユニットが active か
   ttydReachable: boolean; // ttyd ポートへ実際に接続できるか
-  ready: boolean; // ブラウザ端末がそのまま使えるか（両方 OK）
+  ready: boolean; // ブラウザ端末がそのまま使えるか
   target: string;
   service: string;
 }
 
-async function collectStatus(): Promise<TerminalStatus> {
+/**
+ * 指定ターミナルの状態を集める。
+ * - ターミナル1（この箱の tmux main = 林）は tmux main の存在も ready 条件に含める
+ *   （ttyd は tmux main にアタッチする構成で、main が無いと端末が空になるため）。
+ * - ターミナル2/3 は ttyd 自体が ssh / spare claude を起動する構成で、別の tmux main に
+ *   依存しない。ready = service active かつ port 到達可能。
+ */
+async function collectStatusFor(t: TerminalDef): Promise<TerminalStatus> {
+  const isPrimary = t.id === 1;
   const [tmuxSession, ttydService, ttydReachable] = await Promise.all([
-    tmuxSessionExists(),
-    ttydServiceActive(),
-    ttydPortReachable(),
+    isPrimary ? tmuxSessionExists() : Promise.resolve(true),
+    serviceActive(t.service),
+    portReachable(t.port),
   ]);
   return {
+    id: t.id,
     tmuxSession,
     ttydService,
     ttydReachable,
-    // ready の条件: tmux main があり、ttyd が active かつポート到達可能。
     ready: tmuxSession && ttydService && ttydReachable,
-    target: TERMINAL_TMUX_TARGET,
-    service: TERMINAL_TTYD_SERVICE,
+    target: isPrimary ? TERMINAL_TMUX_TARGET : t.service,
+    service: t.service,
   };
 }
+
 
 // ─── 復旧アクション ──────────────────────────────────────────
 
@@ -157,12 +169,12 @@ async function createTmuxSession(): Promise<void> {
   }
 }
 
-/** ttyd の systemd ユニットを start する（dev は NOPASSWD で systemctl を叩ける）。 */
-async function startTtydService(): Promise<void> {
-  const r = await run('sudo', ['-n', 'systemctl', 'start', TERMINAL_TTYD_SERVICE]);
+/** 指定 ttyd の systemd ユニットを start する（dev は NOPASSWD で systemctl を叩ける）。 */
+async function startService(service: string): Promise<void> {
+  const r = await run('sudo', ['-n', 'systemctl', 'start', service]);
   if (r.code !== 0) {
     throw new Error(
-      `systemctl start ${TERMINAL_TTYD_SERVICE} failed (code ${r.code}): ${r.stderr.trim() || r.stdout.trim()}`,
+      `systemctl start ${service} failed (code ${r.code}): ${r.stderr.trim() || r.stdout.trim()}`,
     );
   }
 }
@@ -174,40 +186,54 @@ interface StartResult {
 }
 
 /**
- * 冪等にバックエンドを復旧する。稼働中の要素には触らない。
- * - tmux main が無ければ作成。
- * - ttyd が inactive なら start。
- * 既に両方稼働中なら actions 空（no-op）で ok を返す。
+ * 指定ターミナルのバックエンドを冪等に復旧する。稼働中の要素には触らない。
+ * - ターミナル1: tmux main が無ければ作成（林 CLI 起動）。
+ * - 全ターミナル: ttyd（systemd ユニット）が inactive なら start。
+ * 既に稼働中なら actions 空（no-op）で ok を返す。
+ *
+ * 「ターミナルを開始」を押したタブに対応する service を restart 相当（無ければ start）する。
+ * active なものは触らない＝既に使えている端末を切らない。
  */
-async function performStart(): Promise<StartResult> {
+async function performStartFor(t: TerminalDef): Promise<StartResult> {
   const actions: string[] = [];
 
-  // tmux: 無いときだけ作る。稼働中の本番 main は絶対に触らない。
-  if (!(await tmuxSessionExists())) {
+  // tmux main はターミナル1（この箱の林）のみ。無いときだけ作る。稼働中の本番 main は絶対に触らない。
+  if (t.id === 1 && !(await tmuxSessionExists())) {
     await createTmuxSession();
     actions.push('created-tmux-session');
   }
 
   // ttyd: systemd ユニットが active でないときだけ start。
-  // 既に active なら触らない（restart しない＝Keita のブラウザ端末を切らない）。
-  if (!(await ttydServiceActive())) {
-    await startTtydService();
-    actions.push('started-ttyd');
+  // 既に active なら触らない（restart しない＝既存のブラウザ端末を切らない）。
+  if (!(await serviceActive(t.service))) {
+    await startService(t.service);
+    actions.push(`started-${t.service}`);
   }
 
   // 起動直後はポートが listen に上がるまで少し待ってから最終状態を取る。
   if (actions.length > 0) {
     await new Promise((r) => setTimeout(r, 600));
   }
-  const status = await collectStatus();
-  return { ok: status.tmuxSession && status.ttydService, actions, status };
+  const status = await collectStatusFor(t);
+  return { ok: status.ttydService && (t.id !== 1 || status.tmuxSession), actions, status };
 }
 
 // ─── ハンドラ ────────────────────────────────────────────────
 
-async function handleStatus(_req: Request, res: Response): Promise<void> {
+/**
+ * リクエストからターミナル id を解決する（query / body の terminal、未指定なら 1）。
+ * 不正値・未定義 id はターミナル1にフォールバックする（後方互換）。
+ */
+function resolveTerminal(raw: unknown): TerminalDef {
+  const n = typeof raw === 'string' ? parseInt(raw, 10) : typeof raw === 'number' ? raw : NaN;
+  const t = !isNaN(n) ? terminalById(n) : undefined;
+  return t ?? terminalById(1) ?? TERMINALS[0];
+}
+
+async function handleStatus(req: Request, res: Response): Promise<void> {
   try {
-    const status = await collectStatus();
+    const t = resolveTerminal(req.query.terminal);
+    const status = await collectStatusFor(t);
     res.json(status);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -216,9 +242,29 @@ async function handleStatus(_req: Request, res: Response): Promise<void> {
   }
 }
 
-async function handleStart(_req: Request, res: Response): Promise<void> {
+/** 全ターミナルの定義 + 状態を一括返却（タブ UI の初期描画用）。 */
+async function handleStatusAll(_req: Request, res: Response): Promise<void> {
   try {
-    const result = await performStart();
+    const terminals = await Promise.all(
+      TERMINALS.map(async (t) => ({
+        id: t.id,
+        label: t.label,
+        status: await collectStatusFor(t),
+      })),
+    );
+    res.json({ terminals });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('[terminal-control] status-all failed:', message);
+    res.status(500).json({ error: message });
+  }
+}
+
+async function handleStart(req: Request, res: Response): Promise<void> {
+  try {
+    const body = (req.body ?? {}) as { terminal?: unknown };
+    const t = resolveTerminal(body.terminal ?? req.query.terminal);
+    const result = await performStartFor(t);
     res.status(result.ok ? 200 : 500).json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -339,6 +385,7 @@ async function handleSendKeys(req: Request, res: Response): Promise<void> {
 export function terminalControlRouter(): Router {
   const router = Router();
   router.get('/status', (req, res) => void handleStatus(req, res));
+  router.get('/status-all', (req, res) => void handleStatusAll(req, res));
   router.post('/start', (req, res) => void handleStart(req, res));
   router.get('/output', (req, res) => void handleOutput(req, res));
   router.post('/send-keys', (req, res) => void handleSendKeys(req, res));
