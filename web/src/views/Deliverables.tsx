@@ -11,6 +11,8 @@ import {
   TextFileIcon,
   ImageFileIcon,
   FileIcon,
+  EyeIcon,
+  CloseIcon,
 } from '../components/icons';
 import { relativeTime } from '../lib/time';
 
@@ -99,9 +101,69 @@ function ImagePreview({ file }: { file: DeliverableFile }) {
   );
 }
 
+const OFFICE_KINDS = new Set<DeliverableKind>(['spreadsheet', 'presentation', 'document']);
+// CSV はテキストとして直接見られるので Office 変換プレビューの対象外。
+const CSV_EXT = '.csv';
+
+function isOfficePreviewable(file: DeliverableFile): boolean {
+  return OFFICE_KINDS.has(file.kind) && file.ext.toLowerCase() !== CSV_EXT;
+}
+
+function PdfPreview({ file, src }: { file: DeliverableFile; src: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-2 inline-flex items-center gap-1.5 rounded border border-border px-2 py-1 text-xs text-text-muted hover:bg-surface-2 hover:text-text"
+        aria-label={`${file.name} をプレビュー`}
+      >
+        <EyeIcon width={14} height={14} />
+        プレビュー
+      </button>
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-bg/90 p-2 backdrop-blur md:p-6"
+          role="dialog"
+          aria-modal
+          aria-label={`${file.name} プレビュー`}
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="truncate text-sm font-medium text-text" title={file.name}>
+              {file.name}
+            </span>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="shrink-0 rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
+              aria-label="プレビューを閉じる"
+            >
+              <CloseIcon width={18} height={18} />
+            </button>
+          </div>
+          <div className="relative flex-1 overflow-hidden rounded-lg border border-border bg-surface">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-text-faint">
+              プレビューを生成しています…
+            </div>
+            <iframe
+              src={src}
+              title={`${file.name} プレビュー`}
+              className="relative h-full w-full"
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function FileCard({ file }: { file: DeliverableFile }) {
   const isImage =
     file.kind === 'image' || IMG_EXTS.has(file.ext.toLowerCase());
+  const isPdf = file.kind === 'pdf';
+  const officePreviewable = isOfficePreviewable(file);
+  const previewSrc = `/api/deliverables/preview?path=${encodeURIComponent(file.relpath)}`;
   const downloadHref = `/api/deliverables/file?path=${encodeURIComponent(file.relpath)}`;
 
   return (
@@ -132,6 +194,7 @@ function FileCard({ file }: { file: DeliverableFile }) {
         <span>{relativeTime(file.mtime)}</span>
       </div>
       {isImage && <ImagePreview file={file} />}
+      {(isPdf || officePreviewable) && <PdfPreview file={file} src={previewSrc} />}
     </div>
   );
 }

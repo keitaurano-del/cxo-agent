@@ -45,6 +45,15 @@ export const INBOX_DATA_DIR = join(CXO_ROOT, 'data');
  */
 export const DELIVERABLES_DIR = env('DELIVERABLES_DIR', join(INBOX_DATA_DIR, 'deliverables'));
 
+/**
+ * 成果物プレビュー用の変換キャッシュ（Office→PDF）の置き場。
+ * data/ 配下なので .gitignore 済み。ソースの sha1+mtime+size をキーに PDF を保存する。
+ */
+export const DELIVERABLES_CACHE_DIR = env(
+  'DELIVERABLES_CACHE_DIR',
+  join(INBOX_DATA_DIR, '.deliverables-cache'),
+);
+
 /** 受信箱本体（追記専用 JSONL・1 行 1 エントリ）。 */
 export const INBOX_FILE = join(INBOX_DATA_DIR, 'inbox.jsonl');
 

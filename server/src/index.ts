@@ -29,6 +29,7 @@ import {
 } from './collectors/vault.js';
 import { SafePathError } from './lib/vaultPath.js';
 import { listDeliverables, resolveDeliverable } from './collectors/deliverables.js';
+import { convertOfficeToPdf, isConvertibleToPdf } from './lib/officeToPdf.js';
 import { ALL_PROJECTS, type ProjectName } from './lib/projectMap.js';
 import { makeAuthMiddleware, authEnabled } from './lib/auth.js';
 import { inboxRouter } from './inbox.js';
@@ -390,6 +391,53 @@ app.get('/api/deliverables/file', (req, res) => {
     const inline = req.query.inline === '1' || req.query.inline === 'true';
     res.type(info.contentType);
     res.set('Content-Disposition', contentDisposition(info.name, inline));
+    res.set('Cache-Control', 'private, max-age=60');
+    res.sendFile(info.absPath);
+  } catch (e) {
+    if (e instanceof SafePathError) {
+      res.status(400).json({ error: e.message });
+      return;
+    }
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+// 成果物プレビュー: ブラウザ内（iframe）でそのまま見られる形にして inline 返す。
+//  - pdf/image/text/markdown 等「そのまま見られるもの」は file?inline=1 に委譲（ここでは元実体を inline 返し）。
+//  - spreadsheet/presentation/document（Office 系）は LibreOffice で PDF 変換してから inline 返す。
+//    変換は数秒かかるが、2 回目以降はキャッシュで即返す。
+app.get('/api/deliverables/preview', async (req, res) => {
+  try {
+    const info = resolveDeliverable(String(req.query.path ?? ''));
+    if (!info) {
+      res.status(404).json({ error: 'deliverable not found' });
+      return;
+    }
+
+    // Office 系は PDF 変換してプレビュー。
+    if (isConvertibleToPdf(info.ext)) {
+      let pdfPath: string;
+      try {
+        pdfPath = await convertOfficeToPdf(info.absPath);
+      } catch (convErr) {
+        const message = convErr instanceof Error ? convErr.message : String(convErr);
+        console.error('[deliverables preview convert error]', info.name, message);
+        res.status(502).json({ error: 'preview conversion failed', detail: message });
+        return;
+      }
+      // プレビュー用のファイル名は元ファイル名ベースで .pdf に。
+      const pdfName = info.name.replace(/\.[^.]+$/, '') + '.pdf';
+      res.type('application/pdf');
+      res.set('Content-Disposition', contentDisposition(pdfName, true));
+      res.set('Cache-Control', 'private, max-age=60');
+      // キャッシュ dir 名（.deliverables-cache）が dotfile セグメントを含むため allow を明示。
+      res.sendFile(pdfPath, { dotfiles: 'allow' });
+      return;
+    }
+
+    // それ以外（pdf/image/text/markdown 等）はそのまま inline 返し。
+    res.type(info.contentType);
+    res.set('Content-Disposition', contentDisposition(info.name, true));
     res.set('Cache-Control', 'private, max-age=60');
     res.sendFile(info.absPath);
   } catch (e) {
