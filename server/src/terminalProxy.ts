@@ -140,6 +140,26 @@ const proxy = httpProxy.createProxyServer({
 // KEY_FIX_BODY はブラウザで eval する素の JS（テストから new Function で eval し window.term を
 // モックして「mouse mode→wheel / 通常 shell→scrollPages / Shift は native 尊重 / Ctrl+V→SYN抑止」を
 // 検証する）。本番注入は PASTE_FIX_SCRIPT（<script> でラップ）を使う。
+// ─── xterm テーマ注入（MC-139）───────────────────────────────────────────────
+// ttyd の -t theme=... が反映されない場合の保険として、HTML 注入スクリプトで
+// window.term.options.theme を上書きする。ttyd 側で反映されていれば実質 no-op（同じ値）。
+// ターミナル背景を目に優しいソフトネイビー系（#192231）に統一する。
+const TERM_THEME_BODY = `(function(){
+  var theme={background:"#192231",foreground:"#cdd6f4",cursor:"#a0b4c8",selectionBackground:"#3a4a6a"};
+  function apply(){
+    var t=window.term;
+    if(!t){return false;}
+    try{
+      if(typeof t.options==='object'&&t.options!==null){t.options.theme=theme;return true;}
+    }catch(_e){}
+    return false;
+  }
+  if(!apply()){
+    var n=0,iv=setInterval(function(){if(apply()||++n>100){clearInterval(iv);}},100);
+  }
+})();`;
+const TERM_THEME_SCRIPT = `<script>${TERM_THEME_BODY}</script>`;
+
 export const KEY_FIX_BODY = `(function(){
   function install(){
     var t=window.term;
@@ -449,7 +469,7 @@ proxy.on('proxyRes', (proxyRes, _req, res) => {
   proxyRes.on('end', () => {
     let body = Buffer.concat(chunks).toString('utf8');
     if (body.includes('</body>') && !body.includes('__apolloPasteFix')) {
-      body = body.replace('</body>', `${PASTE_FIX_SCRIPT}${TAP_FIX_SCRIPT}</body>`);
+      body = body.replace('</body>', `${PASTE_FIX_SCRIPT}${TAP_FIX_SCRIPT}${TERM_THEME_SCRIPT}</body>`);
     }
     const buf = Buffer.from(body, 'utf8');
     headers['content-length'] = String(buf.byteLength);

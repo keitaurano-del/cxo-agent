@@ -9,61 +9,61 @@
  * designer が後から差し替えやすいよう、配色は全てここに集約する。
  */
 :root {
-  /* surface（管制室風ダーク基調・AA コントラスト確保） */
-  --mc-bg: #0b1120;
-  --mc-surface: #131b2e;
-  --mc-surface-2: #1b2540;
-  --mc-surface-3: #243152;
-  --mc-border: #2c3a5a;
-  --mc-border-strong: #3b4d75;
+  /* surface（目に優しいライトグレー系・AA コントラスト確保） */
+  --mc-bg:        #f4f6f9;   /* ページ背景: やや青みがかったオフホワイト */
+  --mc-surface:   #ffffff;   /* カード・サイドバー: 白 */
+  --mc-surface-2: #edf0f5;   /* 入力・コードブロック背景 */
+  --mc-surface-3: #e2e7ef;   /* hover */
+  --mc-border:    #d0d8e4;
+  --mc-border-strong: #b0bcce;
 
-  /* text */
-  --mc-text: #e8edf7;
-  --mc-text-muted: #9fb0cc;
-  --mc-text-faint: #6b7da0;
+  /* text — 真っ黒を避けたソフトダーク */
+  --mc-text:       #1e2a3a;
+  --mc-text-muted: #4a5a72;
+  --mc-text-faint: #7a8fa8;
 
-  /* brand / accent */
-  --mc-accent: #5b9dff;
-  --mc-accent-strong: #357bff;
+  /* brand / accent — 落ち着いた青 */
+  --mc-accent:        #3b7dd8;
+  --mc-accent-strong: #2460b8;
 
   /* status（状態色。語ラベル/aria を必ず併記し色のみ依存にしない） */
-  --mc-active: #2fd27a;
-  --mc-active-bg: #11341f;
-  --mc-idle: #f3c14b;
-  --mc-idle-bg: #38300f;
-  --mc-done: #7f8db0;
-  --mc-done-bg: #232c44;
-  --mc-never: #cdd6ea;
-  --mc-never-bg: #1b2236;
-  --mc-stalled: #ff5d5d;
-  --mc-stalled-bg: #3a1620;
-  --mc-blocked: #ff8a3d;
-  --mc-blocked-bg: #3a2413;
-  --mc-review: #b07dff;
-  --mc-review-bg: #2a1f44;
+  --mc-active:    #16a85c;
+  --mc-active-bg: #e6f9ef;
+  --mc-idle:      #d18e00;
+  --mc-idle-bg:   #fdf5dc;
+  --mc-done:      #6b7a96;
+  --mc-done-bg:   #eef1f7;
+  --mc-never:     #4a5a72;
+  --mc-never-bg:  #f0f3f8;
+  --mc-stalled:   #d93535;
+  --mc-stalled-bg:#fdeaea;
+  --mc-blocked:   #c96a10;
+  --mc-blocked-bg:#fff0e0;
+  --mc-review:    #7c52cc;
+  --mc-review-bg: #f2eeff;
 
   /* Obsidian callout 種別色 */
-  --mc-callout-info: #5b9dff;
-  --mc-callout-info-bg: #15233f;
-  --mc-callout-tip: #2fd27a;
-  --mc-callout-tip-bg: #11341f;
-  --mc-callout-warning: #f3c14b;
-  --mc-callout-warning-bg: #38300f;
-  --mc-callout-danger: #ff5d5d;
-  --mc-callout-danger-bg: #3a1620;
-  --mc-callout-note: #b07dff;
-  --mc-callout-note-bg: #2a1f44;
-  --mc-callout-quote: #9fb0cc;
-  --mc-callout-quote-bg: #1b2540;
+  --mc-callout-info:        #3b7dd8;
+  --mc-callout-info-bg:     #eaf2ff;
+  --mc-callout-tip:         #16a85c;
+  --mc-callout-tip-bg:      #e6f9ef;
+  --mc-callout-warning:     #d18e00;
+  --mc-callout-warning-bg:  #fdf5dc;
+  --mc-callout-danger:      #d93535;
+  --mc-callout-danger-bg:   #fdeaea;
+  --mc-callout-note:        #7c52cc;
+  --mc-callout-note-bg:     #f2eeff;
+  --mc-callout-quote:       #4a5a72;
+  --mc-callout-quote-bg:    #edf0f5;
 
   /* project 色分け（Overview / Tasks / Feed 共通） */
-  --mc-proj-logic: #5b9dff;
-  --mc-proj-en-chakai: #2fb6a8;
-  --mc-proj-nishimaru: #e0935b;
-  --mc-proj-ai-pmo: #b07dff;
-  --mc-proj-cxo: #f3c14b;
-  --mc-proj-private: #8aa0c8;
-  --mc-proj-other: #6b7da0;
+  --mc-proj-logic:     #3b7dd8;
+  --mc-proj-en-chakai: #1e9e8f;
+  --mc-proj-nishimaru: #c07030;
+  --mc-proj-ai-pmo:    #7c52cc;
+  --mc-proj-cxo:       #b07a00;
+  --mc-proj-private:   #5a7299;
+  --mc-proj-other:     #6b7a96;
 }
 
 html,
@@ -118,7 +118,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* scrollbar（管制室トーンに馴染ませる） */
+/* scrollbar（ライトトーンに馴染ませる） */
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;
