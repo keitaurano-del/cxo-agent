@@ -16,6 +16,7 @@ import {
   DotIcon,
   VaultIcon,
   DocumentsIcon,
+  NotebookIcon,
   TerminalIcon,
 } from './components/icons';
 import DashboardLayout from './components/DashboardLayout';
@@ -27,6 +28,7 @@ import Tasks from './views/Tasks';
 import Narrative from './views/Narrative';
 import Vault from './views/Vault';
 import Deliverables from './views/Deliverables';
+import Notebooks from './views/Notebooks';
 import Usage from './views/Usage';
 import PlanUsage from './views/PlanUsage';
 import Ticks from './views/Ticks';
@@ -48,6 +50,7 @@ const NAV: NavItem[] = [
   { to: '/approvals', label: '承認フロー', shortLabel: '承認', icon: <ApprovalIcon /> },
   { to: '/vault', label: 'Vault', shortLabel: 'Vault', icon: <VaultIcon /> },
   { to: '/deliverables', label: '成果物', shortLabel: '成果物', icon: <DocumentsIcon /> },
+  { to: '/notebooks', label: 'ノートブック', shortLabel: 'ノート', icon: <NotebookIcon /> },
   // ターミナル: iframe ホスト用 React ルートは /terminal-view。
   // サーバ proxy ルート /terminal（→ ttyd）と衝突させないため別パスにする。
   { to: '/terminal-view', label: 'ターミナル', shortLabel: '端末', icon: <TerminalIcon /> },
@@ -217,6 +220,7 @@ export default function App() {
             <Route path="/approvals" element={<Approvals />} />
             <Route path="/vault" element={<Vault />} />
             <Route path="/deliverables" element={<Deliverables />} />
+            <Route path="/notebooks" element={<Notebooks />} />
             <Route path="/terminal-view" element={<div className="flex h-full flex-col overflow-hidden"><Terminal /></div>} />
             <Route path="/terminal-standalone" element={<Terminal />} />
             <Route path="*" element={<Navigate to="/" replace />} />

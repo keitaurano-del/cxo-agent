@@ -20,10 +20,11 @@ import {
   rmSync,
   unlinkSync,
 } from 'node:fs';
-import { join, extname } from 'node:path';
+import { join, extname, basename } from 'node:path';
 import { NOTEBOOKS_DIR } from '../config.js';
 import {
   resolveNotebookDir,
+  resolveNotebookSubPath,
   generateNotebookId,
   validateNotebookId,
 } from './notebookPath.js';
@@ -111,6 +112,79 @@ const KIND_BY_EXT: Record<string, SourceKind> = {
 
 export function kindForExt(ext: string): SourceKind {
   return KIND_BY_EXT[ext.toLowerCase()] ?? 'other';
+}
+
+// ─── 配信用 MIME（deliverables collector と同方針）─────────────
+const CONTENT_TYPES: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.xls': 'application/vnd.ms-excel',
+  '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
+  '.csv': 'text/csv; charset=utf-8',
+  '.tsv': 'text/tab-separated-values; charset=utf-8',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.odp': 'application/vnd.oasis.opendocument.presentation',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.doc': 'application/msword',
+  '.odt': 'application/vnd.oasis.opendocument.text',
+  '.rtf': 'application/rtf',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.md': 'text/markdown; charset=utf-8',
+  '.markdown': 'text/markdown; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.log': 'text/plain; charset=utf-8',
+  '.yaml': 'text/plain; charset=utf-8',
+  '.yml': 'text/plain; charset=utf-8',
+};
+
+export function contentTypeForExt(ext: string): string {
+  return CONTENT_TYPES[ext.toLowerCase()] ?? 'application/octet-stream';
+}
+
+export interface NotebookFileResolved {
+  absPath: string;
+  name: string;
+  contentType: string;
+  ext: string;
+  kind: SourceKind;
+}
+
+/**
+ * ノートブック内のファイル（sources/ または artifacts/ 配下）を配信用に解決する。
+ * - relpath は notebookPath の realpath / traversal 防御を通す（resolveNotebookSubPath）。
+ * - sources/ artifacts/ 配下に限定する（extracted/ や meta.json 等は配信させない）。
+ * - 実体が無ければ null。
+ */
+export function resolveNotebookFile(id: string, relpath: string): NotebookFileResolved | null {
+  const cleaned = (relpath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  const top = cleaned.split('/')[0];
+  if (top !== 'sources' && top !== 'artifacts') {
+    return null; // sources/ artifacts/ 以外は配信不可。
+  }
+  const abs = resolveNotebookSubPath(id, cleaned); // traversal/範囲外→SafePathError
+  if (!existsSync(abs)) return null;
+  let st;
+  try {
+    st = statSync(abs);
+  } catch {
+    return null;
+  }
+  if (!st.isFile()) return null;
+  const ext = extname(abs).toLowerCase();
+  return {
+    absPath: abs,
+    name: basename(abs),
+    contentType: contentTypeForExt(ext),
+    ext,
+    kind: kindForExt(ext),
+  };
 }
 
 // ─── 内部ヘルパー ───────────────────────────────────────

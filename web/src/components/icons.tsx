@@ -337,6 +337,38 @@ export function TerminalIcon(props: IconProps) {
   );
 }
 
+// ノートブック（資料セット＋Q&A＋生成物）。閉じたノート＋しおりで表現。
+export function NotebookIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M6 3.5h11a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5H6z" />
+      <path d="M6 3.5A1.5 1.5 0 0 0 4.5 5v14A1.5 1.5 0 0 0 6 20.5" />
+      <path d="M9 3.5v17" />
+      <path d="M13.5 8v4l1.5-1 1.5 1V8z" />
+    </svg>
+  );
+}
+
+// 送信（チャットの紙飛行機）。
+export function SendIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 12 20 4l-6 16-3-7z" />
+      <path d="M11 13 20 4" />
+    </svg>
+  );
+}
+
+// 生成（きらめき）。生成物作成ボタン群で使う。
+export function SparkIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 4v4M12 16v4M4 12h4M16 12h4" />
+      <path d="M7 7l2.5 2.5M14.5 14.5 17 17M17 7l-2.5 2.5M9.5 14.5 7 17" />
+    </svg>
+  );
+}
+
 export function KeyboardIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

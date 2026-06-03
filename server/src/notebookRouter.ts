@@ -35,9 +35,11 @@ import {
   deleteSource,
   touchNotebook,
   artifactNames,
+  resolveNotebookFile,
 } from './lib/notebookStore.js';
 import { extractSourceText } from './lib/notebookExtract.js';
 import { runClaude } from './lib/notebookClaude.js';
+import { convertOfficeToPdf, isConvertibleToPdf } from './lib/officeToPdf.js';
 
 /** :id パラメータを string に正規化する（express 5 は string | string[] 型）。 */
 function idParam(req: Request): string {
@@ -388,6 +390,74 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
   });
 }
 
+// ─── ファイル配信（資料／生成物のダウンロード・プレビュー）──────────────
+
+/** ファイル名を RFC5987（filename*）でエンコードする（日本語ファイル名対応）。 */
+function contentDisposition(name: string, inline: boolean): string {
+  const disp = inline ? 'inline' : 'attachment';
+  // eslint-disable-next-line no-control-regex
+  const ascii = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+  const encoded = encodeURIComponent(name).replace(/['()*]/g, (c) =>
+    '%' + c.charCodeAt(0).toString(16).toUpperCase(),
+  );
+  return `${disp}; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
+
+// GET /:id/file?path=<relpath>&inline=1
+//  - inline 無し → attachment（ダウンロード）。
+//  - inline=1 → ブラウザ内プレビュー用に inline 返し。
+//    Office 系（xlsx/pptx/docx 等）は LibreOffice で PDF 変換して返す（deliverables/preview と同方式）。
+//    pdf/画像/text/markdown はそのまま inline。
+async function handleFile(req: Request, res: Response): Promise<void> {
+  const id = idParam(req);
+  const relpath = typeof req.query.path === 'string' ? req.query.path : '';
+  if (!relpath) {
+    res.status(400).json({ error: 'クエリ path が必要です。' });
+    return;
+  }
+  const inline = req.query.inline === '1' || req.query.inline === 'true';
+
+  let info: ReturnType<typeof resolveNotebookFile>;
+  try {
+    info = resolveNotebookFile(id, relpath);
+  } catch (e) {
+    if (e instanceof SafePathError) {
+      res.status(/not found/i.test(e.message) ? 404 : 400).json({ error: e.message });
+      return;
+    }
+    throw e;
+  }
+  if (!info) {
+    res.status(404).json({ error: 'file not found' });
+    return;
+  }
+
+  // inline プレビューで Office 系は PDF 変換して返す。
+  if (inline && isConvertibleToPdf(info.ext)) {
+    let pdfPath: string;
+    try {
+      pdfPath = await convertOfficeToPdf(info.absPath);
+    } catch (convErr) {
+      const message = convErr instanceof Error ? convErr.message : String(convErr);
+      console.error('[notebook preview convert error]', info.name, message);
+      res.status(502).json({ error: 'preview conversion failed', detail: message });
+      return;
+    }
+    const pdfName = info.name.replace(/\.[^.]+$/, '') + '.pdf';
+    res.type('application/pdf');
+    res.set('Content-Disposition', contentDisposition(pdfName, true));
+    res.set('Cache-Control', 'private, max-age=60');
+    // 変換キャッシュ dir（.deliverables-cache）が dotfile セグメントを含むため allow を明示。
+    res.sendFile(pdfPath, { dotfiles: 'allow' });
+    return;
+  }
+
+  res.type(info.contentType);
+  res.set('Content-Disposition', contentDisposition(info.name, inline));
+  res.set('Cache-Control', 'private, max-age=60');
+  res.sendFile(info.absPath);
+}
+
 // ─── Router 組み立て ─────────────────────────────────────
 
 export function notebookRouter(): Router {
@@ -396,6 +466,7 @@ export function notebookRouter(): Router {
   router.post('/', handleCreate);
   router.get('/:id', handleGet);
   router.delete('/:id', handleDelete);
+  router.get('/:id/file', (req, res) => void handleFile(req, res));
   router.post('/:id/sources', (req, res) => void handleAddSources(req, res));
   router.delete('/:id/sources', handleDeleteSource);
   router.post('/:id/ask', (req, res) => void handleAsk(req, res));
