@@ -69,6 +69,31 @@ export const DELIVERABLES_CACHE_DIR = env(
   join(INBOX_DATA_DIR, '.deliverables-cache'),
 );
 
+/**
+ * ノートブック（NotebookLM 的な資料セット＋Q&A＋生成物）のルート（MC-126）。
+ * 各ノートブックは <NOTEBOOKS_DIR>/<id>/ に sources/extracted/artifacts/meta.json/chat.jsonl を持つ。
+ * data/ 配下なので .gitignore 済み。すべてのパス入力は lib/notebookPath.ts で realpath 安全化する。
+ */
+export const NOTEBOOKS_DIR = env('NOTEBOOKS_DIR', join(INBOX_DATA_DIR, 'notebooks'));
+
+/** ノートブックのソースアップロード 1 ファイルあたり最大バイト数（既定 2GB）。 */
+export const NOTEBOOK_UPLOAD_MAX_BYTES = envNum(
+  'NOTEBOOK_UPLOAD_MAX_BYTES',
+  2 * 1024 * 1024 * 1024,
+);
+
+/** ノートブックのソースアップロード 1 リクエストあたり最大ファイル数。 */
+export const NOTEBOOK_UPLOAD_MAX_FILES = envNum('NOTEBOOK_UPLOAD_MAX_FILES', 20);
+
+/** claude CLI バイナリのパス（資料根拠 Q&A・生成物作成エンジン）。 */
+export const NOTEBOOK_CLAUDE_BIN = env('NOTEBOOK_CLAUDE_BIN', '/usr/bin/claude');
+
+/** claude -p 1 回あたりのタイムアウト（ミリ秒、既定 120s）。 */
+export const NOTEBOOK_CLAUDE_TIMEOUT_MS = envNum('NOTEBOOK_CLAUDE_TIMEOUT_MS', 120_000);
+
+/** claude -p の同時実行上限（共有 Anthropic アカウントを食い潰さないため）。 */
+export const NOTEBOOK_CLAUDE_CONCURRENCY = envNum('NOTEBOOK_CLAUDE_CONCURRENCY', 2);
+
 /** 受信箱本体（追記専用 JSONL・1 行 1 エントリ）。 */
 export const INBOX_FILE = join(INBOX_DATA_DIR, 'inbox.jsonl');
 

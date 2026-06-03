@@ -407,3 +407,77 @@ export interface ClaudeUsageSummary {
   ttlMs: number;
   accounts: ClaudeAccountUsage[];
 }
+
+// ─── ノートブック（NotebookLM 的な資料セット＋Q&A＋生成物、MC-126）─────────
+// server/src/lib/notebookStore.ts のレスポンス形と一致させる。
+
+export type NotebookSourceKind =
+  | 'pdf'
+  | 'spreadsheet'
+  | 'presentation'
+  | 'document'
+  | 'image'
+  | 'markdown'
+  | 'text'
+  | 'other';
+
+/** ノートブック一覧の 1 件（GET /api/notebooks の notebooks[]）。 */
+export interface NotebookSummary {
+  id: string;
+  name: string;
+  sourceCount: number;
+  artifactCount: number;
+  updatedAt: string;
+}
+
+/** ノートブックのメタ（POST /api/notebooks のレスポンス・詳細の meta）。 */
+export interface NotebookMeta {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** ノートブック内のソース / 生成物ファイル参照。 */
+export interface NotebookFileRef {
+  name: string;
+  relpath: string; // 'sources/foo.pdf' / 'artifacts/要約.md'
+  sizeBytes: number;
+  mtime: string;
+  ext: string;
+  kind: NotebookSourceKind;
+  extracted?: boolean; // sources のみ: 抽出テキスト生成済みか
+}
+
+/** チャット 1 メッセージ（chat.jsonl の 1 行）。 */
+export interface NotebookChatMessage {
+  ts: string;
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+/** ノートブック詳細（GET /api/notebooks/:id）。 */
+export interface NotebookDetail {
+  meta: NotebookMeta;
+  sources: NotebookFileRef[];
+  artifacts: NotebookFileRef[];
+  chat: NotebookChatMessage[];
+}
+
+/** POST /api/notebooks/:id/ask のレスポンス。 */
+export interface NotebookAskResponse {
+  answer: string;
+  error?: string; // 部分劣化（タイムアウト等）時のみ
+}
+
+/** 生成物 kind。custom は instruction 必須。 */
+export type NotebookGenerateKind = 'summary' | 'faq' | 'timeline' | 'template' | 'custom';
+
+/** POST /api/notebooks/:id/generate のレスポンス。 */
+export interface NotebookGenerateResponse {
+  ok: boolean;
+  created: NotebookFileRef[]; // 今回新規作成された成果物
+  artifacts: NotebookFileRef[]; // 現在の全成果物
+  report: string; // claude の最終報告（作成ファイル名等）
+  error?: string;
+}

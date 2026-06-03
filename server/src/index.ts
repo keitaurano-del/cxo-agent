@@ -43,6 +43,7 @@ import { terminalUploadRouter } from './terminalUpload.js';
 import { terminalControlRouter } from './terminalControl.js';
 import { vaultWriteRouter } from './vaultWriteRouter.js';
 import { deliverableUploadRouter } from './deliverableUploadRouter.js';
+import { notebookRouter } from './notebookRouter.js';
 import { taskEditRouter } from './taskEditRouter.js';
 import { approvalRouter } from './approvalRouter.js';
 import { spawnRouter } from './spawnRouter.js';
@@ -528,6 +529,12 @@ app.delete('/api/deliverables/file', (req, res) => {
     res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
   }
 });
+
+// ─── ノートブック（NotebookLM 的な資料セット＋Q&A＋生成物、MC-126）──────────
+// 資料を sources/ に置き、claude -p（cwd=ノートブック dir）で ./sources/ ./extracted/ を
+// 根拠に回答（ask）・成果物作成（generate→artifacts/）する。パスは lib/notebookPath で安全化。
+// 認証ミドルウェア配下。:id パターンを持つが /api/notebooks 名前空間内なので他ルートと衝突しない。
+app.use('/api/notebooks', notebookRouter());
 
 // ─── overview（KPI 集計）──────────────────────────────
 
