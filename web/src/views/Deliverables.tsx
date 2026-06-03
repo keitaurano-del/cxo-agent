@@ -373,7 +373,7 @@ export default function Deliverables() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="成果物"
-        subtitle="林が生成した Excel/PowerPoint/PDF 等"
+        subtitle="Excel / PowerPoint / PDF などの成果物"
         fetchedAt={fetchedAt}
       />
       <div className="flex-1 overflow-y-auto p-4 md:p-6">

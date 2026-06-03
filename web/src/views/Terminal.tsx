@@ -650,7 +650,7 @@ export default function Terminal() {
                 <div className="max-w-sm space-y-1">
                   <p className="text-sm font-medium text-text">ターミナルが切断されています</p>
                   <p className="text-xs text-text-muted">
-                    tmux main（林セッション）または端末サーバ（ttyd）が停止しています。「ターミナルを開始」で復旧できます。
+                    tmux main セッションまたは端末サーバ（ttyd）が停止しています。「ターミナルを開始」で復旧できます。
                   </p>
                 </div>
                 <button
