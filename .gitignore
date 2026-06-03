@@ -13,3 +13,4 @@ dist/
 # runtime state — inbox 投入データ/添付画像、テスト一時出力（ソースではない）
 data/
 test-results/
+server/tsconfig.tsbuildinfo
