@@ -208,6 +208,33 @@ export interface VaultSearchResponse {
   results: VaultSearchHit[];
 }
 
+// ─── 成果物（Deliverables）─────────────────────────────
+
+export type DeliverableKind =
+  | 'spreadsheet'
+  | 'presentation'
+  | 'document'
+  | 'pdf'
+  | 'image'
+  | 'markdown'
+  | 'text'
+  | 'other';
+
+export interface DeliverableFile {
+  name: string;
+  relpath: string; // DELIVERABLES_DIR 相対（posix 区切り）
+  sizeBytes: number;
+  mtime: string; // ISO
+  ext: string;
+  kind: DeliverableKind;
+}
+
+export interface DeliverablesResponse {
+  generatedAt: string;
+  files: DeliverableFile[];
+  error?: string;
+}
+
 // ─── 横断検索（MC-73 / GET /api/search）──────────────────────
 // server/src/collectors/search.ts のレスポンス形と一致させる。
 

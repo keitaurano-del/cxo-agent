@@ -38,6 +38,13 @@ export const CXO_ROOT = join(PROJECTS_DIR, 'cxo-agent');
 /** 非同期 指示受信箱のデータディレクトリ（cxo-agent/data）。 */
 export const INBOX_DATA_DIR = join(CXO_ROOT, 'data');
 
+/**
+ * 成果物（エクセル/パワポ/PDF/CSV/画像/md 等）の配置ルート。
+ * 林が生成した成果物をここに置くと Apollo の成果物ビューで一覧・閲覧・DL できる。
+ * すべての成果物パス入力は lib/deliverablePath.ts で realpath ベースに安全化する。
+ */
+export const DELIVERABLES_DIR = env('DELIVERABLES_DIR', join(INBOX_DATA_DIR, 'deliverables'));
+
 /** 受信箱本体（追記専用 JSONL・1 行 1 エントリ）。 */
 export const INBOX_FILE = join(INBOX_DATA_DIR, 'inbox.jsonl');
 

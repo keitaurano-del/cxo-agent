@@ -28,6 +28,7 @@ import {
   resolveAttachment,
 } from './collectors/vault.js';
 import { SafePathError } from './lib/vaultPath.js';
+import { listDeliverables, resolveDeliverable } from './collectors/deliverables.js';
 import { ALL_PROJECTS, type ProjectName } from './lib/projectMap.js';
 import { makeAuthMiddleware, authEnabled } from './lib/auth.js';
 import { inboxRouter } from './inbox.js';
@@ -344,6 +345,52 @@ app.get('/api/vault/attachment', (req, res) => {
     }
     res.type(info.contentType);
     res.set('Cache-Control', 'private, max-age=300');
+    res.sendFile(info.absPath);
+  } catch (e) {
+    if (e instanceof SafePathError) {
+      res.status(400).json({ error: e.message });
+      return;
+    }
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+// ─── 成果物（Excel/PPT/PDF/CSV/画像/テキスト の閲覧・DL）─────────────
+// すべてのパス入力は collectors/deliverables → lib/deliverablePath で安全化される。
+// 認証ミドルウェア配下（Vault と同じ並び）。
+
+app.get('/api/deliverables', (_req, res) => {
+  try {
+    res.json({ generatedAt: new Date().toISOString(), files: listDeliverables() });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('[deliverables error]', message);
+    res.status(200).json({ error: message, generatedAt: new Date().toISOString(), files: [] });
+  }
+});
+
+// ファイル名を RFC5987（filename*）でエンコードする（日本語ファイル名対応）。
+function contentDisposition(name: string, inline: boolean): string {
+  const disp = inline ? 'inline' : 'attachment';
+  // ASCII フォールバック用に非 ASCII を _ に落とす。
+  const ascii = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+  const encoded = encodeURIComponent(name).replace(/['()*]/g, (c) =>
+    '%' + c.charCodeAt(0).toString(16).toUpperCase(),
+  );
+  return `${disp}; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
+
+app.get('/api/deliverables/file', (req, res) => {
+  try {
+    const info = resolveDeliverable(String(req.query.path ?? ''));
+    if (!info) {
+      res.status(404).json({ error: 'deliverable not found' });
+      return;
+    }
+    const inline = req.query.inline === '1' || req.query.inline === 'true';
+    res.type(info.contentType);
+    res.set('Content-Disposition', contentDisposition(info.name, inline));
+    res.set('Cache-Control', 'private, max-age=60');
     res.sendFile(info.absPath);
   } catch (e) {
     if (e instanceof SafePathError) {

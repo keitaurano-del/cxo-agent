@@ -152,6 +152,64 @@ export function ImageFileIcon(props: IconProps) {
   );
 }
 
+export function DocumentsIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 3.5h6.5L19 8v9.5a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5V5A1.5 1.5 0 0 1 8 3.5Z" />
+      <path d="M14 3.5V8h4.5" />
+      <path d="M4.5 7.5V19a1.5 1.5 0 0 0 1.5 1.5h8.5" />
+    </svg>
+  );
+}
+
+export function DownloadIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 4v10" />
+      <path d="M8 10.5 12 14.5 16 10.5" />
+      <path d="M5 19h14" />
+    </svg>
+  );
+}
+
+export function SheetIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="4" y="4" width="16" height="16" rx="1.8" />
+      <path d="M4 9.5h16M4 14.5h16M9.5 4v16M14.5 4v16" />
+    </svg>
+  );
+}
+
+export function SlidesIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3.5" y="5" width="17" height="11" rx="1.5" />
+      <path d="M12 16v3M9 19h6" />
+    </svg>
+  );
+}
+
+export function PdfFileIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 3.5h6.5L19 8v9.5a1.5 1.5 0 0 1-1.5 1.5h-9.5a1.5 1.5 0 0 1-1.5-1.5V5A1.5 1.5 0 0 1 8 3.5Z" />
+      <path d="M14 3.5V8h4.5" />
+      <path d="M9.5 12.5h5M9.5 15h3.5" />
+    </svg>
+  );
+}
+
+export function TextFileIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 3.5h6.5L19 8v9.5a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5V5A1.5 1.5 0 0 1 8 3.5Z" />
+      <path d="M14 3.5V8h4.5" />
+      <path d="M9 12h6M9 15h6M9 9h2" />
+    </svg>
+  );
+}
+
 export function SearchIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
