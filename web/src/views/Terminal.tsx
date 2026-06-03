@@ -42,6 +42,7 @@ const TERMINAL_TABS: TerminalTab[] = [
   { id: 1, label: 'ターミナル1', path: '/terminal/' },
   { id: 2, label: 'ターミナル2', path: '/terminal/2/' },
   { id: 3, label: 'ターミナル3', path: '/terminal/3/' },
+  { id: 4, label: 'ターミナル4', path: '/terminal/4/' },
 ];
 
 const ACTIVE_TAB_STORAGE_KEY = 'apollo.terminal.activeTab';

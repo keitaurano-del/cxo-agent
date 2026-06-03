@@ -142,15 +142,24 @@ export function sanitizeNotebookFilename(name: string, fallback = 'file'): strin
 }
 
 /**
- * `<dir>/sources/<name>` が衝突しない安全な絶対パスを返す。既存は上書きしない。
- * @returns { absPath, name } name は実際に確定したファイル名（衝突回避サフィックス込み）。
+ * `<dir>/sources/<name>` の保存先を解決する。
+ * @param options.overwrite true なら同名ファイルが既存でもそのパスを返す（上書き）。
+ *                          false（既定）なら衝突回避サフィックスを付ける。
+ * @returns { absPath, name } name は実際に確定したファイル名。
  */
 export function resolveSourceTarget(
   id: unknown,
   name: string,
+  options: { overwrite?: boolean } = {},
 ): { absPath: string; name: string } {
   const dir = resolveNotebookDir(id);
   const sourcesDir = join(dir, 'sources');
+
+  if (options.overwrite) {
+    const abs = join(sourcesDir, name);
+    return { absPath: abs, name };
+  }
+
   const ext = extname(name);
   const stem = ext ? name.slice(0, -ext.length) : name;
   for (let n = 1; n < 1000; n += 1) {

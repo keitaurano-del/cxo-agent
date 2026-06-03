@@ -94,6 +94,18 @@ export const NOTEBOOK_CLAUDE_TIMEOUT_MS = envNum('NOTEBOOK_CLAUDE_TIMEOUT_MS', 1
 /** claude -p の同時実行上限（共有 Anthropic アカウントを食い潰さないため）。 */
 export const NOTEBOOK_CLAUDE_CONCURRENCY = envNum('NOTEBOOK_CLAUDE_CONCURRENCY', 2);
 
+/** claude -p に渡すモデル名（明示指定で環境デフォルト依存を避ける）。 */
+export const NOTEBOOK_CLAUDE_MODEL = env('NOTEBOOK_CLAUDE_MODEL', 'claude-sonnet-4-6');
+
+/** chat.jsonl に保持する最大メッセージ数（超えたら古いものから削除）。 */
+export const NOTEBOOK_CHAT_MAX_MESSAGES = envNum('NOTEBOOK_CHAT_MAX_MESSAGES', 500);
+
+/** artifacts/ の合計サイズ上限バイト（0 = 無制限、既定 10GB）。 */
+export const NOTEBOOK_ARTIFACT_MAX_TOTAL_BYTES = envNum(
+  'NOTEBOOK_ARTIFACT_MAX_TOTAL_BYTES',
+  10 * 1024 * 1024 * 1024,
+);
+
 /** 受信箱本体（追記専用 JSONL・1 行 1 エントリ）。 */
 export const INBOX_FILE = join(INBOX_DATA_DIR, 'inbox.jsonl');
 
@@ -279,6 +291,14 @@ export const TERMINALS: TerminalDef[] = [
     label: env('TERMINAL_3_LABEL', 'ターミナル3'),
     // この箱（local）の予備セッション spare。
     tmuxSession: env('TERMINAL_3_TMUX', 'spare'),
+  },
+  {
+    id: 4,
+    port: envNum('TERMINAL_4_PORT', 7684),
+    service: env('TERMINAL_4_SERVICE', 'apollo-terminal-4.service'),
+    label: env('TERMINAL_4_LABEL', 'ターミナル4'),
+    // この箱（local）の OpenClaw 秘書 Masayoshi（tmux セッション 'openclaw'、openclaw chat）。
+    tmuxSession: env('TERMINAL_4_TMUX', 'openclaw'),
   },
 ];
 

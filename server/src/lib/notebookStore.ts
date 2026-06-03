@@ -21,7 +21,7 @@ import {
   unlinkSync,
 } from 'node:fs';
 import { join, extname, basename } from 'node:path';
-import { NOTEBOOKS_DIR } from '../config.js';
+import { NOTEBOOKS_DIR, NOTEBOOK_CHAT_MAX_MESSAGES } from '../config.js';
 import {
   resolveNotebookDir,
   resolveNotebookSubPath,
@@ -284,6 +284,22 @@ export function createNotebook(name: string): NotebookMeta {
   return meta;
 }
 
+/**
+ * ディレクトリ内のファイル数を返す（stat なし・一覧取得用の軽量版）。
+ * listDir と違い statSync を呼ばないため、多数ノートブックの一覧取得が速い。
+ */
+function countDir(dir: string, sub: 'sources' | 'artifacts'): number {
+  const abs = join(dir, sub);
+  if (!existsSync(abs)) return 0;
+  try {
+    return readdirSync(abs, { withFileTypes: true }).filter(
+      (e) => e.isFile() && !e.name.startsWith('.'),
+    ).length;
+  } catch {
+    return 0;
+  }
+}
+
 /** 全ノートブックのサマリ一覧（updatedAt 降順）。 */
 export function listNotebooks(): NotebookSummary[] {
   ensureRoot();
@@ -300,7 +316,7 @@ export function listNotebooks(): NotebookSummary[] {
     try {
       id = validateNotebookId(ent.name);
     } catch {
-      continue; // ランダム id 形式でない dir は無視。
+      continue;
     }
     const dir = join(NOTEBOOKS_DIR, id);
     const meta = readMeta(dir);
@@ -308,8 +324,8 @@ export function listNotebooks(): NotebookSummary[] {
     out.push({
       id: meta.id,
       name: meta.name,
-      sourceCount: listDir(dir, 'sources').length,
-      artifactCount: listDir(dir, 'artifacts').length,
+      sourceCount: countDir(dir, 'sources'),
+      artifactCount: countDir(dir, 'artifacts'),
       updatedAt: meta.updatedAt,
     });
   }
@@ -358,10 +374,31 @@ function readChat(dir: string): ChatMessage[] {
   return out;
 }
 
-/** chat.jsonl に 1 メッセージ追記する。 */
+/**
+ * chat.jsonl に 1 メッセージ追記する。
+ * メッセージ数が NOTEBOOK_CHAT_MAX_MESSAGES の 2 倍を超えたら末尾 MAX 件に切り詰める。
+ */
 export function appendChat(id: string, msg: ChatMessage): void {
   const dir = resolveNotebookDir(id, true);
-  appendFileSync(chatPath(dir), JSON.stringify(msg) + '\n', 'utf8');
+  const path = chatPath(dir);
+  appendFileSync(path, JSON.stringify(msg) + '\n', 'utf8');
+
+  const max = NOTEBOOK_CHAT_MAX_MESSAGES;
+  if (max <= 0) return;
+  const all = readChat(dir);
+  if (all.length > max * 2) {
+    const trimmed = all.slice(-max);
+    writeFileSync(path, trimmed.map((m) => JSON.stringify(m)).join('\n') + '\n', 'utf8');
+  }
+}
+
+/**
+ * 直近 N 件のチャット履歴を返す（ask のコンテキスト渡し用）。
+ * getNotebookDetail とは別に軽量に取得できる。
+ */
+export function readChatHistory(id: string, n: number): ChatMessage[] {
+  const dir = resolveNotebookDir(id);
+  return readChat(dir).slice(-n);
 }
 
 /** sources/<name> と対応する extracted/<name>.txt を削除する。 */
@@ -388,4 +425,24 @@ export function deleteSource(id: string, name: string): boolean {
 export function artifactNames(id: string): Set<string> {
   const dir = resolveNotebookDir(id);
   return new Set(listDir(dir, 'artifacts').map((f) => f.name));
+}
+
+/** artifacts/ の合計バイト数（サイズ上限チェック用）。 */
+export function totalArtifactBytes(id: string): number {
+  const dir = resolveNotebookDir(id);
+  const abs = join(dir, 'artifacts');
+  if (!existsSync(abs)) return 0;
+  try {
+    return readdirSync(abs, { withFileTypes: true })
+      .filter((e) => e.isFile() && !e.name.startsWith('.'))
+      .reduce((sum, e) => {
+        try {
+          return sum + statSync(join(abs, e.name)).size;
+        } catch {
+          return sum;
+        }
+      }, 0);
+  } catch {
+    return 0;
+  }
 }

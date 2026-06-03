@@ -19,7 +19,11 @@ import { join } from 'node:path';
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 
-import { NOTEBOOK_UPLOAD_MAX_BYTES, NOTEBOOK_UPLOAD_MAX_FILES } from './config.js';
+import {
+  NOTEBOOK_UPLOAD_MAX_BYTES,
+  NOTEBOOK_UPLOAD_MAX_FILES,
+  NOTEBOOK_ARTIFACT_MAX_TOTAL_BYTES,
+} from './config.js';
 import { SafePathError } from './lib/vaultPath.js';
 import {
   resolveNotebookDir,
@@ -36,9 +40,12 @@ import {
   touchNotebook,
   artifactNames,
   resolveNotebookFile,
+  readChatHistory,
+  totalArtifactBytes,
+  type ChatMessage,
 } from './lib/notebookStore.js';
 import { extractSourceText } from './lib/notebookExtract.js';
-import { runClaude } from './lib/notebookClaude.js';
+import { runClaude, runClaudeStream } from './lib/notebookClaude.js';
 import { convertOfficeToPdf, isConvertibleToPdf } from './lib/officeToPdf.js';
 
 /** :id パラメータを string に正規化する（express 5 は string | string[] 型）。 */
@@ -82,8 +89,9 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     try {
+      const overwrite = req.query?.replace === '1' || req.query?.replace === 'true';
       const safe = sanitizeNotebookFilename(decodeOriginalName(file.originalname));
-      const { absPath, name } = resolveSourceTarget(idParam(req), safe);
+      const { absPath, name } = resolveSourceTarget(idParam(req), safe, { overwrite });
       const r = req as Request & { _savedSources?: SavedSourceRef[] };
       if (!r._savedSources) r._savedSources = [];
       r._savedSources.push({ name, absPath });
@@ -271,8 +279,9 @@ function handleDeleteSource(req: Request, res: Response): void {
 
 // ─── 資料根拠 Q&A ─────────────────────────────────────
 
-function buildAskPrompt(question: string): string {
-  return [
+/** ask プロンプトを構築する。history がある場合は会話履歴を埋め込む。 */
+function buildAskPrompt(question: string, history: ChatMessage[]): string {
+  const lines = [
     'あなたはこのノートブックの資料アシスタントです。',
     '回答・成果物の文章は中立的な丁寧体（です・ます）で書いてください。キャラクター人格・方言・特定の口調（「〜じゃ」「〜のう」「ほっほっ」等）は一切使わず、エンドユーザー向けの自然な日本語にしてください。',
     'カレントディレクトリの ./sources/ と ./extracted/ にある資料だけを根拠に、次の質問に日本語で答えてください。',
@@ -280,9 +289,23 @@ function buildAskPrompt(question: string): string {
     '可能なら根拠にした資料名（ファイル名）を回答中に挙げてください。',
     '資料に書かれていないことは推測せず「資料に記載がありません」と述べてください。',
     '回答は簡潔で読みやすい日本語にしてください。',
-    '',
-    `質問: ${question}`,
-  ].join('\n');
+  ];
+
+  if (history.length > 0) {
+    lines.push('', '--- 過去の会話履歴（参考にしてください） ---');
+    for (const m of history) {
+      lines.push(`${m.role === 'user' ? 'ユーザー' : 'アシスタント'}: ${m.text}`);
+    }
+    lines.push('--- 以上が過去の会話履歴 ---');
+  }
+
+  lines.push('', `質問: ${question}`);
+  return lines.join('\n');
+}
+
+/** SSE イベントを 1 行書き出す。 */
+function sseWrite(res: Response, data: Record<string, unknown>): void {
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
 async function handleAsk(req: Request, res: Response): Promise<void> {
@@ -291,9 +314,10 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'question が必要です。' });
     return;
   }
+  const id = idParam(req);
   let dir: string;
   try {
-    dir = resolveNotebookDir(idParam(req), true);
+    dir = resolveNotebookDir(id, true);
   } catch (e) {
     if (e instanceof SafePathError) {
       res.status(/not found/i.test(e.message) ? 404 : 400).json({ error: e.message });
@@ -302,21 +326,43 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
     throw e;
   }
 
-  // user メッセージを先に記録。
-  appendChat(idParam(req), { ts: new Date().toISOString(), role: 'user', text: question });
+  // 直近 10 件の会話履歴をコンテキストに含める。
+  const history = readChatHistory(id, 10);
 
-  const result = await runClaude(dir, buildAskPrompt(question));
+  // user メッセージを先に記録。
+  appendChat(id, { ts: new Date().toISOString(), role: 'user', text: question });
+
+  const prompt = buildAskPrompt(question, history);
+  const wantsStream = (req.headers.accept ?? '').includes('text/event-stream');
+
+  if (wantsStream) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const result = await runClaudeStream(dir, prompt, (chunk) => {
+      sseWrite(res, { type: 'chunk', text: chunk });
+    });
+
+    const answer = (result.stdout || '').trim();
+    appendChat(id, { ts: new Date().toISOString(), role: 'assistant', text: answer });
+    touchNotebook(id);
+    sseWrite(res, { type: 'done', answer, ...(result.error ? { error: result.error } : {}) });
+    res.end();
+    return;
+  }
+
+  const result = await runClaude(dir, prompt);
   const answer = (result.stdout || '').trim();
 
   if (!result.ok && !answer) {
-    // 完全失敗（部分出力もなし）→ 200 + error フィールド（部分劣化方針）。
     res.status(200).json({ answer: '', error: result.error });
     return;
   }
 
-  // 回答（部分でも）を assistant として記録。
-  appendChat(idParam(req), { ts: new Date().toISOString(), role: 'assistant', text: answer });
-  touchNotebook(idParam(req));
+  appendChat(id, { ts: new Date().toISOString(), role: 'assistant', text: answer });
+  touchNotebook(id);
   res.status(200).json({ answer, ...(result.error ? { error: result.error } : {}) });
 }
 
@@ -376,9 +422,10 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'custom には instruction が必要です。' });
     return;
   }
+  const id = idParam(req);
   let dir: string;
   try {
-    dir = resolveNotebookDir(idParam(req), true);
+    dir = resolveNotebookDir(id, true);
   } catch (e) {
     if (e instanceof SafePathError) {
       res.status(/not found/i.test(e.message) ? 404 : 400).json({ error: e.message });
@@ -387,15 +434,57 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
     throw e;
   }
 
-  const before = artifactNames(idParam(req));
-  const result = await runClaude(dir, buildGeneratePrompt(kind, instruction));
+  // artifacts/ の合計サイズが上限を超えていたら 413 で弾く。
+  const maxArtifacts = NOTEBOOK_ARTIFACT_MAX_TOTAL_BYTES;
+  if (maxArtifacts > 0) {
+    const currentBytes = totalArtifactBytes(id);
+    if (currentBytes >= maxArtifacts) {
+      const mb = Math.round(maxArtifacts / (1024 * 1024));
+      res
+        .status(413)
+        .json({ error: `artifacts の合計サイズが上限（${mb}MB）に達しています。不要な生成物を削除してから再実行してください。` });
+      return;
+    }
+  }
 
-  // 生成後に artifacts/ を再走査し、新規物を差分で割り出す。
-  const detail = getNotebookDetail(idParam(req));
+  const before = artifactNames(id);
+  const prompt = buildGeneratePrompt(kind, instruction);
+  const wantsStream = (req.headers.accept ?? '').includes('text/event-stream');
+
+  if (wantsStream) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const result = await runClaudeStream(dir, prompt, (chunk) => {
+      sseWrite(res, { type: 'chunk', text: chunk });
+    });
+
+    const detail = getNotebookDetail(id);
+    const allArtifacts = detail?.artifacts ?? [];
+    const created = allArtifacts.filter((a) => !before.has(a.name));
+    touchNotebook(id);
+
+    sseWrite(res, {
+      type: 'done',
+      ok: result.ok && created.length > 0,
+      created,
+      artifacts: allArtifacts,
+      report: (result.stdout || '').trim(),
+      ...(result.error ? { error: result.error } : {}),
+    });
+    res.end();
+    return;
+  }
+
+  const result = await runClaude(dir, prompt);
+
+  const detail = getNotebookDetail(id);
   const allArtifacts = detail?.artifacts ?? [];
   const created = allArtifacts.filter((a) => !before.has(a.name));
 
-  touchNotebook(idParam(req));
+  touchNotebook(id);
   res.status(200).json({
     ok: result.ok && created.length > 0,
     created,

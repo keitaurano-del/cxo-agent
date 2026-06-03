@@ -7,11 +7,12 @@
 // 同時実行は共有 Anthropic アカウントを食い潰さないよう簡易セマフォで 1〜2 に制限する。
 // 上限を超えたリクエストは空きが出るまで待つ。タイムアウト・巨大 stdout 上限も設ける。
 
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import {
   NOTEBOOK_CLAUDE_BIN,
   NOTEBOOK_CLAUDE_TIMEOUT_MS,
   NOTEBOOK_CLAUDE_CONCURRENCY,
+  NOTEBOOK_CLAUDE_MODEL,
 } from '../config.js';
 
 // ─── 簡易セマフォ（同時実行制限）─────────────────────────────
@@ -55,24 +56,25 @@ export interface ClaudeRunResult {
   error?: string;
 }
 
+/** claude に渡す共通 CLI 引数（モデル指定込み）。 */
+function claudeArgs(prompt: string): string[] {
+  return ['--model', NOTEBOOK_CLAUDE_MODEL, '-p', prompt];
+}
+
 /**
  * claude -p を cwd=notebookDir で起動し、stdout を返す。
  * 失敗・タイムアウトは throw せず { ok:false, error } で返す（呼び出し側で部分劣化 200）。
- *
- * @param notebookDir 起動 cwd（= ノートブックの dir）。
- * @param prompt claude に渡すプロンプト（-p の引数）。
  */
 export function runClaude(notebookDir: string, prompt: string): Promise<ClaudeRunResult> {
   return new Promise<ClaudeRunResult>((res) => {
     void acquire().then(() => {
       const child = execFile(
         NOTEBOOK_CLAUDE_BIN,
-        ['-p', prompt],
+        claudeArgs(prompt),
         {
           cwd: notebookDir,
           timeout: NOTEBOOK_CLAUDE_TIMEOUT_MS,
           maxBuffer: MAX_STDOUT_BYTES,
-          // 認証情報・PATH 等は dev ユーザの env をそのまま渡す。
           env: process.env,
         },
         (err, stdout, stderr) => {
@@ -89,12 +91,82 @@ export function runClaude(notebookDir: string, prompt: string): Promise<ClaudeRu
           res({ ok: true, stdout: out });
         },
       );
-      // stdin は使わないので閉じる（claude が入力待ちでハングしないように）。
       try {
         child.stdin?.end();
       } catch {
         /* noop */
       }
+    });
+  });
+}
+
+/**
+ * claude -p をストリーミングで起動し、stdout チャンクを onChunk に逐次渡す。
+ * 完了後に ClaudeRunResult を返す（runClaude と同じ失敗方針）。
+ */
+export function runClaudeStream(
+  notebookDir: string,
+  prompt: string,
+  onChunk: (text: string) => void,
+): Promise<ClaudeRunResult> {
+  return new Promise<ClaudeRunResult>((res) => {
+    void acquire().then(() => {
+      const child = spawn(NOTEBOOK_CLAUDE_BIN, claudeArgs(prompt), {
+        cwd: notebookDir,
+        env: process.env,
+      });
+
+      let stdout = '';
+      let stderr = '';
+      let timedOut = false;
+
+      const timer = setTimeout(() => {
+        timedOut = true;
+        child.kill('SIGTERM');
+      }, NOTEBOOK_CLAUDE_TIMEOUT_MS);
+
+      try {
+        child.stdin?.end();
+      } catch {
+        /* noop */
+      }
+
+      child.stdout?.on('data', (chunk: Buffer) => {
+        const text = chunk.toString();
+        if (stdout.length + text.length <= MAX_STDOUT_BYTES) {
+          stdout += text;
+          onChunk(text);
+        }
+      });
+
+      child.stderr?.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        release();
+        if (timedOut) {
+          res({
+            ok: false,
+            stdout,
+            error: `claude がタイムアウトしました（${Math.round(NOTEBOOK_CLAUDE_TIMEOUT_MS / 1000)}s）`,
+          });
+          return;
+        }
+        if (code !== 0) {
+          const errDetail = stderr ? ` | ${stderr.slice(0, 500)}` : '';
+          res({ ok: false, stdout, error: `claude 実行に失敗しました（終了コード ${code}）${errDetail}` });
+          return;
+        }
+        res({ ok: true, stdout });
+      });
+
+      child.on('error', (err) => {
+        clearTimeout(timer);
+        release();
+        res({ ok: false, stdout, error: `claude 実行に失敗しました: ${err.message}` });
+      });
     });
   });
 }
