@@ -333,3 +333,14 @@ export function KeyboardIcon(props: IconProps) {
     </svg>
   );
 }
+
+// ゲージ（プラン使用量）アイコン: 半円+針で使用率を表現。
+export function GaugeIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M5.5 17.5A8 8 0 1 1 18.5 17.5" />
+      <path d="M12 12 9 7" strokeWidth={2} strokeLinecap="round" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}

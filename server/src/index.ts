@@ -15,6 +15,7 @@ import { collectTasks } from './collectors/tasks.js';
 import { collectNarrative } from './collectors/narrative.js';
 import { collectRoster } from './collectors/roster.js';
 import { collectUsage } from './collectors/usage.js';
+import { collectClaudeUsage } from './collectors/claudeUsage.js';
 import { collectWorkflows, collectWorkflowDetail } from './collectors/workflows.js';
 import { collectDeploys } from './collectors/deploys.js';
 import { collectTicks } from './collectors/ticks.js';
@@ -220,6 +221,20 @@ app.use('/api/approvals', approvalRouter());
 
 app.get('/api/usage', (_req, res) => {
   safeJson(res, () => collectUsage());
+});
+
+// ─── Claude プラン使用量（MC-122）──────────────────────────────
+// 各 Claude アカウント（local=この箱 / oldbox=旧箱 SSH）の OAuth usage/profile を取得し、
+// 現在のセッション(5h)/週間(全モデル)/週間(Sonnet) の % とリセット時刻を返す。
+// 認証ミドルウェア（makeAuthMiddleware）配下。OAuth usage は 429 制約があるため
+// collector 側で CLAUDE_USAGE_TTL_MS（既定 180 秒）強キャッシュ。取得失敗・429・SSH 不通でも
+// アカウント単位の error に畳んで 200 で部分劣化（collector が全例外を吸収）。
+app.get('/api/claude-usage', (_req, res, next) => {
+  collectClaudeUsage()
+    .then((data) => {
+      if (!res.headersSent) res.json(data);
+    })
+    .catch(next);
 });
 
 // ─── Deploys（deploy 連動 MC-64）──────────────────────────────

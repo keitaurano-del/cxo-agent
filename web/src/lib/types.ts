@@ -375,3 +375,35 @@ export interface AlertsResponse {
     inboxStallHours: number;
   };
 }
+
+// ─── Claude プラン使用量（MC-122 / GET /api/claude-usage）──────────────
+// server/src/collectors/claudeUsage.ts のレスポンス形と一致させる。
+
+/** 1 つのバー（使用率 % + リセット時刻）。 */
+export interface UsageBar {
+  pct: number | null;
+  resetsAt: string | null;
+}
+
+export type ClaudeAccountKey = 'local' | 'oldbox';
+
+/** 1 アカウント分の使用量。取得失敗部分は error に畳む。 */
+export interface ClaudeAccountUsage {
+  key: ClaudeAccountKey;
+  label: string;
+  email?: string;
+  tier?: string;
+  session: UsageBar;
+  weekAll: UsageBar;
+  weekSonnet: UsageBar | null;
+  weekOpus?: UsageBar | null;
+  fetchedAt: string;
+  error?: string;
+}
+
+export interface ClaudeUsageSummary {
+  generatedAt: string;
+  cached: boolean;
+  ttlMs: number;
+  accounts: ClaudeAccountUsage[];
+}

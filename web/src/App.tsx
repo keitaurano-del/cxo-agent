@@ -28,6 +28,7 @@ import Narrative from './views/Narrative';
 import Vault from './views/Vault';
 import Deliverables from './views/Deliverables';
 import Usage from './views/Usage';
+import PlanUsage from './views/PlanUsage';
 import Ticks from './views/Ticks';
 import Approvals from './views/Approvals';
 import Terminal from './views/Terminal';
@@ -210,6 +211,7 @@ export default function App() {
               <Route path="/today" element={<Narrative />} />
               <Route path="/ticks" element={<Ticks />} />
               <Route path="/usage" element={<Usage />} />
+              <Route path="/plan-usage" element={<PlanUsage />} />
             </Route>
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/approvals" element={<Approvals />} />
