@@ -6,7 +6,7 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
 import { existsSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { PORT, CLAUDE_PROJECTS_DIR, VAULT_DIR, STALL_MINUTES } from './config.js';
@@ -473,8 +473,22 @@ export function broadcast(event: string, data: unknown): void {
 // ─── 静的配信（web/dist があれば SPA を配信。次フェーズ）──────────
 
 if (existsSync(WEB_DIST)) {
-  app.use(express.static(WEB_DIST));
+  // index.html は常に再検証（no-cache）させ、デプロイ後にモバイルが古い
+  // バンドル参照を掴み続ける問題（MC-115: スマホだけ更新されない）を防ぐ。
+  // 中身がハッシュ付きの /assets/* は immutable で長期キャッシュ可。
+  app.use(
+    express.static(WEB_DIST, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+        } else if (filePath.includes(`${sep}assets${sep}`)) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
+    }),
+  );
   app.get('/*splat', (_req, res) => {
+    res.set('Cache-Control', 'no-cache, must-revalidate');
     res.sendFile(join(WEB_DIST, 'index.html'));
   });
 }
