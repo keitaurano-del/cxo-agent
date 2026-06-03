@@ -730,7 +730,7 @@ ID 採番: **AR-0x**。
 | MC-123 | 「画像を選択」「出力を見る」(＋キーバー)をターミナル2・3でも使えるよう端末別対応（send-keys/capture を各tmuxセッション・2は旧箱ssh+scp） | 高 | feature | DONE（2026-06-03 dev-logic。terminalControl/terminalUpload を端末別に一般化。config の TERMINALS に tmuxSession/remote(ssh) 追加。send-keys/capture/output/upload が各端末対象（2は旧箱 ssh+scp）。フロントは serverAssisted 出し分け廃止で全タブ有効。commit 396c4d1。＋ターミナル2 bypass: 旧箱 ~/.claude/settings.json に defaultMode:bypassPermissions+skipDangerousModePermissionPrompt、/home/dev trust 設定で確認スキップ恒久化。真因=pkill -f claude の自滅、pkill -x/-f /usr/bin/claude に是正） | dev-logic | MC-119・terminalControl/terminalUpload |
 | MC-124 | 「出力を見る」の取得範囲を拡大（200→2000行、上限5000、tmux history-limit 2000→50000） | 中 | UX | DONE（2026-06-03 Keita 依頼。terminalControl 上限500→5000・既定100→1000、フロント lines=200→2000、両箱 tmux history-limit 50000。server tsc0/web build green・restart後 lines=2000 で1496行返却確認） | 林 | terminalControl.ts・Terminal.tsx |
 | MC-127 | 「出力を見る」を開いたら最新（末尾）が見える状態にする | 低 | UX | DONE（2026-06-03 Keita 依頼。OutputModal に preRef＋内容ロード後 scrollTop=scrollHeight で末尾スクロール） | 林 | Terminal.tsx |
-| MC-137 | ノートブックに「テンプレート抽出」を作り込む（複数資料から共通の優れた文書構造を抽出し、各節の『何を/なぜ書くか』ガイド＋コツ付きの再利用テンプレを生成。Keitaのドキュメンテーション力向上が目的） | 高 | feature | TODO（2026-06-03 Keita 依頼） | dev-logic | MC-126 ノートブック |
+| MC-137 | ノートブックに「テンプレート抽出」を作り込む（複数資料から共通の優れた文書構造を抽出し、各節の『何を/なぜ書くか』ガイド＋コツ付きの再利用テンプレを生成。Keitaのドキュメンテーション力向上が目的） | 高 | feature | DONE（2026-06-03 dev-logic。notebookRouter に template_extract KIND追加・types.ts型追加・Notebooks.tsx UI追加。server tsc 0err・web build green） | dev-logic | MC-126 ノートブック |
 | MC-125 | 成果物ビューでファイルを削除できるようにする | 中 | feature | DONE（2026-06-03 dev-logic。DELETE /api/deliverables/file?path= realpath防御・README保護(403)・実体無404・dir400・traversal400。MC-117変換キャッシュPDFも連動削除。フロント: 各行に TrashIcon＋インライン確認→DELETE→refetch、プレビュー中削除で自動クローズ。server tsc0/web build green・restart後 healthz200・疎通確認。commit ed3e428） | dev-logic | MC-116 |
 | MC-126 | NotebookLM 的機能: 読み込んだ資料の分析・資料ベースのテンプレート生成・資料に根ざしたQ&A | 高 | feature/企画 | DONE（2026-06-03 test-functional 検証。server 20:55 restart 済。GET /api/notebooks→JSON 200・POST/GET/:id/DELETE CRUD 全件 green。server tsc 0error・web build 0error。/notebooks ルート App.tsx L223 登録確認。commit 55eadda 含む実装確定） | 林（設計）+ dev-logic | MC-116/117/118・claude・LibreOffice |
 
@@ -1920,7 +1920,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-134 |
 | タイトル | morning-briefing（朝ブリーフィング 07:00）を Masayoshi 駆動へ移行＋ceo バグ修正 |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | DONE（2026-06-03 実機smoke検証済: :28 の claude --print --agent ceo（削除済persona＝空振りバグ）と :67 の claude --print を openclaw agent --agent main --json|jq に置換。Masayoshi CEO として frontmatter/KPI/インフラ/残課題/推奨Top3/戦略提案/申し送り全セクション生成を確認。バックアップ morning-briefing.sh.bak.pre-openclaw） |
 | 担当 | 林 |
 | 群 | C群（既存 cron を Masayoshi(openclaw)駆動へ即・全面置き換え） |
 | 詳細 | morning-briefing（朝ブリーフィング、cron 07:00、`morning-briefing.sh:28` と `:67` の LLM 呼出）を `openclaw agent --agent main`（Masayoshi）へ差し替える。移行ついでに既知バグを修正: :28 が `--agent ceo` を指すが ceo persona は 2026-05-31 に削除済（[[project-agent-roster-20260531]]）で壊れている。 |
@@ -1939,7 +1939,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-135 |
 | タイトル | apollo-keeper（Apollo 深い点検 15,45）の LLM 部分を Masayoshi 駆動へ移行 |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | DONE（2026-06-03 実機smoke検証済: :117 の claude --print を openclaw agent --agent main --json に置換。persona を「Masayoshi が Apollo 番人役を担う」に更新。read-only smoke で healthz 200・service active・ディスク余裕を Masayoshi が丁寧体で報告。apollo-watchdog は bash 据え置き。バックアップ apollo-keeper.sh.bak.pre-openclaw） |
 | 担当 | 林 |
 | 群 | C群（既存 cron を Masayoshi(openclaw)駆動へ即・全面置き換え） |
 | 詳細 | apollo-keeper（Apollo 深い点検、cron 15,45、`apollo-keeper.sh:117` の `claude --print`）の LLM 部分を `openclaw agent --agent main`（Masayoshi）へ差し替える。apollo-watchdog（cron */3 の純 bash 死活probe→restart）は LLM 非依存のセーフティネットとして bash のまま据え置き（置き換え対象外＝C群共通方針）。 |

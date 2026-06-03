@@ -471,7 +471,7 @@ export interface NotebookAskResponse {
 }
 
 /** 生成物 kind。custom は instruction 必須。 */
-export type NotebookGenerateKind = 'summary' | 'faq' | 'timeline' | 'template' | 'custom';
+export type NotebookGenerateKind = 'summary' | 'faq' | 'timeline' | 'template' | 'template_extract' | 'custom';
 
 /** POST /api/notebooks/:id/generate のレスポンス。 */
 export interface NotebookGenerateResponse {

@@ -593,6 +593,7 @@ const GENERATE_BUTTONS: { kind: NotebookGenerateKind; label: string }[] = [
   { kind: 'faq', label: 'FAQ' },
   { kind: 'timeline', label: '時系列' },
   { kind: 'template', label: 'テンプレート' },
+  { kind: 'template_extract', label: 'テンプレート抽出' },
   { kind: 'custom', label: 'カスタム' },
 ];
 
@@ -666,7 +667,7 @@ function ArtifactsPane({
   const [report, setReport] = useState<string | null>(null);
 
   const needsInstruction = activeKind === 'custom';
-  const showInstruction = activeKind === 'custom' || activeKind === 'template';
+  const showInstruction = activeKind === 'custom' || activeKind === 'template' || activeKind === 'template_extract';
 
   const run = useCallback(() => {
     if (!activeKind || generating) return;
@@ -678,9 +679,9 @@ function ArtifactsPane({
     setError(null);
     setReport(null);
 
-    // テンプレートは出力形式の指定を instruction に織り込む。
+    // テンプレート系は出力形式の指定を instruction に織り込む。
     let instr = instruction.trim();
-    if (activeKind === 'template' && templateFormat !== TEMPLATE_FORMATS[0]) {
+    if ((activeKind === 'template' || activeKind === 'template_extract') && templateFormat !== TEMPLATE_FORMATS[0]) {
       const fmt = `出力形式は ${templateFormat} で作成してください。`;
       instr = instr ? `${fmt} ${instr}` : fmt;
     }
@@ -739,8 +740,13 @@ function ArtifactsPane({
             ))}
           </div>
 
-          {activeKind === 'template' && (
+          {(activeKind === 'template' || activeKind === 'template_extract') && (
             <div className="mb-2">
+              {activeKind === 'template_extract' && (
+                <p className="mb-2 text-[11px] text-text-faint">
+                  資料の構造・書き方を分析し、各セクションに「目的」「書くべき内容」「書き方のコツ」を添えた学習ガイド付きテンプレートを生成します。
+                </p>
+              )}
               <label className="mb-1 block text-[11px] text-text-faint">出力形式</label>
               <div className="flex flex-wrap gap-1.5">
                 {TEMPLATE_FORMATS.map((fmt) => (
@@ -771,6 +777,8 @@ function ArtifactsPane({
               placeholder={
                 activeKind === 'custom'
                   ? '作成してほしい内容を指示してください（必須）…'
+                  : activeKind === 'template_extract'
+                  ? '用途（例: 会議議事録、企画書、週次レポート）や要望があれば入力（任意）…'
                   : '雛形の追加要望があれば入力（任意）…'
               }
               className="mb-2 w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none disabled:opacity-60"
