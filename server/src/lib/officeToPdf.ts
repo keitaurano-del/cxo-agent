@@ -22,6 +22,7 @@ import {
   copyFileSync,
   statSync,
   readdirSync,
+  unlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename, extname } from 'node:path';
@@ -149,5 +150,37 @@ export async function convertOfficeToPdf(srcAbsPath: string): Promise<string> {
     } catch {
       /* noop */
     }
+  }
+}
+
+/**
+ * ソース成果物に対応する変換キャッシュ（PDF）を削除する（MC-125）。
+ *
+ * キャッシュキーはソースの絶対パス + mtime + size から決まるため、
+ * **ソースをまだ消す前に**（実体が存在する状態で）呼ぶこと。実体が無いと
+ * キーを再計算できず該当キャッシュを特定できない。
+ *
+ * 対象が Office 変換系でない / 実体が無い / キャッシュが存在しない場合は
+ * 何もせず false を返す（残骸が無いだけなので無視してよい）。
+ *
+ * @param srcAbsPath 変換対象の絶対パス（deliverablePath 検証済みであること）。
+ * @returns キャッシュ PDF を実際に削除したら true、対象が無ければ false。
+ */
+export function deleteOfficePdfCache(srcAbsPath: string): boolean {
+  const ext = extname(srcAbsPath).toLowerCase();
+  if (!isConvertibleToPdf(ext)) return false;
+  let key: string;
+  try {
+    key = cacheKey(srcAbsPath); // statSync が要るのでソース実体が必要。
+  } catch {
+    return false; // 実体が無い等でキー算出不能 → 残骸特定不可、無視。
+  }
+  const cachedPdf = join(DELIVERABLES_CACHE_DIR, `${key}.pdf`);
+  if (!existsSync(cachedPdf)) return false;
+  try {
+    unlinkSync(cachedPdf);
+    return true;
+  } catch {
+    return false; // 消せなくても本体削除は成功扱い（残骸防止はベストエフォート）。
   }
 }

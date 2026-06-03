@@ -90,6 +90,18 @@ export function CloseIcon(props: IconProps) {
   );
 }
 
+export function TrashIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 7h16" />
+      <path d="M10 4h4" />
+      <path d="M6 7l1 13h10l1-13" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
+  );
+}
+
 export function DotIcon(props: IconProps) {
   return (
     <svg {...base({ strokeWidth: 0, ...props })}>

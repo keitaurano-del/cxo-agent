@@ -14,6 +14,7 @@ import {
   FileIcon,
   EyeIcon,
   CloseIcon,
+  TrashIcon,
 } from '../components/icons';
 import { relativeTime } from '../lib/time';
 
@@ -313,13 +314,50 @@ function PdfPreview({ file, src }: { file: DeliverableFile; src: string }) {
   );
 }
 
-function FileCard({ file }: { file: DeliverableFile }) {
+// 削除（MC-125）。各ファイル行のゴミ箱ボタン → インライン確認 → DELETE 実行。
+// 成功で onDeleted（一覧 refetch）を呼ぶ。削除されたカードは refetch で一覧から
+// 消えてアンマウントされるため、プレビュー（モーダル）も自動的に閉じる。
+function FileCard({ file, onDeleted }: { file: DeliverableFile; onDeleted: () => void }) {
   const isImage =
     file.kind === 'image' || IMG_EXTS.has(file.ext.toLowerCase());
   const isPdf = file.kind === 'pdf';
   const officePreviewable = isOfficePreviewable(file);
   const previewSrc = `/api/deliverables/preview?path=${encodeURIComponent(file.relpath)}`;
   const downloadHref = `/api/deliverables/file?path=${encodeURIComponent(file.relpath)}`;
+
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDelete = useCallback(() => {
+    setDeleting(true);
+    setDeleteError(null);
+    fetch(`/api/deliverables/file?path=${encodeURIComponent(file.relpath)}`, {
+      method: 'DELETE',
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          // 一覧再取得で即反映（このカードはアンマウントされる）。
+          onDeleted();
+          return;
+        }
+        let msg = `削除に失敗しました（HTTP ${res.status}）。`;
+        try {
+          const body = (await res.json()) as { error?: string };
+          if (body.error) msg = body.error;
+        } catch {
+          /* JSON でなければ既定メッセージ。 */
+        }
+        setDeleteError(msg);
+        setDeleting(false);
+        setConfirming(false);
+      })
+      .catch(() => {
+        setDeleteError('ネットワークエラーで削除に失敗しました。');
+        setDeleting(false);
+        setConfirming(false);
+      });
+  }, [file.relpath, onDeleted]);
 
   return (
     <div className="flex flex-col rounded-lg border border-border bg-surface p-4">
@@ -335,14 +373,27 @@ function FileCard({ file }: { file: DeliverableFile }) {
             {file.name}
           </span>
         </div>
-        <a
-          href={downloadHref}
-          download={file.name}
-          className="shrink-0 rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
-          aria-label={`${file.name} をダウンロード`}
-        >
-          <DownloadIcon width={16} height={16} />
-        </a>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <a
+            href={downloadHref}
+            download={file.name}
+            className="rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
+            aria-label={`${file.name} をダウンロード`}
+          >
+            <DownloadIcon width={16} height={16} />
+          </a>
+          <button
+            type="button"
+            onClick={() => {
+              setConfirming(true);
+              setDeleteError(null);
+            }}
+            className="rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
+            aria-label={`${file.name} を削除`}
+          >
+            <TrashIcon width={16} height={16} />
+          </button>
+        </div>
       </div>
       <div className="mt-2 flex items-center gap-3 text-xs text-text-faint">
         <span>{humanReadableSize(file.sizeBytes)}</span>
@@ -350,6 +401,51 @@ function FileCard({ file }: { file: DeliverableFile }) {
       </div>
       {isImage && <ImagePreview file={file} />}
       {(isPdf || officePreviewable) && <PdfPreview file={file} src={previewSrc} />}
+
+      {confirming && (
+        <div
+          className="mt-3 rounded-lg border border-border bg-surface-2 p-3"
+          role="alertdialog"
+          aria-label="削除の確認"
+        >
+          <p className="text-xs text-text">
+            <span className="font-medium" title={file.name}>
+              {file.name}
+            </span>{' '}
+            を削除しますか？この操作は取り消せません。
+          </p>
+          <div className="mt-2 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              disabled={deleting}
+              className="rounded-full px-3 py-1 text-xs text-text-muted hover:bg-surface-3 hover:text-text disabled:opacity-50"
+            >
+              キャンセル
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold text-bg disabled:opacity-50"
+              style={{ backgroundColor: 'var(--mc-stalled)' }}
+            >
+              <TrashIcon width={13} height={13} />
+              {deleting ? '削除中…' : '削除する'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {deleteError && (
+        <div
+          role="alert"
+          className="mt-2 rounded-lg border border-stalled/40 bg-stalled-bg/60 px-3 py-2 text-xs"
+          style={{ color: 'var(--mc-stalled)' }}
+        >
+          {deleteError}
+        </div>
+      )}
     </div>
   );
 }
@@ -415,7 +511,7 @@ export default function Deliverables() {
               ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {filtered.map((file) => (
-                    <FileCard key={file.relpath} file={file} />
+                    <FileCard key={file.relpath} file={file} onDeleted={refetch} />
                   ))}
                 </div>
               )}

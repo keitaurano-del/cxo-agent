@@ -5,8 +5,8 @@
 
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
-import { existsSync } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
+import { existsSync, statSync, unlinkSync } from 'node:fs';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { PORT, CLAUDE_PROJECTS_DIR, VAULT_DIR, STALL_MINUTES } from './config.js';
@@ -30,7 +30,12 @@ import {
 } from './collectors/vault.js';
 import { SafePathError } from './lib/vaultPath.js';
 import { listDeliverables, resolveDeliverable } from './collectors/deliverables.js';
-import { convertOfficeToPdf, isConvertibleToPdf } from './lib/officeToPdf.js';
+import { resolveDeliverablePath, toDeliverableRelative } from './lib/deliverablePath.js';
+import {
+  convertOfficeToPdf,
+  isConvertibleToPdf,
+  deleteOfficePdfCache,
+} from './lib/officeToPdf.js';
 import { ALL_PROJECTS, type ProjectName } from './lib/projectMap.js';
 import { makeAuthMiddleware, authEnabled } from './lib/auth.js';
 import { inboxRouter } from './inbox.js';
@@ -464,6 +469,59 @@ app.get('/api/deliverables/preview', async (req, res) => {
     res.sendFile(info.absPath);
   } catch (e) {
     if (e instanceof SafePathError) {
+      res.status(400).json({ error: e.message });
+      return;
+    }
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+// 成果物の削除（MC-125）。?path=<相対パス> のファイルを DELIVERABLES_DIR 配下から消す。
+//  - パス解決は deliverablePath（realpath / traversal 防御）を流用。範囲外/不正は SafePathError→400。
+//  - README.md は一覧の説明用なので保護（削除拒否＝403）。
+//  - ディレクトリは不可、ファイルのみ削除可（ディレクトリ指定は 400）。
+//  - 実体が無ければ 404。
+//  - 対応する変換キャッシュ（.deliverables-cache の PDF）があれば併せて消す（残骸防止、無ければ無視）。
+app.delete('/api/deliverables/file', (req, res) => {
+  try {
+    const abs = resolveDeliverablePath(String(req.query.path ?? '')); // traversal/範囲外→SafePathError
+    const relpath = toDeliverableRelative(abs);
+
+    // README.md（ビューの説明用）は保護。basename を小文字比較で弾く。
+    if (basename(abs).toLowerCase() === 'readme.md') {
+      res.status(403).json({ error: 'this file is protected and cannot be deleted' });
+      return;
+    }
+
+    if (!existsSync(abs)) {
+      res.status(404).json({ error: 'deliverable not found' });
+      return;
+    }
+    let st;
+    try {
+      st = statSync(abs);
+    } catch {
+      res.status(404).json({ error: 'deliverable not found' });
+      return;
+    }
+    if (!st.isFile()) {
+      // ディレクトリ・symlink 先非ファイル等。ファイルのみ削除可。
+      res.status(400).json({ error: 'only files can be deleted' });
+      return;
+    }
+
+    // 変換キャッシュは「ソース実体がまだ在る間」にキーを算出して消す（unlink より前）。
+    try {
+      deleteOfficePdfCache(abs);
+    } catch {
+      /* キャッシュ削除失敗は本体削除を妨げない（残骸防止はベストエフォート）。 */
+    }
+
+    unlinkSync(abs);
+    res.json({ ok: true, deleted: relpath });
+  } catch (e) {
+    if (e instanceof SafePathError) {
+      // 範囲外・不正パス・禁止セグメント。空 path は 'path is required'。
       res.status(400).json({ error: e.message });
       return;
     }
