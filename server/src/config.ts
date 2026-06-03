@@ -185,6 +185,23 @@ export const TERMINAL_CONTROL_TIMEOUT_MS = envNum('TERMINAL_CONTROL_TIMEOUT_MS',
 // 3つとも同じ ttyd Basic 認証 credential（.terminal.env の TTYD_USER/TTYD_PASS）を使う。
 // env 上書き例: TERMINAL_2_PORT / TERMINAL_2_SERVICE / TERMINAL_2_LABEL。
 
+/**
+ * remote ターミナル（別マシン）への SSH/SCP 接続情報（MC-123）。
+ * remote が定義されているターミナルは、tmux 操作（send-keys / capture-pane）を
+ * ssh 経由で対象マシンの tmux に対して実行し、画像アップロードは scp で uploadDir へ
+ * コピーしてから対象マシン上の絶対パスを注入する。1/3（local）は remote 無し。
+ */
+export interface TerminalRemote {
+  /** SSH 接続先ホスト（IP or ホスト名）。 */
+  sshHost: string;
+  /** SSH ユーザ名。接続先は `<sshUser>@<sshHost>`。 */
+  sshUser: string;
+  /** SSH 秘密鍵パス（-i に渡す）。 */
+  sshKey: string;
+  /** 画像を scp する先のディレクトリ（末尾なし）。注入するのはこの配下の絶対パス。 */
+  uploadDir: string;
+}
+
 export interface TerminalDef {
   /** ターミナル番号（1 始まり）。1 はベースパス /terminal、2 以降は /terminal/<id>。 */
   id: number;
@@ -194,6 +211,16 @@ export interface TerminalDef {
   service: string;
   /** UI のタブに表示するラベル（中立的な丁寧体・絵文字なし）。 */
   label: string;
+  /**
+   * このターミナルが操作する tmux セッション名（MC-123）。
+   * send-keys / capture-pane の対象。1='main'(この箱)、2='apollo2'(旧箱)、3='spare'(この箱)。
+   */
+  tmuxSession: string;
+  /**
+   * remote 接続情報（MC-123）。定義があれば ssh/scp 経由で対象マシンの tmux を相手にする。
+   * undefined なら local（この箱）の tmux を直接 execFile で操作する。
+   */
+  remote?: TerminalRemote;
 }
 
 /** 3ターミナルの定義（env で個別上書き可、最低限はハードコード既定で動く）。 */
@@ -203,18 +230,30 @@ export const TERMINALS: TerminalDef[] = [
     port: envNum('TERMINAL_1_PORT', 7681),
     service: env('TERMINAL_1_SERVICE', 'apollo-terminal.service'),
     label: env('TERMINAL_1_LABEL', 'ターミナル1'),
+    // この箱（local）の tmux main = 林 CLI 常駐セッション。
+    tmuxSession: env('TERMINAL_1_TMUX', 'main'),
   },
   {
     id: 2,
     port: envNum('TERMINAL_2_PORT', 7682),
     service: env('TERMINAL_2_SERVICE', 'apollo-terminal-2.service'),
     label: env('TERMINAL_2_LABEL', 'ターミナル2'),
+    // 旧箱（remote）の tmux apollo2。tmux 操作は ssh 経由、画像は scp してから注入。
+    tmuxSession: env('TERMINAL_2_TMUX', 'apollo2'),
+    remote: {
+      sshHost: env('TERMINAL_2_SSH_HOST', '139.180.202.62'),
+      sshUser: env('TERMINAL_2_SSH_USER', 'dev'),
+      sshKey: env('TERMINAL_2_SSH_KEY', join(DATA_HOME, '.ssh', 'id_ed25519')),
+      uploadDir: env('TERMINAL_2_UPLOAD_DIR', '/home/dev/terminal-uploads'),
+    },
   },
   {
     id: 3,
     port: envNum('TERMINAL_3_PORT', 7683),
     service: env('TERMINAL_3_SERVICE', 'apollo-terminal-3.service'),
     label: env('TERMINAL_3_LABEL', 'ターミナル3'),
+    // この箱（local）の予備セッション spare。
+    tmuxSession: env('TERMINAL_3_TMUX', 'spare'),
   },
 ];
 

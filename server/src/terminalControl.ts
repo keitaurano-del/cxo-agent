@@ -34,6 +34,7 @@ import {
   TERMINALS,
   terminalById,
   type TerminalDef,
+  type TerminalRemote,
 } from './config.js';
 
 // ─── 子プロセス実行ヘルパ（execFile を Promise 化）────────────────
@@ -73,9 +74,61 @@ function run(cmd: string, args: string[], env?: NodeJS.ProcessEnv): Promise<Exec
 
 const tmuxEnv = (): NodeJS.ProcessEnv => ({ ...process.env, PATH: TERMINAL_TMUX_PATH });
 
+// ─── tmux 操作の local / remote 抽象（MC-123）──────────────────
+//
+// 各ターミナルは config の tmuxSession（'main'/'apollo2'/'spare'）と remote 有無で
+// 操作対象が決まる。local はこの箱の tmux を execFile で直接、remote(2) は ssh 経由で
+// 旧箱の tmux を叩く。tmux 自体の argv（has-session/capture-pane/send-keys ...）を
+// 共通の組み立てにし、local/remote の差は「どこで実行するか」だけにする。
+
+/**
+ * リモート実行のためのシングルクオートエスケープ。
+ * ssh は remote 側で引数を連結して `sh -c` 相当に渡すため、tmux のコマンド文字列を
+ * 1 つの安全な文字列に組む必要がある。各トークンを '...' で囲み、内部の ' は '\'' に置換する。
+ * これでスペース・特殊文字・改行を含む literal でもシェル解釈されず安全に渡る。
+ */
+function shquote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * tmux の argv（先頭の 'tmux' を除いた配列）を、対象ターミナルに応じて実行する。
+ * - local: execFile('tmux', args)（argv 直渡し・シェル経由なし）。
+ * - remote: execFile('ssh', [-i key, BatchMode, ConnectTimeout, user@host, '<tmux cmd 文字列>']）。
+ *   remote コマンド文字列は `tmux` + 各 arg を shquote して連結（remote シェルでの再解釈を防ぐ）。
+ */
+function runTmux(t: TerminalDef, args: string[]): Promise<ExecResult> {
+  if (!t.remote) {
+    return run('tmux', args, tmuxEnv());
+  }
+  const r: TerminalRemote = t.remote;
+  // remote 側で実行されるコマンド文字列。tmux と各引数を個別にクオートして連結する。
+  const remoteCmd = ['tmux', ...args.map(shquote)].join(' ');
+  return run(
+    'ssh',
+    [
+      '-i',
+      r.sshKey,
+      '-o',
+      'BatchMode=yes',
+      '-o',
+      'ConnectTimeout=10',
+      `${r.sshUser}@${r.sshHost}`,
+      remoteCmd,
+    ],
+    tmuxEnv(),
+  );
+}
+
 // ─── 状態取得 ────────────────────────────────────────────────
 
-/** tmux main セッションが存在するか（has-session の exit code で判定）。 */
+/** 指定ターミナルの tmux セッションが存在するか（has-session の exit code で判定）。 */
+async function tmuxSessionExistsFor(t: TerminalDef): Promise<boolean> {
+  const r = await runTmux(t, ['has-session', '-t', t.tmuxSession]);
+  return r.code === 0;
+}
+
+/** ターミナル1（この箱の tmux main）が存在するか。後方互換用。 */
 async function tmuxSessionExists(): Promise<boolean> {
   const r = await run('tmux', ['has-session', '-t', TERMINAL_TMUX_TARGET], tmuxEnv());
   return r.code === 0;
@@ -142,8 +195,9 @@ async function collectStatusFor(t: TerminalDef): Promise<TerminalStatus> {
     tmuxSession,
     ttydService,
     ttydReachable,
+    // ready: ターミナル1 は tmux main 必須。2/3 は ttyd（service+port）だけで判定。
     ready: tmuxSession && ttydService && ttydReachable,
-    target: isPrimary ? TERMINAL_TMUX_TARGET : t.service,
+    target: isPrimary ? TERMINAL_TMUX_TARGET : t.tmuxSession,
     service: t.service,
   };
 }
@@ -273,23 +327,25 @@ async function handleStart(req: Request, res: Response): Promise<void> {
   }
 }
 
-// ─── ターミナル出力取得（MC-92 コピー改善）────────────────────
+// ─── ターミナル出力取得（MC-92 コピー改善 / MC-123 端末別）──────
 //
-// GET /api/terminal/output?lines=N
-//   tmux capture-pane で main セッションの最近 N 行を取得する。
+// GET /api/terminal/output?lines=N&terminal=<id>
+//   tmux capture-pane で対象ターミナルのセッション（main/apollo2/spare）の最近 N 行を取得する。
+//   remote(2) は ssh 越しに旧箱の apollo2 を capture する。未指定 terminal は 1。
 //   モバイル / WebView では iframe 内のテキスト選択が難しいため、
 //   フロントの「出力をコピー」ボタンがこのエンドポイントを叩いて
 //   navigator.clipboard.writeText() に渡す。
 //   lines のデフォルトは 100、最大 500 に制限する。
 //   tmux セッションが無ければ ok:false + error を返す（常に 200）。
 
-async function collectOutput(lines: number): Promise<{ ok: true; content: string; lines: number } | { ok: false; error: string }> {
-  const exists = await tmuxSessionExists();
+async function collectOutput(t: TerminalDef, lines: number): Promise<{ ok: true; content: string; lines: number } | { ok: false; error: string }> {
+  const exists = await tmuxSessionExistsFor(t);
   if (!exists) {
-    return { ok: false, error: `tmux セッション '${TERMINAL_TMUX_TARGET}' が見つかりません。` };
+    // spare 等が未起動でもエラーにせず ok:false（空相当）で返す。UI 側で穏当に表示する。
+    return { ok: false, error: `tmux セッション '${t.tmuxSession}' が見つかりません。` };
   }
   // -p: stdout 出力、-t: ターゲット、-S -N: 末尾から N 行（負の行数で末尾基点）。
-  const r = await run('tmux', ['capture-pane', '-p', '-t', TERMINAL_TMUX_TARGET, '-S', String(-lines)], tmuxEnv());
+  const r = await runTmux(t, ['capture-pane', '-p', '-t', t.tmuxSession, '-S', String(-lines)]);
   if (r.code !== 0) {
     return { ok: false, error: `tmux capture-pane に失敗しました（code ${r.code}）: ${r.stderr.trim() || r.stdout.trim()}` };
   }
@@ -299,8 +355,9 @@ async function collectOutput(lines: number): Promise<{ ok: true; content: string
 async function handleOutput(req: Request, res: Response): Promise<void> {
   const raw = typeof req.query.lines === 'string' ? parseInt(req.query.lines, 10) : NaN;
   const lines = isNaN(raw) || raw <= 0 ? 100 : Math.min(raw, 500);
+  const t = resolveTerminal(req.query.terminal);
   try {
-    const result = await collectOutput(lines);
+    const result = await collectOutput(t, lines);
     res.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -327,7 +384,10 @@ const TMUX_SPECIAL_KEYS = new Set([
 ]);
 
 async function handleSendKeys(req: Request, res: Response): Promise<void> {
-  const { keys } = req.body as { keys?: unknown };
+  const body = (req.body ?? {}) as { keys?: unknown; terminal?: unknown };
+  const keys = body.keys;
+  const t = resolveTerminal(body.terminal ?? req.query.terminal);
+  const target = t.tmuxSession;
 
   // バリデーション
   if (typeof keys !== 'string' || keys.length === 0 || keys.length > 400) {
@@ -341,11 +401,11 @@ async function handleSendKeys(req: Request, res: Response): Promise<void> {
       const direction = keys === 'scroll-up' ? 'scroll-up' : 'scroll-down';
       // copy-mode に入ってスクロール、3行分スクロールしてから copy-mode を抜ける
       // （抜けないと通常入力が詰まるため必ず cancel で戻す）
-      await run('tmux', ['copy-mode', '-t', TERMINAL_TMUX_TARGET], tmuxEnv());
+      await runTmux(t, ['copy-mode', '-t', target]);
       for (let i = 0; i < 3; i++) {
-        await run('tmux', ['send-keys', '-t', TERMINAL_TMUX_TARGET, '-X', direction], tmuxEnv());
+        await runTmux(t, ['send-keys', '-t', target, '-X', direction]);
       }
-      await run('tmux', ['send-keys', '-t', TERMINAL_TMUX_TARGET, '-X', 'cancel'], tmuxEnv());
+      await runTmux(t, ['send-keys', '-t', target, '-X', 'cancel']);
       res.json({ ok: true });
       return;
     }
@@ -353,7 +413,7 @@ async function handleSendKeys(req: Request, res: Response): Promise<void> {
     // exit-copy-mode: スクロール終了後に copy-mode を抜いて通常入力に戻す。
     // copy-mode でない場合は cancel が失敗するが、常に ok を返す（入力を塞がない）。
     if (keys === 'exit-copy-mode') {
-      await run('tmux', ['send-keys', '-t', TERMINAL_TMUX_TARGET, '-X', 'cancel'], tmuxEnv());
+      await runTmux(t, ['send-keys', '-t', target, '-X', 'cancel']);
       res.json({ ok: true });
       return;
     }
@@ -361,10 +421,10 @@ async function handleSendKeys(req: Request, res: Response): Promise<void> {
     // 特殊キーは tmux のキー名として渡す（"-l" リテラル修飾子なし）。
     // 任意テキストは "-l" フラグ付きでリテラル送信し、tmux がキー名として解釈しないようにする。
     const args = TMUX_SPECIAL_KEYS.has(keys)
-      ? ['send-keys', '-t', TERMINAL_TMUX_TARGET, keys]
-      : ['send-keys', '-t', TERMINAL_TMUX_TARGET, '-l', keys];
+      ? ['send-keys', '-t', target, keys]
+      : ['send-keys', '-t', target, '-l', keys];
 
-    const r = await run('tmux', args, tmuxEnv());
+    const r = await runTmux(t, args);
     if (r.code !== 0) {
       const msg = `tmux send-keys failed (code ${r.code}): ${r.stderr.trim() || r.stdout.trim()}`;
       console.error('[terminal-control] send-keys:', msg);

@@ -11,18 +11,17 @@
 // 同一オリジンの iframe なので、認証 Cookie（mc_token）は自動付与され、未認証では
 // サーバ側で弾かれる（HTTP・WS とも）。ttyd の Basic 認証は proxy が内部付与する。
 //
-// サーバ補助機能の対象（重要 / MC-119 制約）:
-//   画像添付・出力モーダル・仮想キーバー・「ターミナルを開始」はサーバ側で
-//   tmux main（= ターミナル1）に対して send-keys / capture-pane する実装。ターミナル2は
-//   旧箱の別 tmux、ターミナル3は spare セッションで、ローカル tmux main 前提のこれらの補助は
-//   効かない。そのため補助機能はターミナル1（serverAssisted）でのみ有効化し、ターミナル2/3 は
-//   iframe（ttyd 直）操作のみとする（2/3 の補助機能対応は follow-up）。
+// サーバ補助機能の対象（MC-123 端末別に一般化）:
+//   画像添付・出力モーダル・仮想キーバー・「ターミナルを開始」はサーバ側で対象 tmux セッション
+//   （1=main この箱 / 2=apollo2 旧箱を ssh 越し / 3=spare この箱）に対して send-keys /
+//   capture-pane する。各操作はアクティブタブの terminal 番号をサーバへ渡し、全ターミナルで効く。
 //   「ターミナルを開始」は対象タブの systemd ユニットを冪等復旧する（terminal 番号をサーバへ渡す）。
 //
-// MC-95 / MC-102 画像添付（ターミナル1 のみ）:
+// MC-95 / MC-102 / MC-123 画像添付（全ターミナル）:
 //   選んだ／貼り付けた画像をフロントの配列に貯め、サムネでプレビュー → 「送る」で一括 POST。
-//   サーバは data/terminal-uploads/ に保存し、絶対パス群を tmux main の入力欄へ send-keys で
-//   リテラル注入する（自動 Enter なし）。林はそのパスを Read で画像として読める。
+//   サーバは data/terminal-uploads/ に保存し、絶対パス群を対象セッションの入力欄へ send-keys で
+//   リテラル注入する（自動 Enter なし）。remote(2) は scp で旧箱へコピーしてから旧箱パスを注入する。
+//   林はそのパスを Read で画像として読める。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ImageFileIcon, CloseIcon, TerminalIcon, PlusIcon, KeyboardIcon } from '../components/icons';
@@ -30,30 +29,31 @@ import { Spinner } from '../components/ui';
 
 // ─── ターミナル定義 ───────────────────────────────────────────
 // path は iframe src のベース（末尾スラッシュ付き＝相対アセットの解決基準）。
-// serverAssisted=true のターミナルだけ画像添付 / 出力 / 仮想キーバーを有効化する。
+// MC-123: 補助機能（画像添付・出力・仮想キーバー）は全ターミナルで有効化する。
+//   各操作はアクティブタブの terminal 番号をサーバに渡し、対象 tmux セッション
+//   （1=main / 2=apollo2(旧箱 ssh 越し) / 3=spare）に対して実行される。
 interface TerminalTab {
   id: number;
   label: string;
   path: string; // iframe src（例: '/terminal/', '/terminal/2/'）
-  serverAssisted: boolean; // tmux main 連動の補助機能が効くか（ターミナル1のみ）
 }
 
 const TERMINAL_TABS: TerminalTab[] = [
-  { id: 1, label: 'ターミナル1', path: '/terminal/', serverAssisted: true },
-  { id: 2, label: 'ターミナル2', path: '/terminal/2/', serverAssisted: false },
-  { id: 3, label: 'ターミナル3', path: '/terminal/3/', serverAssisted: false },
+  { id: 1, label: 'ターミナル1', path: '/terminal/' },
+  { id: 2, label: 'ターミナル2', path: '/terminal/2/' },
+  { id: 3, label: 'ターミナル3', path: '/terminal/3/' },
 ];
 
 const ACTIVE_TAB_STORAGE_KEY = 'apollo.terminal.activeTab';
 
 // ─── 仮想キーバー / 補助 API helper ───────────────────────────
-// send-keys / output / start は tmux main（ターミナル1）に対して効く。
-async function postSendKeys(keys: string): Promise<void> {
+// send-keys / output / start は terminal 番号で対象 tmux セッションを切り替える（MC-123）。
+async function postSendKeys(keys: string, terminal: number): Promise<void> {
   try {
     await fetch('/api/terminal/send-keys', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keys }),
+      body: JSON.stringify({ keys, terminal }),
     });
   } catch {
     // 送信失敗はサイレント（ttyd 画面側で確認できる）
@@ -99,15 +99,15 @@ interface TerminalStatusResponse {
   ready?: boolean;
 }
 
-/** 出力表示モーダル: 最近の出力を通常テキストで表示→選択・コピー可（tmux main = ターミナル1）。 */
-function OutputModal({ onClose }: { onClose: () => void }) {
+/** 出力表示モーダル: 現在タブのターミナルの最近の出力を通常テキストで表示→選択・コピー可（MC-123）。 */
+function OutputModal({ terminal, onClose }: { terminal: number; onClose: () => void }) {
   const [content, setContent] = useState<string>('読み込み中...');
   useEffect(() => {
-    fetch('/api/terminal/output?lines=200')
+    fetch(`/api/terminal/output?lines=200&terminal=${terminal}`)
       .then((r) => r.json())
       .then((b: { ok: boolean; content?: string }) => setContent(b.content ?? '（取得できませんでした）'))
       .catch(() => setContent('（エラー）'));
-  }, []);
+  }, [terminal]);
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col bg-bg/95 backdrop-blur"
@@ -172,8 +172,10 @@ export default function Terminal() {
     }
   }, []);
   const activeTab = TERMINAL_TABS.find((t) => t.id === activeId) ?? TERMINAL_TABS[0];
-  // 補助機能（画像添付・出力・キーバー）はサーバ連動が効くターミナル（=1）のみ。
-  const assisted = activeTab.serverAssisted;
+  // MC-123: 補助機能（画像添付・出力・キーバー）は全ターミナルで有効。各操作は activeId を対象にする。
+  // 最新の activeId をコールバック内で参照するための ref（オートリピート等のクロージャ向け）。
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
 
   // ── モバイル仮想キーバー（スマホ専用）──────────────────────
   const [keyInput, setKeyInput] = useState('');
@@ -223,10 +225,10 @@ export default function Terminal() {
       stopArrowRepeat();
       arrowPointerIdRef.current = pointerId;
       const key = direction === 'up' ? 'Up' : 'Down';
-      void postSendKeys(key);
+      void postSendKeys(key, activeIdRef.current);
       arrowRepeatTimerRef.current = window.setTimeout(() => {
         arrowRepeatIntervalRef.current = window.setInterval(() => {
-          void postSendKeys(key);
+          void postSendKeys(key, activeIdRef.current);
         }, REPEAT_INTERVAL_MS);
       }, REPEAT_DELAY_MS);
     },
@@ -244,12 +246,12 @@ export default function Terminal() {
   useEffect(() => stopArrowRepeat, [stopArrowRepeat]);
 
   const sendKey = useCallback((key: string) => {
-    void postSendKeys(key);
+    void postSendKeys(key, activeIdRef.current);
   }, []);
 
   const sendText = useCallback((text: string) => {
     if (text.length === 0) return;
-    void postSendKeys(text);
+    void postSendKeys(text, activeIdRef.current);
   }, []);
 
   // ── 画像ステージング（MC-102、ターミナル1 のみ）──────────────
@@ -413,6 +415,8 @@ export default function Terminal() {
     try {
       const fd = new FormData();
       items.forEach((s) => fd.append('images', s.file, s.file.name));
+      // 注入先は現在タブのターミナル（MC-123）。multipart のフィールドで番号を渡す。
+      fd.append('terminal', String(activeIdRef.current));
       const res = await fetch('/api/terminal/upload', { method: 'POST', body: fd });
       if (res.status !== 201) {
         let reason = `送信に失敗しました（HTTP ${res.status}）。`;
@@ -454,9 +458,9 @@ export default function Terminal() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // クリップボード貼付（Ctrl+V / ⌘+V）。サーバ連動が効くターミナル1表示中のみ受ける。
+  // クリップボード貼付（Ctrl+V / ⌘+V）。全ターミナルで受ける（MC-123）。注入先は activeId。
+  // iframe にフォーカスがある間は paste が親 window に来ないため、その場合は iframe（ttyd）に委ねる。
   useEffect(() => {
-    if (!assisted) return; // ターミナル2/3 表示中は親で paste を奪わない（iframe に委ねる）
     const onPaste = (e: ClipboardEvent) => {
       const activeTag = document.activeElement?.tagName?.toLowerCase();
       if (activeTag === 'input' || activeTag === 'textarea') return;
@@ -477,7 +481,7 @@ export default function Terminal() {
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, [addToStaging, assisted]);
+  }, [addToStaging]);
 
   const activeBackend = backends[activeId] ?? { kind: 'checking' };
 
@@ -528,8 +532,7 @@ export default function Terminal() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={!assisted || state.kind === 'uploading' || staged.length >= MAX_IMAGES}
-            title={assisted ? undefined : '画像添付はターミナル1でのみ利用できます。'}
+            disabled={state.kind === 'uploading' || staged.length >= MAX_IMAGES}
             className="flex items-center gap-1.5 rounded border border-border bg-surface-2 px-2 py-1 text-xs text-text hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ImageFileIcon width={13} height={13} />
@@ -541,8 +544,6 @@ export default function Terminal() {
           <button
             type="button"
             onClick={() => setShowOutput(true)}
-            disabled={!assisted}
-            title={assisted ? undefined : '出力の取得はターミナル1でのみ利用できます。'}
             className="rounded border border-border px-2 py-1 text-xs text-text-muted hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
           >
             出力を見る
@@ -558,7 +559,7 @@ export default function Terminal() {
         </div>
 
         {/* ステージング中のサムネ一覧（ターミナル1 のみ表示される）。 */}
-        {assisted && staged.length > 0 && (
+        {staged.length > 0 && (
           <div className="mt-2.5 flex flex-wrap gap-2">
             {staged.map((s) => (
               <div
@@ -597,7 +598,7 @@ export default function Terminal() {
         )}
 
         {/* 送信アクション。 */}
-        {assisted && staged.length > 0 && (
+        {staged.length > 0 && (
           <div className="mt-2.5 flex items-center gap-2">
             <button
               type="button"
@@ -621,7 +622,7 @@ export default function Terminal() {
         )}
 
         {/* 結果フィードバック。 */}
-        {assisted && state.kind === 'done' && (
+        {state.kind === 'done' && (
           <div
             role="status"
             className="mt-2 flex items-start gap-2 rounded-md border border-active/40 bg-active-bg px-3 py-2 text-[11px] text-active"
@@ -641,7 +642,7 @@ export default function Terminal() {
             </span>
           </div>
         )}
-        {assisted && state.kind === 'error' && (
+        {state.kind === 'error' && (
           <div
             role="alert"
             className="mt-2 flex items-start gap-2 rounded-md border border-stalled/40 bg-stalled-bg/60 px-3 py-2 text-[11px]"
@@ -734,7 +735,7 @@ export default function Terminal() {
 
         {/* キーバー開閉トグル（モバイル専用 / md 以上では非表示）。
             アクティブターミナルが ready かつ補助機能対象（=1）のときだけ出す。 */}
-        {assisted && activeBackend.kind === 'ready' && (
+        {activeBackend.kind === 'ready' && (
           <button
             type="button"
             onClick={toggleKeybar}
@@ -755,7 +756,7 @@ export default function Terminal() {
 
       {/* モバイル専用 仮想キーバー（md 以上では非表示）。
           補助機能対象（ターミナル1）が ready のときだけ出す。送信先は tmux main。 */}
-      {assisted && keybarOpen && activeBackend.kind === 'ready' && (
+      {keybarOpen && activeBackend.kind === 'ready' && (
         <div className="flex shrink-0 items-center gap-1.5 border-t border-border bg-surface px-2 py-2 md:hidden">
           <input
             type="text"
@@ -828,7 +829,7 @@ export default function Terminal() {
           </button>
         </div>
       )}
-      {showOutput && <OutputModal onClose={() => setShowOutput(false)} />}
+      {showOutput && <OutputModal terminal={activeId} onClose={() => setShowOutput(false)} />}
     </div>
   );
 }

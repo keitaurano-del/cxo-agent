@@ -31,9 +31,11 @@ import {
   TERMINAL_UPLOADS_DIR,
   TERMINAL_UPLOAD_MAX_FILE_BYTES,
   TERMINAL_UPLOAD_MAX_FILES,
-  TERMINAL_TMUX_TARGET,
   TERMINAL_TMUX_PATH,
   TERMINAL_TMUX_TIMEOUT_MS,
+  TERMINALS,
+  terminalById,
+  type TerminalDef,
 } from './config.js';
 import { sanitizeFilename } from './lib/inboxPath.js';
 
@@ -106,23 +108,94 @@ function buildFilename(now: Date, originalName: string, mimetype: string): strin
   return `${iso}-${rand}-${safe}`;
 }
 
-// ─── tmux 注入 ───────────────────────────────────────────
+// ─── tmux 注入（MC-123 端末別 / local・remote）─────────────────
+
+const injectEnv = (): NodeJS.ProcessEnv => ({ ...process.env, PATH: TERMINAL_TMUX_PATH });
 
 /**
- * tmux main の入力欄へ、パス文字列をリテラル送出する（自動 Enter なし）。
- * execFile（argv 直渡し）+ `-l`（literal）でシェル/キーバインド解釈を回避する。
- * 複数パスはスペース区切りで 1 文字列にまとめて送る（林が Read しやすい・
- * Keita が続けて文章を打てる）。失敗時は throw して呼び出し側で 500 に畳む。
+ * リモート実行用のシングルクオートエスケープ（terminalControl.ts と同方式）。
+ * ssh は remote 側で引数を連結してシェル解釈するため、tmux コマンド文字列を安全な1引数に組む。
  */
-function sendPathsToTmux(paths: string[]): void {
-  // 末尾にスペースを 1 つ足し、続けて Keita がメッセージを打ち始められるようにする。
+function shquote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * 対象ターミナルの tmux 入力欄へ、パス文字列をリテラル送出する（自動 Enter なし）。
+ * - local(1/3): execFile('tmux', send-keys -t <session> -l <literal>)。
+ * - remote(2): ssh 経由で旧箱の tmux apollo2 へ send-keys。tmux コマンドを shquote で1引数に組む。
+ * 複数パスはスペース区切りで 1 文字列にまとめ、末尾にスペースを足して続けて入力できるようにする。
+ * 失敗時は throw して呼び出し側で injected:false に畳む。
+ */
+function sendPathsToTmux(t: TerminalDef, paths: string[]): void {
   const literal = paths.join(' ') + ' ';
-  execFileSync('tmux', ['send-keys', '-t', TERMINAL_TMUX_TARGET, '-l', literal], {
+  const tmuxArgs = ['send-keys', '-t', t.tmuxSession, '-l', literal];
+  if (!t.remote) {
+    execFileSync('tmux', tmuxArgs, {
+      encoding: 'utf-8',
+      timeout: TERMINAL_TMUX_TIMEOUT_MS,
+      env: injectEnv(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return;
+  }
+  const r = t.remote;
+  const remoteCmd = ['tmux', ...tmuxArgs.map(shquote)].join(' ');
+  execFileSync(
+    'ssh',
+    ['-i', r.sshKey, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', `${r.sshUser}@${r.sshHost}`, remoteCmd],
+    {
+      encoding: 'utf-8',
+      timeout: TERMINAL_TMUX_TIMEOUT_MS,
+      env: injectEnv(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+}
+
+/**
+ * remote(2) の場合: ローカルに保存した画像群を scp で旧箱の uploadDir へコピーし、
+ * 旧箱側の絶対パス（uploadDir/<basename>）の配列を返す。
+ * uploadDir は scp 前に ssh で mkdir -p しておく（初回でも失敗しないように）。
+ * local(1/3) の場合は呼ばれない（呼び出し側で remote のときだけ使う）。
+ */
+function scpToRemote(r: NonNullable<TerminalDef['remote']>, localPaths: string[]): string[] {
+  const sshTarget = `${r.sshUser}@${r.sshHost}`;
+  const sshOpts = ['-i', r.sshKey, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10'];
+  // uploadDir を用意（既存でも -p で no-op）。
+  execFileSync('ssh', [...sshOpts, sshTarget, `mkdir -p ${shquote(r.uploadDir)}`], {
     encoding: 'utf-8',
     timeout: TERMINAL_TMUX_TIMEOUT_MS,
-    env: { ...process.env, PATH: TERMINAL_TMUX_PATH },
+    env: injectEnv(),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  const remotePaths: string[] = [];
+  for (const lp of localPaths) {
+    const base = lp.slice(lp.lastIndexOf('/') + 1);
+    // scp は execFile（argv 直渡し）。dest は user@host:dir/ 形式。
+    execFileSync(
+      'scp',
+      [...sshOpts, lp, `${sshTarget}:${r.uploadDir}/`],
+      {
+        encoding: 'utf-8',
+        timeout: TERMINAL_TMUX_TIMEOUT_MS,
+        env: injectEnv(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    remotePaths.push(`${r.uploadDir}/${base}`);
+  }
+  return remotePaths;
+}
+
+/**
+ * リクエストからターミナル定義を解決する（query / body の terminal、未指定なら 1）。
+ * 不正値・未定義 id はターミナル1へフォールバック（後方互換）。
+ */
+function resolveTerminal(raw: unknown): TerminalDef {
+  const n = typeof raw === 'string' ? parseInt(raw, 10) : typeof raw === 'number' ? raw : NaN;
+  const t = !isNaN(n) ? terminalById(n) : undefined;
+  return t ?? terminalById(1) ?? TERMINALS[0];
 }
 
 // ─── ハンドラ ───────────────────────────────────────────
@@ -139,6 +212,11 @@ async function handleUpload(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'at least one image is required' });
     return;
   }
+
+  // 対象ターミナルを解決（multipart の terminal フィールド or クエリ、未指定は 1）。
+  const t = resolveTerminal(
+    (req.body as { terminal?: unknown } | undefined)?.terminal ?? req.query.terminal,
+  );
 
   const now = new Date();
   const savedPaths: string[] = [];
@@ -159,29 +237,35 @@ async function handleUpload(req: Request, res: Response): Promise<void> {
       fname = `${stem}-${n}${ext}`;
     }
     used.add(fname);
+    // 保存は常に NEW 箱（この箱）の data/terminal-uploads/。
     const abs = join(TERMINAL_UPLOADS_DIR, fname);
     writeFileSync(abs, f.buffer);
     savedPaths.push(abs);
   }
 
-  // tmux 注入。失敗しても保存自体は成功しているので、保存パスは返した上で
-  // injected:false にして UI に「手動で貼ってほしい」旨を出させる。
+  // remote(2) は scp で旧箱へコピーし、注入するのは旧箱側の絶対パス。
+  // local(1/3) はこの箱の絶対パスをそのまま注入する。
+  let injectPaths = savedPaths;
   let injected = true;
   let injectError: string | undefined;
   try {
-    sendPathsToTmux(savedPaths);
+    if (t.remote) {
+      injectPaths = scpToRemote(t.remote, savedPaths);
+    }
+    sendPathsToTmux(t, injectPaths);
   } catch (e) {
     injected = false;
     injectError = e instanceof Error ? e.message : String(e);
-    console.error('[terminal-upload] tmux send-keys failed:', injectError);
+    console.error('[terminal-upload] inject failed:', injectError);
   }
 
   res.status(201).json({
     count: savedPaths.length,
-    paths: savedPaths,
+    // paths は注入したパス（remote なら旧箱パス、local なら NEW 箱パス）。UI のフォールバック表示用。
+    paths: injectPaths,
     injected,
     ...(injectError ? { injectError } : {}),
-    target: TERMINAL_TMUX_TARGET,
+    target: t.tmuxSession,
   });
 }
 
