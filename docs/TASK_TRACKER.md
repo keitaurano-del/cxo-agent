@@ -1882,7 +1882,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-132 |
 | タイトル | night-patrol（深夜巡回 03:00）を Masayoshi 駆動へ移行 |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | DONE（2026-06-03 実機smoke検証済: 純bashテンプレ生成をopenclaw agent --json|jqに全面刷新。Masayoshi CEOとして分析所見・翌朝アクション表付きレポートを生成確認。フォールバック（openclaw空応答時のテンプレ）も実装。バックアップ night-patrol.sh.bak.pre-openclaw） |
 | 担当 | 林 |
 | 群 | C群（既存 cron を Masayoshi(openclaw)駆動へ即・全面置き換え） |
 | 詳細 | night-patrol（深夜巡回、cron 03:00）の LLM ドライバ部分（`claude --print`）を `openclaw agent --agent main`（Masayoshi）に差し替える。実作業 bash（Playwright probe / vault push 等）は流用。 |
