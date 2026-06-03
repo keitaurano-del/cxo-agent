@@ -731,7 +731,7 @@ ID 採番: **AR-0x**。
 | MC-124 | 「出力を見る」の取得範囲を拡大（200→2000行、上限5000、tmux history-limit 2000→50000） | 中 | UX | DONE（2026-06-03 Keita 依頼。terminalControl 上限500→5000・既定100→1000、フロント lines=200→2000、両箱 tmux history-limit 50000。server tsc0/web build green・restart後 lines=2000 で1496行返却確認） | 林 | terminalControl.ts・Terminal.tsx |
 | MC-127 | 「出力を見る」を開いたら最新（末尾）が見える状態にする | 低 | UX | DONE（2026-06-03 Keita 依頼。OutputModal に preRef＋内容ロード後 scrollTop=scrollHeight で末尾スクロール） | 林 | Terminal.tsx |
 | MC-125 | 成果物ビューでファイルを削除できるようにする | 中 | feature | DONE（2026-06-03 dev-logic。DELETE /api/deliverables/file?path= realpath防御・README保護(403)・実体無404・dir400・traversal400。MC-117変換キャッシュPDFも連動削除。フロント: 各行に TrashIcon＋インライン確認→DELETE→refetch、プレビュー中削除で自動クローズ。server tsc0/web build green・restart後 healthz200・疎通確認。commit ed3e428） | dev-logic | MC-116 |
-| MC-126 | NotebookLM 的機能: 読み込んだ資料の分析・資料ベースのテンプレート生成・資料に根ざしたQ&A | 高 | feature/企画 | REVIEW（2026-06-03 フロントエンド完成。Notebooks.tsx 1190行（一覧/作成/資料/チャット/生成物タブ）＋App.tsx route/nav追加・tsc 0error・web build green commit 595fd04。/api/notebooks 全エンドポイント結線済。server restart 後に /notebooks ルートで動作確認要） | 林（設計）+ dev-logic | MC-116/117/118・claude・LibreOffice |
+| MC-126 | NotebookLM 的機能: 読み込んだ資料の分析・資料ベースのテンプレート生成・資料に根ざしたQ&A | 高 | feature/企画 | DONE（2026-06-03 test-functional 検証。server 20:55 restart 済。GET /api/notebooks→JSON 200・POST/GET/:id/DELETE CRUD 全件 green。server tsc 0error・web build 0error。/notebooks ルート App.tsx L223 登録確認。commit 55eadda 含む実装確定） | 林（設計）+ dev-logic | MC-116/117/118・claude・LibreOffice |
 
 ---
 
@@ -1788,3 +1788,18 @@ ID 採番: **AR-0x**。
 | 受け入れ条件（DoD） | (1) モバイルでテキスト入力フィールドからターミナルへキー送信できる。(2) ↑↓ ボタンが押しやすい位置（端すぎない）に配置される。(3) ボタンを連続タップ or 長押しで連続応答する。(4) tsc/build green・restart 後 healthz 200・非退行（MC-92/93/94/95/102/103/104 smoke 通過）。 |
 | 更新日 | 2026-06-02 |
 
+
+---
+
+### MC-128 — OpenClaw 専用ターミナル4を Apollo に追加
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-128 |
+| タイトル | Apollo ターミナル4（OpenClaw 秘書 Masayoshi）を追加 |
+| 優先度 | P1 |
+| ステータス | DONE（2026-06-03 実機検証済: ttyd7684→tmux openclaw→openclaw-tui(Masayoshi) が起動、/terminal/4/ proxy 200=ttyd、healthz200、ターミナル1/2/3 非退行） |
+| 担当 | 林（インフラ＋wiring）、test-functional（検証） |
+| 詳細 | Keita 依頼（2026-06-03 対話）: 「ターミナル4に OpenClaw 専用のターミナルを作って」。この箱の OpenClaw 秘書 Masayoshi（tmux 'openclaw'、`openclaw chat`）を Apollo に4本目ターミナルとして追加。成果物: ランチャー `~/cron-scripts/term4-openclaw.sh`、systemd `apollo-terminal-4.service`（ttyd 127.0.0.1:7684）、server `config.ts` TERMINALS id=4、web `Terminal.tsx` タブ id=4。 |
+| 受け入れ条件（DoD） | (1) apollo-terminal-4.service active・7684 listen。(2) server tsc green / web build green。(3) Apollo 再起動後 /terminal/4/ が proxy 経由で ttyd に到達し Masayoshi と会話できる。(4) 既存ターミナル1/2/3 非退行。 |
+| 更新日 | 2026-06-03 |
