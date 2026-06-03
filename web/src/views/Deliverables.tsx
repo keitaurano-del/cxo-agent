@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useLiveResource } from '../lib/useLiveData';
 import type { DeliverableFile, DeliverableKind, DeliverablesResponse } from '../lib/types';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, EmptyState } from '../components/ui';
 import {
   DownloadIcon,
+  UploadIcon,
   SheetIcon,
   SlidesIcon,
   PdfFileIcon,
@@ -47,7 +48,161 @@ const FILTER_ORDER: FilterKind[] = [
 function humanReadableSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+// ─── アップロード（MC-118）────────────────────────────────
+// XMLHttpRequest を使うのは upload.onprogress で進捗（%）を取るため
+// （fetch は送信進捗を取れない）。認証は Cookie mc_token が same-origin で自動付与される。
+
+interface UploadPanelProps {
+  /** アップロード完了後に一覧を再取得するコールバック。 */
+  onUploaded: () => void;
+}
+
+function UploadPanel({ onUploaded }: UploadPanelProps) {
+  const [dragOver, setDragOver] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const upload = useCallback(
+    (fileList: FileList | File[]) => {
+      const files = Array.from(fileList);
+      if (files.length === 0 || uploading) return;
+
+      setError(null);
+      setMessage(null);
+      setUploading(true);
+      setProgress(0);
+
+      const fd = new FormData();
+      files.forEach((f) => fd.append('files', f, f.name));
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/deliverables/upload');
+      // Cookie mc_token は same-origin で自動送信される（withCredentials は same-origin では不要）。
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          setProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+
+      xhr.onload = () => {
+        setUploading(false);
+        if (xhr.status === 201) {
+          let count = files.length;
+          try {
+            const body = JSON.parse(xhr.responseText) as { files?: unknown[] };
+            count = body.files?.length ?? files.length;
+          } catch {
+            /* レスポンス parse 失敗時は送信件数を使う。 */
+          }
+          setMessage(`${count} 件をアップロードしました。`);
+          onUploaded();
+        } else {
+          let msg = `アップロードに失敗しました（HTTP ${xhr.status}）。`;
+          try {
+            const body = JSON.parse(xhr.responseText) as { error?: string };
+            if (body.error) msg = body.error;
+          } catch {
+            /* JSON でなければ既定メッセージ。 */
+          }
+          // 413 はサイズ/件数超過。サーバの error 文をそのまま表示する。
+          setError(msg);
+        }
+      };
+
+      xhr.onerror = () => {
+        setUploading(false);
+        setError('ネットワークエラーでアップロードに失敗しました。');
+      };
+
+      xhr.send(fd);
+      if (inputRef.current) inputRef.current.value = '';
+    },
+    [uploading, onUploaded],
+  );
+
+  return (
+    <div className="mb-4">
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (!uploading) setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          if (!uploading && e.dataTransfer.files.length > 0) upload(e.dataTransfer.files);
+        }}
+        className={`flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-center transition-colors ${
+          dragOver ? 'border-accent bg-surface-2' : 'border-border bg-surface'
+        }`}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files && e.target.files.length > 0) upload(e.target.files);
+          }}
+        />
+        <span className="text-text-faint">
+          <UploadIcon width={22} height={22} />
+        </span>
+        <p className="text-sm text-text-muted">
+          ファイルをここにドラッグ＆ドロップ、または
+        </p>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          className="inline-flex items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-bg transition-opacity disabled:opacity-50"
+        >
+          <UploadIcon width={14} height={14} />
+          ファイルを選択
+        </button>
+        <p className="text-[11px] text-text-faint">大容量ファイルにも対応しています。</p>
+      </div>
+
+      {uploading && (
+        <div className="mt-2" role="status" aria-live="polite">
+          <div className="mb-1 flex items-center justify-between text-xs text-text-muted">
+            <span>アップロード中…</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
+            <div
+              className="h-full rounded-full bg-accent transition-[width] duration-150"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div
+          role="alert"
+          className="mt-2 rounded-lg border border-stalled/40 bg-stalled-bg/60 px-3 py-2 text-xs"
+          style={{ color: 'var(--mc-stalled)' }}
+        >
+          {error}
+        </div>
+      )}
+      {message && !error && (
+        <p className="mt-2 text-xs" style={{ color: 'var(--mc-active)' }}>
+          {message}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function KindIcon({ kind, ext }: { kind: DeliverableKind; ext: string }) {
@@ -200,7 +355,7 @@ function FileCard({ file }: { file: DeliverableFile }) {
 }
 
 export default function Deliverables() {
-  const { data, error, loading, fetchedAt } = useLiveResource<DeliverablesResponse>(
+  const { data, error, loading, fetchedAt, refetch } = useLiveResource<DeliverablesResponse>(
     '/api/deliverables',
   );
   const [filter, setFilter] = useState<FilterKind>('all');
@@ -222,6 +377,7 @@ export default function Deliverables() {
         fetchedAt={fetchedAt}
       />
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        <UploadPanel onUploaded={refetch} />
         <ResourceState loading={loading} error={error} hasData={!!data}>
           {data && (
             <>

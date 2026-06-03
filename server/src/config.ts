@@ -46,6 +46,21 @@ export const INBOX_DATA_DIR = join(CXO_ROOT, 'data');
 export const DELIVERABLES_DIR = env('DELIVERABLES_DIR', join(INBOX_DATA_DIR, 'deliverables'));
 
 /**
+ * 成果物アップロード（MC-118）1 ファイルあたりの最大バイト数。
+ * 既定 5GB（= 5 * 1024**3）。multer diskStorage でディスクへストリーム保存するため
+ * メモリには載らず、box のディスク空き（~323GB）の範囲で大容量も捌ける。env で上書き可。
+ * 注意: cloudflared 無料トンネル経由はトンネル側がボディ ~100MB で頭打ちになる既知制約があり、
+ * >100MB は直アクセス/LAN か上位プラン経由でのみ通る（サーバ側ストリームはここで上限まで対応）。
+ */
+export const DELIVERABLE_UPLOAD_MAX_BYTES = envNum(
+  'DELIVERABLE_UPLOAD_MAX_BYTES',
+  5 * 1024 * 1024 * 1024,
+);
+
+/** 成果物アップロード（MC-118）1 リクエストあたりの最大ファイル数。 */
+export const DELIVERABLE_UPLOAD_MAX_FILES = envNum('DELIVERABLE_UPLOAD_MAX_FILES', 20);
+
+/**
  * 成果物プレビュー用の変換キャッシュ（Office→PDF）の置き場。
  * data/ 配下なので .gitignore 済み。ソースの sha1+mtime+size をキーに PDF を保存する。
  */

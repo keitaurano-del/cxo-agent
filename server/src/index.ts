@@ -36,6 +36,7 @@ import { inboxRouter } from './inbox.js';
 import { terminalUploadRouter } from './terminalUpload.js';
 import { terminalControlRouter } from './terminalControl.js';
 import { vaultWriteRouter } from './vaultWriteRouter.js';
+import { deliverableUploadRouter } from './deliverableUploadRouter.js';
 import { taskEditRouter } from './taskEditRouter.js';
 import { approvalRouter } from './approvalRouter.js';
 import { spawnRouter } from './spawnRouter.js';
@@ -359,6 +360,12 @@ app.get('/api/vault/attachment', (req, res) => {
 // ─── 成果物（Excel/PPT/PDF/CSV/画像/テキスト の閲覧・DL）─────────────
 // すべてのパス入力は collectors/deliverables → lib/deliverablePath で安全化される。
 // 認証ミドルウェア配下（Vault と同じ並び）。
+
+// 成果物アップロード（MC-118）。multipart files[] を DELIVERABLES_DIR へ diskStorage で
+// ストリーム保存する（大容量はメモリに載せない）。POST /api/deliverables/upload。
+// GET 系（/api/deliverables・/file・/preview）とは method が異なるため共存する。
+// :id パターンを持たないので登録順の衝突も無い。
+app.use('/api/deliverables', deliverableUploadRouter());
 
 app.get('/api/deliverables', (_req, res) => {
   try {

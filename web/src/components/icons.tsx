@@ -172,6 +172,16 @@ export function DownloadIcon(props: IconProps) {
   );
 }
 
+export function UploadIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 16V4" />
+      <path d="M8 8.5 12 4.5 16 8.5" />
+      <path d="M5 19h14" />
+    </svg>
+  );
+}
+
 export function SheetIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
