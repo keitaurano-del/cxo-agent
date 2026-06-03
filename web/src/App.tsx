@@ -108,7 +108,6 @@ function Sidebar({
           </span>
           <div>
             <div className="text-sm font-bold leading-tight text-text">Apollo</div>
-            <div className="text-[10px] text-text-faint">開発状況リアルタイム可視化</div>
           </div>
         </div>
         <button
@@ -164,7 +163,6 @@ function Sidebar({
             {connected ? 'ライブ接続中' : 'ポーリング更新中'}
           </span>
         </div>
-        <div className="mt-1 text-[10px] text-text-faint">本機（このサーバ）の活動のみ表示</div>
       </div>
     </aside>
   );
