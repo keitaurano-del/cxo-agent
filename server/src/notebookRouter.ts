@@ -274,6 +274,7 @@ function handleDeleteSource(req: Request, res: Response): void {
 function buildAskPrompt(question: string): string {
   return [
     'あなたはこのノートブックの資料アシスタントです。',
+    '回答・成果物の文章は中立的な丁寧体（です・ます）で書いてください。キャラクター人格・方言・特定の口調（「〜じゃ」「〜のう」「ほっほっ」等）は一切使わず、エンドユーザー向けの自然な日本語にしてください。',
     'カレントディレクトリの ./sources/ と ./extracted/ にある資料だけを根拠に、次の質問に日本語で答えてください。',
     'まず関連しそうな資料を Read で読んでから回答してください。',
     '可能なら根拠にした資料名（ファイル名）を回答中に挙げてください。',
@@ -341,6 +342,7 @@ function buildGeneratePrompt(kind: string, instruction: string): string {
       instruction || '資料の内容を日本語でまとめた成果物を ./artifacts/ に作成してください。';
   return [
     'あなたはこのノートブックの資料アシスタントです。',
+    '回答・成果物の文章は中立的な丁寧体（です・ます）で書いてください。キャラクター人格・方言・特定の口調（「〜じゃ」「〜のう」「ほっほっ」等）は一切使わず、エンドユーザー向けの自然な日本語にしてください。',
     'カレントディレクトリの ./sources/ と ./extracted/ にある資料を Read で読んだうえで、次の成果物を作成してください。',
     task,
     '',

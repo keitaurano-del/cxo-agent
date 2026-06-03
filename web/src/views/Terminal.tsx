@@ -102,12 +102,17 @@ interface TerminalStatusResponse {
 /** 出力表示モーダル: 現在タブのターミナルの最近の出力を通常テキストで表示→選択・コピー可（MC-123）。 */
 function OutputModal({ terminal, onClose }: { terminal: number; onClose: () => void }) {
   const [content, setContent] = useState<string>('読み込み中...');
+  const preRef = useRef<HTMLPreElement | null>(null);
   useEffect(() => {
     fetch(`/api/terminal/output?lines=2000&terminal=${terminal}`)
       .then((r) => r.json())
       .then((b: { ok: boolean; content?: string }) => setContent(b.content ?? '（取得できませんでした）'))
       .catch(() => setContent('（エラー）'));
   }, [terminal]);
+  // 開いたら最新（末尾）が見えるよう、内容ロード後に一番下へスクロールする。
+  useEffect(() => {
+    if (preRef.current) preRef.current.scrollTop = preRef.current.scrollHeight;
+  }, [content]);
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col bg-bg/95 backdrop-blur"
@@ -126,7 +131,7 @@ function OutputModal({ terminal, onClose }: { terminal: number; onClose: () => v
           閉じる
         </button>
       </div>
-      <pre className="flex-1 overflow-auto whitespace-pre-wrap break-all p-4 text-xs leading-relaxed text-text select-text font-mono">
+      <pre ref={preRef} className="flex-1 overflow-auto whitespace-pre-wrap break-all p-4 text-xs leading-relaxed text-text select-text font-mono">
         {content}
       </pre>
       <div className="border-t border-border bg-surface px-4 py-3">
