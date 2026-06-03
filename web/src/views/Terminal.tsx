@@ -97,13 +97,36 @@ function OutputModal({ onClose }: { onClose: () => void }) {
     >
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <span className="text-sm font-semibold text-text">出力（選択してコピー）</span>
-        <button type="button" onClick={onClose} className="rounded p-1 text-text-muted hover:text-text">
-          <CloseIcon width={18} height={18} />
+        {/* ヘッダー右上の閉じるボタン: 44x44 の十分なタップ領域＋枠/背景で常時はっきり視認。
+            アイコンを拡大し「閉じる」ラベルを併記する。hover 非依存で常に見えるよう border/bg を常時付与。 */}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="閉じる"
+          style={{ touchAction: 'manipulation' }}
+          className="flex h-11 min-w-11 items-center gap-1.5 rounded-md border border-border-strong bg-surface-2 px-3 text-sm font-medium text-text hover:bg-surface-3"
+        >
+          <CloseIcon width={22} height={22} className="pointer-events-none" />
+          閉じる
         </button>
       </div>
       <pre className="flex-1 overflow-auto whitespace-pre-wrap break-all p-4 text-xs leading-relaxed text-text select-text font-mono">
         {content}
       </pre>
+      {/* 下部の閉じるボタン: 出力を下までスクロールした後でも上部に戻らず閉じられる（モバイル配慮）。
+          全幅・高コントラスト。safe-area は親コンテナの paddingBottom で確保済み。 */}
+      <div className="border-t border-border bg-surface px-4 py-3">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="閉じる"
+          style={{ touchAction: 'manipulation' }}
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-border-strong bg-surface-2 text-sm font-medium text-text hover:bg-surface-3"
+        >
+          <CloseIcon width={20} height={20} className="pointer-events-none" />
+          閉じる
+        </button>
+      </div>
     </div>
   );
 }
