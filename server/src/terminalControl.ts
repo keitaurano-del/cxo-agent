@@ -335,7 +335,7 @@ async function handleStart(req: Request, res: Response): Promise<void> {
 //   モバイル / WebView では iframe 内のテキスト選択が難しいため、
 //   フロントの「出力をコピー」ボタンがこのエンドポイントを叩いて
 //   navigator.clipboard.writeText() に渡す。
-//   lines のデフォルトは 100、最大 500 に制限する。
+//   lines のデフォルトは 1000、最大 5000 に制限する。
 //   tmux セッションが無ければ ok:false + error を返す（常に 200）。
 
 async function collectOutput(t: TerminalDef, lines: number): Promise<{ ok: true; content: string; lines: number } | { ok: false; error: string }> {
@@ -354,7 +354,7 @@ async function collectOutput(t: TerminalDef, lines: number): Promise<{ ok: true;
 
 async function handleOutput(req: Request, res: Response): Promise<void> {
   const raw = typeof req.query.lines === 'string' ? parseInt(req.query.lines, 10) : NaN;
-  const lines = isNaN(raw) || raw <= 0 ? 100 : Math.min(raw, 500);
+  const lines = isNaN(raw) || raw <= 0 ? 1000 : Math.min(raw, 5000);
   const t = resolveTerminal(req.query.terminal);
   try {
     const result = await collectOutput(t, lines);

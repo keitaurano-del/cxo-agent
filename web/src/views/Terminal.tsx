@@ -103,7 +103,7 @@ interface TerminalStatusResponse {
 function OutputModal({ terminal, onClose }: { terminal: number; onClose: () => void }) {
   const [content, setContent] = useState<string>('読み込み中...');
   useEffect(() => {
-    fetch(`/api/terminal/output?lines=200&terminal=${terminal}`)
+    fetch(`/api/terminal/output?lines=2000&terminal=${terminal}`)
       .then((r) => r.json())
       .then((b: { ok: boolean; content?: string }) => setContent(b.content ?? '（取得できませんでした）'))
       .catch(() => setContent('（エラー）'));
