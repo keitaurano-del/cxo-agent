@@ -135,6 +135,9 @@ agent-config の `projects/-root-projects/memory/` から sync。個別ファイ
 - [タスクボードベース実行](feedback_taskboard_based_execution.md) — 全タスクは先にTASK_TRACKER起票→ボードから拾って実行。task-manager=台帳正本/apollo番人=遅延監視の共同責任。inbox/FB由来も全部起票（2026-05-31）
 - [REVIEWはエージェント検証でDONE化](feedback_review_agent_verify_then_done.md) — REVIEWの最終ゲートはKeita実機確認不要。test-functional等が実機検証→必要なら修正→DONE。BLOCKED(判断待ち)とは別（2026-05-31）
 - [全エージェント タスクボードベース](feedback_all_agents_taskboard_based.md) — 全agentが着手前に起票・着手でIN_PROGRESS・完了でDONE/REVIEW。ボード外作業禁止。表行を正とする。task-manager=台帳/apollo番人=遅延監視（2026-05-31）
+- [apollo番人がボード常時リコンサイル](feedback_apollo_keeper_board_reconcile.md) — 番人の常設任務にボード最新化を追加。遅延検知だけでなく実態とズレたstatusを証拠ベースで番人自身が直す（2026-06-01）
+- [全エージェント能動的に動ける設計](feedback_agents_proactive_by_design.md) — 受動(検知→報告)で止めず、権限内で是正・完了まで自走する設計に。承認領域だけエスカレ。agent定義の共通ベースに明記（2026-06-01）
+- [Apollo restart で stale ルート](reference_apollo_restart_stale_routes.md) — git操作途中でrestartすると一部/apiルート未登録のまま起動。未登録パスはSPAフォールバックで200+HTMLを返し隠れる。診断は中身がJSONかHTMLか。クリーンrestartで解消（2026-06-01）
 
 ### feedback_address_keita.md
 
@@ -152,6 +155,34 @@ metadata:
 **Why:** Keita 本人が「君じゃなくてKeitaね」と訂正した。名前で呼ぶのが本人の希望。
 
 **How to apply:** 会話中の呼びかけ・主語は「Keita」を使う。おじいちゃん口調（[[feedback-tone]]）は維持しつつ、二人称だけ「Keita」に固定。報告文・確認の問いかけでも同様。
+
+### feedback_agents_proactive_by_design.md
+
+---
+name: feedback-agents-proactive-by-design
+description: 全エージェント（林・autonomous-rin・apollo番人・task-manager・dev-logic・reviewer・test-functional・logic-coach・content-creator・designer・night-patrol・feedback-watcher）は受動的でなく能動的に動ける設計にする。検知・報告で止めず、自分の権限内で次の一手まで自走する。
+metadata:
+  type: feedback
+  originSessionId: 2026-06-01
+---
+
+全エージェントを「受動的」から「能動的」に設計し直す。2026-06-01 Keita 指示「全部のエージェントにいえることだけど、受動的じゃなくて、能動的に動けるようになってほしい。そういう設計にしてほしい」。
+
+**Why:** これまでの設計は受動寄りだった。監視系は「検知→報告／提言」で止まり実際の是正をしない（apollo番人が遅延を検知しても直さず投げるだけ等）、自律ループは logic スコープだけで cxo/en-chakai を駆動せず放置（MC-90 で inbox が死に箱化したのが典型）、実装系は呼ばれるまで待つ。Keita は各エージェントが自分の領分で起点を作り、完了まで自走する状態を望んでいる。「設計にして」＝個別の指示でなく、エージェント定義レベルの恒久的な行動原則として埋め込む。
+
+**How to apply（全エージェント共通の能動性原則）:**
+- 検知したら是正まで自分の権限内でやる。「見つけた→報告」で止めない。権限外（コード修正・push・deploy・本番DDL・Keita 判断）に当たる部分だけエスカレーションし、それ以外は自走で前進させる。
+- 監視系（apollo番人・night-patrol・feedback-watcher）= 異常/声/遅延を検知したら、自分でできる是正（restart・台帳リコンサイル・起票促し）を実行し、コード修正等だけ委譲（[[feedback-apollo-keeper-board-reconcile]] がこの具体化）。
+- 自律ループ（autonomous-rin）= 1プロジェクトに偏らず、着手可能タスクがある全プロジェクトを駆動する。スコープ欠落で宙に浮くタスクを作らない（cxo/en-chakai ループの常時稼働＝MC-84/85/90 の本質）。
+- 実装系（dev-logic・designer・content-creator）= 渡されたタスクを受け身にこなすだけでなく、着手中に気づいた隣接の不備・抜けを task-manager に起票し、green/検証まで自分で閉じる。
+- 検証系（reviewer・test-functional・logic-coach）= REVIEW を Keita 待ちで放置せず、自分で実機/実効性検証して DONE 化 or 差し戻し（[[feedback-review-agent-verify-then-done]]）。
+- task-manager = 受け身の台帳係でなく、抜け漏れ・停滞を先回りで洗い出し、担当アサインと次アクションを能動提案する。
+- 林 = 区切りで止まらず着手可能 TODO を自分から取りに行く（[[feedback-never-stop-with-open-todos]] と一体）。
+- 共通のブレーキは維持: push・deploy・破壊的操作・本番DDL・設計判断は Keita 承認（[[feedback-default-workflows]]）。「能動的」は「承認を飛ばす」ではない。green ゲート・品質ゲート（[[feedback-quality-efficiency-accuracy]]）も維持。能動性は「承認領域の手前まで自分で進め切る」こと。
+
+**実装（恒久化の置き場所）:** agent-config の各 agent 定義（projects-meta/agents/*.md）の共通ベースに「能動性の原則」を明記し、sync で全 sub-repo へ配布する。apollo-keeper.sh など cron 駆動エージェントは prompt 内にも反映（[[feedback-apollo-keeper-board-reconcile]] で着手済み）。autonomous-rin のスコープ拡張（全プロジェクト駆動）も能動化の一環。
+
+**関連:** [[feedback-apollo-keeper-board-reconcile]]、[[feedback-never-stop-with-open-todos]]、[[feedback-review-agent-verify-then-done]]、[[feedback-taskboard-based-execution]]、[[project-autonomous-rin]]、[[project-apollo-keeper]]、[[project-agent-roster-20260531]]、[[feedback-quality-efficiency-accuracy]]
 
 ### feedback_all_agents_taskboard_based.md
 
@@ -182,6 +213,35 @@ metadata:
 - 林 = オーケストレーション、ボードに無い依頼を必ず起票に通してから委譲
 
 **関連:** [[feedback-taskboard-based-execution]]、[[feedback-route-all-to-task-manager]]、[[feedback-review-agent-verify-then-done]]、[[project-task-manager]]、[[project-apollo-keeper]]、[[reference-task-id-numbering]]、[[feedback-never-stop-with-open-todos]]
+
+### feedback_apollo_keeper_board_reconcile.md
+
+---
+name: feedback-apollo-keeper-board-reconcile
+description: apollo番人の常設任務として「Apollo のタスクボード（全 TASK_TRACKER）を常に最新の実態に保つ＝能動的リコンサイル」を追加。遅延検知だけでなく、台帳が現実とズレていたら番人自身が証拠ベースで status を直す。
+metadata:
+  type: feedback
+  originSessionId: 2026-06-01
+---
+
+apollo番人（apollo-keeper）の常設任務に「Apollo タスクボードを常に最新に保つ＝能動的リコンサイル」を追加した（2026-06-01 Keita 指示「アポロのタスクボードも番人に常に最新になるようにやらせてね」）。
+
+**Why:** それまで apollo番人の台帳責務は「抜け漏れ・遅延を検知して task-manager に提言する」受動監視止まりだった（[[project-apollo-keeper]]）。Keita はボードが常に実態を映している状態を望んでおり、検知して投げるだけでなく番人自身が台帳のズレを直すところまで踏み込ませたい。実際この日、autonomous-rin が logic 専用スコープでしか回らず cxo-agent の IN_PROGRESS（MC-84/85）が誰にも駆動されず放置され、ボードが実態とズレていた。
+
+**How to apply（apollo-keeper.sh のミッション(3)に実装済み）:**
+- エンゲージするティックでは必ずボードのリコンサイルを実施する。全 TASK_TRACKER（logic/cxo-agent/en-chakai/西丸町）を走査し、表行の status（＝single source of truth）が実態と合っているか突合する。
+- 証拠ベースで補正（推測で動かさない）:
+  - 実装・push・deploy・検証済みなのに IN_PROGRESS/REVIEW のまま → 証拠（commit sha / deploy run / test 結果 / file:line）を確認できたら DONE 化し note に根拠（REVIEW→DONE は実機検証で可、Keita 確認不要＝[[feedback-review-agent-verify-then-done]]）。
+  - 着手済みなのに TODO → IN_PROGRESS に補正。完了条件未達なのに DONE → 差し戻し。
+  - 表行と詳細セクションの status 食い違い → 表行に揃える。
+  - inbox/フィードバック由来で宙に浮いた未起票依頼 → task-manager に起票を促す。
+- 役割境界: status の事実補正・整合は番人がやってよい。新規起票・分解・優先度設計・受け入れ条件定義は task-manager の正本責務（番人は「ズレを直す・抜けを指摘する」、task-manager は「台帳を構造として設計する」）。
+- 安全則: 必ず `git pull --rebase --autostash` 後に自分が触る行だけ名指し編集→名指し add→commit→push。`git add -A` や reset --hard 禁止（autonomous-rin/dev-logic とのレース・未コミット差分巻き込み回避、[[feedback-vault-no-destructive-git]] と同思想）。1ティックで触るのは確証のある最小限の行。
+- リコンサイル結果は inspections レポートに「reconciled: <ID> <旧status>→<新status>（根拠）」で記録。
+
+**実装場所:** `/home/dev/cron-scripts/apollo-keeper.sh` の PROMPT 内ミッション(3)＋「ボード最新化（リコンサイル）の手順」セクション。cron は既存の */30（実体は 15,45 の apollo-keeper）。LLM エンゲージ条件（healthz異常 / task stall / 09時日次）は据え置きなので、毎ティックではなく「異常時＋停滞検知時＋日次」にリコンサイルが走る。常時性をさらに上げたい場合は engage 条件の見直しが必要（Keita 確認事項）。
+
+**関連:** [[project-apollo-keeper]]、[[feedback-taskboard-based-execution]]、[[feedback-all-agents-taskboard-based]]、[[feedback-review-agent-verify-then-done]]、[[project-task-manager]]、[[project-autonomous-rin]]
 
 ### feedback_app_copy_neutral.md
 
@@ -1386,6 +1446,31 @@ metadata:
 **.claude.json（dev）:** theme=dark、~/projects 配下を trust 済みに設定（初回プロンプトで簡易端末が無反応になる問題を解消）。
 
 **2箱運用の役割分担（2026-05-29 Keita 決定）:** 共有 CLAUDE.md で両箱に林の人格が乗るため、同一バッチを並行実装すると origin で二重 push/二重実装の競合が起きる（2026-05-29 に実際に #4/#6/#7 で重複発生）。対策として **林＝新箱(Claude Code Server 2)を主たる実装オーナー**、**旧箱(現行サーバ)＝同能力だが優先順位は林の次の支援役**に一本化。旧箱の既定は実装せず「検証・本番 probe・origin 同期・台帳整理・調整・Keita の直接依頼」。旧箱が動く時は必ず origin を pull して林の作業と被らないか確認してから（二重 push を避ける）。「必要に応じて旧箱でも動く」＝ Keita 指名時 or 林が詰まった時の応援。Anthropic アカウントは両箱共有なので、同時に LLM を回すと 529(Overloaded) を誘発しやすい点も留意（容量はアカウント単位、箱スペックでは増えない）。
+
+### reference_apollo_restart_stale_routes.md
+
+---
+name: reference-apollo-restart-stale-routes
+description: Apollo を git 操作（pull --rebase/merge）の途中で restart すると、過渡的なファイル状態を掴んで一部 /api ルートが未登録のまま起動する。未登録パスは SPA フォールバックで 200+HTML を返すため「全 API 200」に見えて隠れる。診断は endpoint の中身が JSON か HTML かで判定。
+metadata:
+  type: reference
+  originSessionId: 2026-06-01
+---
+
+Apollo（mission-control.service、`tsx src/index.ts`）を **git 操作の途中で restart すると、中途半端なファイル状態をロードして一部 API ルートが未登録のまま起動する**ことがある。
+
+**Why（2026-06-01 実例）:** 「ティックをクリックすると『読み込みに失敗しました』」を調査。`/api/ticks` を叩くと HTTP 200 だが中身が JSON でなく index.html（SPA フォールバック）だった＝走っているプロセスに `/api/ticks` ルートが登録されていなかった。原因は、サーバプロセスが pull --rebase の過渡的な working tree（`/api/ticks` ルートを含む index.ts がまだ書き戻される前）でロードされ、正しいファイル（collectors/ticks.ts）はプロセス起動の数分後に書かれていた＝プロセスが disk より古い。disk のコードは元々正しく、クリーン restart で解消した。
+
+**落とし穴のポイント:**
+- Express の SPA フォールバック（`app.get('/*splat', sendFile index.html)`）が、**未登録の `/api/*` パスにも 200 + HTML を返す**。だから `curl -o /dev/null -w "%{http_code}"` で「全部 200」に見えても、実は一部はルート未登録でフォールバックしている。ステータスコードだけ見ると隠れる。
+
+**How to apply（診断と予防）:**
+- 「Apollo の特定ビューだけ『読み込みに失敗しました』（components/ui.tsx の汎用エラー or 各 view のエラー文）」が出たら、まずそのビューが叩く `/api/<x>` の**中身**を確認する: `curl -s ".../api/<x>" -H "Authorization: Bearer $MC_TOKEN" | head -c 80`。`<!doctype html>` が返れば**そのルートは走行プロセスに未登録**＝stale/partial restart の疑い。JSON が返れば別問題（フロントのデータ整形等）。
+- 対処は **クリーン restart**: `sudo systemctl restart mission-control.service` → `MainPID` が変わったことと healthz 200 を確認 → 当該 endpoint が JSON を返すか再確認。disk のコードが正しければこれで直る。
+- 予防（番人の restart 手順）: **restart は working tree が落ち着いてから**やる。pull --rebase / merge / cxo 自律ループのティック実行中など、ファイルが書き換わっている最中に restart しない。restart 前に `git status` が安定し、`git log` の HEAD が期待どおりか確認する。
+- 関連診断: ルート登録順は index.ts で `/api/*` 群 → 最後に `express.static` + SPA fallback の順なので、順序バグではなく「プロセスが古い」を先に疑う。MC_TOKEN は `grep MC_TOKEN /home/dev/projects/cxo-agent/.mc.env`。
+
+**関連:** [[project-apollo-dashboard]]（server 変更は restart 必須・watch 無し）、[[project-apollo-keeper]]（番人が restart を担う）、[[feedback-apollo-keeper-board-reconcile]]
 
 ### reference_deploy_commands.md
 
