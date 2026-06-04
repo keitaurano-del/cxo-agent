@@ -583,3 +583,18 @@ export function agentMessageHandler(broadcast: Broadcast) {
     res.status(201).json({ message: msg });
   };
 }
+
+/** MC-143: 外部から直接チャンネルにメッセージを投稿する（workflow 可視化用）。 */
+export function postChatMessage(channelId: string, msg: ChatMessage, broadcast: Broadcast): void {
+  const dir = channelDir(channelId);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+    const meta: ChannelMeta = {
+      id: channelId, name: channelId, description: '', type: 'channel', members: [],
+      createdAt: new Date().toISOString(),
+    };
+    writeFileSync(metaPath(channelId), JSON.stringify(meta, null, 2), 'utf-8');
+  }
+  appendMessage(channelId, msg);
+  broadcast('chat', { channelId, message: msg });
+}

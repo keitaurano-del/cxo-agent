@@ -8,6 +8,7 @@ import cors from 'cors';
 import { existsSync, statSync, unlinkSync, readdirSync } from 'node:fs';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 
 import { PORT, CLAUDE_PROJECTS_DIR, VAULT_DIR, STALL_MINUTES, AGENT_LOG_TTL_MS } from './config.js';
 import { collectAgents, collectAgentGroups, collectAgentFeed } from './collectors/agents.js';
@@ -665,6 +666,45 @@ export function broadcast(event: string, data: unknown): void {
     } catch {
       // 既に切断された client は次の 'close' で除去される。書き込み失敗は無視。
     }
+  }
+  // MC-143: workflow 更新をチャット #dev に可視化する。
+  // 'workflows' タイプの update イベントで、実行中のワークフローをチャットへ投稿。
+  if (event === 'update') {
+    const d = data as { types?: string[] };
+    if (d.types?.includes('workflows')) {
+      postWorkflowUpdateToChat().catch(() => { /* サイレント失敗 */ });
+    }
+  }
+}
+
+/** 実行中のワークフロー状態をチャット #dev に投稿する（最後に報告したものと変化があれば）。 */
+let _lastWfSummary = '';
+async function postWorkflowUpdateToChat(): Promise<void> {
+  try {
+    const workflows = collectWorkflows();
+    const active = workflows.filter((w) => w.status === 'active');
+    if (active.length === 0) return; // active が無ければスキップ
+    // 簡易サマリを作って前回と同じなら投稿しない（連打防止）
+    const summary = active.map((w) => `${w.runId}:${w.phasesDone}/${w.phaseCount}`).join(',');
+    if (summary === _lastWfSummary) return;
+    _lastWfSummary = summary;
+    // チャット投稿
+    const lines = active.map((w) => {
+      const pct = w.phaseCount > 0 ? `${w.phasesDone}/${w.phaseCount} フェーズ` : '実行中';
+      return `• \`${w.runId}\` — ${w.label || 'workflow'} (${pct})`;
+    });
+    const text = `⚡ ワークフロー実行中:\n${lines.join('\n')}`;
+    const { postChatMessage } = await import('./chatRouter.js');
+    postChatMessage('dev', {
+      id: randomUUID(),
+      ts: new Date().toISOString(),
+      senderId: 'apollo',
+      senderName: 'Apollo',
+      senderEmoji: '🔭',
+      text,
+    }, broadcast);
+  } catch {
+    // サイレント失敗（チャット投稿は補助機能なのでクラッシュさせない）
   }
 }
 
