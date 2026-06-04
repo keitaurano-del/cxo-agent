@@ -755,6 +755,166 @@ export function chatRouter(broadcast: Broadcast): Router {
     res.json({ ok: true, messages: postedMessages });
   });
 
+  // ── MC-145: autonomous-tick ─────────────────────────────────────
+
+  /**
+   * POST /api/chat/autonomous-tick
+   * { token, channelIds?: string[] }
+   * AGENT_TOKEN 認証。全チャンネルを巡回し、各エージェントが確率的に自発投稿または
+   * メンション返答を行う。30分クールダウン・20%確率・チャンネル適合チェック付き。
+   */
+  router.post('/autonomous-tick', async (req: Request, res: Response) => {
+    const { token, channelIds } = req.body as { token?: string; channelIds?: string[] };
+
+    // AGENT_TOKEN 未設定は機能無効
+    if (!AGENT_TOKEN) {
+      res.status(503).json({ error: 'agent messaging not configured (AGENT_TOKEN not set)' });
+      return;
+    }
+
+    if (!token || token !== AGENT_TOKEN) {
+      res.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    const COOLDOWN_MS = 1800000; // 30分
+    const PROB = 0.20;
+
+    // 1. チャンネル一覧取得（channelIds あれば絞り込み）
+    let channels = listChannels();
+    if (Array.isArray(channelIds) && channelIds.length > 0) {
+      channels = channels.filter((ch) => channelIds.includes(ch.id));
+    }
+
+    // 2. ペルソナ一覧取得
+    const personas = collectAgentPersonas();
+
+    const posted: Array<{ channelId: string; agentId: string; messageId: string }> = [];
+
+    // 5. 各チャンネルを順に処理
+    for (const channel of channels) {
+      const channelId = channel.id;
+
+      // a. readMessages で古→新順のメッセージ取得
+      const messages = readMessages(channelId, 50, undefined).reverse();
+
+      // b. 最新メッセージが2時間以上前 or メッセージなしなら自発投稿をスキップ
+      const now = new Date().getTime();
+      const TWO_HOURS_MS = 7200000;
+      let skipSpontaneous = false;
+      if (messages.length === 0) {
+        skipSpontaneous = true;
+      } else {
+        const latestTs = new Date(messages[messages.length - 1].ts).getTime();
+        if (now - latestTs >= TWO_HOURS_MS) {
+          skipSpontaneous = true;
+        }
+      }
+
+      // c. spontaneousPostedThisTick フラグ初期化
+      let spontaneousPostedThisTick = false;
+
+      // d. ペルソナを乱数でシャッフルして走査
+      const shuffled = [...personas].sort(() => Math.random() - 0.5);
+
+      for (const persona of shuffled) {
+        // 当エージェントの最終投稿を messages の末尾から検索
+        let lastPostTs = 0;
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].senderId === persona.senderId) {
+            lastPostTs = new Date(messages[i].ts).getTime();
+            break;
+          }
+        }
+
+        const cooldownPassed = now - lastPostTs > COOLDOWN_MS;
+
+        // @メンション: lastPostTs 以降の他エージェントメッセージに "@" + senderId か senderName前半が含まれるか
+        const senderNameFirst = persona.senderName.split(/[\s（(]/)[0];
+        const isMentioned = messages.some((m) => {
+          if (m.senderId === persona.senderId) return false;
+          const msgTs = new Date(m.ts).getTime();
+          if (msgTs <= lastPostTs) return false;
+          return m.text.includes('@' + persona.senderId) || m.text.includes('@' + senderNameFirst);
+        });
+
+        // shouldPost 判定
+        let shouldPost = false;
+        if (isMentioned) {
+          shouldPost = true;
+        } else {
+          if (!skipSpontaneous && cooldownPassed && !spontaneousPostedThisTick && Math.random() < PROB) {
+            // 自発のみチャンネル適合チェック
+            const id = channelId;
+            const sid = persona.senderId;
+            let channelFit = true;
+            if (id === 'dev') {
+              channelFit = ['dev-logic', 'task-manager', 'test-functional'].includes(sid);
+            } else if (id === 'releases') {
+              channelFit = ['apollo', 'hayashi-rin'].includes(sid);
+            } else if (id === 'general') {
+              channelFit = ['hayashi-rin', 'masayoshi', 'task-manager'].includes(sid);
+            }
+            shouldPost = channelFit;
+          }
+        }
+
+        if (!shouldPost) continue;
+
+        // プロンプト生成
+        const recentHistory = messages
+          .slice(-10)
+          .map((m) => `${m.senderName}: ${m.text}`)
+          .join('\n');
+
+        let prompt: string;
+        if (isMentioned) {
+          // メンション時のプロンプト
+          const mentionMsgs = messages
+            .filter((m) => {
+              if (m.senderId === persona.senderId) return false;
+              const msgTs = new Date(m.ts).getTime();
+              if (msgTs <= lastPostTs) return false;
+              return m.text.includes('@' + persona.senderId) || m.text.includes('@' + senderNameFirst);
+            })
+            .map((m) => `${m.senderName}: ${m.text}`)
+            .join('\n');
+          prompt = `${persona.systemPrompt}\n\nあなた宛メッセージ:\n${mentionMsgs}\n\n最近のチャット:\n${recentHistory || '（まだメッセージはありません）'}\n\n日本語2〜4文で返答してください。`;
+        } else {
+          // 自発時のプロンプト
+          prompt = `${persona.systemPrompt}\n\n最近のチャット(#${channelId}):\n${recentHistory || '（まだメッセージはありません）'}\n\n何か発言したいことがあれば日本語で述べてください。特になければpassとだけ返してください。`;
+        }
+
+        // runClaude で生成
+        const result = await runClaude('/home/dev/projects/cxo-agent', prompt);
+        if (!result.ok || !result.stdout.trim()) continue;
+
+        const text = result.stdout.trim();
+        if (text.toLowerCase() === 'pass') continue;
+
+        // appendMessage + broadcast で投稿
+        const msg: ChatMessage = {
+          id: randomUUID(),
+          ts: new Date().toISOString(),
+          senderId: persona.senderId,
+          senderName: persona.senderName,
+          senderEmoji: '',
+          text,
+        };
+        appendMessage(channelId, msg);
+        broadcast('chat', { channelId, message: msg });
+        posted.push({ channelId, agentId: persona.senderId, messageId: msg.id });
+
+        // 自発投稿なら spontaneousPostedThisTick = true
+        if (!isMentioned) {
+          spontaneousPostedThisTick = true;
+        }
+      }
+    }
+
+    res.json({ ok: true, posted, channels: channels.length, agents: personas.length });
+  });
+
   return router;
 }
 
