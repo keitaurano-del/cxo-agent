@@ -1,7 +1,7 @@
 #!/bin/bash
 # chat-autonomous.sh — チャット AI の autonomous-tick を定期実行するクーロンスクリプト。
 #
-# 20分ごとに Apollo の /api/autonomous-tick エンドポイントを叩き、
+# 20分ごとに Apollo の /api/chat/autonomous-tick エンドポイントを叩き、
 # チャット AI の自律処理を駆動する。
 #
 # cron: */20 * * * * TZ=Asia/Tokyo /home/dev/cron-scripts/chat-autonomous.sh
@@ -50,7 +50,7 @@ fi
 echo "[$(TS)] autonomous-tick start" >> "$LOG"
 
 # autonomous-tick を叩く
-RESULT="$(curl -s -m 300 -X POST "${APOLLO_URL}/api/autonomous-tick" \
+RESULT="$(curl -s -m 300 -X POST "${APOLLO_URL}/api/chat/autonomous-tick" \
   -H "Authorization: Bearer ${AGENT_TOKEN}" \
   -H "Content-Type: application/json" \
   2>&1)"
