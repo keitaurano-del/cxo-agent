@@ -742,6 +742,7 @@ ID 採番: **AR-0x**。
 | MC-147 | chat-autonomous.sh のエンドポイントパス修正（/api/autonomous-tick → /api/chat/autonomous-tick） | 高 | bug | DONE（2026-06-04 dev-logic。scripts/chat-autonomous.sh のコメント行・curl URL の2箇所を /api/chat/autonomous-tick に修正。bash -n 構文チェック green。commit fbb5969） | dev-logic | MC-145/MC-146 |
 | MC-125 | 成果物ビューでファイルを削除できるようにする | 中 | feature | DONE（2026-06-03 dev-logic。DELETE /api/deliverables/file?path= realpath防御・README保護(403)・実体無404・dir400・traversal400。MC-117変換キャッシュPDFも連動削除。フロント: 各行に TrashIcon＋インライン確認→DELETE→refetch、プレビュー中削除で自動クローズ。server tsc0/web build green・restart後 healthz200・疎通確認。commit ed3e428） | dev-logic | MC-116 |
 | MC-126 | NotebookLM 的機能: 読み込んだ資料の分析・資料ベースのテンプレート生成・資料に根ざしたQ&A | 高 | feature/企画 | DONE（2026-06-03 test-functional 検証。server 20:55 restart 済。GET /api/notebooks→JSON 200・POST/GET/:id/DELETE CRUD 全件 green。server tsc 0error・web build 0error。/notebooks ルート App.tsx L223 登録確認。commit 55eadda 含む実装確定） | 林（設計）+ dev-logic | MC-116/117/118・claude・LibreOffice |
+| MC-110 | Apollo ターミナルのスクロール・入力不能・矢印ボタン修正 | P0 | bug | DONE（2026-06-02 commit f31ad36 で3問題一括修正: copy-mode 起因の入力不能→PostMessage スクロール切替・フローティングボタン削除・↑↓長押し連続スクロール追加、tapfix.test.ts 10/10 green。MC-113（commit 91ede9bf, 2026-06-03）でさらに矢印1回送信・44px化・トグル化・履歴矢印削除を追加改善。詳細セクションの CANCELLED は autonomous-worker 汚染で是正済み） | dev-logic | MC-104/MC-113 |
 
 ---
 
@@ -1790,13 +1791,13 @@ ID 採番: **AR-0x**。
 | フィールド | 値 |
 |---|---|
 | ID | MC-110 |
-| タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
+| タイトル | Apollo ターミナルのスクロール・入力不能・矢印ボタン修正 |
 | 優先度 | P0 |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
-| 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
-| 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
-| 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
-| 更新日 | 2026-06-02 |
+| ステータス | DONE（2026-06-04 cxo 自律ティック（林）で台帳是正。実装: commit f31ad36（2026-06-02）で3問題一括修正—copy-mode 起因の入力不能→PostMessage スクロール切替・フローティングスクロールボタン削除・↑↓ 長押し連続スクロール追加、tapfix.test.ts 10/10 green。さらに MC-113（commit 91ede9bf, 2026-06-03）で矢印1回送信・44px 化・トグル化・履歴矢印削除を追加改善。旧 CANCELLED は autonomous-worker 汚染（MC-77 理由が誤記入）のため是正。[[feedback-review-agent-verify-then-done]]） |
+| 担当 | dev-logic |
+| 詳細 | 2026-06-02T02:08 Keita 報告: スクロールがひどい。入力できなくなった。上下矢印が端すぎ。連続反応なし。 |
+| 受け入れ条件（DoD） | (1) ターミナルにテキストを入力できる。(2) スワイプ/ホイールでスクロールバックできる。(3) ↑↓ 矢印が適切な位置で長押し連続スクロールが効く。 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 
 ---
