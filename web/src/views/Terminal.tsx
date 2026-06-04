@@ -116,32 +116,40 @@ function OutputModal({ terminal, onClose }: { terminal: number; onClose: () => v
   }, [content]);
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-bg/95 backdrop-blur"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      className="fixed inset-0 z-50 flex flex-col"
+      style={{ background: '#ffffff', paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <span className="text-sm font-semibold text-text">出力（選択してコピー）</span>
+      <div
+        className="flex items-center justify-between border-b px-4 py-3"
+        style={{ borderColor: '#d0d8e4', background: '#f4f6f9' }}
+      >
+        <span className="text-sm font-semibold" style={{ color: '#1e2a3a' }}>出力（選択してコピー）</span>
         <button
           type="button"
           onClick={onClose}
           aria-label="閉じる"
-          style={{ touchAction: 'manipulation' }}
-          className="flex h-11 min-w-11 items-center gap-1.5 rounded-md border border-border-strong bg-surface-2 px-3 text-sm font-medium text-text hover:bg-surface-3"
+          style={{ touchAction: 'manipulation', color: '#1e2a3a', background: '#edf0f5', border: '1px solid #b0bcce' }}
+          className="flex h-11 min-w-11 items-center gap-1.5 rounded-md px-3 text-sm font-medium"
         >
           <CloseIcon width={22} height={22} className="pointer-events-none" />
           閉じる
         </button>
       </div>
-      <pre ref={preRef} className="flex-1 overflow-auto whitespace-pre-wrap break-all p-4 text-xs leading-relaxed text-text select-text font-mono">
+      {/* 白背景＋濃いダーク文字で常に読みやすく（ライト/ダークモード問わず固定） */}
+      <pre
+        ref={preRef}
+        className="flex-1 overflow-auto whitespace-pre-wrap break-all p-4 text-xs leading-relaxed select-text font-mono"
+        style={{ background: '#ffffff', color: '#1e2a3a' }}
+      >
         {content}
       </pre>
-      <div className="border-t border-border bg-surface px-4 py-3">
+      <div className="border-t px-4 py-3" style={{ borderColor: '#d0d8e4', background: '#f4f6f9' }}>
         <button
           type="button"
           onClick={onClose}
           aria-label="閉じる"
-          style={{ touchAction: 'manipulation' }}
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-border-strong bg-surface-2 text-sm font-medium text-text hover:bg-surface-3"
+          style={{ touchAction: 'manipulation', color: '#1e2a3a', background: '#edf0f5', border: '1px solid #b0bcce' }}
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-md text-sm font-medium"
         >
           <CloseIcon width={20} height={20} className="pointer-events-none" />
           閉じる
