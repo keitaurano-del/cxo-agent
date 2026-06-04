@@ -66,6 +66,62 @@
   --mc-proj-other:     #6b7a96;
 }
 
+/*
+ * ダークモード配色（html.dark クラスで上書き）。
+ * 日中（6:00〜20:59）はライトモード、夜間（21:00〜5:59）はダークモード。
+ * App.tsx の ThemeController が自動切替 + 手動トグルを管理する。
+ */
+html.dark {
+  --mc-bg:        #0b1120;
+  --mc-surface:   #131b2e;
+  --mc-surface-2: #1b2540;
+  --mc-surface-3: #243152;
+  --mc-border:    #2c3a5a;
+  --mc-border-strong: #3b4d75;
+  --mc-text:       #e8edf7;
+  --mc-text-muted: #9fb0cc;
+  --mc-text-faint: #6b7da0;
+  --mc-accent:        #5b9dff;
+  --mc-accent-strong: #357bff;
+  --mc-active:    #2fd27a;
+  --mc-active-bg: #11341f;
+  --mc-idle:      #f3c14b;
+  --mc-idle-bg:   #38300f;
+  --mc-done:      #7f8db0;
+  --mc-done-bg:   #232c44;
+  --mc-never:     #cdd6ea;
+  --mc-never-bg:  #1b2236;
+  --mc-stalled:   #ff5d5d;
+  --mc-stalled-bg:#3a1620;
+  --mc-blocked:   #ff8a3d;
+  --mc-blocked-bg:#3a2010;
+  --mc-review:    #b48cff;
+  --mc-review-bg: #2a1e44;
+
+  /* Obsidian callout 種別色（ダーク） */
+  --mc-callout-info:        #5b9dff;
+  --mc-callout-info-bg:     #0f1e38;
+  --mc-callout-tip:         #2fd27a;
+  --mc-callout-tip-bg:      #0d2a1c;
+  --mc-callout-warning:     #f3c14b;
+  --mc-callout-warning-bg:  #2e2408;
+  --mc-callout-danger:      #ff5d5d;
+  --mc-callout-danger-bg:   #2e0f0f;
+  --mc-callout-note:        #b48cff;
+  --mc-callout-note-bg:     #231444;
+  --mc-callout-quote:       #9fb0cc;
+  --mc-callout-quote-bg:    #1b2540;
+
+  /* project 色分け（ダーク） */
+  --mc-proj-logic:     #5b9dff;
+  --mc-proj-en-chakai: #2ec9b8;
+  --mc-proj-nishimaru: #e8924a;
+  --mc-proj-ai-pmo:    #b48cff;
+  --mc-proj-cxo:       #e0b040;
+  --mc-proj-private:   #7a9ac0;
+  --mc-proj-other:     #7f8db0;
+}
+
 html,
 body,
 #root {

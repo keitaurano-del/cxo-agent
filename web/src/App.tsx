@@ -5,7 +5,7 @@
 // 横断検索からの遷移に影響を出さない。
 import { NavLink, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useLiveStream, useLiveResource } from './lib/useLiveData';
 import { LiveContext } from './lib/liveContext';
 import type { ApprovalsResponse } from './lib/types';
@@ -18,6 +18,8 @@ import {
   DocumentsIcon,
   NotebookIcon,
   TerminalIcon,
+  SunIcon,
+  MoonIcon,
 } from './components/icons';
 import DashboardLayout from './components/DashboardLayout';
 import { isDashboardPath } from './lib/nav';
@@ -37,6 +39,85 @@ import Terminal from './views/Terminal';
 import BottomNav from './components/BottomNav';
 import AddTaskFab from './components/AddTaskFab';
 
+// ---- テーマ管理 ----
+type ThemeMode = 'auto' | 'dark' | 'light';
+
+/** 現在時刻が「日中（6:00〜20:59）」かどうか判定する。 */
+function isDaytime(): boolean {
+  const h = new Date().getHours();
+  return h >= 6 && h <= 20;
+}
+
+/** localStorage のキー */
+const THEME_KEY = 'apollo.theme';
+
+/** 保存済みテーマを読む。不正値は 'auto' に fallback。 */
+function loadTheme(): ThemeMode {
+  const v = localStorage.getItem(THEME_KEY);
+  if (v === 'auto' || v === 'dark' || v === 'light') return v;
+  return 'auto';
+}
+
+/** html 要素に .dark クラスを付け外しする。 */
+function applyDark(dark: boolean) {
+  document.documentElement.classList.toggle('dark', dark);
+}
+
+/** mode と現在時刻から実際のダーク on/off を計算する。 */
+function resolveTheme(mode: ThemeMode): boolean {
+  if (mode === 'dark') return true;
+  if (mode === 'light') return false;
+  return !isDaytime(); // auto: 夜間 = ダーク
+}
+
+/** 手動トグルのサイクル: auto → dark → light → auto */
+function nextMode(current: ThemeMode): ThemeMode {
+  if (current === 'auto') return 'dark';
+  if (current === 'dark') return 'light';
+  return 'auto';
+}
+
+/** ThemeController: 初期化・1分ごとの自動切替・手動トグルを管理する Hook。 */
+function useTheme(): { mode: ThemeMode; isDark: boolean; toggle: () => void } {
+  const [mode, setMode] = useState<ThemeMode>(() => {
+    const m = loadTheme();
+    applyDark(resolveTheme(m));
+    return m;
+  });
+
+  const isDark = resolveTheme(mode);
+
+  // 1分ごとに auto モードの時刻を再評価する
+  useEffect(() => {
+    const id = setInterval(() => {
+      setMode((m) => {
+        if (m === 'auto') {
+          applyDark(resolveTheme('auto'));
+        }
+        return m; // mode 値は変えない、DOM だけ更新
+      });
+    }, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // mode が変わったら即反映
+  useEffect(() => {
+    applyDark(resolveTheme(mode));
+  }, [mode]);
+
+  const toggle = useCallback(() => {
+    setMode((m) => {
+      const next = nextMode(m);
+      localStorage.setItem(THEME_KEY, next);
+      applyDark(resolveTheme(next));
+      return next;
+    });
+  }, []);
+
+  return { mode, isDark, toggle };
+}
+
+// ---- ナビ ----
 interface NavItem {
   to: string;
   label: string;
@@ -75,11 +156,17 @@ function Sidebar({
   badges,
   open,
   onToggle,
+  themeMode,
+  isDark,
+  onThemeToggle,
 }: {
   connected: boolean;
   badges: Partial<Record<string, number>>;
   open: boolean;
   onToggle: () => void;
+  themeMode: ThemeMode;
+  isDark: boolean;
+  onThemeToggle: () => void;
 }) {
   const { pathname } = useLocation();
   const dashActive = isDashboardPath(pathname);
@@ -150,7 +237,26 @@ function Sidebar({
           );
         })}
       </nav>
-      <div className="border-t border-border px-5 py-3">
+      <div className="border-t border-border px-5 py-3 flex flex-col gap-2">
+        {/* テーマトグル */}
+        <button
+          type="button"
+          onClick={onThemeToggle}
+          aria-label={`テーマ: ${themeMode === 'auto' ? '自動' : themeMode === 'dark' ? 'ダーク固定' : 'ライト固定'}`}
+          className="flex items-center gap-2 text-[11px] text-text-muted hover:text-text rounded px-1 -ml-1 py-0.5 transition-colors"
+        >
+          <span aria-hidden>
+            {isDark ? <MoonIcon width={13} height={13} /> : <SunIcon width={13} height={13} />}
+          </span>
+          <span>
+            {themeMode === 'auto'
+              ? `自動 (${isDark ? '夜間' : '日中'})`
+              : themeMode === 'dark'
+              ? 'ダーク固定'
+              : 'ライト固定'}
+          </span>
+        </button>
+        {/* 接続状態 */}
         <div
           className="flex items-center gap-2 text-[11px]"
           role="status"
@@ -179,6 +285,8 @@ export default function App() {
   const approvalCount = approvals?.total ?? 0;
   const badges: Partial<Record<string, number>> = { '/approvals': approvalCount };
 
+  const { mode: themeMode, isDark, toggle: toggleTheme } = useTheme();
+
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     return localStorage.getItem('apollo-sidebar-open') !== 'false';
   });
@@ -202,7 +310,15 @@ export default function App() {
   return (
     <LiveContext.Provider value={{ ticks }}>
       <div className="flex h-dvh overflow-hidden bg-bg text-text">
-        <Sidebar connected={connected} badges={badges} open={sidebarOpen} onToggle={toggleSidebar} />
+        <Sidebar
+          connected={connected}
+          badges={badges}
+          open={sidebarOpen}
+          onToggle={toggleSidebar}
+          themeMode={themeMode}
+          isDark={isDark}
+          onThemeToggle={toggleTheme}
+        />
         <main className="flex-1 overflow-hidden">
           <Routes>
             {/* ダッシュボード（/）配下に 5 タブを入れ子。各子ビューの URL は従来どおり。 */}

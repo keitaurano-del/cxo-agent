@@ -388,3 +388,23 @@ export function GaugeIcon(props: IconProps) {
     </svg>
   );
 }
+
+// 太陽（日中モード）。中心円 + 8本の放射線。
+export function SunIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="4.5" />
+      <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
+      <path d="M5.64 5.64l1.42 1.42M16.95 16.95l1.41 1.41M5.64 18.36l1.42-1.42M16.95 7.05l1.41-1.41" />
+    </svg>
+  );
+}
+
+// 月（夜間モード）。三日月形。
+export function MoonIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+    </svg>
+  );
+}
