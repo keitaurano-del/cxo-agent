@@ -1,13 +1,14 @@
-// Chat — Slack 的チャット機能（MC-141）
+// Chat — Slack 的チャット機能（MC-141/142）
 //
 // 左カラム: チャンネル一覧（#チャンネル + DM）
 // 右カラム: メッセージ一覧（Slack 風・Markdown レンダリング）＋ 入力欄
 // SSE /api/stream の chat イベントでリアルタイム追加。
 // 自分は senderId='keita'、senderName='Keita'、senderEmoji=''（絵文字なし）。
+// MC-142: ラウンドテーブル・エージェント単発反応ボタンを追加。
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLiveTick } from '../lib/liveContext';
-import { HashIcon, PlusIcon, SendIcon, TrashIcon } from '../components/icons';
+import { HashIcon, PlusIcon, SendIcon, TrashIcon, SparkIcon, UsersIcon } from '../components/icons';
 import { PageHeader } from '../components/PageHeader';
 import { Spinner } from '../components/ui';
 
@@ -42,6 +43,13 @@ interface ChatMember {
   emoji: string;
   persona?: string;
   role?: string;
+}
+
+interface AgentInfo {
+  senderId: string;
+  senderName: string;
+  color: string;
+  role: string;
 }
 
 // ── 定数 ───────────────────────────────────────────────────────
@@ -137,6 +145,35 @@ async function fetchMembers(): Promise<ChatMember[]> {
   return data.members;
 }
 
+async function fetchAgents(): Promise<AgentInfo[]> {
+  const res = await fetch('/api/chat/agents');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = (await res.json()) as { agents: AgentInfo[] };
+  return data.agents;
+}
+
+async function postAgentReact(channelId: string, agentId: string): Promise<ChatMessage> {
+  const res = await fetch(`/api/chat/channels/${channelId}/agent-react`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agentId }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = (await res.json()) as { message: ChatMessage };
+  return data.message;
+}
+
+async function postRoundtable(channelId: string, topic: string, agentIds: string[]): Promise<ChatMessage[]> {
+  const res = await fetch(`/api/chat/channels/${channelId}/roundtable`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic, agentIds }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = (await res.json()) as { ok: boolean; messages: ChatMessage[] };
+  return data.messages;
+}
+
 // ── 軽量 Markdown レンダラー（react-markdown 未使用・安全な変換）──
 
 function renderMarkdown(text: string): string {
@@ -200,10 +237,12 @@ function MessageItem({
   msg,
   prevMsg,
   onDelete,
+  onAgentReact,
 }: {
   msg: ChatMessage;
   prevMsg: ChatMessage | null;
   onDelete?: () => void;
+  onAgentReact?: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const isSelf = msg.senderId === SELF_ID;
@@ -259,28 +298,57 @@ function MessageItem({
           dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
         />
       </div>
-      {hovered && isSelf && onDelete && (
-        <button
-          type="button"
-          onClick={onDelete}
+      {hovered && (
+        <div
           style={{
             position: 'absolute',
             right: 12,
             top: '50%',
             transform: 'translateY(-50%)',
-            background: 'var(--mc-surface-3)',
-            border: '1px solid var(--mc-border)',
-            borderRadius: 4,
-            padding: '2px 6px',
-            cursor: 'pointer',
-            color: 'var(--mc-text-muted)',
             display: 'flex',
-            alignItems: 'center',
+            gap: 4,
           }}
-          aria-label="削除"
         >
-          <TrashIcon width={13} height={13} />
-        </button>
+          {onAgentReact && (
+            <button
+              type="button"
+              onClick={onAgentReact}
+              style={{
+                background: 'var(--mc-surface-3)',
+                border: '1px solid var(--mc-border)',
+                borderRadius: 4,
+                padding: '2px 6px',
+                cursor: 'pointer',
+                color: 'var(--mc-text-muted)',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+              title="エージェントに反応させる"
+              aria-label="エージェントに反応させる"
+            >
+              <SparkIcon width={13} height={13} />
+            </button>
+          )}
+          {isSelf && onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              style={{
+                background: 'var(--mc-surface-3)',
+                border: '1px solid var(--mc-border)',
+                borderRadius: 4,
+                padding: '2px 6px',
+                cursor: 'pointer',
+                color: 'var(--mc-text-muted)',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+              aria-label="削除"
+            >
+              <TrashIcon width={13} height={13} />
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -459,6 +527,309 @@ function NewChannelModal({ onClose, onCreate }: { onClose: () => void; onCreate:
   );
 }
 
+// ── エージェント選択モーダル（agent-react）────────────────────────
+
+function AgentReactModal({
+  agents,
+  onClose,
+  onSelect,
+}: {
+  agents: AgentInfo[];
+  onClose: () => void;
+  onSelect: (agentId: string) => void;
+}) {
+  const [loading, setLoading] = useState<string | null>(null);
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.4)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        style={{
+          background: 'var(--mc-surface)',
+          border: '1px solid var(--mc-border)',
+          borderRadius: 8,
+          padding: 20,
+          width: 320,
+          maxWidth: '90vw',
+        }}
+      >
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>エージェントに反応させる</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {agents.map((a) => (
+            <button
+              key={a.senderId}
+              type="button"
+              disabled={loading !== null}
+              onClick={() => {
+                setLoading(a.senderId);
+                onSelect(a.senderId);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 12px',
+                border: '1px solid var(--mc-border)',
+                borderRadius: 6,
+                background: loading === a.senderId ? 'var(--mc-surface-2)' : 'transparent',
+                cursor: loading !== null ? 'default' : 'pointer',
+                color: 'var(--mc-text)',
+                textAlign: 'left',
+                opacity: loading !== null && loading !== a.senderId ? 0.5 : 1,
+              }}
+            >
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '50%',
+                  background: a.color,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  flexShrink: 0,
+                }}
+              >
+                {a.senderName.charAt(0)}
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{a.senderName}</div>
+                <div style={{ fontSize: 11, color: 'var(--mc-text-muted)' }}>{a.role}</div>
+              </div>
+              {loading === a.senderId && (
+                <div style={{ marginLeft: 'auto' }}>
+                  <Spinner />
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+        <div style={{ marginTop: 12, textAlign: 'right' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              padding: '6px 14px',
+              border: '1px solid var(--mc-border)',
+              borderRadius: 4,
+              background: 'transparent',
+              cursor: 'pointer',
+              fontSize: 13,
+              color: 'var(--mc-text-muted)',
+            }}
+          >
+            キャンセル
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── ラウンドテーブルモーダル ───────────────────────────────────────
+
+function RoundtableModal({
+  agents,
+  channelId,
+  onClose,
+  onDone,
+}: {
+  agents: AgentInfo[];
+  channelId: string;
+  onClose: () => void;
+  onDone: (messages: ChatMessage[]) => void;
+}) {
+  const [topic, setTopic] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSubmit = async () => {
+    if (!topic.trim() || selected.size === 0) return;
+    setLoading(true);
+    setError('');
+    try {
+      const msgs = await postRoundtable(channelId, topic.trim(), [...selected]);
+      onDone(msgs);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.4)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget && !loading) onClose(); }}
+    >
+      <div
+        style={{
+          background: 'var(--mc-surface)',
+          border: '1px solid var(--mc-border)',
+          borderRadius: 8,
+          padding: 20,
+          width: 380,
+          maxWidth: '90vw',
+          maxHeight: '80vh',
+          overflow: 'auto',
+        }}
+      >
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <UsersIcon width={16} height={16} />
+          ラウンドテーブル
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--mc-text-muted)', marginBottom: 12 }}>
+          トピックを入力して、発言させるエージェントを選択してください。
+        </div>
+        <textarea
+          rows={3}
+          placeholder="トピック（例: Logic アプリの次のリリース方針）"
+          value={topic}
+          onChange={(e) => setTopic(e.target.value)}
+          style={{
+            width: '100%',
+            boxSizing: 'border-box',
+            padding: '6px 10px',
+            border: '1px solid var(--mc-border)',
+            borderRadius: 4,
+            fontSize: 13,
+            background: 'var(--mc-surface-2)',
+            color: 'var(--mc-text)',
+            marginBottom: 12,
+            resize: 'vertical',
+          }}
+          autoFocus
+        />
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--mc-text-muted)', marginBottom: 6 }}>
+          参加エージェント
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
+          {agents.map((a) => (
+            <label
+              key={a.senderId}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 10px',
+                border: `1px solid ${selected.has(a.senderId) ? a.color : 'var(--mc-border)'}`,
+                borderRadius: 6,
+                cursor: 'pointer',
+                background: selected.has(a.senderId) ? 'var(--mc-surface-2)' : 'transparent',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(a.senderId)}
+                onChange={() => toggle(a.senderId)}
+                style={{ accentColor: a.color }}
+              />
+              <div
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: '50%',
+                  background: a.color,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  flexShrink: 0,
+                }}
+              >
+                {a.senderName.charAt(0)}
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{a.senderName}</div>
+                <div style={{ fontSize: 11, color: 'var(--mc-text-muted)' }}>{a.role}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+        {error && <div style={{ color: 'var(--mc-stalled)', fontSize: 12, marginBottom: 8 }}>{error}</div>}
+        {loading && (
+          <div style={{ fontSize: 12, color: 'var(--mc-text-muted)', marginBottom: 8 }}>
+            エージェントが発言中です...（チャンネルにリアルタイムで流れます）
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            style={{
+              padding: '6px 14px',
+              border: '1px solid var(--mc-border)',
+              borderRadius: 4,
+              background: 'transparent',
+              cursor: loading ? 'default' : 'pointer',
+              fontSize: 13,
+              color: 'var(--mc-text-muted)',
+              opacity: loading ? 0.5 : 1,
+            }}
+          >
+            キャンセル
+          </button>
+          <button
+            type="button"
+            onClick={() => { void handleSubmit(); }}
+            disabled={loading || !topic.trim() || selected.size === 0}
+            style={{
+              padding: '6px 14px',
+              border: 'none',
+              borderRadius: 4,
+              background: 'var(--mc-accent)',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: 13,
+              opacity: loading || !topic.trim() || selected.size === 0 ? 0.6 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            {loading ? <Spinner /> : <UsersIcon width={14} height={14} />}
+            {loading ? '発言中...' : '開始'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── メインビュー ────────────────────────────────────────────────
 
 export default function Chat() {
@@ -481,6 +852,16 @@ export default function Chat() {
 
   // メンバー
   const [_members, setMembers] = useState<ChatMember[]>([]);
+
+  // エージェント人格一覧（MC-142）
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+
+  // ラウンドテーブルモーダル
+  const [showRoundtable, setShowRoundtable] = useState(false);
+
+  // agent-react モーダル
+  const [agentReactPending, setAgentReactPending] = useState(false);
+  const [showAgentReact, setShowAgentReact] = useState(false);
 
   // モバイル: パネル切替
   const [mobilePanel, setMobilePanel] = useState<'list' | 'messages'>('list');
@@ -518,6 +899,7 @@ export default function Chat() {
   useEffect(() => {
     void loadChannels();
     fetchMembers().then(setMembers).catch(() => {});
+    fetchAgents().then(setAgents).catch(() => {});
   }, [loadChannels]);
 
   // チャンネル変更時
@@ -626,6 +1008,20 @@ export default function Chat() {
       setMessages((prev) => prev.filter((m) => m.id !== msgId));
     } catch {
       // ignore
+    }
+  };
+
+  // agent-react: 指定エージェントがチャンネルのメッセージに反応
+  const handleAgentReact = async (channelId: string, agentId: string) => {
+    setAgentReactPending(true);
+    setShowAgentReact(false);
+    try {
+      const msg = await postAgentReact(channelId, agentId);
+      setMessages((prev) => [...prev, msg]);
+    } catch {
+      // ignore（SSE で拾える）
+    } finally {
+      setAgentReactPending(false);
     }
   };
 
@@ -845,6 +1241,11 @@ export default function Chat() {
                           ? () => { void handleDelete(selectedChannel.id, msg.id); }
                           : undefined
                       }
+                      onAgentReact={
+                        agents.length > 0
+                          ? () => setShowAgentReact(true)
+                          : undefined
+                      }
                     />
                   ))
                 )}
@@ -911,8 +1312,34 @@ export default function Chat() {
                     <SendIcon width={18} height={18} />
                   </button>
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--mc-text-faint)', marginTop: 4 }}>
-                  Enter で送信 / Shift+Enter で改行
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                  <div style={{ fontSize: 11, color: 'var(--mc-text-faint)', flex: 1 }}>
+                    Enter で送信 / Shift+Enter で改行
+                  </div>
+                  {agents.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowRoundtable(true)}
+                      disabled={agentReactPending}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        padding: '3px 8px',
+                        border: '1px solid var(--mc-border)',
+                        borderRadius: 4,
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        color: 'var(--mc-text-muted)',
+                        fontSize: 11,
+                        opacity: agentReactPending ? 0.5 : 1,
+                      }}
+                      title="ラウンドテーブル: 複数エージェントがトピックについて発言"
+                    >
+                      <UsersIcon width={12} height={12} />
+                      ラウンドテーブル
+                    </button>
+                  )}
                 </div>
               </div>
             </>
@@ -948,6 +1375,30 @@ export default function Chat() {
             ]);
             setSelectedId(ch.id);
             setShowNewChannel(false);
+          }}
+        />
+      )}
+
+      {/* agent-react モーダル（MC-142） */}
+      {showAgentReact && selectedId && (
+        <AgentReactModal
+          agents={agents}
+          onClose={() => setShowAgentReact(false)}
+          onSelect={(agentId) => {
+            void handleAgentReact(selectedId, agentId);
+          }}
+        />
+      )}
+
+      {/* ラウンドテーブルモーダル（MC-142） */}
+      {showRoundtable && selectedId && (
+        <RoundtableModal
+          agents={agents}
+          channelId={selectedId}
+          onClose={() => setShowRoundtable(false)}
+          onDone={(msgs) => {
+            setMessages((prev) => [...prev, ...msgs]);
+            setShowRoundtable(false);
           }}
         />
       )}

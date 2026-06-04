@@ -1,8 +1,9 @@
-// chatRouter — Slack 的チャット機能（MC-141）
+// chatRouter — Slack 的チャット機能（MC-141/142）
 //
 // ストレージ: data/channels/<channel-id>/meta.json + messages.jsonl
 // 初期チャンネル: general / releases / dev（自動作成）
 // エージェント投稿エンドポイントは auth 外（AGENT_TOKEN で別認証）。
+// MC-142: agent-react / roundtable エンドポイント追加（claude -p によるエージェント自律発言）
 
 import { Router, type Request, type Response } from 'express';
 import {
@@ -17,6 +18,8 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { CHAT_CHANNELS_DIR, AGENT_TOKEN, ROSTER_DIR } from './config.js';
 import type { Broadcast } from './watch.js';
+import { collectAgentPersonas, getAgentPersona } from './lib/agentPersonas.js';
+import { runClaude } from './lib/notebookClaude.js';
 
 // ── 型定義 ──────────────────────────────────────────────────
 
@@ -369,6 +372,142 @@ export function chatRouter(broadcast: Broadcast): Router {
   // GET /api/chat/members
   router.get('/members', (_req: Request, res: Response) => {
     res.json({ members: collectMembers() });
+  });
+
+  // GET /api/chat/agents — エージェント人格一覧（MC-142）
+  router.get('/agents', (_req: Request, res: Response) => {
+    const personas = collectAgentPersonas().map((p) => ({
+      senderId: p.senderId,
+      senderName: p.senderName,
+      color: p.color,
+      role: p.role,
+    }));
+    res.json({ agents: personas });
+  });
+
+  // ── エージェント自律発言 ─────────────────────────────────────
+
+  /**
+   * POST /api/chat/channels/:id/agent-react
+   * { agentId, triggerMessageId?, context? }
+   * → 指定エージェントが直近メッセージを読んで人格に合わせた返答を生成し、チャンネルに投稿。
+   */
+  router.post('/channels/:id/agent-react', async (req: Request, res: Response) => {
+    const channelId = idParam(req, 'id');
+    if (!existsSync(channelDir(channelId))) {
+      res.status(404).json({ error: 'channel not found' });
+      return;
+    }
+
+    const { agentId } = req.body as { agentId?: string; triggerMessageId?: string; context?: string };
+    if (!agentId || typeof agentId !== 'string' || agentId.trim() === '') {
+      res.status(400).json({ error: 'agentId is required' });
+      return;
+    }
+
+    const persona = getAgentPersona(agentId.trim());
+    if (!persona) {
+      res.status(404).json({ error: `agent not found: ${agentId}` });
+      return;
+    }
+
+    // 直近5件を取得して古い→新しい順に並べる
+    const recent = readMessages(channelId, 5, undefined).reverse();
+    const chatHistory = recent
+      .map((m) => `${m.senderName}: ${m.text}`)
+      .join('\n');
+
+    const prompt = `${persona.systemPrompt}\n\n最近のチャット:\n${chatHistory || '（まだメッセージはありません）'}\n\n${persona.senderName} として一言コメントしてください。日本語・3文以内。`;
+
+    const result = await runClaude('/home/dev/projects/cxo-agent', prompt);
+    if (!result.ok || !result.stdout.trim()) {
+      res.status(500).json({ error: result.error ?? 'claude returned empty output' });
+      return;
+    }
+
+    const text = result.stdout.trim();
+    const msg: ChatMessage = {
+      id: randomUUID(),
+      ts: new Date().toISOString(),
+      senderId: persona.senderId,
+      senderName: persona.senderName,
+      senderEmoji: '',
+      text,
+    };
+    appendMessage(channelId, msg);
+    broadcast('chat', { channelId, message: msg });
+    res.status(201).json({ message: msg });
+  });
+
+  /**
+   * POST /api/chat/channels/:id/roundtable
+   * { topic, agentIds: string[] }
+   * → 指定エージェント群が順番にトピックについて発言する（ラウンドテーブル）。
+   */
+  router.post('/channels/:id/roundtable', async (req: Request, res: Response) => {
+    const channelId = idParam(req, 'id');
+    if (!existsSync(channelDir(channelId))) {
+      res.status(404).json({ error: 'channel not found' });
+      return;
+    }
+
+    const { topic, agentIds } = req.body as { topic?: string; agentIds?: string[] };
+    if (!topic || typeof topic !== 'string' || topic.trim() === '') {
+      res.status(400).json({ error: 'topic is required' });
+      return;
+    }
+    if (!Array.isArray(agentIds) || agentIds.length === 0) {
+      res.status(400).json({ error: 'agentIds must be a non-empty array' });
+      return;
+    }
+
+    const personas = agentIds
+      .map((id) => getAgentPersona(id.trim()))
+      .filter((p): p is NonNullable<typeof p> => p !== undefined);
+
+    if (personas.length === 0) {
+      res.status(400).json({ error: 'no valid agents found in agentIds' });
+      return;
+    }
+
+    const postedMessages: ChatMessage[] = [];
+
+    // トピックアナウンス（システムメッセージ）
+    const announce: ChatMessage = {
+      id: randomUUID(),
+      ts: new Date().toISOString(),
+      senderId: 'system',
+      senderName: 'システム',
+      senderEmoji: '',
+      text: `ラウンドテーブル開始: ${topic.trim()}`,
+    };
+    appendMessage(channelId, announce);
+    broadcast('chat', { channelId, message: announce });
+    postedMessages.push(announce);
+
+    // 各エージェントが順番に発言（直列処理でセマフォを節約）
+    for (const persona of personas) {
+      const prompt = `${persona.systemPrompt}\n\nトピック: ${topic.trim()}\n\n${persona.senderName} として、このトピックについて意見を一言述べてください。日本語・3文以内。`;
+
+      const result = await runClaude('/home/dev/projects/cxo-agent', prompt);
+      const text = result.ok && result.stdout.trim()
+        ? result.stdout.trim()
+        : `（${persona.senderName} は応答できませんでした: ${result.error ?? 'empty'}）`;
+
+      const msg: ChatMessage = {
+        id: randomUUID(),
+        ts: new Date().toISOString(),
+        senderId: persona.senderId,
+        senderName: persona.senderName,
+        senderEmoji: '',
+        text,
+      };
+      appendMessage(channelId, msg);
+      broadcast('chat', { channelId, message: msg });
+      postedMessages.push(msg);
+    }
+
+    res.json({ ok: true, messages: postedMessages });
   });
 
   return router;
