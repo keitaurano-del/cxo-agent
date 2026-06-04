@@ -94,7 +94,15 @@ export default function BottomNav({
                   >
                     <span className="relative shrink-0" aria-hidden>
                       {item.icon}
-                      {badge > 0 && (
+                      {badge > 0 && item.to === '/chat' && (
+                        // チャット: 青ドット
+                        <span
+                          className="absolute -right-1 -top-1 inline-flex h-2.5 w-2.5 rounded-full"
+                          style={{ background: '#3b82f6', boxShadow: '0 0 0 2px var(--mc-surface)' }}
+                        />
+                      )}
+                      {badge > 0 && item.to !== '/chat' && (
+                        // その他: 数字バッジ
                         <span
                           className="absolute -right-1.5 -top-1.5 inline-flex min-w-[1rem] items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none"
                           style={{ color: 'var(--mc-bg)', background: 'var(--mc-blocked)' }}
@@ -104,7 +112,7 @@ export default function BottomNav({
                       )}
                     </span>
                     <span>{item.label}</span>
-                    {badge > 0 && <span className="sr-only">（要承認 {badge} 件）</span>}
+                    {badge > 0 && <span className="sr-only">（未読 {badge} 件）</span>}
                   </NavLink>
                 </li>
               );
