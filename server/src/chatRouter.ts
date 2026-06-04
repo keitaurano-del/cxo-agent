@@ -1,9 +1,10 @@
-// chatRouter — Slack 的チャット機能（MC-141/142）
+// chatRouter — Slack 的チャット機能（MC-141/142/144）
 //
 // ストレージ: data/channels/<channel-id>/meta.json + messages.jsonl
 // 初期チャンネル: general / releases / dev（自動作成）
 // エージェント投稿エンドポイントは auth 外（AGENT_TOKEN で別認証）。
 // MC-142: agent-react / roundtable エンドポイント追加（claude -p によるエージェント自律発言）
+// MC-144: ファイル添付・メンション・リアクション追加
 
 import { Router, type Request, type Response } from 'express';
 import {
@@ -13,13 +14,22 @@ import {
   writeFileSync,
   readdirSync,
   appendFileSync,
+  createReadStream,
+  statSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { lookup as mimeLookup } from 'mime-types';
+import multer from 'multer';
 import { CHAT_CHANNELS_DIR, AGENT_TOKEN, ROSTER_DIR } from './config.js';
 import type { Broadcast } from './watch.js';
 import { collectAgentPersonas, getAgentPersona } from './lib/agentPersonas.js';
 import { runClaude } from './lib/notebookClaude.js';
+
+/** アップロード 1 ファイルあたりの最大バイト数（50MB）。 */
+const CHAT_UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
+/** 1 リクエストあたりの最大ファイル数。 */
+const CHAT_UPLOAD_MAX_FILES = 10;
 
 // ── 型定義 ──────────────────────────────────────────────────
 
@@ -32,6 +42,16 @@ export interface ChannelMeta {
   createdAt: string;
 }
 
+export interface Attachment {
+  name: string;
+  url: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
+/** リアクション: emoji -> senderId[] のマップ。 */
+export type Reactions = Record<string, string[]>;
+
 export interface ChatMessage {
   id: string;
   ts: string;
@@ -39,7 +59,8 @@ export interface ChatMessage {
   senderName: string;
   senderEmoji: string;
   text: string;
-  attachments?: string[];
+  attachments?: Attachment[];
+  reactions?: Reactions;
 }
 
 export interface ChannelSummary extends ChannelMeta {
@@ -75,6 +96,10 @@ function metaPath(channelId: string): string {
 
 function messagesPath(channelId: string): string {
   return join(channelDir(channelId), 'messages.jsonl');
+}
+
+function uploadsDir(channelId: string): string {
+  return join(channelDir(channelId), 'uploads');
 }
 
 /** data/channels/ を作成し、初期チャンネルを ensure する。 */
@@ -195,6 +220,41 @@ function deleteMessage(channelId: string, msgId: string): boolean {
   }
 }
 
+/**
+ * 指定メッセージを updater 関数で変換して書き換える。
+ * 見つからなければ false、成功すれば更新後のメッセージを返す。
+ */
+function updateMessage(
+  channelId: string,
+  msgId: string,
+  updater: (msg: ChatMessage) => ChatMessage,
+): ChatMessage | false {
+  const mp = messagesPath(channelId);
+  if (!existsSync(mp)) return false;
+  try {
+    const raw = readFileSync(mp, 'utf-8');
+    const lines = raw.split('\n').filter((l) => l.trim() !== '');
+    let updated: ChatMessage | null = null;
+    const newLines = lines.map((line) => {
+      try {
+        const msg = JSON.parse(line) as ChatMessage;
+        if (msg.id === msgId) {
+          updated = updater(msg);
+          return JSON.stringify(updated);
+        }
+        return line;
+      } catch {
+        return line;
+      }
+    });
+    if (!updated) return false;
+    writeFileSync(mp, newLines.join('\n') + '\n', 'utf-8');
+    return updated;
+  } catch {
+    return false;
+  }
+}
+
 // ── roster から members 一覧を収集 ──────────────────────────
 
 /** frontmatter のフィールドを取得する簡易パーサ。 */
@@ -244,6 +304,65 @@ function collectMembers(): ChatMember[] {
 function idParam(req: Request, name: string): string {
   const v = req.params[name];
   return Array.isArray(v) ? (v[0] ?? '') : (v ?? '');
+}
+
+// ── multer — チャットファイルアップロード ──────────────────────────
+
+/**
+ * multer/busboy は latin1 として originalname を decode するため、UTF-8 ファイル名を復号する。
+ * ASCII のみなら latin1↔utf8 は同値なので無害。
+ */
+function decodeOriginalName(name: string): string {
+  const raw = name || 'file';
+  try {
+    const decoded = Buffer.from(raw, 'latin1').toString('utf8');
+    const before = (raw.match(/�/g) ?? []).length;
+    const after = (decoded.match(/�/g) ?? []).length;
+    return after > before ? raw : decoded;
+  } catch {
+    return raw;
+  }
+}
+
+/** ファイル名のパス区切り・制御文字を無害化する。 */
+function sanitizeChatFilename(name: string): string {
+  return name
+    .replace(/[\\/]/g, '_')
+    .replace(/[^\x20-\x7E　-鿿豈-﫿＀-￯一-鿿]/g, '_')
+    .replace(/\.\./g, '_')
+    .replace(/^\./, '_')
+    .slice(0, 200) || 'file';
+}
+
+/** チャンネルの uploads/ ディレクトリに diskStorage で保存する multer インスタンスを作る。 */
+function makeChatUpload(channelId: string): multer.Multer {
+  const storage = multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      const dir = uploadsDir(channelId);
+      mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: (_req, file, cb) => {
+      const safe = sanitizeChatFilename(decodeOriginalName(file.originalname));
+      const dir = uploadsDir(channelId);
+      mkdirSync(dir, { recursive: true });
+      // 衝突回避: 同名ファイルがあればサフィックスを付ける。
+      let target = safe;
+      let i = 1;
+      while (existsSync(join(dir, target))) {
+        const dot = safe.lastIndexOf('.');
+        target = dot >= 0
+          ? `${safe.slice(0, dot)}-${i}${safe.slice(dot)}`
+          : `${safe}-${i}`;
+        i++;
+      }
+      cb(null, target);
+    },
+  });
+  return multer({
+    storage,
+    limits: { fileSize: CHAT_UPLOAD_MAX_BYTES, files: CHAT_UPLOAD_MAX_FILES },
+  });
 }
 
 // ── ルーター生成（broadcast を受け取る閉包） ────────────────────
@@ -325,11 +444,12 @@ export function chatRouter(broadcast: Broadcast): Router {
       res.status(404).json({ error: 'channel not found' });
       return;
     }
-    const { senderId, senderName, senderEmoji = '', text } = req.body as {
+    const { senderId, senderName, senderEmoji = '', text, attachments } = req.body as {
       senderId?: string;
       senderName?: string;
       senderEmoji?: string;
       text?: string;
+      attachments?: Attachment[];
     };
     if (!senderId || typeof senderId !== 'string' || senderId.trim() === '') {
       res.status(400).json({ error: 'senderId is required' });
@@ -347,9 +467,134 @@ export function chatRouter(broadcast: Broadcast): Router {
       senderEmoji: senderEmoji.trim(),
       text: text.trim(),
     };
+    if (Array.isArray(attachments) && attachments.length > 0) {
+      msg.attachments = attachments;
+    }
     appendMessage(id, msg);
     broadcast('chat', { channelId: id, message: msg });
     res.status(201).json({ message: msg });
+  });
+
+  // ── MC-144: ファイルアップロード ────────────────────────────────
+
+  /**
+   * POST /api/chat/channels/:id/upload
+   * multipart, field "files" → data/channels/<id>/uploads/<filename> に保存。
+   * レスポンス: { ok, files: [{name, url, mimeType, sizeBytes}] }
+   */
+  router.post('/channels/:id/upload', (req: Request, res: Response) => {
+    const id = idParam(req, 'id');
+    if (!existsSync(channelDir(id))) {
+      res.status(404).json({ error: 'channel not found' });
+      return;
+    }
+    const upload = makeChatUpload(id);
+    upload.array('files', CHAT_UPLOAD_MAX_FILES)(req, res, (err: unknown) => {
+      if (err) {
+        if (err instanceof multer.MulterError) {
+          if (err.code === 'LIMIT_FILE_SIZE') {
+            const mb = Math.round(CHAT_UPLOAD_MAX_BYTES / (1024 * 1024));
+            res.status(413).json({ error: `ファイルサイズが上限（${mb}MB）を超えています。`, code: err.code });
+            return;
+          }
+          res.status(400).json({ error: err.message, code: err.code });
+          return;
+        }
+        res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+        return;
+      }
+      const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+      if (files.length === 0) {
+        res.status(400).json({ error: 'ファイルがありません（フィールド名は "files" を使用してください）。' });
+        return;
+      }
+      const result: Attachment[] = files.map((f) => {
+        let sizeBytes = f.size;
+        try { sizeBytes = statSync(f.path).size; } catch { /* use f.size */ }
+        const mimeType = (f.mimetype && f.mimetype !== 'application/octet-stream')
+          ? f.mimetype
+          : (mimeLookup(f.filename) || 'application/octet-stream');
+        return {
+          name: f.filename,
+          url: `/api/chat/channels/${id}/uploads/${encodeURIComponent(f.filename)}`,
+          mimeType,
+          sizeBytes,
+        };
+      });
+      res.status(201).json({ ok: true, files: result });
+    });
+  });
+
+  /**
+   * GET /api/chat/channels/:id/uploads/:filename
+   * アップロードされたファイルを配信する（auth ミドルウェア配下）。
+   */
+  router.get('/channels/:id/uploads/:filename', (req: Request, res: Response) => {
+    const id = idParam(req, 'id');
+    const filename = decodeURIComponent(idParam(req, 'filename'));
+    // パストラバーサル防止: basename のみ使う
+    const safe = basename(filename);
+    const filePath = join(uploadsDir(id), safe);
+    if (!existsSync(filePath)) {
+      res.status(404).json({ error: 'file not found' });
+      return;
+    }
+    const mime = mimeLookup(safe) || 'application/octet-stream';
+    res.setHeader('Content-Type', mime);
+    let size = 0;
+    try { size = statSync(filePath).size; } catch { /* no-op */ }
+    if (size > 0) res.setHeader('Content-Length', size);
+    createReadStream(filePath).pipe(res);
+  });
+
+  // ── MC-144: リアクション ─────────────────────────────────────────
+
+  /**
+   * POST /api/chat/channels/:id/messages/:msgId/react
+   * { emoji: string, senderId: string }
+   * → 該当メッセージの reactions を更新（toggle: 既にあれば削除、なければ追加）。
+   */
+  router.post('/channels/:id/messages/:msgId/react', (req: Request, res: Response) => {
+    const id = idParam(req, 'id');
+    const msgId = idParam(req, 'msgId');
+    if (!existsSync(channelDir(id))) {
+      res.status(404).json({ error: 'channel not found' });
+      return;
+    }
+    const { emoji, senderId } = req.body as { emoji?: string; senderId?: string };
+    if (!emoji || typeof emoji !== 'string' || emoji.trim() === '') {
+      res.status(400).json({ error: 'emoji is required' });
+      return;
+    }
+    if (!senderId || typeof senderId !== 'string' || senderId.trim() === '') {
+      res.status(400).json({ error: 'senderId is required' });
+      return;
+    }
+    const e = emoji.trim();
+    const sid = senderId.trim();
+    const updated = updateMessage(id, msgId, (msg) => {
+      const reactions: Reactions = { ...(msg.reactions ?? {}) };
+      const current = reactions[e] ?? [];
+      if (current.includes(sid)) {
+        // toggle off
+        const next = current.filter((s) => s !== sid);
+        if (next.length === 0) {
+          delete reactions[e];
+        } else {
+          reactions[e] = next;
+        }
+      } else {
+        // toggle on
+        reactions[e] = [...current, sid];
+      }
+      return { ...msg, reactions };
+    });
+    if (!updated) {
+      res.status(404).json({ error: 'message not found' });
+      return;
+    }
+    broadcast('chat', { channelId: id, message: updated });
+    res.json({ ok: true, message: updated });
   });
 
   // DELETE /api/chat/channels/:id/messages/:msgId

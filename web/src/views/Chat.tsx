@@ -1,14 +1,15 @@
-// Chat — Slack 的チャット機能（MC-141/142）
+// Chat — Slack 的チャット機能（MC-141/142/144）
 //
 // 左カラム: チャンネル一覧（#チャンネル + DM）
 // 右カラム: メッセージ一覧（Slack 風・Markdown レンダリング）＋ 入力欄
 // SSE /api/stream の chat イベントでリアルタイム追加。
 // 自分は senderId='keita'、senderName='Keita'、senderEmoji=''（絵文字なし）。
 // MC-142: ラウンドテーブル・エージェント単発反応ボタンを追加。
+// MC-144: ファイル添付・メンション・リアクション追加。
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLiveTick } from '../lib/liveContext';
-import { HashIcon, PlusIcon, SendIcon, TrashIcon, SparkIcon, ExpandIcon, ShrinkIcon } from '../components/icons';
+import { HashIcon, PlusIcon, SendIcon, TrashIcon, SparkIcon, ExpandIcon, ShrinkIcon, PaperclipIcon } from '../components/icons';
 import { PageHeader } from '../components/PageHeader';
 import { Spinner } from '../components/ui';
 
@@ -23,6 +24,15 @@ interface ChannelMeta {
   createdAt: string;
 }
 
+interface Attachment {
+  name: string;
+  url: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
+type Reactions = Record<string, string[]>;
+
 interface ChatMessage {
   id: string;
   ts: string;
@@ -30,6 +40,8 @@ interface ChatMessage {
   senderName: string;
   senderEmoji: string;
   text: string;
+  attachments?: Attachment[];
+  reactions?: Reactions;
 }
 
 interface ChannelSummary extends ChannelMeta {
@@ -111,11 +123,37 @@ async function fetchMessages(channelId: string, limit = 50): Promise<ChatMessage
   return [...data.messages].reverse();
 }
 
-async function postMessage(channelId: string, text: string): Promise<ChatMessage> {
+async function postMessage(channelId: string, text: string, attachments?: Attachment[]): Promise<ChatMessage> {
   const res = await fetch(`/api/chat/channels/${channelId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ senderId: SELF_ID, senderName: SELF_NAME, senderEmoji: SELF_EMOJI, text }),
+    body: JSON.stringify({
+      senderId: SELF_ID, senderName: SELF_NAME, senderEmoji: SELF_EMOJI, text,
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
+    }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = (await res.json()) as { message: ChatMessage };
+  return data.message;
+}
+
+async function uploadFiles(channelId: string, files: File[]): Promise<Attachment[]> {
+  const fd = new FormData();
+  for (const f of files) fd.append('files', f);
+  const res = await fetch(`/api/chat/channels/${channelId}/upload`, {
+    method: 'POST',
+    body: fd,
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = (await res.json()) as { files: Attachment[] };
+  return data.files;
+}
+
+async function postReaction(channelId: string, msgId: string, emoji: string): Promise<ChatMessage> {
+  const res = await fetch(`/api/chat/channels/${channelId}/messages/${msgId}/react`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ emoji, senderId: SELF_ID }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = (await res.json()) as { message: ChatMessage };
@@ -221,19 +259,97 @@ function Avatar({ senderId, senderName, senderEmoji, size = 32 }: {
   );
 }
 
+// ── 絵文字リアクション固定セット ─────────────────────────────────
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '🔥'] as const;
+
+/** 添付ファイル表示コンポーネント。 */
+function AttachmentView({ att }: { att: Attachment }) {
+  const [lightbox, setLightbox] = useState(false);
+  const isImage = att.mimeType.startsWith('image/');
+  const isVideo = att.mimeType.startsWith('video/');
+  const isPdf = att.mimeType === 'application/pdf';
+
+  if (isImage) {
+    return (
+      <>
+        <div
+          style={{ marginTop: 6, cursor: 'pointer' }}
+          onClick={() => setLightbox(true)}
+          title={att.name}
+        >
+          <img
+            src={att.url}
+            alt={att.name}
+            style={{
+              maxWidth: 320,
+              maxHeight: 240,
+              borderRadius: 6,
+              display: 'block',
+              border: '1px solid var(--mc-border)',
+            }}
+          />
+        </div>
+        {lightbox && (
+          <div
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000,
+            }}
+            onClick={() => setLightbox(false)}
+          >
+            <img src={att.url} alt={att.name} style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 8 }} />
+          </div>
+        )}
+      </>
+    );
+  }
+  if (isVideo) {
+    return (
+      <div style={{ marginTop: 6 }}>
+        <video
+          src={att.url}
+          controls
+          style={{ maxWidth: 360, maxHeight: 240, borderRadius: 6, display: 'block', border: '1px solid var(--mc-border)' }}
+        />
+      </div>
+    );
+  }
+  if (isPdf) {
+    return (
+      <div style={{ marginTop: 6 }}>
+        <a href={att.url} target="_blank" rel="noopener noreferrer"
+          style={{ fontSize: 13, color: 'var(--mc-accent)', textDecoration: 'underline' }}>
+          PDF を開く: {att.name}
+        </a>
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginTop: 6 }}>
+      <a href={att.url} download={att.name}
+        style={{ fontSize: 13, color: 'var(--mc-accent)', textDecoration: 'underline' }}>
+        ダウンロード: {att.name}
+      </a>
+    </div>
+  );
+}
+
 /** メッセージ1件。連続送信者はアバター・名前省略。 */
 function MessageItem({
   msg,
   prevMsg,
   onDelete,
   onAgentReact,
+  onReact,
 }: {
   msg: ChatMessage;
   prevMsg: ChatMessage | null;
   onDelete?: () => void;
   onAgentReact?: () => void;
+  onReact?: (emoji: string) => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const [showReactPicker, setShowReactPicker] = useState(false);
   const isSelf = msg.senderId === SELF_ID;
   const isAgent = !isSelf;
   const isGrouped =
@@ -242,6 +358,19 @@ function MessageItem({
     new Date(msg.ts).getTime() - new Date(prevMsg.ts).getTime() < 5 * 60 * 1000; // 5分以内
 
   const time = new Date(msg.ts).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+
+  // @mention を強調表示
+  const highlightMentions = (text: string): string => {
+    return text.replace(/@([a-zA-Z0-9_\-]+)/g, (m) =>
+      `<span style="background:var(--mc-accent);color:#fff;border-radius:3px;padding:0 3px;font-size:13px">${m}</span>`
+    );
+  };
+
+  const renderedText = highlightMentions(renderMarkdown(msg.text));
+
+  // リアクション集計
+  const reactions = msg.reactions ?? {};
+  const reactionEntries = Object.entries(reactions).filter(([, senders]) => senders.length > 0);
 
   return (
     <div
@@ -254,7 +383,7 @@ function MessageItem({
         position: 'relative',
       }}
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseLeave={() => { setHovered(false); setShowReactPicker(false); }}
     >
       {!isGrouped && (
         <Avatar senderId={msg.senderId} senderName={msg.senderName} senderEmoji={msg.senderEmoji} />
@@ -284,9 +413,44 @@ function MessageItem({
             borderRadius: isAgent ? 6 : 0,
             borderLeft: isAgent ? `3px solid ${agentBg(msg.senderId)}` : 'none',
           }}
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
+          dangerouslySetInnerHTML={{ __html: renderedText }}
         />
+        {/* 添付ファイル */}
+        {msg.attachments && msg.attachments.length > 0 && (
+          <div style={{ marginTop: 4 }}>
+            {msg.attachments.map((att, i) => (
+              <AttachmentView key={i} att={att} />
+            ))}
+          </div>
+        )}
+        {/* リアクション表示 */}
+        {reactionEntries.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+            {reactionEntries.map(([emoji, senders]) => {
+              const isMine = senders.includes(SELF_ID);
+              return (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => onReact?.(emoji)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 3,
+                    padding: '1px 6px', borderRadius: 12,
+                    border: `1px solid ${isMine ? 'var(--mc-accent)' : 'var(--mc-border)'}`,
+                    background: isMine ? 'rgba(var(--mc-accent-rgb, 90,110,200),0.12)' : 'var(--mc-surface-2)',
+                    cursor: 'pointer', fontSize: 13, color: 'var(--mc-text)',
+                  }}
+                  title={senders.join(', ')}
+                >
+                  <span>{emoji}</span>
+                  <span style={{ fontSize: 11, color: 'var(--mc-text-muted)' }}>{senders.length}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
+      {/* ホバーアクションバー */}
       {hovered && (
         <div
           style={{
@@ -296,8 +460,63 @@ function MessageItem({
             transform: 'translateY(-50%)',
             display: 'flex',
             gap: 4,
+            zIndex: 10,
           }}
         >
+          {/* リアクション絵文字ピッカー */}
+          {onReact && (
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setShowReactPicker((v) => !v)}
+                style={{
+                  background: 'var(--mc-surface-3)',
+                  border: '1px solid var(--mc-border)',
+                  borderRadius: 4,
+                  padding: '2px 6px',
+                  cursor: 'pointer',
+                  color: 'var(--mc-text-muted)',
+                  fontSize: 14,
+                  lineHeight: 1,
+                }}
+                title="リアクション"
+                aria-label="リアクション"
+              >
+                +
+              </button>
+              {showReactPicker && (
+                <div
+                  style={{
+                    position: 'absolute', right: 0, bottom: '110%',
+                    background: 'var(--mc-surface)',
+                    border: '1px solid var(--mc-border)',
+                    borderRadius: 8,
+                    padding: '6px 8px',
+                    display: 'flex', gap: 4,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                    whiteSpace: 'nowrap',
+                    zIndex: 20,
+                  }}
+                >
+                  {REACTION_EMOJIS.map((em) => (
+                    <button
+                      key={em}
+                      type="button"
+                      onClick={() => { onReact(em); setShowReactPicker(false); }}
+                      style={{
+                        background: 'transparent', border: 'none',
+                        cursor: 'pointer', fontSize: 20, padding: '2px 3px',
+                        borderRadius: 4,
+                      }}
+                      title={em}
+                    >
+                      {em}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {onAgentReact && (
             <button
               type="button"
@@ -650,7 +869,7 @@ export default function Chat() {
   const [lastRead, setLastRead] = useState<Record<string, string>>(loadLastRead);
 
   // メンバー
-  const [_members, setMembers] = useState<ChatMember[]>([]);
+  const [members, setMembers] = useState<ChatMember[]>([]);
 
   // エージェント人格一覧（MC-142）
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -665,6 +884,15 @@ export default function Chat() {
 
   // モバイル: パネル切替
   const [mobilePanel, setMobilePanel] = useState<'list' | 'messages'>('list');
+
+  // MC-144: ファイル添付ステート
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploadedAttachments, setUploadedAttachments] = useState<Attachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // MC-144: メンション候補ステート
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -698,7 +926,7 @@ export default function Chat() {
   // 初回ロード
   useEffect(() => {
     void loadChannels();
-    fetchMembers().then(setMembers).catch(() => {});
+    fetchMembers().then((ms) => setMembers(ms)).catch(() => {});
     fetchAgents().then(setAgents).catch(() => {});
   }, [loadChannels]);
 
@@ -730,17 +958,29 @@ export default function Chat() {
           };
           if (data.channelId === selectedId) {
             if (data.message) {
-              setMessages((prev) => [...prev, data.message!]);
+              setMessages((prev) => {
+                // リアクション更新の場合は既存メッセージを置き換え
+                const idx = prev.findIndex((m) => m.id === data.message!.id);
+                if (idx >= 0) {
+                  const next = [...prev];
+                  next[idx] = data.message!;
+                  return next;
+                }
+                return [...prev, data.message!];
+              });
             } else if (data.deleted) {
               setMessages((prev) => prev.filter((m) => m.id !== data.deleted));
             }
           }
-          // チャンネルリストの lastMessage を更新
+          // チャンネルリストの lastMessage を更新（新規メッセージのみ）
           if (data.message) {
             setChannels((prev) =>
-              prev.map((ch) =>
-                ch.id === data.channelId ? { ...ch, lastMessage: data.message! } : ch,
-              ),
+              prev.map((ch) => {
+                if (ch.id !== data.channelId) return ch;
+                // reactions 更新は lastMessage に反映しない（チャンネルリストに不要）
+                const isNew = !ch.lastMessage || data.message!.ts >= (ch.lastMessage?.ts ?? '');
+                return isNew ? { ...ch, lastMessage: data.message! } : ch;
+              }),
             );
           }
         } catch {
@@ -777,12 +1017,34 @@ export default function Chat() {
 
   // 送信
   const handleSend = async () => {
-    if (!selectedId || !inputText.trim() || sending) return;
-    const text = inputText.trim();
+    const hasFiles = pendingFiles.length > 0 || uploadedAttachments.length > 0;
+    if (!selectedId || (!inputText.trim() && !hasFiles) || sending) return;
+    // ファイルのみの場合は自動テキストを補完
+    const text = inputText.trim() || 'ファイルを添付しました';
+
+    // ファイルのアップロードが未完了の場合は先にアップロード
+    let attachments: Attachment[] = [...uploadedAttachments];
+    if (pendingFiles.length > 0) {
+      setUploading(true);
+      try {
+        const uploaded = await uploadFiles(selectedId, pendingFiles);
+        attachments = [...attachments, ...uploaded];
+        setPendingFiles([]);
+        setUploadedAttachments([]);
+      } catch {
+        setUploading(false);
+        return; // アップロード失敗時は送信しない
+      }
+      setUploading(false);
+    } else {
+      setUploadedAttachments([]);
+    }
+
     setInputText('');
+    setMentionQuery(null);
     setSending(true);
     try {
-      const msg = await postMessage(selectedId, text);
+      const msg = await postMessage(selectedId, text, attachments.length > 0 ? attachments : undefined);
       setMessages((prev) => [...prev, msg]);
       // 既読を最新に更新
       saveLastRead(selectedId, msg.ts);
@@ -794,12 +1056,72 @@ export default function Chat() {
     }
   };
 
+  // ファイル選択
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length > 0) {
+      setPendingFiles((prev) => [...prev, ...files]);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // リアクション
+  const handleReact = async (channelId: string, msgId: string, emoji: string) => {
+    try {
+      const updated = await postReaction(channelId, msgId, emoji);
+      setMessages((prev) => prev.map((m) => (m.id === msgId ? updated : m)));
+    } catch {
+      // SSE で回復
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // メンション候補が表示中は Enter でキャンセル
+    if (mentionQuery !== null && e.key === 'Escape') {
+      setMentionQuery(null);
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
     }
   };
+
+  // メンション候補の検出（入力変化時）
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInputText(val);
+    // カーソル直前の @ を検出
+    const pos = e.target.selectionStart ?? val.length;
+    const before = val.slice(0, pos);
+    const match = before.match(/@([a-zA-Z0-9_\-]*)$/);
+    if (match) {
+      setMentionQuery(match[1]);
+    } else {
+      setMentionQuery(null);
+    }
+  };
+
+  // メンション候補クリック時: テキストに挿入
+  const handleMentionSelect = (memberId: string) => {
+    const pos = textareaRef.current?.selectionStart ?? inputText.length;
+    const before = inputText.slice(0, pos);
+    const after = inputText.slice(pos);
+    const atIdx = before.lastIndexOf('@');
+    const newText = before.slice(0, atIdx) + `@${memberId} ` + after;
+    setInputText(newText);
+    setMentionQuery(null);
+    // フォーカス復帰
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  };
+
+  // フィルタ済みメンション候補
+  const mentionCandidates = mentionQuery !== null
+    ? members.filter((m) =>
+        m.id.toLowerCase().includes(mentionQuery.toLowerCase()) ||
+        m.name.toLowerCase().includes(mentionQuery.toLowerCase())
+      ).slice(0, 8)
+    : [];
 
   // 削除
   const handleDelete = async (channelId: string, msgId: string) => {
@@ -1064,6 +1386,7 @@ export default function Chat() {
                           ? () => setShowAgentReact(true)
                           : undefined
                       }
+                      onReact={(emoji) => { void handleReact(selectedChannel.id, msg.id, emoji); }}
                     />
                   ))
                 )}
@@ -1077,8 +1400,84 @@ export default function Chat() {
                   borderTop: '1px solid var(--mc-border)',
                   background: 'var(--mc-surface)',
                   flexShrink: 0,
+                  position: 'relative',
                 }}
               >
+                {/* メンション候補ポップアップ */}
+                {mentionQuery !== null && mentionCandidates.length > 0 && (
+                  <div
+                    style={{
+                      position: 'absolute', bottom: '100%', left: 12,
+                      background: 'var(--mc-surface)',
+                      border: '1px solid var(--mc-border)',
+                      borderRadius: 6,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                      zIndex: 100,
+                      minWidth: 200,
+                      maxHeight: 220,
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {mentionCandidates.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); handleMentionSelect(m.id); }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '6px 12px', width: '100%', textAlign: 'left',
+                          border: 'none', background: 'transparent', cursor: 'pointer',
+                          color: 'var(--mc-text)', fontSize: 13,
+                        }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--mc-surface-2)'; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                      >
+                        <div style={{
+                          width: 24, height: 24, borderRadius: '50%',
+                          background: 'var(--mc-text-muted)', display: 'flex',
+                          alignItems: 'center', justifyContent: 'center',
+                          color: '#fff', fontSize: 10, fontWeight: 700, flexShrink: 0,
+                        }}>
+                          {m.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 600 }}>{m.id}</div>
+                          {m.role && <div style={{ fontSize: 11, color: 'var(--mc-text-muted)' }}>{m.role}</div>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* ファイルプレビュー */}
+                {(pendingFiles.length > 0 || uploadedAttachments.length > 0) && (
+                  <div style={{
+                    display: 'flex', flexWrap: 'wrap', gap: 6,
+                    marginBottom: 6, padding: '4px 0',
+                  }}>
+                    {pendingFiles.map((f, i) => (
+                      <div key={i} style={{
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        background: 'var(--mc-surface-2)',
+                        border: '1px solid var(--mc-border)',
+                        borderRadius: 4, padding: '2px 8px', fontSize: 12,
+                        color: 'var(--mc-text-muted)',
+                      }}>
+                        {f.type.startsWith('image/')
+                          ? <img src={URL.createObjectURL(f)} alt={f.name}
+                              style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 3 }} />
+                          : <PaperclipIcon width={12} height={12} />
+                        }
+                        <span style={{ maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                        <button type="button" onClick={() => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--mc-text-faint)', fontSize: 14, lineHeight: 1, padding: 0 }}>
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div
                   style={{
                     display: 'flex',
@@ -1090,13 +1489,37 @@ export default function Chat() {
                     background: 'var(--mc-surface-2)',
                   }}
                 >
+                  {/* クリップ（ファイル添付）ボタン */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={handleFileChange}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading || sending}
+                    aria-label="ファイルを添付"
+                    title="ファイルを添付"
+                    style={{
+                      background: 'transparent', border: 'none',
+                      cursor: uploading || sending ? 'default' : 'pointer',
+                      color: 'var(--mc-text-muted)',
+                      display: 'flex', alignItems: 'center', padding: '2px 4px',
+                      opacity: uploading || sending ? 0.5 : 1,
+                    }}
+                  >
+                    <PaperclipIcon width={16} height={16} />
+                  </button>
                   <textarea
                     ref={textareaRef}
                     rows={1}
                     value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
+                    onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
-                    placeholder={`#${selectedChannel.name} にメッセージを送る`}
+                    placeholder={`#${selectedChannel.name} にメッセージを送る（@ でメンション）`}
                     style={{
                       flex: 1,
                       background: 'transparent',
@@ -1113,26 +1536,26 @@ export default function Chat() {
                   <button
                     type="button"
                     onClick={() => { void handleSend(); }}
-                    disabled={!inputText.trim() || sending}
+                    disabled={(!inputText.trim() && pendingFiles.length === 0) || sending || uploading}
                     aria-label="送信"
                     style={{
-                      background: inputText.trim() ? 'var(--mc-accent)' : 'transparent',
+                      background: (inputText.trim() || pendingFiles.length > 0) ? 'var(--mc-accent)' : 'transparent',
                       border: 'none',
                       borderRadius: 4,
                       padding: '4px 8px',
-                      cursor: inputText.trim() ? 'pointer' : 'default',
-                      color: inputText.trim() ? '#fff' : 'var(--mc-text-faint)',
+                      cursor: (inputText.trim() || pendingFiles.length > 0) ? 'pointer' : 'default',
+                      color: (inputText.trim() || pendingFiles.length > 0) ? '#fff' : 'var(--mc-text-faint)',
                       display: 'flex',
                       alignItems: 'center',
                       transition: 'background 0.15s',
                     }}
                   >
-                    <SendIcon width={18} height={18} />
+                    {uploading ? <Spinner /> : <SendIcon width={18} height={18} />}
                   </button>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                   <div style={{ fontSize: 11, color: 'var(--mc-text-faint)', flex: 1 }}>
-                    Enter で送信 / Shift+Enter で改行
+                    Enter で送信 / Shift+Enter で改行 / @ でメンション
                   </div>
                   {/* ラウンドテーブルボタン削除済み（Keita 指示） */}
                 </div>
