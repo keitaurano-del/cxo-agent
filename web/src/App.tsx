@@ -144,13 +144,15 @@ const NAV: NavItem[] = [
 function NavBadge({ count, dot }: { count: number; dot?: boolean }) {
   if (count <= 0) return null;
   if (dot) {
-    // 青い丸ドット（チャット未読通知用）
+    // チャット未読: 青い数字バッジ（ドットより目立つ）
     return (
       <span
-        className="ml-auto inline-flex h-2.5 w-2.5 rounded-full"
-        style={{ background: '#3b82f6', boxShadow: '0 0 0 2px var(--mc-surface)' }}
+        className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none tabular-nums"
+        style={{ color: '#fff', background: '#3b82f6' }}
         aria-label={`未読 ${count} 件`}
-      />
+      >
+        {count > 99 ? '99+' : count}
+      </span>
     );
   }
   return (
@@ -298,13 +300,12 @@ export default function App() {
   const approvalCount = approvals?.total ?? 0;
 
   // チャット未読数: SSE の chat イベントを受けてカウント。
-  // チャット画面を開いている間は増やさない（pathname === '/chat'）。
-  const [chatUnread, setChatUnread] = useState(0);
-  useEffect(() => {
-    // マウント時に localStorage の残カウントを復元
+  // pathname は ref で持ち SSE は一度だけ開く（pathname 変化で再接続しない）。
+  const [chatUnread, setChatUnread] = useState(() => {
     const saved = parseInt(localStorage.getItem('chat.unreadBadge') ?? '0', 10);
-    setChatUnread(isNaN(saved) ? 0 : saved);
-  }, []);
+    return isNaN(saved) ? 0 : saved;
+  });
+  const pathnameRef = useCallback(() => pathname, [pathname]);
   useEffect(() => {
     // チャット画面を開いたらバッジをリセット
     if (pathname === '/chat') {
@@ -313,10 +314,10 @@ export default function App() {
     }
   }, [pathname]);
   useEffect(() => {
-    // SSE で新着チャットメッセージを受けたらカウント（チャット画面以外のみ）
+    // SSE 接続は一度だけ（pathname に依存しない）。最新の pathname は closure で参照。
     const es = new EventSource('/api/stream');
     es.addEventListener('chat', () => {
-      if (pathname === '/chat') return;
+      if (pathnameRef() === '/chat') return;
       setChatUnread((n) => {
         const next = n + 1;
         localStorage.setItem('chat.unreadBadge', String(next));
@@ -324,7 +325,8 @@ export default function App() {
       });
     });
     return () => es.close();
-  }, [pathname]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const badges: Partial<Record<string, number>> = { '/approvals': approvalCount, '/chat': chatUnread };
 
