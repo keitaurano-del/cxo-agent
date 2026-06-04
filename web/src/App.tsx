@@ -286,7 +286,13 @@ export default function App() {
   const { ticks, connected } = useLiveStream();
   const { data: approvals } = useLiveResource<ApprovalsResponse>('/api/approvals', ticks.tasks);
   const approvalCount = approvals?.total ?? 0;
-  const badges: Partial<Record<string, number>> = { '/approvals': approvalCount };
+  // チャット未読数: /api/chat/channels の unreadCount 合計
+  const { data: chatChannels } = useLiveResource<{ channels: Array<{ unreadCount?: number }> }>(
+    '/api/chat/channels',
+    ticks.tasks,
+  );
+  const chatUnread = (chatChannels?.channels ?? []).reduce((s, ch) => s + (ch.unreadCount ?? 0), 0);
+  const badges: Partial<Record<string, number>> = { '/approvals': approvalCount, '/chat': chatUnread };
 
   const { mode: themeMode, isDark, toggle: toggleTheme } = useTheme();
 

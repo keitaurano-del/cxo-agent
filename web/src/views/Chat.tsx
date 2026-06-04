@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLiveTick } from '../lib/liveContext';
-import { HashIcon, PlusIcon, SendIcon, TrashIcon, SparkIcon, UsersIcon } from '../components/icons';
+import { HashIcon, PlusIcon, SendIcon, TrashIcon, SparkIcon, ExpandIcon, ShrinkIcon } from '../components/icons';
 import { PageHeader } from '../components/PageHeader';
 import { Spinner } from '../components/ui';
 
@@ -161,17 +161,6 @@ async function postAgentReact(channelId: string, agentId: string): Promise<ChatM
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = (await res.json()) as { message: ChatMessage };
   return data.message;
-}
-
-async function postRoundtable(channelId: string, topic: string, agentIds: string[]): Promise<ChatMessage[]> {
-  const res = await fetch(`/api/chat/channels/${channelId}/roundtable`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ topic, agentIds }),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = (await res.json()) as { ok: boolean; messages: ChatMessage[] };
-  return data.messages;
 }
 
 // ── 軽量 Markdown レンダラー（react-markdown 未使用・安全な変換）──
@@ -639,196 +628,6 @@ function AgentReactModal({
   );
 }
 
-// ── ラウンドテーブルモーダル ───────────────────────────────────────
-
-function RoundtableModal({
-  agents,
-  channelId,
-  onClose,
-  onDone,
-}: {
-  agents: AgentInfo[];
-  channelId: string;
-  onClose: () => void;
-  onDone: (messages: ChatMessage[]) => void;
-}) {
-  const [topic, setTopic] = useState('');
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const toggle = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleSubmit = async () => {
-    if (!topic.trim() || selected.size === 0) return;
-    setLoading(true);
-    setError('');
-    try {
-      const msgs = await postRoundtable(channelId, topic.trim(), [...selected]);
-      onDone(msgs);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.4)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-      }}
-      onClick={(e) => { if (e.target === e.currentTarget && !loading) onClose(); }}
-    >
-      <div
-        style={{
-          background: 'var(--mc-surface)',
-          border: '1px solid var(--mc-border)',
-          borderRadius: 8,
-          padding: 20,
-          width: 380,
-          maxWidth: '90vw',
-          maxHeight: '80vh',
-          overflow: 'auto',
-        }}
-      >
-        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <UsersIcon width={16} height={16} />
-          ラウンドテーブル
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--mc-text-muted)', marginBottom: 12 }}>
-          トピックを入力して、発言させるエージェントを選択してください。
-        </div>
-        <textarea
-          rows={3}
-          placeholder="トピック（例: Logic アプリの次のリリース方針）"
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-          style={{
-            width: '100%',
-            boxSizing: 'border-box',
-            padding: '6px 10px',
-            border: '1px solid var(--mc-border)',
-            borderRadius: 4,
-            fontSize: 13,
-            background: 'var(--mc-surface-2)',
-            color: 'var(--mc-text)',
-            marginBottom: 12,
-            resize: 'vertical',
-          }}
-          autoFocus
-        />
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--mc-text-muted)', marginBottom: 6 }}>
-          参加エージェント
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
-          {agents.map((a) => (
-            <label
-              key={a.senderId}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '6px 10px',
-                border: `1px solid ${selected.has(a.senderId) ? a.color : 'var(--mc-border)'}`,
-                borderRadius: 6,
-                cursor: 'pointer',
-                background: selected.has(a.senderId) ? 'var(--mc-surface-2)' : 'transparent',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={selected.has(a.senderId)}
-                onChange={() => toggle(a.senderId)}
-                style={{ accentColor: a.color }}
-              />
-              <div
-                style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: '50%',
-                  background: a.color,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#fff',
-                  fontSize: 10,
-                  fontWeight: 700,
-                  flexShrink: 0,
-                }}
-              >
-                {a.senderName.charAt(0)}
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{a.senderName}</div>
-                <div style={{ fontSize: 11, color: 'var(--mc-text-muted)' }}>{a.role}</div>
-              </div>
-            </label>
-          ))}
-        </div>
-        {error && <div style={{ color: 'var(--mc-stalled)', fontSize: 12, marginBottom: 8 }}>{error}</div>}
-        {loading && (
-          <div style={{ fontSize: 12, color: 'var(--mc-text-muted)', marginBottom: 8 }}>
-            エージェントが発言中です...（チャンネルにリアルタイムで流れます）
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={loading}
-            style={{
-              padding: '6px 14px',
-              border: '1px solid var(--mc-border)',
-              borderRadius: 4,
-              background: 'transparent',
-              cursor: loading ? 'default' : 'pointer',
-              fontSize: 13,
-              color: 'var(--mc-text-muted)',
-              opacity: loading ? 0.5 : 1,
-            }}
-          >
-            キャンセル
-          </button>
-          <button
-            type="button"
-            onClick={() => { void handleSubmit(); }}
-            disabled={loading || !topic.trim() || selected.size === 0}
-            style={{
-              padding: '6px 14px',
-              border: 'none',
-              borderRadius: 4,
-              background: 'var(--mc-accent)',
-              color: '#fff',
-              cursor: 'pointer',
-              fontSize: 13,
-              opacity: loading || !topic.trim() || selected.size === 0 ? 0.6 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            {loading ? <Spinner /> : <UsersIcon width={14} height={14} />}
-            {loading ? '発言中...' : '開始'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── メインビュー ────────────────────────────────────────────────
 
@@ -856,11 +655,12 @@ export default function Chat() {
   // エージェント人格一覧（MC-142）
   const [agents, setAgents] = useState<AgentInfo[]>([]);
 
-  // ラウンドテーブルモーダル
-  const [showRoundtable, setShowRoundtable] = useState(false);
+  // 全画面表示
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // ラウンドテーブルは削除済み（Keita 指示）
 
   // agent-react モーダル
-  const [agentReactPending, setAgentReactPending] = useState(false);
   const [showAgentReact, setShowAgentReact] = useState(false);
 
   // モバイル: パネル切替
@@ -1013,15 +813,12 @@ export default function Chat() {
 
   // agent-react: 指定エージェントがチャンネルのメッセージに反応
   const handleAgentReact = async (channelId: string, agentId: string) => {
-    setAgentReactPending(true);
     setShowAgentReact(false);
     try {
       const msg = await postAgentReact(channelId, agentId);
       setMessages((prev) => [...prev, msg]);
     } catch {
       // ignore（SSE で拾える）
-    } finally {
-      setAgentReactPending(false);
     }
   };
 
@@ -1036,11 +833,32 @@ export default function Chat() {
   // ── レンダリング ──────────────────────────────────────────────
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <PageHeader
-        title="チャット"
-        subtitle={selectedChannel ? `#${selectedChannel.name}` : undefined}
-      />
+    <div style={{
+      display: 'flex', flexDirection: 'column',
+      ...(isFullscreen
+        ? { position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--mc-bg)' }
+        : { height: '100%' }),
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 8 }}>
+        <div style={{ flex: 1 }}>
+          <PageHeader
+            title="チャット"
+            subtitle={selectedChannel ? `#${selectedChannel.name}` : undefined}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsFullscreen((v) => !v)}
+          title={isFullscreen ? '全画面を終了' : '全画面表示'}
+          style={{
+            padding: 6, borderRadius: 6, border: '1px solid var(--mc-border)',
+            background: 'var(--mc-surface-2)', color: 'var(--mc-text-muted)',
+            cursor: 'pointer', display: 'flex', alignItems: 'center',
+          }}
+        >
+          {isFullscreen ? <ShrinkIcon width={16} height={16} /> : <ExpandIcon width={16} height={16} />}
+        </button>
+      </div>
 
       {/* モバイル タブ切替 */}
       <div
@@ -1316,30 +1134,7 @@ export default function Chat() {
                   <div style={{ fontSize: 11, color: 'var(--mc-text-faint)', flex: 1 }}>
                     Enter で送信 / Shift+Enter で改行
                   </div>
-                  {agents.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowRoundtable(true)}
-                      disabled={agentReactPending}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        padding: '3px 8px',
-                        border: '1px solid var(--mc-border)',
-                        borderRadius: 4,
-                        background: 'transparent',
-                        cursor: 'pointer',
-                        color: 'var(--mc-text-muted)',
-                        fontSize: 11,
-                        opacity: agentReactPending ? 0.5 : 1,
-                      }}
-                      title="ラウンドテーブル: 複数エージェントがトピックについて発言"
-                    >
-                      <UsersIcon width={12} height={12} />
-                      ラウンドテーブル
-                    </button>
-                  )}
+                  {/* ラウンドテーブルボタン削除済み（Keita 指示） */}
                 </div>
               </div>
             </>
@@ -1390,18 +1185,7 @@ export default function Chat() {
         />
       )}
 
-      {/* ラウンドテーブルモーダル（MC-142） */}
-      {showRoundtable && selectedId && (
-        <RoundtableModal
-          agents={agents}
-          channelId={selectedId}
-          onClose={() => setShowRoundtable(false)}
-          onDone={(msgs) => {
-            setMessages((prev) => [...prev, ...msgs]);
-            setShowRoundtable(false);
-          }}
-        />
-      )}
+      {/* ラウンドテーブルモーダル削除済み（Keita 指示） */}
     </div>
   );
 }

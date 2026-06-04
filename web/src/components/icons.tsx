@@ -426,3 +426,21 @@ export function HashIcon(props: IconProps) {
     </svg>
   );
 }
+
+// 全画面展開（Expand）アイコン。
+export function ExpandIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+    </svg>
+  );
+}
+
+// 全画面縮小（Shrink）アイコン。
+export function ShrinkIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 3v5H3M21 8h-5V3M3 16h5v5M16 21v-5h5" />
+    </svg>
+  );
+}
