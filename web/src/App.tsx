@@ -5,7 +5,7 @@
 // 横断検索からの遷移に影響を出さない。
 import { NavLink, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLiveStream, useLiveResource } from './lib/useLiveData';
 import { LiveContext } from './lib/liveContext';
 import type { ApprovalsResponse } from './lib/types';
@@ -300,12 +300,13 @@ export default function App() {
   const approvalCount = approvals?.total ?? 0;
 
   // チャット未読数: SSE の chat イベントを受けてカウント。
-  // pathname は ref で持ち SSE は一度だけ開く（pathname 変化で再接続しない）。
+  // useRef で最新 pathname を保持し、SSE は一度だけ開く。
   const [chatUnread, setChatUnread] = useState(() => {
     const saved = parseInt(localStorage.getItem('chat.unreadBadge') ?? '0', 10);
     return isNaN(saved) ? 0 : saved;
   });
-  const pathnameRef = useCallback(() => pathname, [pathname]);
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname; // レンダリングのたびに最新値を更新
   useEffect(() => {
     // チャット画面を開いたらバッジをリセット
     if (pathname === '/chat') {
@@ -314,19 +315,21 @@ export default function App() {
     }
   }, [pathname]);
   useEffect(() => {
-    // SSE 接続は一度だけ（pathname に依存しない）。最新の pathname は closure で参照。
+    // SSE 接続は一度だけ（マウント時のみ）。最新 pathname は ref 経由で参照。
     const es = new EventSource('/api/stream');
     es.addEventListener('chat', () => {
-      if (pathnameRef() === '/chat') return;
+      if (pathnameRef.current === '/chat') return; // チャット画面中は増やさない
       setChatUnread((n) => {
         const next = n + 1;
         localStorage.setItem('chat.unreadBadge', String(next));
         return next;
       });
     });
+    es.onerror = () => {
+      // 接続エラー時は自動再接続（EventSource のデフォルト動作）
+    };
     return () => es.close();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const badges: Partial<Record<string, number>> = { '/approvals': approvalCount, '/chat': chatUnread };
 
