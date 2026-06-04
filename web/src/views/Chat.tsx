@@ -341,12 +341,14 @@ function MessageItem({
   onDelete,
   onAgentReact,
   onReact,
+  avatarSize = 32,
 }: {
   msg: ChatMessage;
   prevMsg: ChatMessage | null;
   onDelete?: () => void;
   onAgentReact?: () => void;
   onReact?: (emoji: string) => void;
+  avatarSize?: number;
 }) {
   const [hovered, setHovered] = useState(false);
   const [showReactPicker, setShowReactPicker] = useState(false);
@@ -372,12 +374,17 @@ function MessageItem({
   const reactions = msg.reactions ?? {};
   const reactionEntries = Object.entries(reactions).filter(([, senders]) => senders.length > 0);
 
+  // グループ時の左 padding はアバター幅 + gap に合わせる
+  const groupedPaddingLeft = avatarSize + 8 + 12;
+
   return (
     <div
       style={{
         display: 'flex',
         gap: 8,
-        padding: isGrouped ? '2px 12px 2px 52px' : '8px 12px 2px 12px',
+        padding: isGrouped
+          ? `2px 12px 4px ${groupedPaddingLeft}px`
+          : `${avatarSize >= 36 ? 10 : 8}px 12px 4px 12px`,
         background: hovered ? 'var(--mc-surface-2)' : 'transparent',
         borderRadius: 4,
         position: 'relative',
@@ -386,14 +393,14 @@ function MessageItem({
       onMouseLeave={() => { setHovered(false); setShowReactPicker(false); }}
     >
       {!isGrouped && (
-        <Avatar senderId={msg.senderId} senderName={msg.senderName} senderEmoji={msg.senderEmoji} />
+        <Avatar senderId={msg.senderId} senderName={msg.senderName} senderEmoji={msg.senderEmoji} size={avatarSize} />
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
         {!isGrouped && (
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
             <span
               style={{
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: 600,
                 color: isAgent ? agentBg(msg.senderId) : 'var(--mc-text)',
               }}
@@ -582,7 +589,7 @@ function ChannelItem({
         display: 'flex',
         alignItems: 'center',
         gap: 6,
-        padding: '4px 8px',
+        padding: '10px 8px',
         borderRadius: 4,
         width: '100%',
         textAlign: 'left',
@@ -603,8 +610,8 @@ function ChannelItem({
             background: 'var(--mc-blocked)',
             color: '#fff',
             borderRadius: 10,
-            fontSize: 10,
-            padding: '1px 5px',
+            fontSize: 11,
+            padding: '2px 6px',
             fontWeight: 700,
           }}
         >
@@ -881,6 +888,14 @@ export default function Chat() {
 
   // agent-react モーダル
   const [showAgentReact, setShowAgentReact] = useState(false);
+
+  // モバイル判定（768px 未満）
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
 
   // モバイル: パネル切替
   const [mobilePanel, setMobilePanel] = useState<'list' | 'messages'>('list');
@@ -1183,44 +1198,47 @@ export default function Chat() {
       </div>
 
       {/* モバイル タブ切替 */}
-      <div
-        style={{
-          display: 'none',
-          borderBottom: '1px solid var(--mc-border)',
-          background: 'var(--mc-surface)',
-        }}
-        className="md:hidden-override"
-      >
-        {(['list', 'messages'] as const).map((panel) => (
-          <button
-            key={panel}
-            type="button"
-            onClick={() => setMobilePanel(panel)}
-            style={{
-              padding: '8px 16px',
-              border: 'none',
-              borderBottom: mobilePanel === panel ? '2px solid var(--mc-accent)' : '2px solid transparent',
-              background: 'transparent',
-              cursor: 'pointer',
-              fontSize: 13,
-              color: mobilePanel === panel ? 'var(--mc-accent)' : 'var(--mc-text-muted)',
-              fontWeight: mobilePanel === panel ? 600 : 400,
-            }}
-          >
-            {panel === 'list' ? 'チャンネル' : 'メッセージ'}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* 左カラム: チャンネルリスト */}
+      {isMobile && (
         <div
           style={{
-            width: 220,
-            flexShrink: 0,
-            borderRight: '1px solid var(--mc-border)',
-            background: 'var(--mc-surface)',
             display: 'flex',
+            borderBottom: '1px solid var(--mc-border)',
+            background: 'var(--mc-surface)',
+            flexShrink: 0,
+          }}
+        >
+          {(['list', 'messages'] as const).map((panel) => (
+            <button
+              key={panel}
+              type="button"
+              onClick={() => setMobilePanel(panel)}
+              style={{
+                flex: 1,
+                height: 44,
+                border: 'none',
+                borderBottom: mobilePanel === panel ? '2px solid var(--mc-accent)' : '2px solid transparent',
+                background: 'transparent',
+                cursor: 'pointer',
+                fontSize: 14,
+                color: mobilePanel === panel ? 'var(--mc-accent)' : 'var(--mc-text-muted)',
+                fontWeight: mobilePanel === panel ? 600 : 400,
+              }}
+            >
+              {panel === 'list' ? 'チャンネル一覧' : 'メッセージ'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* 左カラム: チャンネルリスト（モバイルは list パネル時のみ表示） */}
+        <div
+          style={{
+            width: isMobile ? '100%' : 220,
+            flexShrink: 0,
+            borderRight: isMobile ? 'none' : '1px solid var(--mc-border)',
+            background: 'var(--mc-surface)',
+            display: isMobile && mobilePanel !== 'list' ? 'none' : 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
           }}
@@ -1320,8 +1338,13 @@ export default function Chat() {
           )}
         </div>
 
-        {/* 右カラム: メッセージエリア */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* 右カラム: メッセージエリア（モバイルは messages パネル時のみ表示） */}
+        <div style={{
+          flex: 1,
+          display: isMobile && mobilePanel !== 'messages' ? 'none' : 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}>
           {selectedChannel ? (
             <>
               {/* チャンネルヘッダー */}
@@ -1376,6 +1399,7 @@ export default function Chat() {
                       key={msg.id}
                       msg={msg}
                       prevMsg={i > 0 ? messages[i - 1] : null}
+                      avatarSize={isMobile ? 36 : 32}
                       onDelete={
                         msg.senderId === SELF_ID
                           ? () => { void handleDelete(selectedChannel.id, msg.id); }
@@ -1507,11 +1531,15 @@ export default function Chat() {
                       background: 'transparent', border: 'none',
                       cursor: uploading || sending ? 'default' : 'pointer',
                       color: 'var(--mc-text-muted)',
-                      display: 'flex', alignItems: 'center', padding: '2px 4px',
+                      display: 'flex', alignItems: 'center',
+                      padding: isMobile ? '6px 8px' : '2px 4px',
+                      minWidth: isMobile ? 44 : undefined,
+                      minHeight: isMobile ? 44 : undefined,
+                      justifyContent: 'center',
                       opacity: uploading || sending ? 0.5 : 1,
                     }}
                   >
-                    <PaperclipIcon width={16} height={16} />
+                    <PaperclipIcon width={isMobile ? 20 : 16} height={isMobile ? 20 : 16} />
                   </button>
                   <textarea
                     ref={textareaRef}
@@ -1529,8 +1557,11 @@ export default function Chat() {
                       fontSize: 14,
                       color: 'var(--mc-text)',
                       lineHeight: 1.5,
+                      minHeight: isMobile ? 44 : 36,
                       maxHeight: 120,
                       overflowY: 'auto',
+                      paddingTop: isMobile ? 12 : 0,
+                      boxSizing: 'border-box',
                     }}
                   />
                   <button
@@ -1542,23 +1573,28 @@ export default function Chat() {
                       background: (inputText.trim() || pendingFiles.length > 0) ? 'var(--mc-accent)' : 'transparent',
                       border: 'none',
                       borderRadius: 4,
-                      padding: '4px 8px',
+                      padding: isMobile ? '8px 12px' : '4px 8px',
+                      minWidth: isMobile ? 44 : undefined,
+                      minHeight: isMobile ? 44 : undefined,
                       cursor: (inputText.trim() || pendingFiles.length > 0) ? 'pointer' : 'default',
                       color: (inputText.trim() || pendingFiles.length > 0) ? '#fff' : 'var(--mc-text-faint)',
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'center',
                       transition: 'background 0.15s',
                     }}
                   >
-                    {uploading ? <Spinner /> : <SendIcon width={18} height={18} />}
+                    {uploading ? <Spinner /> : <SendIcon width={isMobile ? 22 : 18} height={isMobile ? 22 : 18} />}
                   </button>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                  <div style={{ fontSize: 11, color: 'var(--mc-text-faint)', flex: 1 }}>
-                    Enter で送信 / Shift+Enter で改行 / @ でメンション
+                {!isMobile && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                    <div style={{ fontSize: 11, color: 'var(--mc-text-faint)', flex: 1 }}>
+                      Enter で送信 / Shift+Enter で改行 / @ でメンション
+                    </div>
+                    {/* ラウンドテーブルボタン削除済み（Keita 指示） */}
                   </div>
-                  {/* ラウンドテーブルボタン削除済み（Keita 指示） */}
-                </div>
+                )}
               </div>
             </>
           ) : (
