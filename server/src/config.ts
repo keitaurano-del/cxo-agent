@@ -332,6 +332,13 @@ export const NARRATIVE_DIRS = {
 export const ROSTER_DIR = join(VAULT_DIR, '60-Agents');
 
 /**
+ * agent-*.jsonl の保持期間（ミリ秒）。これより古いファイルは collector が無視し、
+ * 起動時クリーンアップで物理削除される。既定 7 日。env AGENT_LOG_TTL_DAYS で上書き可。
+ */
+export const AGENT_LOG_TTL_MS =
+  envNum('AGENT_LOG_TTL_DAYS', 7) * 24 * 60 * 60 * 1000;
+
+/**
  * roster に表示するエージェント名の allowlist（MC-75）。
  * Keita 方針: Apollo の roster には「人格を持つエージェント」と「その他の主要エージェント」だけを出す。
  * cron 常駐のバックグラウンド系含め、ここに列挙したものだけ表示し、
@@ -349,19 +356,17 @@ function parseRosterVisible(): Set<string> {
         .filter((s) => s !== ''),
     );
   }
-  // 人格保有 9 体 ＋ 林（main assistant）＋ apollo（番人）の現 11 体。
+  // 開発 5 体 ＋ 林（main assistant）＋ apollo（番人）＋ masayoshi（秘書兼CEO）の 8 体。
+  // 削除済み: reviewer / logic-coach / night-patrol / feedback-watcher（2026-06-03 整理）
   return new Set<string>([
     'dev-logic',
     'task-manager',
     'designer',
     'content-creator',
-    'reviewer',
-    'logic-coach',
     'test-functional',
-    'night-patrol',
-    'feedback-watcher',
     'hayashi-rin',
     'apollo',
+    'masayoshi',
   ]);
 }
 
@@ -711,3 +716,15 @@ export const CLAUDE_SSH_PATH = env(
   'CLAUDE_SSH_PATH',
   '/usr/local/bin:/usr/bin:/bin:' + (process.env.PATH ?? ''),
 );
+
+// ─── チャット（MC-141）──────────────────────────────────────
+//
+// Keita・林・Masayoshi・エージェントが channel / DM でリアルタイム会話するチャット。
+// ストレージは data/channels/<channel-id>/{meta.json,messages.jsonl}。
+// data/ は .gitignore 済みなので channels/ もバージョン管理対象外。
+
+/** チャンネルデータのルートディレクトリ。 */
+export const CHAT_CHANNELS_DIR = env('CHAT_CHANNELS_DIR', join(INBOX_DATA_DIR, 'channels'));
+
+/** エージェント投稿エンドポイントの認証トークン（MC_TOKEN とは別）。 */
+export const AGENT_TOKEN = env('AGENT_TOKEN', '');

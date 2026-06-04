@@ -5,7 +5,7 @@
 
 import { readdirSync, statSync, lstatSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { CLAUDE_PROJECTS_DIR, ROSTER_VISIBLE } from '../config.js';
+import { CLAUDE_PROJECTS_DIR, ROSTER_VISIBLE, AGENT_LOG_TTL_MS } from '../config.js';
 import { readJsonl, lastActivity, firstText, type JsonlLine } from '../lib/jsonl.js';
 import { projectFromPath, projectLabel, type ProjectName } from '../lib/projectMap.js';
 import { agentStatus, type AgentStatus } from '../lib/stall.js';
@@ -74,7 +74,9 @@ function walkJsonl(dir: string, acc: WalkResult): WalkResult {
         // subagent バケットは agent-*.jsonl のみ対象。
         // journal.jsonl 等（subagents/workflows/wf_*/journal.jsonl）の非エージェント
         // jsonl を除外する。誤収集すると done カウントが水増しされる（121→108 に正常化）。
-        if (e.startsWith('agent-')) acc.subagents.push(p);
+        if (e.startsWith('agent-') && Date.now() - st.mtimeMs < AGENT_LOG_TTL_MS) {
+          acc.subagents.push(p);
+        }
       } else {
         // 親セッションは <sessionId>.jsonl 命名なので agent- 接頭辞は付かない。
         // agentMap の index 構築に必要なため、こちらは広く拾う。

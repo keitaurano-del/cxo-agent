@@ -408,3 +408,21 @@ export function MoonIcon(props: IconProps) {
     </svg>
   );
 }
+
+// チャット（吹き出し）。Slack 的チャット機能のナビアイコン。
+export function ChatIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+// ハッシュ（チャンネルを表す # 記号）。
+export function HashIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 9h16M4 15h16M10 4 8 20M16 4l-2 16" />
+    </svg>
+  );
+}

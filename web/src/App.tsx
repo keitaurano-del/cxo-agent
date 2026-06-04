@@ -20,6 +20,7 @@ import {
   TerminalIcon,
   SunIcon,
   MoonIcon,
+  ChatIcon,
 } from './components/icons';
 import DashboardLayout from './components/DashboardLayout';
 import { isDashboardPath } from './lib/nav';
@@ -36,6 +37,7 @@ import PlanUsage from './views/PlanUsage';
 import Ticks from './views/Ticks';
 import Approvals from './views/Approvals';
 import Terminal from './views/Terminal';
+import Chat from './views/Chat';
 import BottomNav from './components/BottomNav';
 import AddTaskFab from './components/AddTaskFab';
 
@@ -132,6 +134,7 @@ const NAV: NavItem[] = [
   { to: '/vault', label: 'Vault', shortLabel: 'Vault', icon: <VaultIcon /> },
   { to: '/deliverables', label: '成果物', shortLabel: '成果物', icon: <DocumentsIcon /> },
   { to: '/notebooks', label: 'ノートブック', shortLabel: 'ノート', icon: <NotebookIcon /> },
+  { to: '/chat', label: 'チャット', shortLabel: 'チャット', icon: <ChatIcon /> },
   // ターミナル: iframe ホスト用 React ルートは /terminal-view。
   // サーバ proxy ルート /terminal（→ ttyd）と衝突させないため別パスにする。
   { to: '/terminal-view', label: 'ターミナル', shortLabel: '端末', icon: <TerminalIcon /> },
@@ -337,6 +340,7 @@ export default function App() {
             <Route path="/vault" element={<Vault />} />
             <Route path="/deliverables" element={<Deliverables />} />
             <Route path="/notebooks" element={<Notebooks />} />
+            <Route path="/chat" element={<Chat />} />
             <Route path="/terminal-view" element={<div className="flex h-full flex-col overflow-hidden"><Terminal /></div>} />
             <Route path="/terminal-standalone" element={<Terminal />} />
             <Route path="*" element={<Navigate to="/" replace />} />

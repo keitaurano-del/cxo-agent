@@ -5,11 +5,11 @@
 
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
-import { existsSync, statSync, unlinkSync } from 'node:fs';
+import { existsSync, statSync, unlinkSync, readdirSync } from 'node:fs';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { PORT, CLAUDE_PROJECTS_DIR, VAULT_DIR, STALL_MINUTES } from './config.js';
+import { PORT, CLAUDE_PROJECTS_DIR, VAULT_DIR, STALL_MINUTES, AGENT_LOG_TTL_MS } from './config.js';
 import { collectAgents, collectAgentGroups, collectAgentFeed } from './collectors/agents.js';
 import { collectTasks } from './collectors/tasks.js';
 import { collectNarrative } from './collectors/narrative.js';
@@ -49,6 +49,7 @@ import { approvalRouter } from './approvalRouter.js';
 import { spawnRouter } from './spawnRouter.js';
 import { terminalHttpHandler, attachUpgrade } from './terminalProxy.js';
 import { startWatch } from './watch.js';
+import { chatRouter, agentMessageHandler } from './chatRouter.js';
 
 const HEALTHZ_PATH = '/api/healthz';
 
@@ -86,6 +87,14 @@ app.use((_req, res, next) => {
 // systemd / 外形監視用の軽量版。詳細版 /api/health は認証下に残す。
 app.get(HEALTHZ_PATH, (_req, res) => {
   res.json({ ok: true });
+});
+
+// ─── エージェント投稿（認証外）──────────────────────────────────
+// /api/chat/agent-message は AGENT_TOKEN で独立認証するため auth ミドルウェアの外に置く。
+// エージェント（林・Masayoshi）が Cookie なしで curl / fetch で呼べるようにする。
+// broadcast は SSE hub（このファイルで定義）を参照するため、ここで登録して closure で遅延解決。
+app.post('/api/chat/agent-message', (req, res) => {
+  agentMessageHandler(broadcast)(req, res);
 });
 
 // ─── token 認証（healthz より後、他ルートより前に適用）──────────
@@ -536,6 +545,13 @@ app.delete('/api/deliverables/file', (req, res) => {
 // 認証ミドルウェア配下。:id パターンを持つが /api/notebooks 名前空間内なので他ルートと衝突しない。
 app.use('/api/notebooks', notebookRouter());
 
+// ─── チャット（MC-141）──────────────────────────────────────
+// Keita・林・Masayoshi・エージェントが channel / DM でリアルタイム会話するチャット。
+// ストレージ: data/channels/<channel-id>/{meta.json,messages.jsonl}。
+// SSE broadcast で chat イベントを全クライアントへ配信する（既存 /api/stream を流用）。
+// /api/chat/agent-message（認証外）は auth ミドルウェアより前に登録済み。
+app.use('/api/chat', chatRouter(broadcast));
+
 // ─── overview（KPI 集計）──────────────────────────────
 
 function buildOverview() {
@@ -681,6 +697,30 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error('[error]', err);
   res.status(500).json({ error: err?.message ?? 'internal error' });
 });
+
+// ─── 起動時クリーンアップ: 古い agent-*.jsonl を物理削除 ──────────────
+// TTL を超えた完了済み subagent ログを削除し「待機」カウントが積み上がらないようにする。
+function cleanupStaleAgentLogs(): void {
+  if (!existsSync(CLAUDE_PROJECTS_DIR)) return;
+  let removed = 0;
+  const cutoff = Date.now() - AGENT_LOG_TTL_MS;
+  function walk(dir: string): void {
+    let entries: string[];
+    try { entries = readdirSync(dir); } catch { return; }
+    for (const e of entries) {
+      const p = `${dir}/${e}`;
+      let st;
+      try { st = statSync(p); } catch { continue; }
+      if (st.isDirectory()) { walk(p); }
+      else if (e.startsWith('agent-') && e.endsWith('.jsonl') && p.includes('/subagents/')) {
+        if (st.mtimeMs < cutoff) { try { unlinkSync(p); removed++; } catch { /* ignore */ } }
+      }
+    }
+  }
+  walk(CLAUDE_PROJECTS_DIR);
+  if (removed > 0) console.log(`[startup] cleaned up ${removed} stale agent log(s) older than ${AGENT_LOG_TTL_MS / 86400000}d`);
+}
+cleanupStaleAgentLogs();
 
 const server = app.listen(PORT, () => {
   console.log(`🛰  Apollo API listening on http://localhost:${PORT}`);
