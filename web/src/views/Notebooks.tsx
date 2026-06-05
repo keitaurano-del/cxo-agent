@@ -924,6 +924,7 @@ function ArtifactsPane({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<string | null>(null);
+  const [genPct, setGenPct] = useState<number>(0);
   // 離脱後復帰時: 生成リクエスト送信後に HTTP 接続が切れても artifacts 増加をポーリングで検出。
   const [generatingKind, setGeneratingKind] = useState<NotebookGenerateKind | null>(null);
   const artifactPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -985,30 +986,59 @@ function ArtifactsPane({
     }
 
     const requestedKind = activeKind;
+    setGenPct(0);
+
+    // SSE ストリームで進捗を受け取る。
+    const ctrl = new AbortController();
     fetch(`/api/notebooks/${id}/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
       body: JSON.stringify({ kind: activeKind, instruction: instr || undefined }),
+      signal: ctrl.signal,
     })
       .then(async (res) => {
-        const body = (await res.json().catch(() => ({}))) as NotebookGenerateResponse;
         if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as NotebookGenerateResponse;
           setError(body.error || `生成に失敗しました（HTTP ${res.status}）。`);
           setGenerating(false);
-        } else if (!body.ok) {
-          setError(body.error || '生成物を作成できませんでした。資料が十分か確認してください。');
-          setGenerating(false);
-        } else {
-          const created = body.created?.length ?? 0;
-          setReport(created > 0 ? `${created} 件の生成物を作成しました。` : (body.report || '生成が完了しました。'));
-          setInstruction('');
-          setGenerating(false);
+          setGeneratingKind(null);
+          return;
         }
-        onGenerated();
-        // 正常完了後にポーリングが残っていれば停止。
-        setGeneratingKind(null);
+        // SSE を行単位でパースして進捗・完了を処理。
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error('no body');
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            let evt: { type?: string; pct?: number; ok?: boolean; created?: unknown[]; report?: string; error?: string } = {};
+            try { evt = JSON.parse(line.slice(6)) as typeof evt; } catch { continue; }
+            if (evt.type === 'progress' && typeof evt.pct === 'number') {
+              setGenPct(evt.pct);
+            } else if (evt.type === 'done') {
+              setGenPct(100);
+              if (!evt.ok) {
+                setError(evt.error || '生成物を作成できませんでした。資料が十分か確認してください。');
+              } else {
+                const created = evt.created?.length ?? 0;
+                setReport(created > 0 ? `${created} 件の生成物を作成しました。` : (evt.report || '生成が完了しました。'));
+                setInstruction('');
+              }
+              onGenerated();
+              setGeneratingKind(null);
+              setGenerating(false);
+            }
+          }
+        }
       })
-      .catch(() => {
+      .catch((e: unknown) => {
+        if (e instanceof Error && e.name === 'AbortError') return;
         // HTTP 切断（離脱後復帰のケース）: generating 状態を維持してポーリングに委ねる。
         setGeneratingKind(requestedKind);
       });
@@ -1113,7 +1143,18 @@ function ArtifactsPane({
             <p className="mt-1.5 text-[11px] text-text-faint">資料を追加すると生成できます。</p>
           )}
           {(generating || generatingKind) && (
-            <p className="mt-1.5 text-[11px] text-text-faint">資料を読み込んでいます。完了まで時間がかかる場合があります。</p>
+            <div className="mt-2" role="status" aria-live="polite">
+              <div className="mb-1 flex items-center justify-between text-[11px] text-text-muted">
+                <span>資料を読み込んでいます…</span>
+                <span>{genPct}%</span>
+              </div>
+              <div className="h-1 w-full overflow-hidden rounded-full bg-surface-2">
+                <div
+                  className="h-1 rounded-full bg-accent transition-[width] duration-150"
+                  style={{ width: `${genPct}%` }}
+                />
+              </div>
+            </div>
           )}
           {error && (
             <div role="alert" className="mt-2 rounded-lg border border-stalled/40 bg-stalled-bg/60 px-3 py-1.5 text-xs" style={{ color: 'var(--mc-stalled)' }}>

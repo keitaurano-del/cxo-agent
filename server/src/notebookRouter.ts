@@ -488,9 +488,15 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
+    let totalChars = 0;
+    const EXPECTED_CHARS = 2000;
     const result = await runClaudeStream(dir, prompt, (chunk) => {
       sseWrite(res, { type: 'chunk', text: chunk });
+      totalChars += chunk.length;
+      const pct = Math.min(99, Math.round((totalChars / EXPECTED_CHARS) * 100));
+      sseWrite(res, { type: 'progress', pct });
     });
+    sseWrite(res, { type: 'progress', pct: 100 });
 
     const detail = getNotebookDetail(id);
     const allArtifacts = detail?.artifacts ?? [];
