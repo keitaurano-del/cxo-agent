@@ -57,8 +57,10 @@ export interface ClaudeRunResult {
 }
 
 /** claude に渡す共通 CLI 引数（モデル指定込み）。 */
-function claudeArgs(prompt: string): string[] {
-  return ['--model', NOTEBOOK_CLAUDE_MODEL, '-p', prompt];
+function claudeArgs(prompt: string, notebookDir: string): string[] {
+  // --allowedPaths でノートブックディレクトリ内のファイルのみ Read を許可。
+  // 他ノートブック・Vault・システムファイルへのアクセスを遮断してノートブック横断を防ぐ。
+  return ['--model', NOTEBOOK_CLAUDE_MODEL, '--allowedPaths', notebookDir, '-p', prompt];
 }
 
 /**
@@ -70,7 +72,7 @@ export function runClaude(notebookDir: string, prompt: string): Promise<ClaudeRu
     void acquire().then(() => {
       const child = execFile(
         NOTEBOOK_CLAUDE_BIN,
-        claudeArgs(prompt),
+        claudeArgs(prompt, notebookDir),
         {
           cwd: notebookDir,
           timeout: NOTEBOOK_CLAUDE_TIMEOUT_MS,
@@ -111,7 +113,7 @@ export function runClaudeStream(
 ): Promise<ClaudeRunResult> {
   return new Promise<ClaudeRunResult>((res) => {
     void acquire().then(() => {
-      const child = spawn(NOTEBOOK_CLAUDE_BIN, claudeArgs(prompt), {
+      const child = spawn(NOTEBOOK_CLAUDE_BIN, claudeArgs(prompt, notebookDir), {
         cwd: notebookDir,
         env: process.env,
       });
