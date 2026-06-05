@@ -747,7 +747,7 @@ ID 採番: **AR-0x**。
 ---
 
 ### MC-112 — Apollo ターミナルの定期自動セッション切替（引き継ぎ付きリフレッシュ）　[高 / feature・安定性]
-- ステータス: TODO（2026-06-03 Keita 依頼。タイミングは林に一任）
+- ステータス: DONE（2026-06-05 cxo林ティック。`~/cron-scripts/terminal-session-manager.sh` が実装済み（idle検知+handoff要約生成+kill-switch）。モデル名 `claude-sonnet-4-5`→`claude-sonnet-4-6` に修正、`@reboot` crontab を `exec /usr/bin/claude` から `exec ~/cron-scripts/terminal-session-manager.sh` に切替。HANDOFF_ONLY=1 で handoff 生成グリーン（69行生成、`~/.terminal-handoff.md` 作成確認）。現行 `main` セッションは live のまま変更は次回 reboot から有効。server コード変更なし・web build 変更なし・push は NO_PUSH モードで Keita 承認待ち）
 - 詳細: Keita 依頼「定期的に自動でこのターミナルを新しいセッションにしてほしい。ずっとそのままだと動かなくなっちゃうから。前のセッションを引き継いだ上で新しいセッションに自動で切り替える仕組みをいれて。タイミングはまかせる」。Apollo のターミナルビュー（ttyd→tmux `main` で常駐対話林 `claude`）は長時間同一セッションのままだとコンテキスト肥大・応答劣化・ハングで「動かなくなる」。一定間隔で (1) 現セッションの状態を引き継ぎ（要約/handoff）、(2) 新しい claude セッションに自動で切り替える、を入れる。
 - 設計の論点（着手前に確定する）: (a) 引き継ぎ方法 — `claude --continue`/`--resume` で直近セッションを継続するか、handoff 要約を生成して新セッションの初期プロンプトに流すか、Claude Code の /compact 相当で圧縮継続するか。(b) 切替トリガ — 時間間隔（例 N時間毎）か、アイドル検知（一定時間 Keita 入力なし）か、コンテキスト量しきい値か。Keita「タイミングはまかせる」なのでアイドル時を狙って無停止で入れ替えるのが安全（作業中の強制切替を避ける）。(c) 実装場所 — tmux main の pane で実行している claude を、ラッパースクリプト（既存 `dev:~/.bashrc` の `cd ~/projects && claude` 自動起動、[[project-vultr-second-server]]）側で「終了→handoff 引き継ぎ→再起動」ループにするのが筋。session-cleanup.sh が tmux main 配下の常駐林を保護している点（同 memory）との整合に注意＝この自動切替は cleanup とは別系統で main pane 自身が自己リフレッシュする形にする。(d) Keita が作業中に切れない安全装置（直近入力からのアイドル猶予、kill-switch）。
 - DoD: ターミナルが定期的に新セッションへ自動で切り替わり、切替後も前の文脈を引き継いでいる。Keita 操作中に勝手に切れない。ハングしても次サイクルで自動復帰する。手動の kill-switch あり。
