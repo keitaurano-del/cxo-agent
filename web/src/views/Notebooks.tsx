@@ -507,12 +507,58 @@ function ChatPane({
   const [error, setError] = useState<string | null>(null);
   // 楽観追加した自分の質問（送信中に即表示）。
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
+  // 離脱後復帰時: 最後の user メッセージに応答がない状態を検出してポーリング。
+  const [pendingAnswer, setPendingAnswer] = useState(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // chat が更新されたとき、最後が user で assistant 応答がまだなら pendingAnswer をセット。
+  useEffect(() => {
+    const last = chat.at(-1);
+    if (last && last.role === 'user' && !asking) {
+      setPendingAnswer(true);
+    } else {
+      setPendingAnswer(false);
+    }
+  }, [chat, asking]);
+
+  // pendingAnswer の間、3秒ごとに詳細取得してチャットを更新。
+  useEffect(() => {
+    if (!pendingAnswer) {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      return;
+    }
+    pollingRef.current = setInterval(() => {
+      fetch(`/api/notebooks/${id}`)
+        .then((res) => res.json().catch(() => null))
+        .then((data: { chat?: NotebookChatMessage[] } | null) => {
+          if (!data) return;
+          const msgs = data.chat ?? [];
+          const last = msgs.at(-1);
+          if (last && last.role === 'assistant') {
+            // 新しい assistant 応答が来た → 親を更新してポーリング停止。
+            onAnswered();
+            setPendingAnswer(false);
+          }
+        })
+        .catch(() => { /* ネットワーク一時エラーは無視してリトライ */ });
+    }, 3000);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [pendingAnswer, id, onAnswered]);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [chat.length, asking, pendingQuestion]);
+  }, [chat.length, asking, pendingQuestion, pendingAnswer]);
 
   const submit = useCallback(() => {
     const q = question.trim();
@@ -574,6 +620,15 @@ function ChatPane({
                 <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-sm bg-surface-2 px-3 py-2 text-sm text-text-muted">
                   <Spinner />
                   資料を読んでいます…
+                </div>
+              </div>
+            )}
+            {/* 離脱後復帰時: 未受信の assistant 応答を待機中 */}
+            {!asking && pendingAnswer && (
+              <div className="flex justify-start">
+                <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-sm bg-surface-2 px-3 py-2 text-sm text-text-muted">
+                  <Spinner />
+                  回答を生成中…
                 </div>
               </div>
             )}
@@ -696,6 +751,45 @@ function ArtifactsPane({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<string | null>(null);
+  // 離脱後復帰時: 生成リクエスト送信後に HTTP 接続が切れても artifacts 増加をポーリングで検出。
+  const [generatingKind, setGeneratingKind] = useState<NotebookGenerateKind | null>(null);
+  const artifactPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // ポーリング開始時点の artifacts 件数を記憶して増加を検出する。
+  const artifactBaseCount = useRef<number>(0);
+
+  // generatingKind がセットされたら 3 秒ごとに artifacts 件数を確認。
+  useEffect(() => {
+    if (!generatingKind) {
+      if (artifactPollingRef.current) {
+        clearInterval(artifactPollingRef.current);
+        artifactPollingRef.current = null;
+      }
+      return;
+    }
+    artifactBaseCount.current = artifacts.length;
+    artifactPollingRef.current = setInterval(() => {
+      fetch(`/api/notebooks/${id}`)
+        .then((res) => res.json().catch(() => null))
+        .then((data: { artifacts?: NotebookFileRef[] } | null) => {
+          if (!data) return;
+          const count = data.artifacts?.length ?? 0;
+          if (count > artifactBaseCount.current) {
+            // 新しい生成物が増えた → 親を更新してポーリング停止。
+            onGenerated();
+            setGeneratingKind(null);
+            setGenerating(false);
+          }
+        })
+        .catch(() => { /* ネットワーク一時エラーは無視してリトライ */ });
+    }, 3000);
+
+    return () => {
+      if (artifactPollingRef.current) {
+        clearInterval(artifactPollingRef.current);
+        artifactPollingRef.current = null;
+      }
+    };
+  }, [generatingKind, id, artifacts.length, onGenerated]);
 
   const needsInstruction = activeKind === 'custom';
   const showInstruction = activeKind === 'custom' || activeKind === 'template' || activeKind === 'template_extract';
@@ -717,6 +811,7 @@ function ArtifactsPane({
       instr = instr ? `${fmt} ${instr}` : fmt;
     }
 
+    const requestedKind = activeKind;
     fetch(`/api/notebooks/${id}/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -726,19 +821,24 @@ function ArtifactsPane({
         const body = (await res.json().catch(() => ({}))) as NotebookGenerateResponse;
         if (!res.ok) {
           setError(body.error || `生成に失敗しました（HTTP ${res.status}）。`);
+          setGenerating(false);
         } else if (!body.ok) {
           setError(body.error || '生成物を作成できませんでした。資料が十分か確認してください。');
+          setGenerating(false);
         } else {
           const created = body.created?.length ?? 0;
           setReport(created > 0 ? `${created} 件の生成物を作成しました。` : (body.report || '生成が完了しました。'));
           setInstruction('');
+          setGenerating(false);
         }
         onGenerated();
+        // 正常完了後にポーリングが残っていれば停止。
+        setGeneratingKind(null);
       })
       .catch(() => {
-        setError('ネットワークエラーで生成できませんでした。');
-      })
-      .finally(() => setGenerating(false));
+        // HTTP 切断（離脱後復帰のケース）: generating 状態を維持してポーリングに委ねる。
+        setGeneratingKind(requestedKind);
+      });
   }, [id, activeKind, instruction, templateFormat, needsInstruction, generating, onGenerated]);
 
   return (
@@ -820,10 +920,10 @@ function ArtifactsPane({
             <button
               type="button"
               onClick={run}
-              disabled={generating || !hasSources}
+              disabled={generating || !!generatingKind || !hasSources}
               className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition-opacity disabled:opacity-40"
             >
-              {generating ? (
+              {(generating || generatingKind) ? (
                 <>
                   <Spinner />
                   生成しています…
@@ -839,7 +939,7 @@ function ArtifactsPane({
           {!hasSources && activeKind && (
             <p className="mt-1.5 text-[11px] text-text-faint">資料を追加すると生成できます。</p>
           )}
-          {generating && (
+          {(generating || generatingKind) && (
             <p className="mt-1.5 text-[11px] text-text-faint">資料を読み込んでいます。完了まで時間がかかる場合があります。</p>
           )}
           {error && (
