@@ -47,6 +47,7 @@ import {
 import { extractSourceText } from './lib/notebookExtract.js';
 import { runClaude, runClaudeStream } from './lib/notebookClaude.js';
 import { convertOfficeToPdf, isConvertibleToPdf } from './lib/officeToPdf.js';
+import { buildIndex, searchChunks, deleteIndex, type Chunk } from './lib/notebookIndex.js';
 
 /** :id パラメータを string に正規化する（express 5 は string | string[] 型）。 */
 function idParam(req: Request): string {
@@ -279,6 +280,9 @@ async function handleAddSources(req: Request, res: Response): Promise<void> {
     });
   }
 
+  buildIndex(dir).catch((e: unknown) => {
+    console.error('[notebook] index build error:', e instanceof Error ? e.message : String(e));
+  });
   touchNotebook(idParam(req));
   res.status(201).json({ ok: true, added });
 }
@@ -292,15 +296,31 @@ function handleDeleteSource(req: Request, res: Response): void {
   }
   // basename 化して traversal を無害化（sanitize と同等のガード）。
   const safeName = sanitizeNotebookFilename(name);
-  safe(res, () => {
-    const removed = deleteSource(idParam(req), safeName);
+  const id = idParam(req);
+  try {
+    const removed = deleteSource(id, safeName);
     if (!removed) {
       res.status(404).json({ error: 'source not found' });
-      return undefined;
+      return;
     }
-    touchNotebook(idParam(req));
-    return { ok: true, removed: safeName };
-  });
+    touchNotebook(id);
+    const nbDir = resolveNotebookDir(id, true);
+    deleteIndex(nbDir);
+    buildIndex(nbDir).catch((e: unknown) => {
+      console.error('[notebook] index build error:', e instanceof Error ? e.message : String(e));
+    });
+    res.json({ ok: true, removed: safeName });
+  } catch (e) {
+    if (res.headersSent) return;
+    if (e instanceof SafePathError) {
+      const code = /not found/i.test(e.message) ? 404 : 400;
+      res.status(code).json({ error: e.message });
+      return;
+    }
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('[notebook error]', message);
+    res.status(500).json({ error: message });
+  }
 }
 
 // ─── 資料根拠 Q&A ─────────────────────────────────────
@@ -321,6 +341,47 @@ function buildAskPrompt(question: string, history: ChatMessage[]): string {
     '資料に書かれていないことは推測せず「資料に記載がありません」と述べてください。',
     '回答は簡潔で読みやすい日本語にしてください。',
   ];
+
+  if (history.length > 0) {
+    lines.push('', '--- 過去の会話履歴（参考にしてください） ---');
+    for (const m of history) {
+      lines.push(`${m.role === 'user' ? 'ユーザー' : 'アシスタント'}: ${m.text}`);
+    }
+    lines.push('--- 以上が過去の会話履歴 ---');
+  }
+
+  lines.push('', `質問: ${question}`);
+  return lines.join('\n');
+}
+
+/**
+ * RAG 検索結果チャンクを根拠に含めた ask プロンプトを構築する。
+ * 各チャンクには「--- 抜粋 N: ファイル名=X, チャンク=Y ---」形式のヘッダを付与する。
+ */
+function buildRagAskPrompt(question: string, chunks: Chunk[], history: ChatMessage[]): string {
+  const lines = [
+    'あなたはこのノートブックの資料アシスタントです。',
+    '回答・成果物の文章は中立的な丁寧体（です・ます）で書いてください。キャラクター人格・方言・特定の口調（「〜じゃ」「〜のう」「ほっほっ」等）は一切使わず、エンドユーザー向けの自然な日本語にしてください。',
+    '以下の【資料抜粋】のみを根拠に、次の質問に日本語で答えてください。',
+    '回答中で資料を引用するときは必ず以下の形式のタグを使ってください:',
+    '  {{cite:ファイル名:チャンクインデックス}}',
+    '例:',
+    '  {{cite:1.1.e_要求一覧_v4.0.xlsx.txt:2}}',
+    '  {{cite:W200_プロジェクト管理マニュアル_v4.0.pdf.txt:0}}',
+    'チャンクインデックスが不明な場合は省略してください: {{cite:ファイル名}}',
+    '資料抜粋に書かれていないことは推測せず「資料に記載がありません」と述べてください。',
+    '回答は簡潔で読みやすい日本語にしてください。',
+    '',
+    '【資料抜粋】',
+  ];
+
+  chunks.forEach((chunk, i) => {
+    lines.push(`--- 抜粋 ${i + 1}: ファイル名=${chunk.sourceFile}, チャンク=${chunk.chunkIndex} ---`);
+    lines.push(chunk.text);
+    lines.push('');
+  });
+
+  lines.push('【資料抜粋ここまで】');
 
   if (history.length > 0) {
     lines.push('', '--- 過去の会話履歴（参考にしてください） ---');
@@ -363,7 +424,10 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
   // user メッセージを先に記録。
   appendChat(id, { ts: new Date().toISOString(), role: 'user', text: question });
 
-  const prompt = buildAskPrompt(question, history);
+  const ragChunks = await searchChunks(dir, question).catch(() => [] as Chunk[]);
+  const prompt = ragChunks.length > 0
+    ? buildRagAskPrompt(question, ragChunks, history)
+    : buildAskPrompt(question, history);
   const wantsStream = (req.headers.accept ?? '').includes('text/event-stream');
 
   if (wantsStream) {
@@ -446,6 +510,47 @@ function buildGeneratePrompt(kind: string, instruction: string): string {
   ].join('\n');
 }
 
+/**
+ * RAG 検索結果チャンクを根拠に含めた generate プロンプトを構築する。
+ * KIND_INSTRUCTIONS を活かしながら「以下の資料抜粋を参考に」形式にする。
+ */
+function buildRagGeneratePrompt(kind: string, instruction: string, chunks: Chunk[]): string {
+  const base = KIND_INSTRUCTIONS[kind];
+  const task = base
+    ? instruction
+      ? `${base}\n追加の指示: ${instruction}`
+      : base
+    : instruction || '資料の内容を日本語でまとめた成果物を ./artifacts/ に作成してください。';
+
+  const lines = [
+    'あなたはこのノートブックの資料アシスタントです。',
+    '回答・成果物の文章は中立的な丁寧体（です・ます）で書いてください。キャラクター人格・方言・特定の口調（「〜じゃ」「〜のう」「ほっほっ」等）は一切使わず、エンドユーザー向けの自然な日本語にしてください。',
+    '以下の【資料抜粋】を参考に、次の成果物を作成してください。',
+    'より詳細な情報が必要な場合は ./sources/ と ./extracted/ の資料を Read で追加確認してください。',
+    task,
+    '',
+    '【資料抜粋】',
+  ];
+
+  chunks.forEach((chunk, i) => {
+    lines.push(`--- 抜粋 ${i + 1}: ファイル名=${chunk.sourceFile}, チャンク=${chunk.chunkIndex} ---`);
+    lines.push(chunk.text);
+    lines.push('');
+  });
+
+  lines.push('【資料抜粋ここまで】');
+  lines.push('');
+  lines.push('注意:');
+  lines.push('- 成果物ファイルは必ず ./artifacts/ ディレクトリの中に書き出してください。');
+  lines.push('- 表計算・文書・スライド等のファイルは openpyxl / python-docx / python-pptx を使って生成してください（Bash でスクリプトを実行して構いません）。');
+  lines.push('- 要約・FAQ・年表など文章主体のものは Markdown（.md）で作成してください。');
+  lines.push('- 文章はアシスタントの口調を出さず、中立的な丁寧体（です・ます）で書いてください。');
+  lines.push('- 資料に無い情報を創作しないでください。');
+  lines.push('最後に、作成したファイル名を「作成: <ファイル名>」の形式で 1 行で報告してください。');
+
+  return lines.join('\n');
+}
+
 async function handleGenerate(req: Request, res: Response): Promise<void> {
   const kind = typeof req.body?.kind === 'string' ? req.body.kind.trim() : 'custom';
   const instruction = typeof req.body?.instruction === 'string' ? req.body.instruction.trim() : '';
@@ -479,7 +584,10 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
   }
 
   const before = artifactNames(id);
-  const prompt = buildGeneratePrompt(kind, instruction);
+  const ragChunks = await searchChunks(dir, instruction || kind).catch(() => [] as Chunk[]);
+  const prompt = ragChunks.length > 0
+    ? buildRagGeneratePrompt(kind, instruction, ragChunks)
+    : buildGeneratePrompt(kind, instruction);
   const wantsStream = (req.headers.accept ?? '').includes('text/event-stream');
 
   if (wantsStream) {
@@ -531,6 +639,31 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
     created,
     artifacts: allArtifacts,
     report: (result.stdout || '').trim(),
+    ...(result.error ? { error: result.error } : {}),
+  });
+}
+
+// ─── 索引再構築 ──────────────────────────────────────────
+
+// POST /:id/reindex — 索引を強制再構築する
+async function handleReindex(req: Request, res: Response): Promise<void> {
+  const id = idParam(req);
+  let dir: string;
+  try {
+    dir = resolveNotebookDir(id, true);
+  } catch (e) {
+    if (e instanceof SafePathError) {
+      res.status(/not found/i.test(e.message) ? 404 : 400).json({ error: e.message });
+      return;
+    }
+    throw e;
+  }
+
+  const result = await buildIndex(dir);
+  res.status(200).json({
+    ok: result.ok,
+    chunkCount: result.chunkCount,
+    fileCount: result.fileCount,
     ...(result.error ? { error: result.error } : {}),
   });
 }
@@ -617,5 +750,6 @@ export function notebookRouter(): Router {
   router.delete('/:id/sources', handleDeleteSource);
   router.post('/:id/ask', (req, res) => void handleAsk(req, res));
   router.post('/:id/generate', (req, res) => void handleGenerate(req, res));
+  router.post('/:id/reindex', (req, res) => void handleReindex(req, res));
   return router;
 }

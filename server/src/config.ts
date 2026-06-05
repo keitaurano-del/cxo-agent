@@ -106,6 +106,18 @@ export const NOTEBOOK_ARTIFACT_MAX_TOTAL_BYTES = envNum(
   10 * 1024 * 1024 * 1024,
 );
 
+/** Gemini embedding API キー（text-embedding-004 用）。未設定なら RAG 索引なしの従来動作にフォールバック。 */
+export const GEMINI_API_KEY = env('GEMINI_API_KEY', '');
+
+/** RAG 検索で返す上位チャンク数。 */
+export const NOTEBOOK_RAG_TOP_K = envNum('NOTEBOOK_RAG_TOP_K', 8);
+
+/** チャンク分割のターゲット文字数。 */
+export const NOTEBOOK_RAG_CHUNK_SIZE = envNum('NOTEBOOK_RAG_CHUNK_SIZE', 800);
+
+/** チャンク分割のオーバーラップ文字数。 */
+export const NOTEBOOK_RAG_CHUNK_OVERLAP = envNum('NOTEBOOK_RAG_CHUNK_OVERLAP', 100);
+
 /** 受信箱本体（追記専用 JSONL・1 行 1 エントリ）。 */
 export const INBOX_FILE = join(INBOX_DATA_DIR, 'inbox.jsonl');
 
