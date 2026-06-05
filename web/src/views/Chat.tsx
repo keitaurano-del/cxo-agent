@@ -953,6 +953,10 @@ export default function Chat() {
     const now = new Date().toISOString();
     saveLastRead(selectedId, now);
     setLastRead((prev) => ({ ...prev, [selectedId]: now }));
+    // App.tsx のサイドバーバッジをリセット（アクティブチャンネル通知）
+    localStorage.setItem('chat.activeChannel', selectedId);
+    localStorage.setItem('chat.unreadBadge', '0');
+    window.dispatchEvent(new Event('chat-badge-update'));
   }, [selectedId, loadMessages]);
 
   // SSE chat イベント受信でリアルタイム追加

@@ -299,35 +299,48 @@ export default function App() {
   const { data: approvals } = useLiveResource<ApprovalsResponse>('/api/approvals', ticks.tasks);
   const approvalCount = approvals?.total ?? 0;
 
-  // チャット未読数: SSE の chat イベントを受けてカウント。
-  // useRef で最新 pathname を保持し、SSE は一度だけ開く。
+  // チャット未読数: チャンネル別に管理し、/chat 表示中でも他チャンネルの未読を保持する。
+  // localStorage に { channelId: lastSeenTs } を保存して未読を計算する。
   const [chatUnread, setChatUnread] = useState(() => {
     const saved = parseInt(localStorage.getItem('chat.unreadBadge') ?? '0', 10);
     return isNaN(saved) ? 0 : saved;
   });
+  // Chat.tsx が選択中チャンネルを書き込む key: 'chat.activeChannel'
   const pathnameRef = useRef(pathname);
-  pathnameRef.current = pathname; // レンダリングのたびに最新値を更新
+  pathnameRef.current = pathname;
+
+  // /chat 以外に移動したらバッジはそのまま（他画面からでも見えるように）
+  // /chat に戻ったらリセットはしない — Chat.tsx 側でチャンネルを開いた時に per-channel でリセット
   useEffect(() => {
-    // チャット画面を開いたらバッジをリセット
-    if (pathname === '/chat') {
-      setChatUnread(0);
-      localStorage.setItem('chat.unreadBadge', '0');
-    }
-  }, [pathname]);
+    const handler = () => {
+      // Chat.tsx が 'chat.unreadBadge' を更新したら同期
+      const saved = parseInt(localStorage.getItem('chat.unreadBadge') ?? '0', 10);
+      setChatUnread(isNaN(saved) ? 0 : saved);
+    };
+    window.addEventListener('chat-badge-update', handler);
+    return () => window.removeEventListener('chat-badge-update', handler);
+  }, []);
+
   useEffect(() => {
-    // SSE 接続は一度だけ（マウント時のみ）。最新 pathname は ref 経由で参照。
+    // SSE 接続は一度だけ（マウント時のみ）。
     const es = new EventSource('/api/stream');
-    es.addEventListener('chat', () => {
-      if (pathnameRef.current === '/chat') return; // チャット画面中は増やさない
+    es.addEventListener('chat', (e) => {
+      // event.data から channelId を取得
+      let channelId = '';
+      try { channelId = (JSON.parse((e as MessageEvent).data) as { channelId?: string }).channelId ?? ''; } catch { /* ignore */ }
+
+      // 現在アクティブなチャンネルへのメッセージなら増やさない
+      const activeChannel = localStorage.getItem('chat.activeChannel') ?? '';
+      const isOnChatPage = pathnameRef.current === '/chat';
+      if (isOnChatPage && channelId && channelId === activeChannel) return;
+
       setChatUnread((n) => {
         const next = n + 1;
         localStorage.setItem('chat.unreadBadge', String(next));
         return next;
       });
     });
-    es.onerror = () => {
-      // 接続エラー時は自動再接続（EventSource のデフォルト動作）
-    };
+    es.onerror = () => { /* 自動再接続 */ };
     return () => es.close();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

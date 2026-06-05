@@ -95,11 +95,14 @@ export default function BottomNav({
                     <span className="relative shrink-0" aria-hidden>
                       {item.icon}
                       {badge > 0 && item.to === '/chat' && (
-                        // チャット: 青ドット
+                        // チャット: 青い数字バッジ（アニメーション付き）
                         <span
-                          className="absolute -right-1 -top-1 inline-flex h-2.5 w-2.5 rounded-full"
-                          style={{ background: '#3b82f6', boxShadow: '0 0 0 2px var(--mc-surface)' }}
-                        />
+                          className="absolute -right-1.5 -top-1.5 inline-flex min-w-[1rem] items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none mc-pulse"
+                          style={{ color: '#fff', background: '#3b82f6', boxShadow: '0 0 0 2px var(--mc-surface)' }}
+                          aria-label={`未読 ${badge} 件`}
+                        >
+                          {badge > 99 ? '99+' : badge}
+                        </span>
                       )}
                       {badge > 0 && item.to !== '/chat' && (
                         // その他: 数字バッジ
