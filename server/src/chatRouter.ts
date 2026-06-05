@@ -782,7 +782,7 @@ export function autonomousTickHandler(broadcast: Broadcast) {
     })();
     const token = bodyToken ?? bearerToken;
 
-    const { channelIds } = req.body as { channelIds?: string[] };
+    const { channelIds } = (req.body ?? {}) as { channelIds?: string[] };
 
     // AGENT_TOKEN 未設定は機能無効
     if (!AGENT_TOKEN) {
