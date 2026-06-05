@@ -39,6 +39,7 @@ import {
   ImageFileIcon,
   FileIcon,
   FolderIcon,
+  EditIcon,
 } from '../components/icons';
 import { relativeTime } from '../lib/time';
 
@@ -882,11 +883,66 @@ function NotebookDetailView({
   const [tab, setTab] = useState<DetailTab>('sources');
   const [preview, setPreview] = useState<NotebookFileRef | null>(null);
 
+  // インライン名称編集
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+
   const detail = data && data.meta ? data : null;
   const sources = detail?.sources ?? [];
   const artifacts = detail?.artifacts ?? [];
   const chat = detail?.chat ?? [];
   const hasSources = sources.length > 0;
+
+  const startEditing = useCallback(() => {
+    setNameInput(detail?.meta.name ?? '');
+    setRenameError(null);
+    setEditingName(true);
+  }, [detail]);
+
+  useEffect(() => {
+    if (editingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [editingName]);
+
+  const commitRename = useCallback(() => {
+    const trimmed = nameInput.trim();
+    if (!trimmed) {
+      setRenameError('名前を入力してください。');
+      return;
+    }
+    if (trimmed === detail?.meta.name) {
+      setEditingName(false);
+      return;
+    }
+    setRenaming(true);
+    setRenameError(null);
+    fetch(`/api/notebooks/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: trimmed }),
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          setEditingName(false);
+          refetch();
+        } else {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          setRenameError(body.error || `リネームに失敗しました（HTTP ${res.status}）。`);
+        }
+      })
+      .catch(() => setRenameError('ネットワークエラーでリネームに失敗しました。'))
+      .finally(() => setRenaming(false));
+  }, [id, nameInput, detail, refetch]);
+
+  const cancelRename = useCallback(() => {
+    setEditingName(false);
+    setRenameError(null);
+  }, []);
 
   const sourcesPane = (
     <SourcesPane id={id} sources={sources} onChanged={refetch} onPreview={setPreview} />
@@ -910,21 +966,67 @@ function NotebookDetailView({
     { key: 'artifacts', label: '生成物', count: artifacts.length },
   ];
 
+  // ヘッダのタイトル部分（インライン編集対応）
+  const titleContent = editingName ? (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1">
+        <input
+          ref={nameInputRef}
+          type="text"
+          value={nameInput}
+          onChange={(e) => setNameInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+            if (e.key === 'Escape') cancelRename();
+          }}
+          onBlur={commitRename}
+          disabled={renaming}
+          className="rounded border border-accent bg-bg px-2 py-0.5 text-lg font-bold text-text focus:outline-none disabled:opacity-60"
+          style={{ minWidth: '12rem', maxWidth: '24rem' }}
+        />
+        {renaming && <Spinner />}
+      </div>
+      {renameError && (
+        <span className="text-[11px]" style={{ color: 'var(--mc-stalled)' }}>{renameError}</span>
+      )}
+    </div>
+  ) : (
+    <div className="flex items-center gap-1.5">
+      <span className="text-lg font-bold text-text">{detail?.meta.name ?? 'ノートブック'}</span>
+      {detail && (
+        <button
+          type="button"
+          onClick={startEditing}
+          className="rounded p-0.5 text-text-faint opacity-0 hover:bg-surface-2 hover:text-text group-hover:opacity-100 focus:opacity-100"
+          aria-label="名前を変更"
+        >
+          <EditIcon width={14} height={14} />
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex h-full flex-col">
-      <PageHeader
-        title={detail?.meta.name ?? 'ノートブック'}
-        subtitle={detail ? `資料 ${sources.length}・生成物 ${artifacts.length}` : undefined}
-        right={
-          <button
-            type="button"
-            onClick={onBack}
-            className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 text-xs text-text-muted hover:bg-surface-2 hover:text-text"
-          >
-            一覧へ戻る
-          </button>
-        }
-      />
+      <header className="sticky top-0 z-10 border-b border-border bg-bg/95 px-4 py-3 backdrop-blur md:px-6 md:py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="group">
+            {titleContent}
+            {detail && !editingName && (
+              <p className="mt-0.5 text-xs text-text-muted">資料 {sources.length}・生成物 {artifacts.length}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 text-xs text-text-muted hover:bg-surface-2 hover:text-text"
+            >
+              一覧へ戻る
+            </button>
+          </div>
+        </div>
+      </header>
 
       {/* モバイル: タブ切替 */}
       <div className="flex shrink-0 border-b border-border md:hidden" role="tablist" aria-label="ペイン切替">

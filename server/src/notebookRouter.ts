@@ -37,6 +37,7 @@ import {
   appendChat,
   deleteSource,
   touchNotebook,
+  renameNotebook,
   artifactNames,
   resolveNotebookFile,
   readChatHistory,
@@ -200,6 +201,32 @@ function handleDelete(req: Request, res: Response): void {
     deleteNotebook(idParam(req));
     return { ok: true };
   });
+}
+
+// PATCH /:id — ノートブック名を変更
+async function handleRename(req: Request, res: Response): Promise<void> {
+  const id = idParam(req);
+  const { name } = req.body as { name?: string };
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    res.status(400).json({ error: 'name は必須です' });
+    return;
+  }
+  try {
+    const dir = resolveNotebookDir(id);
+    if (!existsSync(dir)) {
+      res.status(404).json({ error: 'ノートブックが見つかりません' });
+      return;
+    }
+    renameNotebook(id, name.trim());
+    res.json({ ok: true });
+  } catch (e) {
+    if (e instanceof SafePathError) {
+      res.status(400).json({ error: String(e) });
+      return;
+    }
+    console.error('[notebook PATCH]', e);
+    res.status(500).json({ error: 'リネームに失敗しました' });
+  }
 }
 
 // POST /:id/sources — ソース追加（multipart）→ 抽出
@@ -568,6 +595,7 @@ export function notebookRouter(): Router {
   router.get('/', handleList);
   router.post('/', handleCreate);
   router.get('/:id', handleGet);
+  router.patch('/:id', (req, res) => void handleRename(req, res));
   router.delete('/:id', handleDelete);
   router.get('/:id/file', (req, res) => void handleFile(req, res));
   router.post('/:id/sources', (req, res) => void handleAddSources(req, res));

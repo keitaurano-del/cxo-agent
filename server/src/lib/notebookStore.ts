@@ -217,6 +217,16 @@ export function touchNotebook(id: string): void {
   writeMeta(dir, meta);
 }
 
+/** ノートブック名を変更し updatedAt を現在時刻に更新する。 */
+export function renameNotebook(id: string, newName: string): void {
+  const dir = resolveNotebookDir(id, true);
+  const meta = readMeta(dir);
+  if (!meta) throw new Error('ノートブックのメタデータが読み込めません');
+  meta.name = newName;
+  meta.updatedAt = new Date().toISOString();
+  writeMeta(dir, meta);
+}
+
 /** ディレクトリ内のファイル一覧を NotebookFileRef[] にする。 */
 function listDir(dir: string, sub: 'sources' | 'artifacts'): NotebookFileRef[] {
   const abs = join(dir, sub);
