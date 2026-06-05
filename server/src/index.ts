@@ -50,7 +50,7 @@ import { approvalRouter } from './approvalRouter.js';
 import { spawnRouter } from './spawnRouter.js';
 import { terminalHttpHandler, attachUpgrade } from './terminalProxy.js';
 import { startWatch } from './watch.js';
-import { chatRouter, agentMessageHandler } from './chatRouter.js';
+import { chatRouter, agentMessageHandler, autonomousTickHandler } from './chatRouter.js';
 
 const HEALTHZ_PATH = '/api/healthz';
 
@@ -96,6 +96,14 @@ app.get(HEALTHZ_PATH, (_req, res) => {
 // broadcast は SSE hub（このファイルで定義）を参照するため、ここで登録して closure で遅延解決。
 app.post('/api/chat/agent-message', (req, res) => {
   agentMessageHandler(broadcast)(req, res);
+});
+
+// ── autonomous-tick（認証外）─────────────────────────────────────
+// MC-148: /api/chat/autonomous-tick は AGENT_TOKEN で独立認証するため auth ミドルウェアの外に置く。
+// cron スクリプトが Authorization: Bearer <AGENT_TOKEN> で Cookie なしで呼べるようにする。
+// token は req.body.token または Bearer ヘッダのどちらからでも受理する。
+app.post('/api/chat/autonomous-tick', (req, res) => {
+  void autonomousTickHandler(broadcast)(req, res);
 });
 
 // ─── token 認証（healthz より後、他ルートより前に適用）──────────

@@ -740,7 +740,7 @@ ID 採番: **AR-0x**。
 | MC-145 | エージェントが自律的にチャットを確認・返信・発言（Masayoshi/林等が定期的にチャットを読んで必要なら発言） | 高 | feature | DONE（2026-06-04 dev-logic。POST /api/chat/autonomous-tick エンドポイント追加（AGENT_TOKEN認証・全チャンネル巡回・@メンション必答・30分クールダウン・20%確率自発投稿・チャンネル適合チェック）。/home/dev/cron-scripts/chat-autonomous.sh 作成＋cron */20登録。tsc 0err green・ローカルcommit済。server restart でライブ反映=Keita承認待ち） | dev-logic | MC-141/142 |
 | MC-146 | chat-autonomous.sh の AGENT_TOKEN 取得パス修正（~/.mc.env→projects/cxo-agent/.mc.env） | 高 | bug | DONE（2026-06-04 林。MC_ENV="/home/dev/projects/cxo-agent/.mc.env" 変数を導入し3箇所を修正。bash -n 構文チェック green・ドライラン AGENT_TOKEN 48chars 取得確認。/home/dev/cron-scripts/chat-autonomous.sh 修正済み＋scripts/chat-autonomous.sh としてリポに追加。ローカルcommit済。次の cron */20 ティックから AGENT_TOKEN is empty 解消） | dev-logic | MC-145 |
 | MC-147 | chat-autonomous.sh のエンドポイントパス修正（/api/autonomous-tick → /api/chat/autonomous-tick） | 高 | bug | DONE（2026-06-04 dev-logic。scripts/chat-autonomous.sh のコメント行・curl URL の2箇所を /api/chat/autonomous-tick に修正。bash -n 構文チェック green。commit fbb5969） | dev-logic | MC-145/MC-146 |
-| MC-148 | /api/chat/autonomous-tick の認証設計修正（グローバル MC_TOKEN auth バイパス or cron 側二重トークン対応） | 高 | bug | TODO（2026-06-05 apollo-keeper 起票。/api/chat/autonomous-tick は MC_TOKEN グローバル auth 後段に登録されているため AGENT_TOKEN のみの cron リクエストが 401。/api/chat/agent-message と同様に auth 前段に移動するか、cron スクリプトに MC_TOKEN ヘッダを追加する必要あり。MC_TOKEN+body AGENT_TOKEN で疎通 >15s 確認済み=エンドポイント自体は動作している） | dev-logic | MC-145/MC-146/MC-147 |
+| MC-148 | /api/chat/autonomous-tick の認証設計修正（グローバル MC_TOKEN auth バイパス or cron 側二重トークン対応） | 高 | bug | DONE（2026-06-05 林。autonomousTickHandler を chatRouter から抽出・export し index.ts の auth middleware 前段に登録（agent-message と同設計）。Bearer ヘッダ or req.body.token 両対応。cron-scripts/chat-autonomous.sh の URL パスを /api/chat/autonomous-tick に修正。server tsc 0err green。server restart で有効化=Keita承認待ち） | dev-logic | MC-145/MC-146/MC-147 |
 | MC-125 | 成果物ビューでファイルを削除できるようにする | 中 | feature | DONE（2026-06-03 dev-logic。DELETE /api/deliverables/file?path= realpath防御・README保護(403)・実体無404・dir400・traversal400。MC-117変換キャッシュPDFも連動削除。フロント: 各行に TrashIcon＋インライン確認→DELETE→refetch、プレビュー中削除で自動クローズ。server tsc0/web build green・restart後 healthz200・疎通確認。commit ed3e428） | dev-logic | MC-116 |
 | MC-126 | NotebookLM 的機能: 読み込んだ資料の分析・資料ベースのテンプレート生成・資料に根ざしたQ&A | 高 | feature/企画 | DONE（2026-06-03 test-functional 検証。server 20:55 restart 済。GET /api/notebooks→JSON 200・POST/GET/:id/DELETE CRUD 全件 green。server tsc 0error・web build 0error。/notebooks ルート App.tsx L223 登録確認。commit 55eadda 含む実装確定） | 林（設計）+ dev-logic | MC-116/117/118・claude・LibreOffice |
 | MC-110 | Apollo ターミナルのスクロール・入力不能・矢印ボタン修正 | P0 | bug | DONE（2026-06-02 commit f31ad36 で3問題一括修正: copy-mode 起因の入力不能→PostMessage スクロール切替・フローティングボタン削除・↑↓長押し連続スクロール追加、tapfix.test.ts 10/10 green。MC-113（commit 91ede9bf, 2026-06-03）でさらに矢印1回送信・44px化・トグル化・履歴矢印削除を追加改善。詳細セクションの CANCELLED は autonomous-worker 汚染で是正済み） | dev-logic | MC-104/MC-113 |
@@ -1990,3 +1990,26 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
 | 更新日 | 2026-06-03 |
+
+---
+
+## バッチ: 2026-06-05 Android クローズドテスト進行管理
+
+| ID | タイトル | 優先度 | ステータス | 担当 |
+|----|---------|--------|-----------|------|
+| MC-148 | クローズドテスト監視 cron 実装（14日後・12人達成を Apollo inbox 通知） | P0 | DONE | dev-logic（蓮） |
+
+### MC-148 — クローズドテスト監視 cron 実装
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-148 |
+| タイトル | Android クローズドテスト: 14日後・テスター12人達成を Apollo inbox 通知する cron |
+| 優先度 | P0 |
+| ステータス | DONE |
+| 担当 | dev-logic（蓮） |
+| 詳細 | Play Console API でオプトイン人数・14日間達成を取得する手段は公開されていない。代替として: (1) `cron-scripts/closed-test-monitor.sh` を新設 — 開始日を `cxo-agent/data/closed-test.json` に記録し、14日経過・テスター12人達成時に Apollo inbox へ通知を投入する。(2) テスター数は Keita が手動で `closed-test.json` の `tester_count` を更新する運用。(3) D+7〜D+13 は毎日中間通知を inbox に出す。cron は JST 09:00（UTC 00:00）に毎日実行。 |
+| 受け入れ条件（DoD） | (1) `closed-test.json` に `start_date` をセットして 14日後に `notified_14d: true` が記録される。(2) `tester_count >= 12` で `notified_12testers: true` が記録され inbox に通知が入る。(3) crontab に `0 0 * * *` で登録済み。(4) kill-switch `~/.closed-test-monitor.disabled` で即停止できる。 |
+| 関連ファイル | `dev:~/cron-scripts/closed-test-monitor.sh`, `cxo-agent/data/closed-test.json` |
+| 更新日 | 2026-06-05 |
+| 完了根拠 | スクリプト作成済み (closed-test-monitor.sh, chmod +x)、状態ファイル作成済み (data/closed-test.json)、crontab 登録済み (`0 0 * * * TZ=Asia/Tokyo`) |

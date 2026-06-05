@@ -756,15 +756,33 @@ export function chatRouter(broadcast: Broadcast): Router {
   });
 
   // ── MC-145: autonomous-tick ─────────────────────────────────────
+  // MC-148: auth middleware の前に autonomousTickHandler として登録済み（index.ts 参照）。
+  // router 内ルートは削除し、standalone export に一本化。
 
-  /**
-   * POST /api/chat/autonomous-tick
-   * { token, channelIds?: string[] }
-   * AGENT_TOKEN 認証。全チャンネルを巡回し、各エージェントが確率的に自発投稿または
-   * メンション返答を行う。30分クールダウン・20%確率・チャンネル適合チェック付き。
-   */
-  router.post('/autonomous-tick', async (req: Request, res: Response) => {
-    const { token, channelIds } = req.body as { token?: string; channelIds?: string[] };
+  return router;
+}
+
+// ── autonomous-tick エンドポイント（auth 外）──────────────────
+
+/**
+ * POST /api/chat/autonomous-tick
+ * { token?, channelIds?: string[] } または Authorization: Bearer <AGENT_TOKEN>
+ * AGENT_TOKEN 認証（Cookie なしで呼べる）。
+ * MC-148: auth middleware の外（index.ts の agent-message と同じ位置）に登録する。
+ * token は req.body.token または Authorization Bearer ヘッダのどちらからでも受理する。
+ */
+export function autonomousTickHandler(broadcast: Broadcast) {
+  return async (req: Request, res: Response) => {
+    const bodyToken = req.body?.token as string | undefined;
+    const bearerToken = (() => {
+      const h = req.headers.authorization;
+      if (!h) return undefined;
+      const m = h.match(/^Bearer\s+(.+)$/i);
+      return m ? m[1].trim() : undefined;
+    })();
+    const token = bodyToken ?? bearerToken;
+
+    const { channelIds } = req.body as { channelIds?: string[] };
 
     // AGENT_TOKEN 未設定は機能無効
     if (!AGENT_TOKEN) {
@@ -913,9 +931,7 @@ export function chatRouter(broadcast: Broadcast): Router {
     }
 
     res.json({ ok: true, posted, channels: channels.length, agents: personas.length });
-  });
-
-  return router;
+  };
 }
 
 // ── エージェント投稿エンドポイント（auth 外）──────────────────
