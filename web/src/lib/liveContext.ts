@@ -6,7 +6,7 @@ export interface LiveContextValue {
   ticks: LiveTicks;
 }
 
-const ZERO_TICKS: LiveTicks = { agents: 0, tasks: 0, narrative: 0 };
+const ZERO_TICKS: LiveTicks = { agents: 0, tasks: 0, narrative: 0, vault: 0, deliverables: 0 };
 
 export const LiveContext = createContext<LiveContextValue>({ ticks: ZERO_TICKS });
 

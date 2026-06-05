@@ -18,10 +18,12 @@ import {
   NARRATIVE_DIRS,
   TASK_SOURCES,
   WATCH_DEBOUNCE_MS,
+  VAULT_DIR,
+  DELIVERABLES_DIR,
 } from './config.js';
 
 /** broadcast されるイベントの種別。frontend はこれを見て該当データだけ再フェッチできる。 */
-export type ChangeType = 'agents' | 'tasks' | 'narrative';
+export type ChangeType = 'agents' | 'tasks' | 'narrative' | 'vault' | 'deliverables';
 
 /** broadcast 関数の型（index.ts の SSE hub を注入する）。 */
 export type Broadcast = (event: string, data: unknown) => void;
@@ -42,6 +44,14 @@ function classify(path: string): ChangeType | null {
   // tasks: 監視対象の各台帳 md（完全一致）
   for (const src of Object.values(TASK_SOURCES)) {
     if (path === src) return 'tasks';
+  }
+  // deliverables: deliverables ディレクトリ配下
+  if (DELIVERABLES_DIR && path.startsWith(DELIVERABLES_DIR)) {
+    return 'deliverables';
+  }
+  // vault: obsidian-vault 配下（50-Daily 以外）
+  if (VAULT_DIR && path.startsWith(VAULT_DIR) && !path.includes('/50-Daily/')) {
+    return 'vault';
   }
   return null;
 }
@@ -68,6 +78,10 @@ function buildWatchTargets(): string[] {
     const dir = dirname(src);
     if (existsSync(dir)) targets.add(dir);
   }
+
+  // vault と deliverables を監視（存在する分だけ）
+  if (VAULT_DIR && existsSync(VAULT_DIR)) targets.add(VAULT_DIR);
+  if (DELIVERABLES_DIR && existsSync(DELIVERABLES_DIR)) targets.add(DELIVERABLES_DIR);
 
   return [...targets];
 }

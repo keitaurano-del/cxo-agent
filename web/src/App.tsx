@@ -344,7 +344,63 @@ export default function App() {
     return () => es.close();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const badges: Partial<Record<string, number>> = { '/approvals': approvalCount, '/chat': chatUnread };
+  // ページ別バッジ: SSE update イベントの type → nav path にマッピング
+  // ページを訪問したら badge.{path} を 0 にリセットする
+  const NAV_BADGE_MAP: Record<string, string> = {
+    tasks: '/tasks',
+    vault: '/vault',
+    deliverables: '/deliverables',
+    agents: '/',
+  };
+  const loadBadge = (path: string) => parseInt(localStorage.getItem(`badge.${path}`) ?? '0', 10) || 0;
+  const [navBadges, setNavBadges] = useState<Record<string, number>>(() => ({
+    '/tasks': loadBadge('/tasks'),
+    '/vault': loadBadge('/vault'),
+    '/deliverables': loadBadge('/deliverables'),
+    '/': loadBadge('/'),
+  }));
+
+  // ページ訪問時にそのバッジをリセット
+  useEffect(() => {
+    const path = pathname === '/' || pathname.startsWith('/feed') || pathname.startsWith('/agents') || pathname.startsWith('/today') ? '/' : pathname;
+    if (navBadges[path] > 0) {
+      localStorage.setItem(`badge.${path}`, '0');
+      setNavBadges((prev) => ({ ...prev, [path]: 0 }));
+    }
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // SSE update イベントでバッジをインクリメント（表示中のページ以外）
+  useEffect(() => {
+    const es2 = new EventSource('/api/stream');
+    es2.addEventListener('update', (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as { types?: string[] };
+        for (const type of data.types ?? []) {
+          const navPath = NAV_BADGE_MAP[type];
+          if (!navPath) continue;
+          // 現在そのページを見ていたら増やさない
+          const cur = pathnameRef.current;
+          const isActive = navPath === '/'
+            ? cur === '/' || cur.startsWith('/feed') || cur.startsWith('/agents') || cur.startsWith('/today')
+            : cur.startsWith(navPath);
+          if (isActive) continue;
+          setNavBadges((prev) => {
+            const next = (prev[navPath] ?? 0) + 1;
+            localStorage.setItem(`badge.${navPath}`, String(next));
+            return { ...prev, [navPath]: next };
+          });
+        }
+      } catch { /* ignore */ }
+    });
+    es2.onerror = () => { /* 自動再接続 */ };
+    return () => es2.close();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const badges: Partial<Record<string, number>> = {
+    '/approvals': approvalCount,
+    '/chat': chatUnread,
+    ...navBadges,
+  };
 
   const { mode: themeMode, isDark, toggle: toggleTheme } = useTheme();
 

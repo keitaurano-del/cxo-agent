@@ -89,12 +89,12 @@ export function useLiveResource<T>(path: string, liveTick = 0): LiveResource<T> 
 }
 
 /** SSE が運ぶリソース種別。backend watch.ts の ChangeType と一致させる。 */
-export type LiveResourceType = 'agents' | 'tasks' | 'narrative';
+export type LiveResourceType = 'agents' | 'tasks' | 'narrative' | 'vault' | 'deliverables';
 
 /** 種別ごとの再フェッチカウンタ。各 useLiveResource は関係する種別の値だけ購読する。 */
 export type LiveTicks = Record<LiveResourceType, number>;
 
-const ZERO_TICKS: LiveTicks = { agents: 0, tasks: 0, narrative: 0 };
+const ZERO_TICKS: LiveTicks = { agents: 0, tasks: 0, narrative: 0, vault: 0, deliverables: 0 };
 
 /**
  * /api/stream の EventSource を購読し、種別ごとの再フェッチカウンタを返す。
