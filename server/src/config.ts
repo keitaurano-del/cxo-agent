@@ -88,8 +88,8 @@ export const NOTEBOOK_UPLOAD_MAX_FILES = envNum('NOTEBOOK_UPLOAD_MAX_FILES', 20)
 /** claude CLI バイナリのパス（資料根拠 Q&A・生成物作成エンジン）。 */
 export const NOTEBOOK_CLAUDE_BIN = env('NOTEBOOK_CLAUDE_BIN', '/usr/bin/claude');
 
-/** claude -p 1 回あたりのタイムアウト（ミリ秒、既定 120s）。 */
-export const NOTEBOOK_CLAUDE_TIMEOUT_MS = envNum('NOTEBOOK_CLAUDE_TIMEOUT_MS', 120_000);
+/** claude -p 1 回あたりのタイムアウト（ミリ秒、既定 600s）。SSH ラッパー経由での rsync+claude 実行時間を考慮して 10 分に設定。 */
+export const NOTEBOOK_CLAUDE_TIMEOUT_MS = envNum('NOTEBOOK_CLAUDE_TIMEOUT_MS', 600_000);
 
 /** claude -p の同時実行上限（共有 Anthropic アカウントを食い潰さないため）。 */
 export const NOTEBOOK_CLAUDE_CONCURRENCY = envNum('NOTEBOOK_CLAUDE_CONCURRENCY', 2);

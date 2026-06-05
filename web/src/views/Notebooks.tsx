@@ -931,6 +931,21 @@ function ArtifactsPane({
   // ポーリング開始時点の artifacts 件数を記憶して増加を検出する。
   const artifactBaseCount = useRef<number>(0);
 
+  // 生成中に実際の progress イベントが来ない間、時間ベースで擬似進捗を増やす。
+  // SSH ラッパー経由の場合 chunk が逐次来ないため、sqrt カーブで最大95%まで自動増加。
+  // 実際の progress イベントや done イベントが来た時点でそちらが上書きする。
+  useEffect(() => {
+    if (!generating) return;
+    const start = Date.now();
+    const EXPECTED_MS = 120_000; // 想定 2 分
+    const timer = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const pct = Math.min(95, Math.round(Math.sqrt(elapsed / EXPECTED_MS) * 95));
+      setGenPct((prev) => Math.max(prev, pct));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [generating]);
+
   // generatingKind がセットされたら 3 秒ごとに artifacts 件数を確認。
   useEffect(() => {
     if (!generatingKind) {
