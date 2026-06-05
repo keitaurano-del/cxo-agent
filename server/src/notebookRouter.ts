@@ -21,7 +21,6 @@ import multer from 'multer';
 
 import {
   NOTEBOOK_UPLOAD_MAX_BYTES,
-  NOTEBOOK_UPLOAD_MAX_FILES,
   NOTEBOOK_ARTIFACT_MAX_TOTAL_BYTES,
 } from './config.js';
 import { SafePathError } from './lib/vaultPath.js';
@@ -102,10 +101,10 @@ const storage = multer.diskStorage({
   },
 });
 
+// limits を外してファイルサイズ・件数の上限を撤廃（フォルダアップロード対応のため）。
 const uploadSources = multer({
   storage,
-  limits: { fileSize: NOTEBOOK_UPLOAD_MAX_BYTES, files: NOTEBOOK_UPLOAD_MAX_FILES },
-}).array('files', NOTEBOOK_UPLOAD_MAX_FILES);
+}).array('files');
 
 function cleanupPartial(req: Request): void {
   const r = req as Request & { _savedSources?: SavedSourceRef[] };

@@ -38,6 +38,7 @@ import {
   TextFileIcon,
   ImageFileIcon,
   FileIcon,
+  FolderIcon,
 } from '../components/icons';
 import { relativeTime } from '../lib/time';
 
@@ -154,6 +155,7 @@ function UploadPanel({ id, onUploaded }: { id: string; onUploaded: () => void })
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
 
   const upload = useCallback(
     (fileList: FileList | File[]) => {
@@ -165,7 +167,12 @@ function UploadPanel({ id, onUploaded }: { id: string; onUploaded: () => void })
       setProgress(0);
 
       const fd = new FormData();
-      files.forEach((f) => fd.append('files', f, f.name));
+      files.forEach((f) => {
+        // webkitdirectory で選択したファイルは webkitRelativePath にパスが入る。
+        // basename のみを使うことでサーバ側の sanitize と一致する（フラット保存）。
+        const name = (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name;
+        fd.append('files', f, name);
+      });
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `/api/notebooks/${id}/sources`);
@@ -201,6 +208,7 @@ function UploadPanel({ id, onUploaded }: { id: string; onUploaded: () => void })
       };
       xhr.send(fd);
       if (inputRef.current) inputRef.current.value = '';
+      if (folderInputRef.current) folderInputRef.current.value = '';
     },
     [id, uploading, onUploaded],
   );
@@ -231,19 +239,41 @@ function UploadPanel({ id, onUploaded }: { id: string; onUploaded: () => void })
             if (e.target.files && e.target.files.length > 0) upload(e.target.files);
           }}
         />
+        {/* webkitdirectory は非標準のため spread で型チェックを回避する */}
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files && e.target.files.length > 0) upload(e.target.files);
+          }}
+          {...({ webkitdirectory: '' } as React.HTMLAttributes<HTMLInputElement>)}
+        />
         <span className="text-text-faint">
           <UploadIcon width={20} height={20} />
         </span>
         <p className="text-xs text-text-muted">資料をドラッグ＆ドロップ、または</p>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-          className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-bg transition-opacity disabled:opacity-50"
-        >
-          <UploadIcon width={13} height={13} />
-          資料を選択
-        </button>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-bg transition-opacity disabled:opacity-50"
+          >
+            <UploadIcon width={13} height={13} />
+            資料を選択
+          </button>
+          <button
+            type="button"
+            onClick={() => folderInputRef.current?.click()}
+            disabled={uploading}
+            className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 border border-border px-3 py-1 text-xs font-semibold text-text transition-opacity disabled:opacity-50"
+          >
+            <FolderIcon width={13} height={13} />
+            フォルダを選択
+          </button>
+        </div>
       </div>
 
       {uploading && (
