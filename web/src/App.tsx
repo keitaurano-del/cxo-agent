@@ -20,7 +20,6 @@ import {
   TerminalIcon,
   SunIcon,
   MoonIcon,
-  ChatIcon,
 } from './components/icons';
 import DashboardLayout from './components/DashboardLayout';
 import { isDashboardPath } from './lib/nav';
@@ -37,7 +36,6 @@ import PlanUsage from './views/PlanUsage';
 import Ticks from './views/Ticks';
 import Approvals from './views/Approvals';
 import Terminal from './views/Terminal';
-import Chat from './views/Chat';
 import BottomNav from './components/BottomNav';
 import AddTaskFab from './components/AddTaskFab';
 
@@ -134,7 +132,6 @@ const NAV: NavItem[] = [
   { to: '/vault', label: 'Vault', shortLabel: 'Vault', icon: <VaultIcon /> },
   { to: '/deliverables', label: '成果物', shortLabel: '成果物', icon: <DocumentsIcon /> },
   { to: '/notebooks', label: 'ノートブック', shortLabel: 'ノート', icon: <NotebookIcon /> },
-  { to: '/chat', label: 'チャット', shortLabel: 'チャット', icon: <ChatIcon /> },
   // ターミナル: iframe ホスト用 React ルートは /terminal-view。
   // サーバ proxy ルート /terminal（→ ttyd）と衝突させないため別パスにする。
   { to: '/terminal-view', label: 'ターミナル', shortLabel: '端末', icon: <TerminalIcon /> },
@@ -299,50 +296,8 @@ export default function App() {
   const { data: approvals } = useLiveResource<ApprovalsResponse>('/api/approvals', ticks.tasks);
   const approvalCount = approvals?.total ?? 0;
 
-  // チャット未読数: チャンネル別に管理し、/chat 表示中でも他チャンネルの未読を保持する。
-  // localStorage に { channelId: lastSeenTs } を保存して未読を計算する。
-  const [chatUnread, setChatUnread] = useState(() => {
-    const saved = parseInt(localStorage.getItem('chat.unreadBadge') ?? '0', 10);
-    return isNaN(saved) ? 0 : saved;
-  });
-  // Chat.tsx が選択中チャンネルを書き込む key: 'chat.activeChannel'
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
-
-  // /chat 以外に移動したらバッジはそのまま（他画面からでも見えるように）
-  // /chat に戻ったらリセットはしない — Chat.tsx 側でチャンネルを開いた時に per-channel でリセット
-  useEffect(() => {
-    const handler = () => {
-      // Chat.tsx が 'chat.unreadBadge' を更新したら同期
-      const saved = parseInt(localStorage.getItem('chat.unreadBadge') ?? '0', 10);
-      setChatUnread(isNaN(saved) ? 0 : saved);
-    };
-    window.addEventListener('chat-badge-update', handler);
-    return () => window.removeEventListener('chat-badge-update', handler);
-  }, []);
-
-  useEffect(() => {
-    // SSE 接続は一度だけ（マウント時のみ）。
-    const es = new EventSource('/api/stream');
-    es.addEventListener('chat', (e) => {
-      // event.data から channelId を取得
-      let channelId = '';
-      try { channelId = (JSON.parse((e as MessageEvent).data) as { channelId?: string }).channelId ?? ''; } catch { /* ignore */ }
-
-      // 現在アクティブなチャンネルへのメッセージなら増やさない
-      const activeChannel = localStorage.getItem('chat.activeChannel') ?? '';
-      const isOnChatPage = pathnameRef.current === '/chat';
-      if (isOnChatPage && channelId && channelId === activeChannel) return;
-
-      setChatUnread((n) => {
-        const next = n + 1;
-        localStorage.setItem('chat.unreadBadge', String(next));
-        return next;
-      });
-    });
-    es.onerror = () => { /* 自動再接続 */ };
-    return () => es.close();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ページ別バッジ: SSE update イベントの type → nav path にマッピング
   // ページを訪問したら badge.{path} を 0 にリセットする
@@ -398,7 +353,6 @@ export default function App() {
 
   const badges: Partial<Record<string, number>> = {
     '/approvals': approvalCount,
-    '/chat': chatUnread,
     ...navBadges,
   };
 
@@ -454,7 +408,6 @@ export default function App() {
             <Route path="/vault" element={<Vault />} />
             <Route path="/deliverables" element={<Deliverables />} />
             <Route path="/notebooks" element={<Notebooks />} />
-            <Route path="/chat" element={<Chat />} />
             <Route path="/terminal-view" element={<div className="flex h-full flex-col overflow-hidden"><Terminal /></div>} />
             <Route path="/terminal-standalone" element={<Terminal />} />
             <Route path="*" element={<Navigate to="/" replace />} />
