@@ -474,18 +474,177 @@ function SourcesPane({
   );
 }
 
+// ─── ファイルビューア（引用クリックで開くスライドオーバー）──────────────
+
+interface FileViewerState {
+  notebookId: string;
+  filename: string; // ファイル名のみ（"sources/" なし）
+  page?: string;    // ページ番号またはシート名
+}
+
+/** 認証が必要なファイルを Blob URL 経由で iframe に渡すビューア。 */
+function NotebookFileViewer({
+  notebookId,
+  filename,
+  page,
+  onClose,
+}: FileViewerState & { onClose: () => void }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    setLoading(true);
+    setError(null);
+    setBlobUrl(null);
+
+    const apiPath = `/api/notebooks/${notebookId}/file?path=${encodeURIComponent('sources/' + filename)}&inline=1`;
+    fetch(apiPath)
+      .then(async (res) => {
+        if (!res.ok) {
+          const msg = await res.text().catch(() => `HTTP ${res.status}`);
+          throw new Error(msg);
+        }
+        return res.blob();
+      })
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        // PDF の場合はページフラグメントを付与する。
+        const withPage = page ? `${objectUrl}#page=${encodeURIComponent(page)}` : objectUrl;
+        setBlobUrl(withPage);
+        setLoading(false);
+      })
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : String(e));
+        setLoading(false);
+      });
+
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [notebookId, filename, page]);
+
+  const displayName = page ? `${filename}  p.${page}` : filename;
+
+  return (
+    <div
+      className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-bg shadow-2xl md:w-2/3 lg:w-1/2"
+      role="dialog"
+      aria-modal
+      aria-label={`${displayName} ビューア`}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-3">
+        <span className="truncate text-sm font-medium text-text" title={displayName}>
+          {displayName}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="shrink-0 rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
+          aria-label="ビューアを閉じる"
+        >
+          <CloseIcon width={18} height={18} />
+        </button>
+      </div>
+      <div className="relative flex-1 overflow-hidden">
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center text-sm text-text-muted">
+            <Spinner />
+            <span className="ml-2">読み込み中…</span>
+          </div>
+        )}
+        {error && (
+          <div className="absolute inset-0 flex items-center justify-center p-4 text-sm" style={{ color: 'var(--mc-stalled)' }}>
+            ファイルの読み込みに失敗しました: {error}
+          </div>
+        )}
+        {blobUrl && (
+          <iframe
+            src={blobUrl}
+            title={displayName}
+            className="h-full w-full"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── 引用タグパーサ ───────────────────────────────────────
+
+interface CitePart {
+  type: 'text' | 'cite';
+  text: string;
+  filename?: string;
+  page?: string;
+}
+
+/** テキスト中の {{cite:filename:page}} を解析して parts に分解する。 */
+function parseCites(text: string): CitePart[] {
+  const parts: CitePart[] = [];
+  // {{cite:filename}} または {{cite:filename:page}} にマッチ。
+  const re = /\{\{cite:([^}:]+?)(?::([^}]*))?\}\}/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) {
+      parts.push({ type: 'text', text: text.slice(last, m.index) });
+    }
+    parts.push({
+      type: 'cite',
+      text: m[0],
+      filename: m[1],
+      page: m[2] || undefined,
+    });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) {
+    parts.push({ type: 'text', text: text.slice(last) });
+  }
+  return parts;
+}
+
 // ─── チャットペイン ───────────────────────────────────────
 
-function ChatBubble({ msg }: { msg: NotebookChatMessage }) {
+function ChatBubble({
+  msg,
+  onCite,
+}: {
+  msg: NotebookChatMessage;
+  onCite?: (filename: string, page?: string) => void;
+}) {
   const isUser = msg.role === 'user';
+  const parts = isUser ? null : parseCites(msg.text);
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm ${
+        className={`max-w-[85%] break-words rounded-2xl px-3 py-2 text-sm ${
           isUser ? 'rounded-br-sm bg-accent text-bg' : 'rounded-bl-sm bg-surface-2 text-text'
         }`}
       >
-        {msg.text}
+        {isUser || !parts ? (
+          <span className="whitespace-pre-wrap">{msg.text}</span>
+        ) : (
+          <span className="whitespace-pre-wrap">
+            {parts.map((p, i) => {
+              if (p.type === 'text') return <span key={i}>{p.text}</span>;
+              const label = p.page ? `${p.filename} p.${p.page}` : p.filename!;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => onCite?.(p.filename!, p.page)}
+                  className="mx-0.5 inline-flex items-center rounded-full border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                  title={`${label} を開く`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -511,6 +670,12 @@ function ChatPane({
   const [pendingAnswer, setPendingAnswer] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // 引用ビューア状態。
+  const [viewer, setViewer] = useState<FileViewerState | null>(null);
+
+  const handleCite = useCallback((filename: string, page?: string) => {
+    setViewer({ notebookId: id, filename, page });
+  }, [id]);
 
   // chat が更新されたとき、最後が user で assistant 応答がまだなら pendingAnswer をセット。
   useEffect(() => {
@@ -609,7 +774,7 @@ function ChatPane({
         ) : (
           <div className="flex flex-col gap-2.5">
             {chat.map((m, i) => (
-              <ChatBubble key={`${m.ts}-${i}`} msg={m} />
+              <ChatBubble key={`${m.ts}-${i}`} msg={m} onCite={handleCite} />
             ))}
             {/* 送信中の楽観追加（chat に未反映の自分の質問）。 */}
             {pendingQuestion && (
@@ -668,6 +833,14 @@ function ChatPane({
         </div>
         <p className="mt-1 text-[11px] text-text-faint">回答には時間がかかる場合があります（⌘/Ctrl + Enter で送信）。</p>
       </div>
+      {viewer && (
+        <NotebookFileViewer
+          notebookId={viewer.notebookId}
+          filename={viewer.filename}
+          page={viewer.page}
+          onClose={() => setViewer(null)}
+        />
+      )}
     </div>
   );
 }
