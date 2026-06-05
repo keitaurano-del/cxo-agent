@@ -488,8 +488,12 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
+    // 生成開始を即 0% で通知（クライアント側で確実に 0 から始まるようにする）。
+    sseWrite(res, { type: 'progress', pct: 0 });
     let totalChars = 0;
-    const EXPECTED_CHARS = 2000;
+    // Claude の生成物は長いと数千〜数万文字になるため EXPECTED_CHARS を大きくして
+    // 進捗が早期に 99% に張り付かないようにする。
+    const EXPECTED_CHARS = 8000;
     const result = await runClaudeStream(dir, prompt, (chunk) => {
       sseWrite(res, { type: 'chunk', text: chunk });
       totalChars += chunk.length;

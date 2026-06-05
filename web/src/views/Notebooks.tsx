@@ -1375,11 +1375,11 @@ function NotebookDetailView({
                 <div className="min-h-0 border-r border-border">{chatPane}</div>
                 <div className="min-h-0">{artifactsPane}</div>
               </div>
-              {/* モバイル: 選択タブのみ */}
+              {/* モバイル: display:none で切り替え（アンマウントしないため生成中 state を保持）*/}
               <div className="h-full md:hidden">
-                {tab === 'sources' && sourcesPane}
-                {tab === 'chat' && chatPane}
-                {tab === 'artifacts' && artifactsPane}
+                <div className="h-full" style={{ display: tab === 'sources' ? undefined : 'none' }}>{sourcesPane}</div>
+                <div className="h-full" style={{ display: tab === 'chat' ? undefined : 'none' }}>{chatPane}</div>
+                <div className="h-full" style={{ display: tab === 'artifacts' ? undefined : 'none' }}>{artifactsPane}</div>
               </div>
             </>
           )}
