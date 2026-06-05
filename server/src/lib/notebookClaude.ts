@@ -58,9 +58,9 @@ export interface ClaudeRunResult {
 
 /** claude に渡す共通 CLI 引数（モデル指定込み）。 */
 function claudeArgs(prompt: string, notebookDir: string): string[] {
-  // --allowedPaths でノートブックディレクトリ内のファイルのみ Read を許可。
-  // 他ノートブック・Vault・システムファイルへのアクセスを遮断してノートブック横断を防ぐ。
-  return ['--model', NOTEBOOK_CLAUDE_MODEL, '--allowedPaths', notebookDir, '-p', prompt];
+  // cwd=notebookDir で起動 + --add-dir でノートブックディレクトリを明示追加。
+  // デフォルトでは cwd のみ許可されるが、--add-dir で確実に閉じ込める。
+  return ['--model', NOTEBOOK_CLAUDE_MODEL, '--add-dir', notebookDir, '-p', prompt];
 }
 
 /**
