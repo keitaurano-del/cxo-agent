@@ -753,7 +753,8 @@ async function handleSetAccountLabel(req: Request, res: Response): Promise<void>
     //    ターミナル4（OpenClaw/Masayoshi）は独自 auth のため CLAUDE_CONFIG_DIR 切替不可。
     //    ラベル保存のみ行い、env 注入はスキップ。
     const dirMap = t.remote ? ACCOUNT_CONFIG_DIR_REMOTE : ACCOUNT_CONFIG_DIR_LOCAL;
-    const configDir = t.id !== 4 ? dirMap[account] : null;
+    // T2/T4 は OpenClaw 独自 auth のため CLAUDE_CONFIG_DIR 切替不可
+    const configDir = (t.id !== 2 && t.id !== 4) ? dirMap[account] : null;
     if (configDir) {
       const target = t.tmuxSession;
       // C-c で現在のプロセスを停止

@@ -740,9 +740,9 @@ export default function Terminal() {
               {/* アカウントプルダウン（T4=OpenClawは切替不可のためバッジのみ） */}
               {switching ? (
                 <span className="flex h-5 w-10 items-center justify-center"><Spinner /></span>
-              ) : t.id === 4 ? (
+              ) : t.id === 2 || t.id === 4 ? (
                 <span
-                  title="OpenClaw（Masayoshi）は独自認証のため切替不可"
+                  title="OpenClaw（独自認証）のため切替不可"
                   className={`flex h-5 min-w-[1.75rem] items-center justify-center rounded px-1 text-[10px] font-semibold leading-none opacity-50 ${
                     isC2 ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-sky-500/20 text-sky-600 dark:text-sky-400'
                   }`}
