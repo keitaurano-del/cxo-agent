@@ -28,6 +28,8 @@ import type {
   MinutesGenerateResponse,
   NotebookFolderTree,
   NotebookFolderEntry,
+  DeliverableFile,
+  DeliverablesResponse,
 } from '../lib/types';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, EmptyState, Spinner } from '../components/ui';
@@ -1468,6 +1470,229 @@ const EXPORT_OPTS = [
   { fmt: 'txt' as ExportFmt, label: 'テキスト', icon: '📝' },
 ] as const;
 
+// ─── Apollo（Deliverables）ファイル選択モーダル ─────────────────────
+
+// 選択可能な拡張子（テキスト系・音声・PDF・Word）。画像・フォルダは選択不可。
+const DELIVERABLE_SELECTABLE_EXTS = new Set([
+  '.txt', '.md', '.csv',
+  '.mp3', '.wav', '.m4a', '.ogg',
+  '.pdf',
+  '.docx',
+]);
+
+function deliverableSelectable(df: DeliverableFile): boolean {
+  if (df.isDir || df.kind === 'folder') return false;
+  return DELIVERABLE_SELECTABLE_EXTS.has((df.ext || '').toLowerCase());
+}
+
+interface DeliverableTreeNode {
+  name: string;
+  path: string; // この階層までの posix パス（ディレクトリ用）
+  dirs: Map<string, DeliverableTreeNode>;
+  files: DeliverableFile[];
+}
+
+function buildDeliverableTree(files: DeliverableFile[]): DeliverableTreeNode {
+  const root: DeliverableTreeNode = { name: '', path: '', dirs: new Map(), files: [] };
+  for (const f of files) {
+    const parts = f.relpath.split('/').filter(Boolean);
+    if (parts.length === 0) continue;
+    let node = root;
+    // 末尾以外はディレクトリ。
+    for (let i = 0; i < parts.length - 1; i++) {
+      const seg = parts[i];
+      let child = node.dirs.get(seg);
+      if (!child) {
+        child = { name: seg, path: node.path ? `${node.path}/${seg}` : seg, dirs: new Map(), files: [] };
+        node.dirs.set(seg, child);
+      }
+      node = child;
+    }
+    if (f.isDir || f.kind === 'folder') {
+      // 空ディレクトリのエントリ: ディレクトリノードとして登録。
+      const seg = parts[parts.length - 1];
+      if (!node.dirs.has(seg)) {
+        node.dirs.set(seg, { name: seg, path: f.relpath, dirs: new Map(), files: [] });
+      }
+    } else {
+      node.files.push(f);
+    }
+  }
+  return root;
+}
+
+function DeliverableTreeRows({
+  node,
+  depth,
+  collapsed,
+  toggle,
+  onPick,
+  disabled,
+}: {
+  node: DeliverableTreeNode;
+  depth: number;
+  collapsed: Set<string>;
+  toggle: (path: string) => void;
+  onPick: (df: DeliverableFile) => void;
+  disabled: boolean;
+}) {
+  const dirs = Array.from(node.dirs.values()).sort((a, b) => a.name.localeCompare(b.name));
+  const files = [...node.files].sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <>
+      {dirs.map((dir) => {
+        const isCollapsed = collapsed.has(dir.path);
+        return (
+          <div key={`d:${dir.path}`}>
+            <button
+              type="button"
+              onClick={() => toggle(dir.path)}
+              className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs text-text hover:bg-surface-2"
+              style={{ paddingLeft: depth * 14 + 6 }}
+            >
+              <ChevronRightIcon
+                width={12}
+                height={12}
+                className="shrink-0 text-text-faint"
+                style={{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform 0.15s' }}
+              />
+              <FolderIcon width={14} height={14} className="shrink-0 text-text-faint" />
+              <span className="truncate font-medium">{dir.name}</span>
+            </button>
+            {!isCollapsed && (
+              <DeliverableTreeRows
+                node={dir}
+                depth={depth + 1}
+                collapsed={collapsed}
+                toggle={toggle}
+                onPick={onPick}
+                disabled={disabled}
+              />
+            )}
+          </div>
+        );
+      })}
+      {files.map((f) => {
+        const selectable = deliverableSelectable(f);
+        return (
+          <button
+            key={`f:${f.relpath}`}
+            type="button"
+            disabled={!selectable || disabled}
+            onClick={() => onPick(f)}
+            title={selectable ? f.name : `${f.name}（選択できません）`}
+            className={
+              'flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors ' +
+              (selectable && !disabled
+                ? 'text-text hover:bg-surface-2'
+                : 'cursor-not-allowed text-text-faint opacity-50')
+            }
+            style={{ paddingLeft: depth * 14 + 6 + 16 }}
+          >
+            <span className="shrink-0 text-text-faint">
+              <KindIcon kind={(f.kind === 'folder' ? 'other' : f.kind) as NotebookSourceKind} ext={f.ext} />
+            </span>
+            <span className="min-w-0 flex-1 truncate">{f.name}</span>
+            <span className="shrink-0 text-[10px] text-text-faint">{humanReadableSize(f.sizeBytes)}</span>
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
+function DeliverablePickerModal({
+  onClose,
+  onPick,
+  picking,
+}: {
+  onClose: () => void;
+  onPick: (df: DeliverableFile) => void;
+  picking: boolean;
+}) {
+  const [files, setFiles] = useState<DeliverableFile[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/deliverables')
+      .then((r) => r.json().catch(() => null))
+      .then((data: DeliverablesResponse | null) => {
+        if (!alive) return;
+        if (data?.files) setFiles(data.files);
+        else setError(data?.error || '成果物の一覧を取得できませんでした。');
+      })
+      .catch(() => { if (alive) setError('ネットワークエラーで成果物を取得できませんでした。'); });
+    return () => { alive = false; };
+  }, []);
+
+  const toggle = useCallback((path: string) => {
+    setCollapsed((prev) => {
+      const n = new Set(prev);
+      if (n.has(path)) n.delete(path); else n.add(path);
+      return n;
+    });
+  }, []);
+
+  const tree = files ? buildDeliverableTree(files) : null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-3 backdrop-blur md:p-6"
+      role="dialog"
+      aria-modal
+      aria-label="Apollo から資料を選択"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+          <span className="text-sm font-semibold text-text">📁 Apollo から選択</span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
+            aria-label="閉じる"
+          >
+            <CloseIcon width={18} height={18} />
+          </button>
+        </div>
+        <p className="border-b border-border px-4 py-1.5 text-[11px] text-text-faint">
+          テキスト（.txt/.md/.csv）・音声（.mp3/.wav/.m4a/.ogg）・PDF・Word（.docx）を選択できます。
+        </p>
+        <div className="relative flex-1 overflow-y-auto p-2">
+          {picking && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface/70">
+              <span className="inline-flex items-center gap-2 text-xs text-text-muted"><Spinner />取り込み中…</span>
+            </div>
+          )}
+          {error ? (
+            <div role="alert" className="m-2 rounded-lg border border-stalled/40 bg-stalled-bg/60 px-3 py-2 text-xs" style={{ color: 'var(--mc-stalled)' }}>
+              {error}
+            </div>
+          ) : !tree ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-xs text-text-muted"><Spinner />読み込み中…</div>
+          ) : tree.dirs.size === 0 && tree.files.length === 0 ? (
+            <EmptyState>成果物がまだありません</EmptyState>
+          ) : (
+            <DeliverableTreeRows
+              node={tree}
+              depth={0}
+              collapsed={collapsed}
+              toggle={toggle}
+              onPick={onPick}
+              disabled={picking}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── 議事録ペイン ─────────────────────────────────────────
 
 export function MinutesPane({
@@ -1494,6 +1719,9 @@ export function MinutesPane({
   const [inputText, setInputText] = useState('');
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Apollo（Deliverables）から選ぶモーダル
+  const [showDeliverablePicker, setShowDeliverablePicker] = useState(false);
+  const [loadingFromDeliverable, setLoadingFromDeliverable] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [transcribeError, setTranscribeError] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
@@ -1675,6 +1903,46 @@ export function MinutesPane({
         .finally(() => setExtracting(false));
     },
     [minutesBase],
+  );
+
+  // Apollo（Deliverables）のファイルを入力として取り込む。
+  // 拡張子で分岐: テキスト系は内容を直接 inputText に、音声は文字起こし、PDF/Word/画像は抽出に回す。
+  const handleDeliverablePick = useCallback(
+    async (df: DeliverableFile) => {
+      if (df.isDir) return;
+      const ext = (df.ext || '').toLowerCase();
+      setLoadingFromDeliverable(true);
+      setTranscribeError(null);
+      setExtractError(null);
+      try {
+        const url = `/api/deliverables/file?path=${encodeURIComponent(df.relpath)}&inline=1`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`ファイルの取得に失敗しました（HTTP ${res.status}）。`);
+        const textLikeExts = ['.txt', '.md', '.csv'];
+        const audioExts = ['.mp3', '.wav', '.m4a', '.ogg'];
+        if (textLikeExts.includes(ext)) {
+          const content = await res.text();
+          setInputText(content);
+          setInputMode('text');
+          setShowDeliverablePicker(false);
+        } else {
+          const blob = await res.blob();
+          const file = new File([blob], df.name, { type: blob.type || undefined });
+          if (audioExts.includes(ext)) {
+            handleAudioFile(file);
+          } else {
+            // PDF / Word（.docx）など → サーバ側でテキスト抽出。
+            handleExtractFile(file);
+          }
+          setShowDeliverablePicker(false);
+        }
+      } catch (e) {
+        setExtractError(e instanceof Error ? e.message : 'ファイルの取得に失敗しました。');
+      } finally {
+        setLoadingFromDeliverable(false);
+      }
+    },
+    [handleAudioFile, handleExtractFile],
   );
 
   const runSingleGenerate = useCallback(
@@ -1953,6 +2221,13 @@ export function MinutesPane({
 
   return (
     <div className="flex h-full flex-col">
+      {showDeliverablePicker && (
+        <DeliverablePickerModal
+          onClose={() => setShowDeliverablePicker(false)}
+          onPick={(df) => void handleDeliverablePick(df)}
+          picking={loadingFromDeliverable}
+        />
+      )}
       <div className="border-b border-border px-3 py-2 flex items-center gap-2">
         {onBack && (
           <button
@@ -2003,6 +2278,13 @@ export function MinutesPane({
                   {mode === 'text' ? 'テキスト' : mode === 'audio' ? '音声' : 'ファイル'}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => setShowDeliverablePicker(true)}
+                className="rounded-full bg-surface-2 px-3 py-1 text-xs text-text-muted transition-colors hover:text-text"
+              >
+                📁 Apollo
+              </button>
             </div>
 
             {inputMode === 'audio' && (
