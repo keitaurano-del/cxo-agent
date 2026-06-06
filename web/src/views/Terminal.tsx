@@ -323,8 +323,7 @@ export default function Terminal() {
   const [accountDropdownOpen, setAccountDropdownOpen] = useState<number | null>(null);
   // アカウントドロップダウンの表示座標（portal 描画用）。
   const [accountDropdownAnchor, setAccountDropdownAnchor] = useState<{ top: number; left: number } | null>(null);
-  // アカウント切替中のターミナル番号（null=なし）。
-  const [accountSwitching, setAccountSwitching] = useState<number | null>(null);
+  const [, setAccountSwitching] = useState<number | null>(null);
 
   const [, setAgentInfoMap] = useState<Record<number, { name: string; emoji: string } | null>>({});
 
@@ -678,8 +677,6 @@ export default function Terminal() {
         {TERMINAL_TABS.map((t) => {
           const isActive = t.id === activeId;
           const st = backends[t.id]?.kind ?? 'checking';
-          const currentAccount = accountLabels[t.id] ?? t.account;
-          const isAccountSwitching = accountSwitching === t.id;
           return (
             <button
               key={t.id}
@@ -694,30 +691,7 @@ export default function Terminal() {
               }`}
             >
               <TerminalIcon width={13} height={13} className="pointer-events-none" />
-              <span className="flex flex-col items-start leading-tight">
-                <span
-                  role="button"
-                  tabIndex={-1}
-                  aria-label={`${t.label} のアカウントを変更`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (accountDropdownOpen === t.id) {
-                      setAccountDropdownOpen(null);
-                      setAccountDropdownAnchor(null);
-                      return;
-                    }
-                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                    setAccountDropdownAnchor({ top: rect.bottom + 4, left: rect.left });
-                    setAccountDropdownOpen(t.id);
-                  }}
-                  className={`text-[9px] font-semibold cursor-pointer underline-offset-2 hover:underline ${
-                    currentAccount === 'Claude2' ? 'text-amber-400/80' : 'text-sky-400/90'
-                  } ${isAccountSwitching ? 'opacity-50' : ''}`}
-                >
-                  {isAccountSwitching ? '…' : currentAccount}
-                </span>
-                <span>{t.label}</span>
-              </span>
+              <span>{t.label}</span>
               {/* 稼働状態ドット */}
               <span
                 aria-hidden
