@@ -1703,6 +1703,7 @@ export function MinutesPane({
         if (opts?.feedback) fd.append('feedback', opts.feedback);
         if (opts?.previousContent) fd.append('previousContent', opts.previousContent);
         for (const f of sourceFiles) fd.append('sourceFiles', f, f.name);
+        for (const fmt of selectedExportFormats) fd.append('exportFormats', fmt);
         res = await fetch(minutesBase + '/generate', {
           method: 'POST',
           headers: { Accept: 'text/event-stream' },
@@ -1721,6 +1722,7 @@ export function MinutesPane({
             customInstructions: mergedInstructions || undefined,
             feedback: opts?.feedback || undefined,
             previousContent: opts?.previousContent || undefined,
+            exportFormats: [...selectedExportFormats],
           }),
         });
       }

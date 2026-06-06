@@ -10,7 +10,7 @@
 //   POST /generate      議事録生成（Claude）→ Deliverables 保存
 //   POST /export        議事録を Word/Excel/PDF/Text でダウンロード
 
-import { mkdtempSync, readFileSync, existsSync, rmSync, readdirSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, rmSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Router, type Request, type Response } from 'express';
@@ -27,6 +27,7 @@ import { listPatterns, type MinutesPattern } from './lib/minutesPatterns.js';
 import { exportMinutes, type ExportFormat } from './lib/minutesExport.js';
 import { runClaude, runClaudeStream } from './lib/notebookClaude.js';
 import { saveMinutesToDeliverables } from './lib/minutesDeliverables.js';
+import { DELIVERABLES_DIR } from './config.js';
 
 // 音声文字起こし用 multer（memoryStorage）
 const uploadAudio = multer({
@@ -200,6 +201,7 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
     customInstructions,
     feedback,
     previousContent,
+    exportFormats: exportFormatsRaw,
   } = req.body as {
     inputText?: string;
     type?: string;
@@ -210,7 +212,16 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
     customInstructions?: string;
     feedback?: string;
     previousContent?: string;
+    exportFormats?: string | string[];
   };
+  // multipart では配列でなく繰り返しフィールドか JSON 文字列で来る場合がある
+  const exportFormats: ExportFormat[] = (
+    Array.isArray(exportFormatsRaw)
+      ? exportFormatsRaw
+      : typeof exportFormatsRaw === 'string'
+        ? exportFormatsRaw.startsWith('[') ? (JSON.parse(exportFormatsRaw) as string[]) : [exportFormatsRaw]
+        : []
+  ).filter((f): f is ExportFormat => ['docx', 'xlsx', 'txt', 'pdf'].includes(f));
 
   let resolvedType: string = type || 'summary';
   let resolvedFormat: string = format || 'markdown';
@@ -350,6 +361,19 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
           markdownContent: markdown,
           ...(mappedSources.length > 0 ? { sourceFiles: mappedSources } : {}),
         });
+
+        // 選択されたエクスポート形式もフォルダに保存する
+        if (saved && exportFormats.length > 0) {
+          const folderAbs = join(DELIVERABLES_DIR, saved.folderRelpath);
+          for (const fmt of exportFormats) {
+            try {
+              const { buffer, ext } = await exportMinutes(markdown, fmt, title);
+              writeFileSync(join(folderAbs, `議事録.${ext}`), buffer);
+            } catch {
+              // エクスポート失敗は警告のみ（MD保存は成功済み）
+            }
+          }
+        }
       } catch (e) {
         saveError = e instanceof Error ? e.message : String(e);
       }
