@@ -671,7 +671,7 @@ export default function Terminal() {
         if (state.kind === 'uploading') return;
         void sendStaged();
       };
-      win.addEventListener('keydown', onKeydown);
+      win.addEventListener('keydown', onKeydown, true); // capture: xterm.js が stopPropagation するため
       return onKeydown;
     };
 
@@ -696,7 +696,7 @@ export default function Terminal() {
     }
 
     return () => {
-      if (win && handler) win.removeEventListener('keydown', handler);
+      if (win && handler) win.removeEventListener('keydown', handler, true);
     };
   }, [staged.length, activeId, sendStaged, state.kind]);
 
