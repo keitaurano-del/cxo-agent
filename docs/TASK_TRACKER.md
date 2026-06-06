@@ -2019,7 +2019,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 
 | ID | タイトル | 優先度 | ステータス | 担当 |
 |----|---------|--------|-----------|------|
-| MC-150 | mission-control.service を再起動して成果物フォルダアップロードの新コードを反映する | P0 | BLOCKED（Keita承認待ち・デプロイ承認） | apollo-keeper |
+| MC-150 | mission-control.service を再起動して成果物フォルダアップロードの新コードを反映する | P0 | DONE（2026-06-06 restart 完了 healthz 200 確認） | apollo-keeper |
 
 ### MC-150 — Apollo server restart（フォルダアップロード新コード反映）
 
