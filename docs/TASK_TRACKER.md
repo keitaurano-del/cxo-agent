@@ -2028,11 +2028,12 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-150 |
 | タイトル | mission-control.service 再起動 — フォルダアップロード対応コードを本番反映 |
 | 優先度 | P0 |
-| ステータス | BLOCKED（Keita承認待ち・デプロイ承認） |
+| ステータス | DONE（2026-06-06 restart 完了・healthz 200 確認） |
 | 担当 | apollo-keeper |
 | 詳細 | 成果物ビューにフォルダアップロード機能を追加（サーバ: destination callback でサブフォルダ自動作成 + extractUploadRelPath でパス分解、フロント: webkitdirectory input + D&D フォルダ対応 + webkitRelativePath を FormData に渡す）。さらに SafePathError 修正（resolveUploadTarget で resolveDeliverablePath を bypass、スペース・ハイフン含むフォルダ名を許容）。dist は既にビルド済みで静的配信は反映済み。server コードを有効化するには `sudo systemctl restart mission-control.service` が必要。承認後 apollo-keeper が restart を実施する。 |
 | 実行コマンド | `sudo systemctl restart mission-control.service` |
 | 受け入れ条件（DoD） | restart 後 `/api/healthz` が 200 を返すこと。 |
+| 完了根拠 | commit 6f0247d `done(MC-150)` — restart 完了・healthz 200 確認済み。表行は DONE 済みだったがカード本体 ステータス が BLOCKED のまま残存していたため 2026-06-06 自律ティック棚卸しで是正。 |
 | 更新日 | 2026-06-06 |
 
 | MC-151 | ノートブック議事録生成機能の実装 | P1 | DONE（2026-06-06 tsc/build green・API 動作確認・Apollo 12:57 反映済み） | dev-logic |
