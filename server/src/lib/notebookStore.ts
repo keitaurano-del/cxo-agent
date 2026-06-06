@@ -20,7 +20,7 @@ import {
   rmSync,
   unlinkSync,
 } from 'node:fs';
-import { join, extname, basename } from 'node:path';
+import { join, extname, basename, relative } from 'node:path';
 import { NOTEBOOKS_DIR, NOTEBOOK_CHAT_MAX_MESSAGES } from '../config.js';
 import {
   resolveNotebookDir,
@@ -227,42 +227,55 @@ export function renameNotebook(id: string, newName: string): void {
   writeMeta(dir, meta);
 }
 
-/** ディレクトリ内のファイル一覧を NotebookFileRef[] にする。 */
+/** ディレクトリ内のファイル一覧を NotebookFileRef[] にする（artifacts は再帰）。 */
 function listDir(dir: string, sub: 'sources' | 'artifacts'): NotebookFileRef[] {
   const abs = join(dir, sub);
   if (!existsSync(abs)) return [];
   const extractedDir = join(dir, 'extracted');
   const out: NotebookFileRef[] = [];
-  let entries: import('node:fs').Dirent[];
-  try {
-    entries = readdirSync(abs, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  for (const ent of entries) {
-    if (!ent.isFile()) continue;
-    if (ent.name.startsWith('.')) continue;
-    let st;
+
+  function walk(curDir: string): void {
+    let entries: import('node:fs').Dirent[];
     try {
-      st = statSync(join(abs, ent.name));
+      entries = readdirSync(curDir, { withFileTypes: true });
     } catch {
-      continue;
+      return;
     }
-    const ext = extname(ent.name).toLowerCase();
-    const ref: NotebookFileRef = {
-      name: ent.name,
-      relpath: `${sub}/${ent.name}`,
-      sizeBytes: st.size,
-      mtime: st.mtime.toISOString(),
-      ext,
-      kind: kindForExt(ext),
-    };
-    if (sub === 'sources') {
-      ref.extracted = existsSync(join(extractedDir, `${ent.name}.txt`));
+    for (const ent of entries) {
+      if (ent.name.startsWith('.')) continue;
+      const entPath = join(curDir, ent.name);
+      if (ent.isDirectory()) {
+        // artifacts のみ再帰（sources は非再帰）
+        if (sub === 'artifacts') walk(entPath);
+        continue;
+      }
+      if (!ent.isFile()) continue;
+      let st;
+      try {
+        st = statSync(entPath);
+      } catch {
+        continue;
+      }
+      const ext = extname(ent.name).toLowerCase();
+      // relpath を posix スタイルで組み立て
+      const relFromSub = relative(abs, entPath).replace(/\\/g, '/');
+      const ref: NotebookFileRef = {
+        name: ent.name,
+        relpath: `${sub}/${relFromSub}`,
+        sizeBytes: st.size,
+        mtime: st.mtime.toISOString(),
+        ext,
+        kind: kindForExt(ext),
+      };
+      if (sub === 'sources') {
+        ref.extracted = existsSync(join(extractedDir, `${ent.name}.txt`));
+      }
+      out.push(ref);
     }
-    out.push(ref);
   }
-  out.sort((a, b) => (a.name < b.name ? -1 : 1));
+
+  walk(abs);
+  out.sort((a, b) => (a.relpath < b.relpath ? -1 : 1));
   return out;
 }
 
@@ -431,28 +444,111 @@ export function deleteSource(id: string, name: string): boolean {
   return removed;
 }
 
-/** artifacts/ の現在のファイル名集合（生成前後の差分検出に使う）。 */
+/** artifacts/ の現在のファイル名集合（生成前後の差分検出に使う）。後方互換のため残す。 */
 export function artifactNames(id: string): Set<string> {
   const dir = resolveNotebookDir(id);
   return new Set(listDir(dir, 'artifacts').map((f) => f.name));
 }
 
-/** artifacts/ の合計バイト数（サイズ上限チェック用）。 */
+/** artifacts/ の現在の relpath 集合（サブフォルダ対応の差分検出用）。 */
+export function artifactRelpaths(id: string): Set<string> {
+  const dir = resolveNotebookDir(id);
+  return new Set(listDir(dir, 'artifacts').map((f) => f.relpath));
+}
+
+/** artifacts/ の合計バイト数（サイズ上限チェック用）。再帰版。 */
 export function totalArtifactBytes(id: string): number {
   const dir = resolveNotebookDir(id);
   const abs = join(dir, 'artifacts');
   if (!existsSync(abs)) return 0;
-  try {
-    return readdirSync(abs, { withFileTypes: true })
-      .filter((e) => e.isFile() && !e.name.startsWith('.'))
-      .reduce((sum, e) => {
-        try {
-          return sum + statSync(join(abs, e.name)).size;
-        } catch {
-          return sum;
-        }
-      }, 0);
-  } catch {
-    return 0;
+  let total = 0;
+  function walk(d: string): void {
+    let entries: import('node:fs').Dirent[];
+    try { entries = readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.name.startsWith('.')) continue;
+      const p = join(d, e.name);
+      if (e.isDirectory()) { walk(p); continue; }
+      if (!e.isFile()) continue;
+      try { total += statSync(p).size; } catch { /* skip */ }
+    }
   }
+  walk(abs);
+  return total;
+}
+
+// ─── フォルダツリー型 ─────────────────────────────────────
+
+export interface NotebookFolderEntry {
+  name: string;
+  files: NotebookFileRef[];
+}
+export interface NotebookFolderTree {
+  folders: NotebookFolderEntry[];
+  rootFiles: NotebookFileRef[];
+}
+
+/**
+ * artifacts/ のフォルダツリーを返す。
+ * { folders: [{name, files}], rootFiles }
+ */
+export function listArtifactFolderTree(id: string): NotebookFolderTree {
+  const dir = resolveNotebookDir(id);
+  const abs = join(dir, 'artifacts');
+  if (!existsSync(abs)) return { folders: [], rootFiles: [] };
+
+  const rootFiles: NotebookFileRef[] = [];
+  const folderMap = new Map<string, NotebookFileRef[]>();
+
+  // artifacts/ 直下のエントリを確認してフォルダ一覧を作る。
+  let topEntries: import('node:fs').Dirent[];
+  try {
+    topEntries = readdirSync(abs, { withFileTypes: true });
+  } catch {
+    return { folders: [], rootFiles: [] };
+  }
+
+  // サブフォルダを先に登録（ファイルが入っていなくても表示するため）。
+  for (const ent of topEntries) {
+    if (ent.isDirectory() && !ent.name.startsWith('.')) {
+      folderMap.set(ent.name, []);
+    }
+  }
+
+  // 全 artifacts を取得してルートファイルとサブフォルダに振り分け。
+  const allFiles = listDir(dir, 'artifacts');
+  for (const f of allFiles) {
+    // relpath = 'artifacts/subdir/file.md' または 'artifacts/file.md'
+    const parts = f.relpath.replace(/^artifacts\//, '').split('/');
+    if (parts.length === 1) {
+      rootFiles.push(f);
+    } else {
+      const folderName = parts[0];
+      if (!folderMap.has(folderName)) folderMap.set(folderName, []);
+      folderMap.get(folderName)!.push(f);
+    }
+  }
+
+  const folders: NotebookFolderEntry[] = Array.from(folderMap.entries())
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([name, files]) => ({ name, files }));
+
+  return { folders, rootFiles };
+}
+
+/** artifacts/ にサブフォルダを作成する。 */
+export function createArtifactFolder(id: string, folderName: string): void {
+  const dir = resolveNotebookDir(id, true);
+  mkdirSync(join(dir, 'artifacts', folderName), { recursive: true });
+}
+
+/** artifacts/ 内の既存ファイルのコンテンツを上書き保存する。 */
+export function updateArtifactContent(id: string, relpath: string, content: string): void {
+  const cleaned = (relpath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!cleaned.startsWith('artifacts/')) throw new Error('relpath must be under artifacts/');
+  const abs = resolveNotebookSubPath(id, cleaned);
+  if (!existsSync(abs)) throw new Error('artifact not found: ' + relpath);
+  const st = statSync(abs);
+  if (!st.isFile()) throw new Error('not a file: ' + relpath);
+  writeFileSync(abs, content, 'utf8');
 }

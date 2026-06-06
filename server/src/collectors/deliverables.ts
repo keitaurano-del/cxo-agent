@@ -23,6 +23,7 @@ export type DeliverableKind =
   | 'image' // png, jpg, gif, webp, svg
   | 'markdown' // md
   | 'text' // txt, json, log 等
+  | 'folder' // 空ディレクトリ
   | 'other';
 
 export interface DeliverableFile {
@@ -32,6 +33,7 @@ export interface DeliverableFile {
   mtime: string; // ISO
   ext: string; // 拡張子（'.xlsx' 等、小文字）
   kind: DeliverableKind;
+  isDir?: true; // 空ディレクトリのエントリ
 }
 
 // ─── 分類・MIME ────────────────────────────────────────
@@ -117,6 +119,35 @@ export function listDeliverables(): DeliverableFile[] {
       const abs = join(absDir, ent.name);
       if (ent.isDirectory()) {
         if (EXCLUDED_DIRS.has(ent.name)) continue;
+        // 空ディレクトリ（実ファイルを 1 件も含まない）を folder エントリとして出す。
+        // 子に実ファイルがあればその子が個別に push されるので、ここでは空のときだけ追加する。
+        let childCount = 0;
+        try {
+          childCount = readdirSync(abs, { withFileTypes: true }).filter(
+            (c) =>
+              !(c.isDirectory() && EXCLUDED_DIRS.has(c.name)) &&
+              !(c.isFile() && (c.name.startsWith('.') || EXCLUDED_NAMES.has(c.name.toLowerCase()))),
+          ).length;
+        } catch {
+          childCount = 0;
+        }
+        if (childCount === 0) {
+          let st;
+          try {
+            st = statSync(abs);
+          } catch {
+            st = null;
+          }
+          out.push({
+            name: ent.name,
+            relpath: toDeliverableRelative(abs),
+            sizeBytes: 0,
+            mtime: (st?.mtime ?? new Date()).toISOString(),
+            ext: '',
+            kind: 'folder' as DeliverableKind,
+            isDir: true,
+          });
+        }
         walk(abs);
       } else if (ent.isFile()) {
         if (ent.name.startsWith('.')) continue; // 隠しファイルは出さない

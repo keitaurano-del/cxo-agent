@@ -291,6 +291,15 @@ export function LoopIcon(props: IconProps) {
   );
 }
 
+// ティック＋消費量を統合した「活動」タブのアイコン（稲妻/アクティビティ）。
+export function ActivityIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+    </svg>
+  );
+}
+
 export function PlusIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

@@ -39,16 +39,20 @@ import {
   touchNotebook,
   renameNotebook,
   artifactNames,
+  artifactRelpaths,
   resolveNotebookFile,
   readChatHistory,
   totalArtifactBytes,
+  listArtifactFolderTree,
+  createArtifactFolder,
+  updateArtifactContent,
   type ChatMessage,
 } from './lib/notebookStore.js';
 import { extractSourceText } from './lib/notebookExtract.js';
 import { runClaude, runClaudeStream } from './lib/notebookClaude.js';
 import { convertOfficeToPdf, isConvertibleToPdf } from './lib/officeToPdf.js';
 import { buildIndex, searchChunks, deleteIndex, type Chunk } from './lib/notebookIndex.js';
-import { transcribeAudio } from './lib/transcribe.js';
+import { transcribeAudio, extractFileText } from './lib/transcribe.js';
 import {
   MINUTES_TYPES,
   MINUTES_FORMATS,
@@ -58,6 +62,7 @@ import {
   type MinutesFormat,
 } from './lib/minutesPresets.js';
 import { listPatterns, createPattern, deletePattern, type MinutesPattern } from './lib/minutesPatterns.js';
+import { exportMinutes, type ExportFormat } from './lib/minutesExport.js';
 
 /** :id パラメータを string に正規化する（express 5 は string | string[] 型）。 */
 function idParam(req: Request): string {
@@ -120,6 +125,9 @@ const uploadSources = multer({
 
 // 音声文字起こし用 multer（memoryStorage: base64 変換後に Gemini API へ渡す）
 const uploadAudio = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } }).single('audio');
+
+// ファイルテキスト抽出用 multer（PDF / テキスト / 画像）
+const uploadFileExtract = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }).single('file');
 
 function runAudioUpload(req: Request, res: Response): Promise<Express.Multer.File | null> {
   return new Promise((resolve) => {
@@ -796,6 +804,84 @@ async function handleTranscribe(req: Request, res: Response): Promise<void> {
   }
 }
 
+// POST /:id/minutes/extract-file — PDF / テキスト / 画像からテキスト抽出
+async function handleExtractFile(req: Request, res: Response): Promise<void> {
+  const id = idParam(req);
+  try {
+    resolveNotebookDir(id, true);
+  } catch (e) {
+    if (e instanceof SafePathError) {
+      res.status(/not found/i.test(e.message) ? 404 : 400).json({ error: e.message });
+      return;
+    }
+    throw e;
+  }
+  await new Promise<void>((resolve) => {
+    uploadFileExtract(req, res, (err: unknown) => {
+      if (err) {
+        const msg =
+          err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE'
+            ? 'ファイルが大きすぎます（上限 50MB）。'
+            : err instanceof Error
+              ? err.message
+              : String(err);
+        res.status(413).json({ error: msg });
+      }
+      resolve();
+    });
+  });
+  if (res.headersSent) return;
+  const file = (req as Request & { file?: Express.Multer.File }).file;
+  if (!file) {
+    res.status(400).json({ error: 'ファイルが見つかりません。' });
+    return;
+  }
+  try {
+    const text = await extractFileText(file.buffer, file.mimetype || 'application/octet-stream');
+    res.json({ text });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[extract-file error]', msg);
+    res.status(500).json({ error: msg });
+  }
+}
+
+// POST /:id/minutes/export — 議事録を Word / Excel / PDF / Text でダウンロード
+async function handleMinutesExport(req: Request, res: Response): Promise<void> {
+  const id = idParam(req);
+  const { content, format, filename } = req.body as {
+    content?: string;
+    format?: string;
+    filename?: string;
+  };
+
+  if (!content || typeof content !== 'string') {
+    res.status(400).json({ error: 'content が必要です。' });
+    return;
+  }
+  const validFormats: ExportFormat[] = ['docx', 'xlsx', 'txt', 'pdf'];
+  if (!format || !validFormats.includes(format as ExportFormat)) {
+    res.status(400).json({ error: `format は ${validFormats.join(' / ')} のいずれかです。` });
+    return;
+  }
+
+  try {
+    const title = (filename ?? '議事録').replace(/\.[^.]+$/, '');
+    const { buffer, mimeType, ext } = await exportMinutes(content, format as ExportFormat, title);
+    const safeFilename = encodeURIComponent(`${title}.${ext}`);
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${safeFilename}`);
+    res.setHeader('Content-Length', String(buffer.length));
+    res.send(buffer);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[minutes-export error]', msg);
+    res.status(500).json({ error: msg });
+  }
+  // resolveNotebookDir チェックは content が直接渡されるため省略
+  void id;
+}
+
 // POST /:id/minutes/generate — 議事録生成（Claude 使用、既存の generate と同パターン）
 async function handleMinutesGenerate(req: Request, res: Response): Promise<void> {
   const id = idParam(req);
@@ -877,15 +963,23 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
     return;
   }
 
+  // artifacts/議事録/ サブフォルダを事前に作成
+  try {
+    mkdirSync(join(dir, 'artifacts', '議事録'), { recursive: true });
+  } catch {
+    /* すでに存在する場合は noop */
+  }
+
   const prompt = buildMinutesPrompt({
     inputText: inputText.trim(),
     type: resolvedType as MinutesType,
     format: resolvedFormat as MinutesFormat,
     templateBody: resolvedTemplateBody,
     customInstructions: resolvedInstructions,
+    outputFolder: './artifacts/議事録',
   });
 
-  const before = artifactNames(id);
+  const before = artifactRelpaths(id);
   const wantsStream = (req.headers.accept ?? '').includes('text/event-stream');
 
   if (wantsStream) {
@@ -904,7 +998,7 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
     sseWrite(res, { type: 'progress', pct: 100 });
     const detail = getNotebookDetail(id);
     const allArtifacts = detail?.artifacts ?? [];
-    const created = allArtifacts.filter((a) => !before.has(a.name));
+    const created = allArtifacts.filter((a) => !before.has(a.relpath));
     touchNotebook(id);
     sseWrite(res, {
       type: 'done',
@@ -921,7 +1015,7 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
   const result = await runClaude(dir, prompt);
   const detail = getNotebookDetail(id);
   const allArtifacts = detail?.artifacts ?? [];
-  const created = allArtifacts.filter((a) => !before.has(a.name));
+  const created = allArtifacts.filter((a) => !before.has(a.relpath));
   touchNotebook(id);
   res.status(200).json({
     ok: result.ok && created.length > 0,
@@ -1000,6 +1094,62 @@ async function handleFile(req: Request, res: Response): Promise<void> {
   res.sendFile(info.absPath);
 }
 
+// ─── フォルダ操作 ─────────────────────────────────────────
+
+// フォルダ名バリデーション: パス区切り / \ . .. なし、50文字以内
+const FOLDER_NAME_RE = /^[^/\\]+$/;
+function validateFolderName(name: string): string | null {
+  if (!name || !name.trim()) return 'フォルダ名が空です。';
+  const trimmed = name.trim();
+  if (trimmed === '.' || trimmed === '..') return 'フォルダ名が不正です。';
+  if (!FOLDER_NAME_RE.test(trimmed)) return 'フォルダ名に "/" や "\\" を含めることはできません。';
+  if (trimmed.length > 50) return 'フォルダ名は 50 文字以内にしてください。';
+  return null;
+}
+
+// GET /:id/folders — フォルダツリー取得
+function handleGetFolders(req: Request, res: Response): void {
+  safe(res, () => {
+    const id = idParam(req);
+    const tree = listArtifactFolderTree(id);
+    return tree;
+  });
+}
+
+// POST /:id/folders — フォルダ作成
+function handleCreateFolder(req: Request, res: Response): void {
+  const id = idParam(req);
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  const err = validateFolderName(name);
+  if (err) {
+    res.status(400).json({ error: err });
+    return;
+  }
+  safe(res, () => {
+    createArtifactFolder(id, name);
+    return { ok: true, name };
+  });
+}
+
+// PUT /:id/artifacts — 成果物コンテンツ更新
+function handleUpdateArtifact(req: Request, res: Response): void {
+  const id = idParam(req);
+  const { relpath, content } = req.body as { relpath?: string; content?: string };
+  if (!relpath || typeof relpath !== 'string') {
+    res.status(400).json({ error: 'relpath が必要です。' });
+    return;
+  }
+  if (content === undefined || content === null) {
+    res.status(400).json({ error: 'content が必要です。' });
+    return;
+  }
+  safe(res, () => {
+    updateArtifactContent(id, relpath, content as string);
+    touchNotebook(id);
+    return { ok: true };
+  });
+}
+
 // ─── Router 組み立て ─────────────────────────────────────
 
 export function notebookRouter(): Router {
@@ -1015,12 +1165,17 @@ export function notebookRouter(): Router {
   router.patch('/:id', (req, res) => void handleRename(req, res));
   router.delete('/:id', handleDelete);
   router.get('/:id/file', (req, res) => void handleFile(req, res));
+  router.get('/:id/folders', handleGetFolders);
+  router.post('/:id/folders', handleCreateFolder);
+  router.put('/:id/artifacts', handleUpdateArtifact);
   router.post('/:id/sources', (req, res) => void handleAddSources(req, res));
   router.delete('/:id/sources', handleDeleteSource);
   router.post('/:id/ask', (req, res) => void handleAsk(req, res));
   router.post('/:id/generate', (req, res) => void handleGenerate(req, res));
   router.post('/:id/reindex', (req, res) => void handleReindex(req, res));
   router.post('/:id/minutes/transcribe', (req, res) => void handleTranscribe(req, res));
+  router.post('/:id/minutes/extract-file', (req, res) => void handleExtractFile(req, res));
+  router.post('/:id/minutes/export', (req, res) => void handleMinutesExport(req, res));
   router.post('/:id/minutes/generate', (req, res) => void handleMinutesGenerate(req, res));
   return router;
 }

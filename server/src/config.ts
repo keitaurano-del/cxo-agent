@@ -57,8 +57,8 @@ export const DELIVERABLE_UPLOAD_MAX_BYTES = envNum(
   5 * 1024 * 1024 * 1024,
 );
 
-/** 成果物アップロード（MC-118）1 リクエストあたりの最大ファイル数。 */
-export const DELIVERABLE_UPLOAD_MAX_FILES = envNum('DELIVERABLE_UPLOAD_MAX_FILES', 20);
+/** 成果物アップロード（MC-118）1 リクエストあたりの最大ファイル数。フォルダ一括アップロードを想定して大きめに設定。 */
+export const DELIVERABLE_UPLOAD_MAX_FILES = envNum('DELIVERABLE_UPLOAD_MAX_FILES', 999);
 
 /**
  * 成果物プレビュー用の変換キャッシュ（Office→PDF）の置き場。

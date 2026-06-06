@@ -26,6 +26,7 @@ import DashboardLayout from './components/DashboardLayout';
 import { isDashboardPath } from './lib/nav';
 import Overview from './views/Overview';
 import Agents from './views/Agents';
+import Activity from './views/Activity';
 import Feed from './views/Feed';
 import Tasks from './views/Tasks';
 import Narrative from './views/Narrative';
@@ -33,14 +34,14 @@ import News from './views/News';
 import Vault from './views/Vault';
 import Deliverables from './views/Deliverables';
 import Notebooks from './views/Notebooks';
-import Usage from './views/Usage';
 import PlanUsage from './views/PlanUsage';
-import Ticks from './views/Ticks';
 import Approvals from './views/Approvals';
 import Terminal from './views/Terminal';
 import Chat from './views/Chat';
 import BottomNav from './components/BottomNav';
 import AddTaskFab from './components/AddTaskFab';
+import { UploadProvider } from './lib/UploadContext';
+import { UploadToast } from './components/UploadToast';
 
 // ---- テーマ管理 ----
 type ThemeMode = 'auto' | 'dark' | 'light';
@@ -133,7 +134,7 @@ const NAV: NavItem[] = [
   { to: '/tasks', label: 'タスクボード', shortLabel: 'ボード', icon: <BoardIcon /> },
   { to: '/approvals', label: '承認フロー', shortLabel: '承認', icon: <ApprovalIcon /> },
   { to: '/vault', label: 'Vault', shortLabel: 'Vault', icon: <VaultIcon /> },
-  { to: '/deliverables', label: '成果物', shortLabel: '成果物', icon: <DocumentsIcon /> },
+  { to: '/deliverables', label: 'フォルダ', shortLabel: 'フォルダ', icon: <DocumentsIcon /> },
   { to: '/notebooks', label: 'ノートブック', shortLabel: 'ノート', icon: <NotebookIcon /> },
   { to: '/chat', label: 'チャット', shortLabel: 'チャット', icon: <ChatIcon /> },
   // ターミナル: iframe ホスト用 React ルートは /terminal-view。
@@ -427,44 +428,51 @@ export default function App() {
 
   return (
     <LiveContext.Provider value={{ ticks }}>
-      <div className="flex h-dvh overflow-hidden bg-bg text-text">
-        <Sidebar
-          connected={connected}
-          badges={badges}
-          open={sidebarOpen}
-          onToggle={toggleSidebar}
-          themeMode={themeMode}
-          isDark={isDark}
-          onThemeToggle={toggleTheme}
-        />
-        <main className="flex-1 overflow-hidden">
-          <Routes>
-            {/* ダッシュボード（/）配下に 5 タブを入れ子。各子ビューの URL は従来どおり。 */}
-            <Route element={<DashboardLayout />}>
-              <Route path="/" element={<Overview />} />
-              <Route path="/agents" element={<Agents />} />
-              <Route path="/agents/:agentId" element={<Agents />} />
-              <Route path="/feed" element={<Feed />} />
-              <Route path="/today" element={<Narrative />} />
-              <Route path="/news" element={<News />} />
-              <Route path="/ticks" element={<Ticks />} />
-              <Route path="/usage" element={<Usage />} />
-              <Route path="/plan-usage" element={<PlanUsage />} />
-            </Route>
-            <Route path="/tasks" element={<Tasks />} />
-            <Route path="/approvals" element={<Approvals />} />
-            <Route path="/vault" element={<Vault />} />
-            <Route path="/deliverables" element={<Deliverables />} />
-            <Route path="/notebooks" element={<Notebooks />} />
-            <Route path="/chat" element={<Chat />} />
-            <Route path="/terminal-view" element={<div className="flex h-full flex-col overflow-hidden"><Terminal /></div>} />
-            <Route path="/terminal-standalone" element={<Terminal />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </main>
-        <BottomNav items={NAV} badges={badges} />
-        {pathname === '/tasks' && <AddTaskFab />}
-      </div>
+      <UploadProvider>
+        <div className="flex h-dvh overflow-hidden bg-bg text-text">
+          <Sidebar
+            connected={connected}
+            badges={badges}
+            open={sidebarOpen}
+            onToggle={toggleSidebar}
+            themeMode={themeMode}
+            isDark={isDark}
+            onThemeToggle={toggleTheme}
+          />
+          <main className="flex-1 overflow-hidden">
+            <Routes>
+              {/* ダッシュボード（/）配下に各タブを入れ子。各子ビューの URL は従来どおり。 */}
+              {/* エージェントタブは / に統合。ティック+消費量は /activity に統合。 */}
+              <Route element={<DashboardLayout />}>
+                <Route path="/" element={<Overview />} />
+                <Route path="/feed" element={<Feed />} />
+                <Route path="/today" element={<Narrative />} />
+                <Route path="/news" element={<News />} />
+                <Route path="/activity" element={<Activity />} />
+                {/* 後方互換リダイレクト: 旧ティック/消費量 URL */}
+                <Route path="/ticks" element={<Navigate to="/activity" replace />} />
+                <Route path="/usage" element={<Navigate to="/activity" replace />} />
+                {/* 旧 Agents ビュー: 参照は残すが / にリダイレクト */}
+                <Route path="/agents" element={<Navigate to="/" replace />} />
+                <Route path="/agents/:agentId" element={<Agents />} />
+                <Route path="/plan-usage" element={<PlanUsage />} />
+              </Route>
+              <Route path="/tasks" element={<Tasks />} />
+              <Route path="/approvals" element={<Approvals />} />
+              <Route path="/vault" element={<Vault />} />
+              <Route path="/deliverables" element={<Deliverables />} />
+              <Route path="/notebooks" element={<Notebooks />} />
+              <Route path="/chat" element={<Chat />} />
+              <Route path="/terminal-view" element={<div className="flex h-full flex-col overflow-hidden"><Terminal /></div>} />
+              <Route path="/terminal-standalone" element={<Terminal />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </main>
+          <BottomNav items={NAV} badges={badges} />
+          {pathname === '/tasks' && <AddTaskFab />}
+          <UploadToast />
+        </div>
+      </UploadProvider>
     </LiveContext.Provider>
   );
 }

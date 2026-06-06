@@ -1,18 +1,23 @@
-// terminalUpload — ターミナル画像添付（MC-95）。
+// terminalUpload — ターミナルファイル添付（MC-95 / 拡張）。
 //
-// Apollo のターミナルビューから画像をアップロードし、tmux main（林 CLI 常駐）の
+// Apollo のターミナルビューからファイルをアップロードし、tmux main（林 CLI 常駐）の
 // 入力欄へ「保存先の絶対パス」を send-keys でリテラル注入する。林はそのパスを
-// Read で画像として読める。Keita が続けてメッセージを添えて Enter する想定なので、
+// Read で読める。Keita が続けてメッセージを添えて Enter する想定なので、
 // 自動 Enter は送らない（C-m を付けない）。
 //
 // 流儀は inbox.ts の画像添付に倣う:
 //  - multipart（images フィールド）でメモリ受け → サニタイズ名で保存
-//  - 画像 MIME（png/jpeg/webp/gif）と拡張子の二重検証
-//  - 1 枚 10MB・最大 5 枚（config の TERMINAL_UPLOAD_* で上限）
+//  - MIME（画像 + テキスト系）と拡張子の二重検証
+//  - 1 ファイル 10MB・最大 5 個（config の TERMINAL_UPLOAD_* で上限）
+//
+// 大量ファイルの自動分散（拡張）:
+//  - アップロードされたファイルが 5 個を超える場合、複数ターミナルにラウンドロビン分散する。
+//  - ターミナル1 → ターミナル2（旧箱）→ ターミナル3 の順、各グループ最大 5 ファイル。
+//  - レスポンスに distribution フィールドを含める。
 //
 // ストレージ: data/terminal-uploads/<timestamp>-<rand>-<safe-name>
 //  inbox と違い <id>/ ディレクトリは切らずフラットに置く（履歴監査というより
-//  「林に渡す一時画像」なので、衝突しないファイル名で 1 ファイル 1 パスにする）。
+//  「林に渡す一時ファイル」なので、衝突しないファイル名で 1 ファイル 1 パスにする）。
 //
 // セキュリティ:
 //  - tmux send-keys には execFile（シェル経由でなく argv 直渡し）を使い、
@@ -39,18 +44,51 @@ import {
 } from './config.js';
 import { sanitizeFilename } from './lib/inboxPath.js';
 
-// ─── 許可する画像 MIME と拡張子 ─────────────────────────────
-// 林が Read で画像として読める形式に限定する（png/jpeg/webp/gif）。
-const ALLOWED_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
-// MIME → 正規拡張子。元ファイル名の拡張子が欠落/不一致のとき補正に使う。
+// ─── 許可する MIME と拡張子 ──────────────────────────────────
+// 画像（png/jpeg/webp/gif）に加え、テキスト系ファイルも受け付ける。
+const ALLOWED_MIME = new Set([
+  // 画像
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  // テキスト系（text/* ワイルドカードは fileFilter 内で prefix 判定）
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'text/x-typescript',
+  'text/x-python',
+  'text/javascript',
+  'text/x-javascript',
+  // application 系
+  'application/json',
+  'application/javascript',
+  'application/x-yaml',
+  'application/yaml',
+]);
+
+/**
+ * MIME が許可されているか判定する。
+ * text/* プレフィックスはすべて許容する（text/x-* 等の未知サブタイプ込み）。
+ */
+function isAllowedMime(mime: string): boolean {
+  const m = mime.toLowerCase().split(';')[0].trim();
+  if (m.startsWith('text/')) return true;
+  return ALLOWED_MIME.has(m);
+}
+
+// MIME → 正規拡張子。画像のみ。元ファイル名の拡張子が欠落/不一致のとき画像は補正する。
 const MIME_TO_EXT: Record<string, string> = {
   'image/png': '.png',
   'image/jpeg': '.jpg',
   'image/webp': '.webp',
   'image/gif': '.gif',
 };
-// 拡張子の許可リスト（jpeg/jpg 両方許容）。
-const ALLOWED_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+// 画像拡張子の許可リスト（jpeg/jpg 両方許容）。画像以外は拡張子補正対象外。
+const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+
+/** 分散送信のグループサイズ上限。 */
+const DISTRIBUTE_GROUP_SIZE = 5;
 
 // ─── multer（メモリ保存）──────────────────────────────────
 // 保存名は id 確定後に組むため、いったんメモリに溜める。
@@ -62,8 +100,8 @@ const upload = multer({
     files: TERMINAL_UPLOAD_MAX_FILES,
   },
   fileFilter(_req, file, cb) {
-    if (!ALLOWED_MIME.has(file.mimetype.toLowerCase())) {
-      cb(new Error('only png/jpeg/webp/gif images are allowed'));
+    if (!isAllowedMime(file.mimetype)) {
+      cb(new Error('unsupported file type: only images (png/jpeg/webp/gif) and text files (txt/md/ts/js/py/json/yaml/csv) are allowed'));
       return;
     }
     cb(null, true);
@@ -97,13 +135,23 @@ function runUpload(req: Request, res: Response): Promise<boolean> {
 function buildFilename(now: Date, originalName: string, mimetype: string): string {
   const iso = now.toISOString().replace(/[:.]/g, '-');
   const rand = randomBytes(4).toString('hex');
-  const safe = sanitizeFilename(originalName || 'image');
+  const m = mimetype.toLowerCase().split(';')[0].trim();
+  const isImage = m.startsWith('image/');
+  const safe = sanitizeFilename(originalName || (isImage ? 'image' : 'file'));
   const ext = extname(safe).toLowerCase();
-  const wantExt = MIME_TO_EXT[mimetype.toLowerCase()] ?? '.png';
-  // 元名の拡張子が許可リストに無い（or 無い）場合は MIME 由来に差し替える。
-  if (!ALLOWED_EXT.has(ext)) {
-    const stem = ext ? safe.slice(0, safe.length - ext.length) : safe;
-    return `${iso}-${rand}-${stem}${wantExt}`;
+  if (isImage) {
+    // 画像: 拡張子が許可リスト外なら MIME 由来に補正する。
+    const wantExt = MIME_TO_EXT[m] ?? '.png';
+    if (!IMAGE_EXT.has(ext)) {
+      const stem = ext ? safe.slice(0, safe.length - ext.length) : safe;
+      return `${iso}-${rand}-${stem}${wantExt}`;
+    }
+  } else {
+    // テキスト系: 拡張子が許可リスト外でも補正しない（元名を尊重）。
+    // ただし拡張子が全く無い場合は .txt を補う。
+    if (!ext) {
+      return `${iso}-${rand}-${safe}.txt`;
+    }
   }
   return `${iso}-${rand}-${safe}`;
 }
@@ -121,36 +169,38 @@ function shquote(s: string): string {
 }
 
 /**
- * 対象ターミナルの tmux 入力欄へ、パス文字列をリテラル送出する（自動 Enter なし）。
- * - local(1/3): execFile('tmux', send-keys -t <session> -l <literal>)。
- * - remote(2): ssh 経由で旧箱の tmux apollo2 へ send-keys。tmux コマンドを shquote で1引数に組む。
+ * 対象ターミナルの tmux 入力欄へ、パス文字列をリテラル送出する。
+ * sendEnter=true のとき: リテラル注入後に別コマンドで Enter キーも送る（C-m 相当）。
+ * - local(1/3): execFile('tmux', send-keys -t <session> -l <literal>) → 必要なら Enter。
+ * - remote(2): ssh 経由で旧箱の tmux apollo2 へ send-keys（2回 ssh の許容範囲）。
  * 複数パスはスペース区切りで 1 文字列にまとめ、末尾にスペースを足して続けて入力できるようにする。
  * 失敗時は throw して呼び出し側で injected:false に畳む。
  */
-function sendPathsToTmux(t: TerminalDef, paths: string[]): void {
-  const literal = paths.join(' ') + ' ';
+function sendPathsToTmux(t: TerminalDef, paths: string[], sendEnter = false): void {
+  const literal = ' ' + paths.join(' ') + ' ';
   const tmuxArgs = ['send-keys', '-t', t.tmuxSession, '-l', literal];
+  const execOpts = {
+    encoding: 'utf-8' as const,
+    timeout: TERMINAL_TMUX_TIMEOUT_MS,
+    env: injectEnv(),
+    stdio: ['ignore', 'pipe', 'pipe'] as ['ignore', 'pipe', 'pipe'],
+  };
   if (!t.remote) {
-    execFileSync('tmux', tmuxArgs, {
-      encoding: 'utf-8',
-      timeout: TERMINAL_TMUX_TIMEOUT_MS,
-      env: injectEnv(),
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    execFileSync('tmux', tmuxArgs, execOpts);
+    if (sendEnter) {
+      execFileSync('tmux', ['send-keys', '-t', t.tmuxSession, 'Enter'], execOpts);
+    }
     return;
   }
   const r = t.remote;
+  const sshOpts = ['-i', r.sshKey, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10'];
+  const sshTarget = `${r.sshUser}@${r.sshHost}`;
   const remoteCmd = ['tmux', ...tmuxArgs.map(shquote)].join(' ');
-  execFileSync(
-    'ssh',
-    ['-i', r.sshKey, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', `${r.sshUser}@${r.sshHost}`, remoteCmd],
-    {
-      encoding: 'utf-8',
-      timeout: TERMINAL_TMUX_TIMEOUT_MS,
-      env: injectEnv(),
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
+  execFileSync('ssh', [...sshOpts, sshTarget, remoteCmd], execOpts);
+  if (sendEnter) {
+    const enterCmd = `tmux send-keys -t ${shquote(t.tmuxSession)} Enter`;
+    execFileSync('ssh', [...sshOpts, sshTarget, enterCmd], execOpts);
+  }
 }
 
 /**
@@ -200,7 +250,7 @@ function resolveTerminal(raw: unknown): TerminalDef {
 
 // ─── ハンドラ ───────────────────────────────────────────
 
-/** POST /api/terminal/upload — multipart の画像を受け、保存→tmux 注入。 */
+/** POST /api/terminal/upload — multipart のファイルを受け、保存→tmux 注入。5 個超えは自動分散。 */
 async function handleUpload(req: Request, res: Response): Promise<void> {
   mkdirSync(TERMINAL_UPLOADS_DIR, { recursive: true });
 
@@ -209,22 +259,26 @@ async function handleUpload(req: Request, res: Response): Promise<void> {
 
   const files = (req.files as Express.Multer.File[] | undefined) ?? [];
   if (files.length === 0) {
-    res.status(400).json({ error: 'at least one image is required' });
+    res.status(400).json({ error: 'at least one file is required' });
     return;
   }
 
   // 対象ターミナルを解決（multipart の terminal フィールド or クエリ、未指定は 1）。
-  const t = resolveTerminal(
+  const requestedTerminal = resolveTerminal(
     (req.body as { terminal?: unknown } | undefined)?.terminal ?? req.query.terminal,
   );
+
+  // sendEnter=1 のとき: パス注入後に Enter キーも送る（Enter キーを preventDefault した場合に使う）。
+  const body = req.body as { sendEnter?: unknown } | undefined;
+  const shouldSendEnter = String(body?.sendEnter ?? '0') !== '0';
 
   const now = new Date();
   const savedPaths: string[] = [];
   const used = new Set<string>();
   for (const f of files) {
     // MIME を二重チェック（fileFilter を通っているはずだが念のため）。
-    if (!ALLOWED_MIME.has(f.mimetype.toLowerCase())) {
-      res.status(400).json({ error: `unsupported image type: ${f.mimetype}` });
+    if (!isAllowedMime(f.mimetype)) {
+      res.status(400).json({ error: `unsupported file type: ${f.mimetype}` });
       return;
     }
     let fname = buildFilename(now, f.originalname, f.mimetype);
@@ -243,29 +297,78 @@ async function handleUpload(req: Request, res: Response): Promise<void> {
     savedPaths.push(abs);
   }
 
-  // remote(2) は scp で旧箱へコピーし、注入するのは旧箱側の絶対パス。
-  // local(1/3) はこの箱の絶対パスをそのまま注入する。
-  let injectPaths = savedPaths;
-  let injected = true;
-  let injectError: string | undefined;
-  try {
-    if (t.remote) {
-      injectPaths = scpToRemote(t.remote, savedPaths);
+  // ─── 分散ロジック ─────────────────────────────────────────
+  // ファイル数が DISTRIBUTE_GROUP_SIZE（5）以下は従来通り指定ターミナルへ一括注入。
+  // 超える場合はターミナル1→2→3 の順にラウンドロビンで各グループ最大 5 ファイルずつ分散する。
+  // 分散時は指定ターミナル（requestedTerminal）を使わず、常にターミナル1起点でラウンドロビンする。
+
+  // 分散先のターミナル順序: 旧箱（2）を先頭にして新箱（1/3）へオーバーフロー。
+  // ターミナル2は別アカウント（keita.urano2）なのでコンテキストが独立しており、
+  // 大量アップロードを優先的に受け持たせることで新箱の枯渇を防ぐ。
+  const DISTRIBUTE_TERMINAL_IDS = [2, 1, 3];
+
+  /** ファイルグループをターミナルへ注入する。失敗しても例外をスローせず結果を返す。 */
+  async function injectGroup(
+    t: TerminalDef,
+    localPaths: string[],
+    sendEnter = false,
+  ): Promise<{ terminal: number; count: number; paths: string[]; injected: boolean; error?: string }> {
+    let injectPaths = localPaths;
+    try {
+      if (t.remote) {
+        injectPaths = scpToRemote(t.remote, localPaths);
+      }
+      sendPathsToTmux(t, injectPaths, sendEnter);
+      return { terminal: t.id, count: localPaths.length, paths: injectPaths, injected: true };
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      console.error(`[terminal-upload] inject to terminal ${t.id} failed:`, error);
+      return { terminal: t.id, count: localPaths.length, paths: injectPaths, injected: false, error };
     }
-    sendPathsToTmux(t, injectPaths);
-  } catch (e) {
-    injected = false;
-    injectError = e instanceof Error ? e.message : String(e);
-    console.error('[terminal-upload] inject failed:', injectError);
   }
+
+  if (savedPaths.length <= DISTRIBUTE_GROUP_SIZE) {
+    // 5 個以下: 従来通り指定ターミナルへ一括注入。
+    const t = requestedTerminal;
+    const result = await injectGroup(t, savedPaths, shouldSendEnter);
+    res.status(201).json({
+      count: savedPaths.length,
+      paths: result.paths,
+      injected: result.injected,
+      ...(result.error ? { injectError: result.error } : {}),
+      target: t.tmuxSession,
+    });
+    return;
+  }
+
+  // 5 個超え: ラウンドロビン分散。
+  // ファイルを DISTRIBUTE_GROUP_SIZE ずつのチャンクに分割し、ターミナル1→2→3 と順に割り当てる。
+  const chunks: string[][] = [];
+  for (let i = 0; i < savedPaths.length; i += DISTRIBUTE_GROUP_SIZE) {
+    chunks.push(savedPaths.slice(i, i + DISTRIBUTE_GROUP_SIZE));
+  }
+
+  const distribution: Array<{ terminal: number; count: number; paths: string[]; injected: boolean; error?: string }> = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const tid = DISTRIBUTE_TERMINAL_IDS[i % DISTRIBUTE_TERMINAL_IDS.length];
+    const t = terminalById(tid) ?? requestedTerminal;
+    const result = await injectGroup(t, chunks[i]);
+    distribution.push(result);
+  }
+
+  const allInjected = distribution.every((d) => d.injected);
+  const allPaths = distribution.flatMap((d) => d.paths);
 
   res.status(201).json({
     count: savedPaths.length,
-    // paths は注入したパス（remote なら旧箱パス、local なら NEW 箱パス）。UI のフォールバック表示用。
-    paths: injectPaths,
-    injected,
-    ...(injectError ? { injectError } : {}),
-    target: t.tmuxSession,
+    paths: allPaths,
+    injected: allInjected,
+    distribution: distribution.map((d) => ({
+      terminal: d.terminal,
+      count: d.count,
+      paths: d.paths,
+      ...(d.error ? { error: d.error } : {}),
+    })),
   });
 }
 

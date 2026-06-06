@@ -17,7 +17,7 @@
 //  トンネル越えの >100MB はトンネル側制約のため将来 chunked upload で対応する。
 
 import { mkdirSync, statSync, existsSync, unlinkSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 
@@ -28,8 +28,8 @@ import {
 } from './config.js';
 import { SafePathError } from './lib/vaultPath.js';
 import {
-  sanitizeDeliverableFilename,
   resolveUploadTarget,
+  extractUploadRelPath,
 } from './lib/deliverablePath.js';
 
 /**
@@ -71,25 +71,31 @@ interface SavedRef {
 }
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
+  destination: (req, file, cb) => {
     try {
       ensureRootDir();
-      cb(null, DELIVERABLES_DIR);
+      const decoded = decodeOriginalName(file.originalname);
+      const { subDir } = extractUploadRelPath(decoded);
+      (req as Request & { _currentSubDir?: string })._currentSubDir = subDir;
+      let destDir = DELIVERABLES_DIR;
+      if (subDir) {
+        destDir = join(DELIVERABLES_DIR, subDir);
+        mkdirSync(destDir, { recursive: true });
+      }
+      cb(null, destDir);
     } catch (e) {
       cb(e instanceof Error ? e : new Error(String(e)), DELIVERABLES_DIR);
     }
   },
   filename: (req, file, cb) => {
     try {
-      const safe = sanitizeDeliverableFilename(decodeOriginalName(file.originalname));
-      // ルート直下で衝突しない名前を確定（既存ファイルは上書きしない）。
-      const { absPath, relpath } = resolveUploadTarget(safe, '');
-      // 後段で読むために req に貯める。multer は同一 req のファイルを順次処理するので
-      // existsSync ベースの衝突回避は直前に確定した名前とも当たらない。
+      const decoded = decodeOriginalName(file.originalname);
+      const { safeFilename } = extractUploadRelPath(decoded);
+      const subDir = (req as Request & { _currentSubDir?: string })._currentSubDir ?? '';
+      const { absPath, relpath } = resolveUploadTarget(safeFilename, subDir);
       const r = req as Request & { _savedDeliverables?: SavedRef[] };
       if (!r._savedDeliverables) r._savedDeliverables = [];
-      r._savedDeliverables.push({ name: safe, relpath, absPath });
-      // multer に渡す filename は basename のみ（destination と結合される）。
+      r._savedDeliverables.push({ name: safeFilename, relpath, absPath });
       cb(null, absPath.slice(dirname(absPath).length + 1));
     } catch (e) {
       cb(e instanceof Error ? e : new Error(String(e)), '');

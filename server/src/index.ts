@@ -5,12 +5,12 @@
 
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
-import { existsSync, statSync, unlinkSync, readdirSync } from 'node:fs';
+import { existsSync, statSync, unlinkSync, readdirSync, mkdirSync } from 'node:fs';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
-import { PORT, CLAUDE_PROJECTS_DIR, VAULT_DIR, STALL_MINUTES, AGENT_LOG_TTL_MS } from './config.js';
+import { PORT, CLAUDE_PROJECTS_DIR, VAULT_DIR, STALL_MINUTES, AGENT_LOG_TTL_MS, DELIVERABLES_DIR } from './config.js';
 import { collectAgents, collectAgentGroups, collectAgentFeed } from './collectors/agents.js';
 import { collectTasks } from './collectors/tasks.js';
 import { collectNarrative } from './collectors/narrative.js';
@@ -44,7 +44,9 @@ import { terminalUploadRouter } from './terminalUpload.js';
 import { terminalControlRouter } from './terminalControl.js';
 import { vaultWriteRouter } from './vaultWriteRouter.js';
 import { deliverableUploadRouter } from './deliverableUploadRouter.js';
+import { deliverableChunkRouter } from './deliverableChunkRouter.js';
 import { notebookRouter } from './notebookRouter.js';
+import { minutesRouter } from './minutesRouter.js';
 import { taskEditRouter } from './taskEditRouter.js';
 import { approvalRouter } from './approvalRouter.js';
 import { spawnRouter } from './spawnRouter.js';
@@ -406,6 +408,11 @@ app.get('/api/vault/attachment', (req, res) => {
 // :id パターンを持たないので登録順の衝突も無い。
 app.use('/api/deliverables', deliverableUploadRouter());
 
+// 成果物チャンクアップロード（cloudflared ~100MB 制限対策）。
+// 50MB 超のファイルをフロントが 20MB ずつに分割して POST する。
+// POST /api/deliverables/upload-chunk
+app.use('/api/deliverables', deliverableChunkRouter());
+
 app.get('/api/deliverables', (_req, res) => {
   try {
     res.json({ generatedAt: new Date().toISOString(), files: listDeliverables() });
@@ -548,11 +555,74 @@ app.delete('/api/deliverables/file', (req, res) => {
   }
 });
 
+// 成果物ディレクトリ作成（MC-154）。DELIVERABLES_DIR 配下に新フォルダを作る。
+//  - body: { name: string, parent?: string }
+//  - name は空白・FS禁止文字・ドット始まり・トラバーサルセグメント（..）を拒否。
+//  - parent は optional: 指定があれば DELIVERABLES_DIR/<parent>/<name>、省略は DELIVERABLES_DIR/<name>。
+//  - 応答: { ok: true } または { error: string }。
+app.post('/api/deliverables/mkdir', (req, res) => {
+  try {
+    const { name, parent } = (req.body ?? {}) as { name?: unknown; parent?: unknown };
+
+    if (typeof name !== 'string' || name.trim() === '') {
+      res.status(400).json({ error: 'フォルダ名は必須です。' });
+      return;
+    }
+
+    const trimmedName = name.trim();
+
+    // 名前の安全チェック: パス区切り・ドット始まり・FS禁止文字・トラバーサル。
+    if (
+      trimmedName === '.' ||
+      trimmedName === '..' ||
+      trimmedName.startsWith('.') ||
+      /[/\\<>:"|?*\x00-\x1f]/.test(trimmedName)
+    ) {
+      res.status(400).json({ error: '使用できないフォルダ名です。' });
+      return;
+    }
+
+    // parent が指定された場合の安全チェック（トラバーサル防止）。
+    let baseDir = resolve(DELIVERABLES_DIR);
+    if (typeof parent === 'string' && parent.trim() !== '') {
+      const trimmedParent = parent.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+      if (/\.\./.test(trimmedParent)) {
+        res.status(400).json({ error: '無効な親ディレクトリです。' });
+        return;
+      }
+      const candidate = resolve(baseDir, trimmedParent);
+      // DELIVERABLES_DIR 配下に留まるか確認。
+      const rel = candidate.startsWith(baseDir + sep) || candidate === baseDir;
+      if (!rel) {
+        res.status(400).json({ error: '親ディレクトリが範囲外です。' });
+        return;
+      }
+      baseDir = candidate;
+    }
+
+    const newDir = join(baseDir, trimmedName);
+
+    if (existsSync(newDir)) {
+      res.status(409).json({ error: '同名のフォルダが既に存在します。' });
+      return;
+    }
+
+    mkdirSync(newDir, { recursive: true });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
 // ─── ノートブック（NotebookLM 的な資料セット＋Q&A＋生成物、MC-126）──────────
 // 資料を sources/ に置き、claude -p（cwd=ノートブック dir）で ./sources/ ./extracted/ を
 // 根拠に回答（ask）・成果物作成（generate→artifacts/）する。パスは lib/notebookPath で安全化。
 // 認証ミドルウェア配下。:id パターンを持つが /api/notebooks 名前空間内なので他ルートと衝突しない。
 app.use('/api/notebooks', notebookRouter());
+
+// ─── 議事録（Deliverables 直接保存版、notebook 非依存）────────────────────
+// notebook id を使わず、生成結果を DELIVERABLES_DIR/議事録/ に直接保存する。
+app.use('/api/minutes', minutesRouter());
 
 // ─── チャット（MC-141）──────────────────────────────────────
 // Keita・林・Masayoshi・エージェントが channel / DM でリアルタイム会話するチャット。

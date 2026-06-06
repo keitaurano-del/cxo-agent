@@ -342,6 +342,7 @@ function MessageItem({
   onAgentReact,
   onReact,
   avatarSize = 32,
+  roleByMemberId = {},
 }: {
   msg: ChatMessage;
   prevMsg: ChatMessage | null;
@@ -349,6 +350,7 @@ function MessageItem({
   onAgentReact?: () => void;
   onReact?: (emoji: string) => void;
   avatarSize?: number;
+  roleByMemberId?: Record<string, string>;
 }) {
   const [hovered, setHovered] = useState(false);
   const [showReactPicker, setShowReactPicker] = useState(false);
@@ -406,6 +408,11 @@ function MessageItem({
               }}
             >
               {msg.senderName}
+              {isAgent && roleByMemberId[msg.senderId] && (
+                <span style={{ fontWeight: 400, color: 'var(--mc-text-faint)', fontSize: 11, marginLeft: 4 }}>
+                  （{roleByMemberId[msg.senderId]}）
+                </span>
+              )}
             </span>
             <span style={{ fontSize: 11, color: 'var(--mc-text-faint)' }}>{time}</span>
           </div>
@@ -574,11 +581,13 @@ function ChannelItem({
   ch,
   active,
   unread,
+  roleLabel,
   onClick,
 }: {
   ch: ChannelSummary;
   active: boolean;
   unread: number;
+  roleLabel?: string;
   onClick: () => void;
 }) {
   return (
@@ -603,6 +612,11 @@ function ChannelItem({
       <HashIcon width={14} height={14} />
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14 }}>
         {ch.name}
+        {roleLabel && (
+          <span style={{ fontWeight: 400, color: 'var(--mc-text-faint)', fontSize: 12, marginLeft: 4 }}>
+            （{roleLabel}）
+          </span>
+        )}
       </span>
       {unread > 0 && (
         <span
@@ -1299,18 +1313,25 @@ export default function Chat() {
                     </div>
                     {channels
                       .filter((ch) => ch.type === 'dm')
-                      .map((ch) => (
-                        <ChannelItem
-                          key={ch.id}
-                          ch={ch}
-                          active={ch.id === selectedId}
-                          unread={ch.id !== selectedId ? unreadCount(ch) : 0}
-                          onClick={() => {
-                            setSelectedId(ch.id);
-                            setMobilePanel('messages');
-                          }}
-                        />
-                      ))}
+                      .map((ch) => {
+                        const otherId = ch.members.find((m) => m !== SELF_ID);
+                        const roleLabel = otherId
+                          ? members.find((m) => m.id === otherId)?.role
+                          : undefined;
+                        return (
+                          <ChannelItem
+                            key={ch.id}
+                            ch={ch}
+                            active={ch.id === selectedId}
+                            unread={ch.id !== selectedId ? unreadCount(ch) : 0}
+                            roleLabel={roleLabel}
+                            onClick={() => {
+                              setSelectedId(ch.id);
+                              setMobilePanel('messages');
+                            }}
+                          />
+                        );
+                      })}
                   </>
                 )}
               </div>
@@ -1404,6 +1425,7 @@ export default function Chat() {
                       msg={msg}
                       prevMsg={i > 0 ? messages[i - 1] : null}
                       avatarSize={isMobile ? 36 : 32}
+                      roleByMemberId={Object.fromEntries(members.filter(m => m.role).map(m => [m.id, m.role!]))}
                       onDelete={
                         msg.senderId === SELF_ID
                           ? () => { void handleDelete(selectedChannel.id, msg.id); }

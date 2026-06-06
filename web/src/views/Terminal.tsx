@@ -29,13 +29,7 @@ import { ImageFileIcon, CloseIcon, TerminalIcon, PlusIcon, KeyboardIcon } from '
 import { Spinner } from '../components/ui';
 
 // ─── 利用可能モデル定義 ─────────────────────────────────────
-const AVAILABLE_MODELS = [
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-  { id: 'claude-opus-4-8', label: 'Opus 4.8' },
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
-] as const;
-
-type ModelId = (typeof AVAILABLE_MODELS)[number]['id'];
+// ModelId は将来のモデル切替 UI で使用予定
 
 // ─── ターミナル定義 ───────────────────────────────────────────
 // path は iframe src のベース（末尾スラッシュ付き＝相対アセットの解決基準）。
@@ -319,19 +313,6 @@ export default function Terminal() {
     };
   }, []);
 
-  // ── モデル状態（各ターミナルの現在モデル）────────────────────
-  const [models, setModels] = useState<Record<number, string | null>>(() => {
-    const init: Record<number, string | null> = {};
-    for (const t of TERMINAL_TABS) init[t.id] = null;
-    return init;
-  });
-  // モデル切替ドロップダウンを開いているターミナル番号（null=閉じている）。
-  const [modelDropdownOpen, setModelDropdownOpen] = useState<number | null>(null);
-  // ドロップダウンの表示座標（portal 描画用）。
-  const [dropdownAnchor, setDropdownAnchor] = useState<{ top: number; left: number } | null>(null);
-  // モデル切替中のターミナル番号（null=なし）。
-  const [modelSwitching, setModelSwitching] = useState<number | null>(null);
-
   // ── アカウントラベル状態（各ターミナルの Claude1/Claude2）────
   const [accountLabels, setAccountLabels] = useState<Record<number, string>>(() => {
     const init: Record<number, string> = {};
@@ -346,10 +327,6 @@ export default function Terminal() {
   const [accountSwitching, setAccountSwitching] = useState<number | null>(null);
 
   const [, setAgentInfoMap] = useState<Record<number, { name: string; emoji: string } | null>>({});
-
-  const setModel = useCallback((id: number, model: string | null) => {
-    setModels((prev) => ({ ...prev, [id]: model }));
-  }, []);
 
   const setAccountLabel = useCallback((id: number, account: string) => {
     setAccountLabels((prev) => ({ ...prev, [id]: account }));
@@ -380,30 +357,6 @@ export default function Terminal() {
     [setAccountLabel],
   );
 
-  // POST /api/terminal/model でモデルを切り替える。
-  const switchModel = useCallback(
-    async (terminalId: number, modelId: ModelId) => {
-      setModelSwitching(terminalId);
-      setModelDropdownOpen(null);
-      setDropdownAnchor(null);
-      try {
-        const res = await fetch('/api/terminal/model', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ terminal: terminalId, model: modelId }),
-        });
-        const body = (await res.json()) as { ok: boolean; model?: string; error?: string };
-        if (body.ok && body.model) {
-          setModel(terminalId, body.model);
-        }
-      } catch {
-        // 失敗しても UI をブロックしない
-      } finally {
-        setModelSwitching(null);
-      }
-    },
-    [setModel],
-  );
 
   // ── バックエンド復旧（MC-100 / MC-119）────────────────────────
   // 各ターミナルごとに状態を持つ（id → BackendState）。
@@ -496,7 +449,6 @@ export default function Terminal() {
             for (const item of body.terminals) {
               const ready = Boolean(item.status?.ready);
               setBackend(item.id, ready ? { kind: 'ready' } : { kind: 'down' });
-              setModel(item.id, item.model ?? null);
               if (item.account) setAccountLabel(item.id, item.account);
               newAgentMap[item.id] = item.agentName ? { name: item.agentName, emoji: item.agentEmoji ?? '' } : null;
             }
@@ -519,7 +471,7 @@ export default function Terminal() {
       }
     }, 15000);
     return () => window.clearInterval(intId);
-  }, [refreshStatus, setBackend, setModel]);
+  }, [refreshStatus, setBackend]);
 
   // 選択/貼付したファイルをステージング配列に追加する（即送信しない）。
   const addToStaging = useCallback((files: File[]) => {
@@ -576,7 +528,8 @@ export default function Terminal() {
   }, []);
 
   // ステージング中の全画像を /api/terminal/upload へ一括送信する（tmux main = ターミナル1 に注入）。
-  const sendStaged = useCallback(async () => {
+  // sendEnterAfter=true のとき: Enter をブロックした後に呼ぶ。サーバーがパス注入直後に Enter を送る。
+  const sendStaged = useCallback(async (sendEnterAfter = false) => {
     const items = stagedRef.current;
     if (items.length === 0) return;
     setState({ kind: 'uploading' });
@@ -585,6 +538,7 @@ export default function Terminal() {
       items.forEach((s) => fd.append('images', s.file, s.file.name));
       // 注入先は現在タブのターミナル（MC-123）。multipart のフィールドで番号を渡す。
       fd.append('terminal', String(activeIdRef.current));
+      if (sendEnterAfter) fd.append('sendEnter', '1');
       const res = await fetch('/api/terminal/upload', { method: 'POST', body: fd });
       if (res.status !== 201) {
         let reason = `送信に失敗しました（HTTP ${res.status}）。`;
@@ -669,7 +623,11 @@ export default function Terminal() {
         // 二重呼び出しガード: uploading 中、または staged が空なら何もしない
         if (stagedRef.current.length === 0) return;
         if (state.kind === 'uploading') return;
-        void sendStaged();
+        // xterm.js が keydown を処理する前に捕まえ、Enter を PTY へ送らせない。
+        // preventDefault だけでは xterm.js の keydown ハンドラは止まらないため stopPropagation も必要。
+        event.preventDefault();
+        event.stopPropagation();
+        void sendStaged(true);
       };
       win.addEventListener('keydown', onKeydown, true); // capture: xterm.js が stopPropagation するため
       return onKeydown;
@@ -702,18 +660,6 @@ export default function Terminal() {
 
   const activeBackend = backends[activeId] ?? { kind: 'checking' };
 
-  // ドロップダウンの外側クリックで閉じる（portal 内クリックは除外）。
-  useEffect(() => {
-    if (modelDropdownOpen === null) return;
-    const handler = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest('[data-model-dropdown]')) return;
-      setModelDropdownOpen(null);
-      setDropdownAnchor(null);
-    };
-    window.addEventListener('click', handler, { capture: true });
-    return () => window.removeEventListener('click', handler, { capture: true });
-  }, [modelDropdownOpen]);
-
   useEffect(() => {
     if (accountDropdownOpen === null) return;
     const handler = (e: MouseEvent) => {
@@ -732,88 +678,52 @@ export default function Terminal() {
         {TERMINAL_TABS.map((t) => {
           const isActive = t.id === activeId;
           const st = backends[t.id]?.kind ?? 'checking';
-          const currentModel = models[t.id] ?? null;
-          const modelLabel = currentModel
-            ? (AVAILABLE_MODELS.find((m) => m.id === currentModel)?.label ?? currentModel.split('-')[1] ?? currentModel)
-            : null;
-          const isSwitching = modelSwitching === t.id;
           const currentAccount = accountLabels[t.id] ?? t.account;
           const isAccountSwitching = accountSwitching === t.id;
           return (
-            <div key={t.id} className="flex shrink-0 items-stretch">
-              {/* タブ本体: クリックでアクティブ切替 */}
-              <button
-                type="button"
-                onClick={() => switchTab(t.id)}
-                aria-pressed={isActive}
-                style={{ touchAction: 'manipulation' }}
-                className={`flex shrink-0 items-center gap-1.5 rounded-l-md border border-r-0 px-3 py-1.5 text-xs font-medium transition-colors ${
-                  isActive
-                    ? 'border-active/50 bg-active-bg text-active'
-                    : 'border-border bg-surface-2 text-text-muted hover:bg-surface-3 hover:text-text'
-                }`}
-              >
-                <TerminalIcon width={13} height={13} className="pointer-events-none" />
-                <span className="flex flex-col items-start leading-tight">
-                  <span
-                    role="button"
-                    tabIndex={-1}
-                    aria-label={`${t.label} のアカウントを変更`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (accountDropdownOpen === t.id) {
-                        setAccountDropdownOpen(null);
-                        setAccountDropdownAnchor(null);
-                        return;
-                      }
-                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      setAccountDropdownAnchor({ top: rect.bottom + 4, left: rect.left });
-                      setAccountDropdownOpen(t.id);
-                    }}
-                    className={`text-[9px] font-semibold cursor-pointer underline-offset-2 hover:underline ${
-                      currentAccount === 'Claude2' ? 'text-amber-400/80' : 'text-sky-400/90'
-                    } ${isAccountSwitching ? 'opacity-50' : ''}`}
-                  >
-                    {isAccountSwitching ? '…' : currentAccount}
-                  </span>
-                  <span>{t.label}</span>
-                  {modelLabel && (
-                    <span className="text-[10px] text-text-faint font-normal">{modelLabel}</span>
-                  )}
-                </span>
-                {/* 稼働状態ドット */}
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => switchTab(t.id)}
+              aria-pressed={isActive}
+              style={{ touchAction: 'manipulation' }}
+              className={`flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                isActive
+                  ? 'border-active/50 bg-active-bg text-active'
+                  : 'border-border bg-surface-2 text-text-muted hover:bg-surface-3 hover:text-text'
+              }`}
+            >
+              <TerminalIcon width={13} height={13} className="pointer-events-none" />
+              <span className="flex flex-col items-start leading-tight">
                 <span
-                  aria-hidden
-                  className={`h-1.5 w-1.5 rounded-full ${st === 'ready' ? 'bg-active' : 'bg-text-faint'}`}
-                />
-              </button>
-              {/* モデル切替ドロップダウントリガー（▾ ボタン）: タブ右端に連結して overflow 内に収める */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (modelDropdownOpen === t.id) {
-                    setModelDropdownOpen(null);
-                    setDropdownAnchor(null);
-                    return;
-                  }
-                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                  setDropdownAnchor({ top: rect.bottom + 4, left: rect.left });
-                  setModelDropdownOpen(t.id);
-                }}
-                aria-label={`${t.label} のモデルを変更`}
-                title="モデルを変更"
-                disabled={isSwitching}
-                style={{ touchAction: 'manipulation' }}
-                className={`flex shrink-0 items-center justify-center rounded-r-md border px-1.5 text-[9px] transition-colors disabled:opacity-50 ${
-                  isActive
-                    ? 'border-active/50 bg-active-bg text-active/70 hover:text-active'
-                    : 'border-border bg-surface-2 text-text-faint hover:bg-surface-3 hover:text-text'
-                }`}
-              >
-                {isSwitching ? '…' : '▾'}
-              </button>
-            </div>
+                  role="button"
+                  tabIndex={-1}
+                  aria-label={`${t.label} のアカウントを変更`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (accountDropdownOpen === t.id) {
+                      setAccountDropdownOpen(null);
+                      setAccountDropdownAnchor(null);
+                      return;
+                    }
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    setAccountDropdownAnchor({ top: rect.bottom + 4, left: rect.left });
+                    setAccountDropdownOpen(t.id);
+                  }}
+                  className={`text-[9px] font-semibold cursor-pointer underline-offset-2 hover:underline ${
+                    currentAccount === 'Claude2' ? 'text-amber-400/80' : 'text-sky-400/90'
+                  } ${isAccountSwitching ? 'opacity-50' : ''}`}
+                >
+                  {isAccountSwitching ? '…' : currentAccount}
+                </span>
+                <span>{t.label}</span>
+              </span>
+              {/* 稼働状態ドット */}
+              <span
+                aria-hidden
+                className={`h-1.5 w-1.5 rounded-full ${st === 'ready' ? 'bg-active' : 'bg-text-faint'}`}
+              />
+            </button>
           );
         })}
       </div>
@@ -1178,39 +1088,6 @@ export default function Terminal() {
                 {current === acc && <span className="text-active">✓</span>}
                 {current !== acc && <span className="w-3" />}
                 {acc}
-              </button>
-            );
-          })}
-        </div>,
-        document.body
-      )}
-      {/* モデル切替ドロップダウン（portal: overflow クリップを避けるため body に直接マウント）*/}
-      {modelDropdownOpen !== null && dropdownAnchor && createPortal(
-        <div
-          data-model-dropdown=""
-          style={{
-            position: 'fixed',
-            top: dropdownAnchor.top,
-            left: dropdownAnchor.left,
-            zIndex: 9999,
-          }}
-          className="min-w-36 rounded-md border border-border bg-surface shadow-md"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {AVAILABLE_MODELS.map((m) => {
-            const currentModel = models[modelDropdownOpen] ?? null;
-            return (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => void switchModel(modelDropdownOpen, m.id)}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface-2 ${
-                  currentModel === m.id ? 'font-medium text-active' : 'text-text'
-                }`}
-              >
-                {currentModel === m.id && <span className="text-active">✓</span>}
-                {currentModel !== m.id && <span className="w-3" />}
-                {m.label}
               </button>
             );
           })}

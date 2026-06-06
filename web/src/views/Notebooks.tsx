@@ -8,25 +8,24 @@
 //
 // バックエンド API は全て auth 配下で Cookie mc_token が same-origin 自動付与される。
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useLiveResource } from '../lib/useLiveData';
 import type {
   NotebookSummary,
   NotebookDetail,
   NotebookFileRef,
   NotebookSourceKind,
-  NotebookChatMessage,
-  NotebookAskResponse,
   NotebookGenerateKind,
   NotebookGenerateResponse,
   MinutesType,
   MinutesFormat,
-  MinutesTypePreset,
-  MinutesTemplate,
   MinutesPattern,
   MinutesPresetsResponse,
   MinutesTranscribeResponse,
   MinutesPatternsResponse,
   MinutesGenerateResponse,
+  NotebookFolderTree,
+  NotebookFolderEntry,
 } from '../lib/types';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, EmptyState, Spinner } from '../components/ui';
@@ -38,7 +37,6 @@ import {
   UploadIcon,
   EyeIcon,
   CloseIcon,
-  SendIcon,
   SparkIcon,
   ChevronRightIcon,
   SheetIcon,
@@ -49,6 +47,7 @@ import {
   FileIcon,
   FolderIcon,
   EditIcon,
+  NoteIcon,
 } from '../components/icons';
 import { relativeTime } from '../lib/time';
 
@@ -483,376 +482,6 @@ function SourcesPane({
   );
 }
 
-// ─── ファイルビューア（引用クリックで開くスライドオーバー）──────────────
-
-interface FileViewerState {
-  notebookId: string;
-  filename: string; // ファイル名のみ（"sources/" なし）
-  page?: string;    // ページ番号またはシート名
-}
-
-/** 認証が必要なファイルを Blob URL 経由で iframe に渡すビューア。 */
-function NotebookFileViewer({
-  notebookId,
-  filename,
-  page,
-  onClose,
-}: FileViewerState & { onClose: () => void }) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let objectUrl: string | null = null;
-    setLoading(true);
-    setError(null);
-    setBlobUrl(null);
-
-    const apiPath = `/api/notebooks/${notebookId}/file?path=${encodeURIComponent('sources/' + filename)}&inline=1`;
-    fetch(apiPath)
-      .then(async (res) => {
-        if (!res.ok) {
-          const msg = await res.text().catch(() => `HTTP ${res.status}`);
-          throw new Error(msg);
-        }
-        return res.blob();
-      })
-      .then((blob) => {
-        objectUrl = URL.createObjectURL(blob);
-        // PDF の場合はページフラグメントを付与する。
-        const withPage = page ? `${objectUrl}#page=${encodeURIComponent(page)}` : objectUrl;
-        setBlobUrl(withPage);
-        setLoading(false);
-      })
-      .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : String(e));
-        setLoading(false);
-      });
-
-    return () => {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [notebookId, filename, page]);
-
-  const displayName = page ? `${filename}  p.${page}` : filename;
-
-  return (
-    <div
-      className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-bg shadow-2xl md:w-2/3 lg:w-1/2"
-      role="dialog"
-      aria-modal
-      aria-label={`${displayName} ビューア`}
-    >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-3">
-        <span className="truncate text-sm font-medium text-text" title={displayName}>
-          {displayName}
-        </span>
-        <button
-          type="button"
-          onClick={onClose}
-          className="shrink-0 rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
-          aria-label="ビューアを閉じる"
-        >
-          <CloseIcon width={18} height={18} />
-        </button>
-      </div>
-      <div className="relative flex-1 overflow-hidden">
-        {loading && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-text-muted">
-            <Spinner />
-            <span className="ml-2">読み込み中…</span>
-          </div>
-        )}
-        {error && (
-          <div className="absolute inset-0 flex items-center justify-center p-4 text-sm" style={{ color: 'var(--mc-stalled)' }}>
-            ファイルの読み込みに失敗しました: {error}
-          </div>
-        )}
-        {blobUrl && (
-          <iframe
-            src={blobUrl}
-            title={displayName}
-            className="h-full w-full"
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── 引用タグパーサ ───────────────────────────────────────
-
-interface CitePart {
-  type: 'text' | 'cite';
-  text: string;
-  filename?: string;
-  page?: string;
-}
-
-/** テキスト中の {{cite:filename:page}} を解析して parts に分解する。 */
-function parseCites(text: string): CitePart[] {
-  const parts: CitePart[] = [];
-  // {{cite:filename}} または {{cite:filename:page}} にマッチ。
-  const re = /\{\{cite:([^}:]+?)(?::([^}]*))?\}\}/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) {
-      parts.push({ type: 'text', text: text.slice(last, m.index) });
-    }
-    parts.push({
-      type: 'cite',
-      text: m[0],
-      filename: m[1],
-      page: m[2] || undefined,
-    });
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) {
-    parts.push({ type: 'text', text: text.slice(last) });
-  }
-  return parts;
-}
-
-// ─── チャットペイン ───────────────────────────────────────
-
-function ChatBubble({
-  msg,
-  onCite,
-}: {
-  msg: NotebookChatMessage;
-  onCite?: (filename: string, page?: string) => void;
-}) {
-  const isUser = msg.role === 'user';
-  const parts = isUser ? null : parseCites(msg.text);
-
-  return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div
-        className={`max-w-[85%] break-words rounded-2xl px-3 py-2 text-sm ${
-          isUser ? 'rounded-br-sm bg-accent text-bg' : 'rounded-bl-sm bg-surface-2 text-text'
-        }`}
-      >
-        {isUser || !parts ? (
-          <span className="whitespace-pre-wrap">{msg.text}</span>
-        ) : (
-          <span className="whitespace-pre-wrap">
-            {parts.map((p, i) => {
-              if (p.type === 'text') return <span key={i}>{p.text}</span>;
-              const label = p.page ? `${p.filename} p.${p.page}` : p.filename!;
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => onCite?.(p.filename!, p.page)}
-                  className="mx-0.5 inline-flex items-center rounded-full border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
-                  title={`${label} を開く`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ChatPane({
-  id,
-  chat,
-  hasSources,
-  onAnswered,
-}: {
-  id: string;
-  chat: NotebookChatMessage[];
-  hasSources: boolean;
-  onAnswered: () => void;
-}) {
-  const [question, setQuestion] = useState('');
-  const [asking, setAsking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // 楽観追加した自分の質問（送信中に即表示）。
-  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
-  // 離脱後復帰時: 最後の user メッセージに応答がない状態を検出してポーリング。
-  const [pendingAnswer, setPendingAnswer] = useState(false);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  // 引用ビューア状態。
-  const [viewer, setViewer] = useState<FileViewerState | null>(null);
-
-  const handleCite = useCallback((filename: string, page?: string) => {
-    setViewer({ notebookId: id, filename, page });
-  }, [id]);
-
-  // chat が更新されたとき、最後が user で assistant 応答がまだなら pendingAnswer をセット。
-  useEffect(() => {
-    const last = chat.at(-1);
-    if (last && last.role === 'user' && !asking) {
-      setPendingAnswer(true);
-    } else {
-      setPendingAnswer(false);
-    }
-  }, [chat, asking]);
-
-  // pendingAnswer の間、3秒ごとに詳細取得してチャットを更新。
-  useEffect(() => {
-    if (!pendingAnswer) {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-      return;
-    }
-    pollingRef.current = setInterval(() => {
-      fetch(`/api/notebooks/${id}`)
-        .then((res) => res.json().catch(() => null))
-        .then((data: { chat?: NotebookChatMessage[] } | null) => {
-          if (!data) return;
-          const msgs = data.chat ?? [];
-          const last = msgs.at(-1);
-          if (last && last.role === 'assistant') {
-            // 新しい assistant 応答が来た → 親を更新してポーリング停止。
-            onAnswered();
-            setPendingAnswer(false);
-          }
-        })
-        .catch(() => { /* ネットワーク一時エラーは無視してリトライ */ });
-    }, 3000);
-
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-    };
-  }, [pendingAnswer, id, onAnswered]);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [chat.length, asking, pendingQuestion, pendingAnswer]);
-
-  const submit = useCallback(() => {
-    const q = question.trim();
-    if (!q || asking) return;
-    setAsking(true);
-    setError(null);
-    setPendingQuestion(q);
-    setQuestion('');
-    fetch(`/api/notebooks/${id}/ask`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: q }),
-    })
-      .then(async (res) => {
-        const body = (await res.json().catch(() => ({}))) as NotebookAskResponse;
-        if (!res.ok) {
-          setError(body.error || `回答の取得に失敗しました（HTTP ${res.status}）。`);
-        } else if (body.error && !body.answer) {
-          setError(body.error);
-        } else if (body.error) {
-          // 部分劣化（タイムアウト等で部分回答あり）。
-          setError('回答が途中で打ち切られた可能性があります。');
-        }
-        // chat は ask 後にサーバへ user/assistant 両方記録済み。再取得して反映。
-        onAnswered();
-      })
-      .catch(() => {
-        setError('ネットワークエラーで回答を取得できませんでした。');
-      })
-      .finally(() => {
-        setAsking(false);
-        setPendingQuestion(null);
-      });
-  }, [id, question, asking, onAnswered]);
-
-  return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-faint">
-        チャット
-      </div>
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3">
-        {chat.length === 0 && !pendingQuestion ? (
-          <EmptyState>
-            {hasSources
-              ? '資料について質問できます。回答は資料を根拠に生成されます。'
-              : 'まず資料をアップロードすると、その内容について質問できます。'}
-          </EmptyState>
-        ) : (
-          <div className="flex flex-col gap-2.5">
-            {chat.map((m, i) => (
-              <ChatBubble key={`${m.ts}-${i}`} msg={m} onCite={handleCite} />
-            ))}
-            {/* 送信中の楽観追加（chat に未反映の自分の質問）。 */}
-            {pendingQuestion && (
-              <ChatBubble msg={{ ts: '', role: 'user', text: pendingQuestion }} />
-            )}
-            {asking && (
-              <div className="flex justify-start">
-                <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-sm bg-surface-2 px-3 py-2 text-sm text-text-muted">
-                  <Spinner />
-                  資料を読んでいます…
-                </div>
-              </div>
-            )}
-            {/* 離脱後復帰時: 未受信の assistant 応答を待機中 */}
-            {!asking && pendingAnswer && (
-              <div className="flex justify-start">
-                <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-sm bg-surface-2 px-3 py-2 text-sm text-text-muted">
-                  <Spinner />
-                  回答を生成中…
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-      {error && (
-        <div role="alert" className="mx-3 mb-2 rounded-lg border border-stalled/40 bg-stalled-bg/60 px-3 py-1.5 text-xs" style={{ color: 'var(--mc-stalled)' }}>
-          {error}
-        </div>
-      )}
-      <div className="border-t border-border p-3">
-        <div className="flex items-end gap-2">
-          <textarea
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                submit();
-              }
-            }}
-            disabled={asking}
-            rows={2}
-            placeholder="資料について質問する…"
-            className="min-h-[2.5rem] flex-1 resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none disabled:opacity-60"
-          />
-          <button
-            type="button"
-            onClick={submit}
-            disabled={asking || question.trim() === ''}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-bg transition-opacity disabled:opacity-40"
-            aria-label="質問を送信"
-          >
-            {asking ? <Spinner /> : <SendIcon width={18} height={18} />}
-          </button>
-        </div>
-        <p className="mt-1 text-[11px] text-text-faint">回答には時間がかかる場合があります（⌘/Ctrl + Enter で送信）。</p>
-      </div>
-      {viewer && (
-        <NotebookFileViewer
-          notebookId={viewer.notebookId}
-          filename={viewer.filename}
-          page={viewer.page}
-          onClose={() => setViewer(null)}
-        />
-      )}
-    </div>
-  );
-}
 
 // ─── 生成物ペイン ─────────────────────────────────────────
 
@@ -920,12 +549,14 @@ function ArtifactsPane({
   hasSources,
   onGenerated,
   onPreview,
+  onOpenMinutes,
 }: {
   id: string;
   artifacts: NotebookFileRef[];
   hasSources: boolean;
   onGenerated: () => void;
   onPreview: (file: NotebookFileRef) => void;
+  onOpenMinutes?: () => void;
 }) {
   const [activeKind, setActiveKind] = useState<NotebookGenerateKind | null>(null);
   const [instruction, setInstruction] = useState('');
@@ -939,6 +570,55 @@ function ArtifactsPane({
   const artifactPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // ポーリング開始時点の artifacts 件数を記憶して増加を検出する。
   const artifactBaseCount = useRef<number>(0);
+
+  // フォルダツリー
+  const [folderTree, setFolderTree] = useState<NotebookFolderTree | null>(null);
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [folderCreateError, setFolderCreateError] = useState<string | null>(null);
+  const newFolderInputRef = useRef<HTMLInputElement | null>(null);
+
+  const fetchFolderTree = useCallback(() => {
+    fetch(`/api/notebooks/${id}/folders`)
+      .then((r) => r.json().catch(() => null))
+      .then((data: NotebookFolderTree | null) => {
+        if (data) setFolderTree(data);
+      })
+      .catch(() => {});
+  }, [id]);
+
+  useEffect(() => {
+    fetchFolderTree();
+  }, [fetchFolderTree, artifacts]);
+
+  useEffect(() => {
+    if (creatingFolder && newFolderInputRef.current) {
+      newFolderInputRef.current.focus();
+    }
+  }, [creatingFolder]);
+
+  const handleCreateFolder = useCallback(() => {
+    const name = newFolderName.trim();
+    if (!name) return;
+    setFolderCreateError(null);
+    fetch(`/api/notebooks/${id}/folders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          setNewFolderName('');
+          setCreatingFolder(false);
+          fetchFolderTree();
+        } else {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          setFolderCreateError(body.error || 'フォルダの作成に失敗しました。');
+        }
+      })
+      .catch(() => setFolderCreateError('ネットワークエラーでフォルダを作成できませんでした。'));
+  }, [id, newFolderName, fetchFolderTree]);
 
   // 生成中に実際の progress イベントが来ない間、時間ベースで擬似進捗を増やす。
   // SSH ラッパー経由の場合 chunk が逐次来ないため、sqrt カーブで最大95%まで自動増加。
@@ -1070,10 +750,124 @@ function ArtifactsPane({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-faint">
-        生成物 <span className="ml-1 text-text-muted">{artifacts.length}</span>
+      <div className="border-b border-border px-3 py-2 flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-text-faint">
+          フォルダ <span className="ml-1 text-text-muted">{artifacts.length}</span>
+        </span>
+        <button
+          type="button"
+          title="フォルダを追加"
+          onClick={() => { setCreatingFolder(true); setFolderCreateError(null); setNewFolderName(''); }}
+          className="rounded p-0.5 text-text-faint hover:bg-surface-2 hover:text-text"
+          aria-label="フォルダを追加"
+        >
+          <PlusIcon width={14} height={14} />
+        </button>
       </div>
+
+      {creatingFolder && (
+        <div className="border-b border-border px-3 py-2 flex flex-col gap-1">
+          <div className="flex gap-1.5">
+            <input
+              ref={newFolderInputRef}
+              type="text"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); handleCreateFolder(); }
+                if (e.key === 'Escape') { setCreatingFolder(false); }
+              }}
+              placeholder="フォルダ名…"
+              className="flex-1 rounded border border-border bg-bg px-2 py-1 text-xs text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={handleCreateFolder}
+              disabled={!newFolderName.trim()}
+              className="rounded-full bg-accent px-2.5 py-1 text-xs font-semibold text-bg disabled:opacity-50"
+            >
+              作成
+            </button>
+            <button
+              type="button"
+              onClick={() => setCreatingFolder(false)}
+              className="rounded-full px-2 py-1 text-xs text-text-muted hover:text-text"
+            >
+              ×
+            </button>
+          </div>
+          {folderCreateError && (
+            <p className="text-[11px]" style={{ color: 'var(--mc-stalled)' }}>{folderCreateError}</p>
+          )}
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-3">
+        {/* フォルダツリー */}
+        {folderTree && (
+          <div className="mb-3 flex flex-col gap-2">
+            {folderTree.folders.map((folder: NotebookFolderEntry) => {
+              const isCollapsed = collapsedFolders.has(folder.name);
+              const isMinutes = folder.name === '議事録';
+              return (
+                <div key={folder.name} className="rounded-lg border border-border bg-surface overflow-hidden">
+                  <div className="flex items-center justify-between px-2.5 py-2 bg-surface-2">
+                    <button
+                      type="button"
+                      onClick={() => setCollapsedFolders((prev) => {
+                        const n = new Set(prev);
+                        if (n.has(folder.name)) n.delete(folder.name); else n.add(folder.name);
+                        return n;
+                      })}
+                      className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                    >
+                      <FolderIcon width={14} height={14} className="shrink-0 text-text-faint" />
+                      <span className="truncate text-xs font-semibold text-text">{folder.name}</span>
+                      <span className="ml-1 text-[10px] text-text-faint">{folder.files.length}</span>
+                      <ChevronRightIcon
+                        width={12} height={12}
+                        className="shrink-0 text-text-faint ml-auto"
+                        style={{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform 0.15s' }}
+                      />
+                    </button>
+                    {isMinutes && onOpenMinutes && (
+                      <button
+                        type="button"
+                        onClick={onOpenMinutes}
+                        className="ml-2 shrink-0 inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-bg hover:opacity-80"
+                      >
+                        <NoteIcon width={10} height={10} />
+                        作成
+                      </button>
+                    )}
+                  </div>
+                  {!isCollapsed && (
+                    <div className="flex flex-col gap-1.5 p-2">
+                      {folder.files.length === 0 ? (
+                        <p className="text-[11px] text-text-faint px-1">
+                          {isMinutes ? '議事録はまだありません' : 'ファイルがありません'}
+                        </p>
+                      ) : (
+                        folder.files.map((f) => (
+                          <ArtifactRow key={f.relpath} id={id} file={f} onPreview={onPreview} />
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {folderTree.rootFiles.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[10px] text-text-faint uppercase tracking-wide px-0.5">ルート</p>
+                {folderTree.rootFiles.map((f) => (
+                  <ArtifactRow key={f.relpath} id={id} file={f} onPreview={onPreview} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="mb-3 rounded-lg border border-border bg-surface p-3">
           <div className="mb-2 flex flex-wrap gap-1.5">
             {GENERATE_BUTTONS.map((b) => (
@@ -1192,37 +986,525 @@ function ArtifactsPane({
           )}
         </div>
 
-        {artifacts.length === 0 ? (
-          <EmptyState>生成ボタンから要約や FAQ などを作成できます</EmptyState>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {artifacts.map((f) => (
-              <ArtifactRow key={f.relpath} id={id} file={f} onPreview={onPreview} />
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
 }
 
+// ─── 議事録スタイル定義 ─────────────────────────────────────
+
+type ExportFmt = 'docx' | 'xlsx' | 'pdf' | 'txt';
+
+const MINUTES_STYLES = [
+  {
+    id: 'form',
+    label: 'フォーム形式',
+    emoji: '📋',
+    desc: '会議名・日時・場所・出席者などをテーブル枠で整理した正式書式',
+    type: 'decisions' as MinutesType,
+    format: 'sections' as MinutesFormat,
+    sample: `## 会議議事録
+
+| 項目 | 内容 |
+|------|------|
+| 会議名 | 第1回 プロジェクト定例 |
+| 開催日時 | 2025年4月10日 14:00〜15:00 |
+| 開催場所 | 本社 3F 第一会議室 |
+| 出席者 | 田中、山田、鈴木 |
+
+### 議題
+1. 進捗確認
+2. 次期リリース計画
+
+### 議事内容
+…（各議題の討議内容）
+
+### 合意事項・決定事項
+- リリース日を5月末に決定
+- 担当割り振りは山田が調整
+
+### 次回会議
+| 日時 | 場所 |
+|------|------|
+| 5月15日 14:00 | 本社 3F |`,
+    extraInstructions: `以下の構造で議事録を作成してください。
+
+## 会議議事録
+
+| 項目 | 内容 |
+|------|------|
+| 会議名 | （テキストから読み取る） |
+| 開催日時 | （テキストから読み取る） |
+| 開催場所 | （テキストから読み取る） |
+| 司会 | （テキストから読み取る） |
+| 書記 | （テキストから読み取る） |
+| 出席者 | （テキストから読み取る） |
+| 欠席者 | （テキストから読み取る、いなければ「なし」） |
+
+### 議題
+（議題を番号付きで列挙）
+
+### 議事内容
+（各議題の討議内容を詳しく記載）
+
+### 合意事項・決定事項
+（決定した事項を箇条書きで列挙）
+
+### 次回会議
+| 日時 | 場所 |
+|------|------|
+| （日時） | （場所） |`,
+  },
+  {
+    id: 'label',
+    label: 'ラベル形式',
+    emoji: '🏷',
+    desc: '【標題】【日時】などのラベルブロックで区切る視認性重視の書式',
+    type: 'decisions' as MinutesType,
+    format: 'markdown' as MinutesFormat,
+    sample: `**【標題】** ○○開発部 役員級会議
+
+**【日時】** 2025年7月1日（火）13:00〜14:30
+
+**【場所】** 本社 3階 第一会議室
+
+**【出席者】** 田中専務、山田部長、鈴木リーダー（※）
+
+**【議題】**
+1. ○○開発の進捗確認
+2. 新規開発提案
+
+**【議決事項】**
+- 議題1：遅延回復策を提案通り承認
+- 議題2：次回会議までに部内調査
+
+**【議事】**
+…（各議題の審議内容）
+
+**【所見】**
+…（特記コメント）`,
+    extraInstructions: `以下のラベルブロック形式で議事録を作成してください。各ラベルは太字で表示します。
+
+**【標題】** （会議名と目的を1行で）
+
+**【日時】** （開催日時）
+
+**【場所】** （開催場所）
+
+**【出席者】** （氏名（役職）をカンマ区切りで。※は欠席）
+
+**【議題】**
+1. （議題1）
+2. （議題2）
+…
+
+**【議決事項】**
+- 議題1：（決定内容）
+- 議題2：（決定内容）
+…
+
+**【議事】**
+（各議題の審議内容・発言要旨を段落形式で）
+
+**【所見】**
+（特記事項・コメント。特になければ省略）`,
+  },
+  {
+    id: 'report',
+    label: 'レポート形式',
+    emoji: '📄',
+    desc: '前回報告・議題ごとセクション・次回予定を含む報告書スタイル',
+    type: 'summary' as MinutesType,
+    format: 'sections' as MinutesFormat,
+    sample: `# 第1回 衛生委員会 議事録
+
+- 開催日：2025年4月10日
+- 時間：14:00〜15:00
+- 開催場所：本社 3階会議室
+- 出席者：石野、山本、福田
+
+---
+
+## 1. 前回議事録の確認
+特になし
+
+## 2. 報告事項
+### 健康診断結果
+- 受診者：○件
+- 通常扱い：○件
+
+## 3. 議事
+### 議題1：時間外労働について
+…（討議内容・結論）
+
+## 4. その他
+次回議題の提案を事前に提出すること
+
+---
+
+**次回会議予定**
+- 日時：5月14日 14:00〜
+- 場所：本社 3階会議室`,
+    extraInstructions: `以下のレポート形式で議事録を作成してください。
+
+# 第○回 [会議名] 議事録
+
+- 開催日：（日付）
+- 時間：（開始〜終了）
+- 開催場所：（場所）
+- 出席者：（氏名リスト）
+
+---
+
+## 1. 前回議事録の確認
+（前回からの積み残し・報告事項。特になければ「特になし」）
+
+## 2. 報告事項
+（各報告項目を小見出しで整理）
+
+## 3. 議事
+### 議題1：（タイトル）
+（内容・討議・結論）
+
+### 議題2：（タイトル）
+（内容・討議・結論）
+
+## 4. その他
+（その他の共有事項）
+
+---
+
+**次回会議予定**
+- 日時：（日時）
+- 場所：（場所）`,
+  },
+  {
+    id: 'action',
+    label: 'アクション重視',
+    emoji: '✅',
+    desc: 'ネクストアクションと担当者が一目でわかる実務形式',
+    type: 'decisions' as MinutesType,
+    format: 'markdown' as MinutesFormat,
+    sample: `## アクションリスト
+
+| No | アクション | 担当者 | 期限 | ステータス |
+|----|-----------|--------|------|-----------|
+| 1 | 仕様書更新 | 山田 | 5/20 | 未着手 |
+| 2 | ベンダー確認 | 鈴木 | 5/15 | 進行中 |
+
+## 決定事項
+- リリース日：5月末に確定
+- 予算：300万円の枠で進める
+
+## 議論の要点
+…（主な議論の概要）`,
+    extraInstructions: 'アクションアイテムと担当者・期限を最優先で先頭の表に記載し、その後に議論の要点を簡潔に記述してください。アクション表は「No / アクション / 担当者 / 期限 / ステータス」の列を持つMarkdownテーブルで。',
+  },
+  {
+    id: 'summary',
+    label: '要点サマリー',
+    emoji: '💡',
+    desc: '要点を箇条書きで簡潔にまとめたコンパクト形式',
+    type: 'summary' as MinutesType,
+    format: 'markdown' as MinutesFormat,
+    sample: `## 会議サマリー（2025/04/10）
+
+### 結論・決定事項
+- 新機能のリリースを5月末に決定
+- 担当は山田が主導、鈴木がサポート
+
+### 主な議論ポイント
+- 現状の進捗は予定比80%、遅延リスクあり
+- 予算超過の懸念は次回以降に持ち越し
+
+### ネクストアクション
+- 山田：仕様書更新（5/20まで）
+- 鈴木：ベンダー調整（5/15まで）`,
+    extraInstructions: '全体を3〜5分で読み切れるコンパクトなサマリーにしてください。各セクションは箇条書き中心で。',
+  },
+  {
+    id: 'casual',
+    label: 'カジュアルメモ',
+    emoji: '💬',
+    desc: '話し言葉を活かした社内向けライトな記録',
+    type: 'summary' as MinutesType,
+    format: 'plain' as MinutesFormat,
+    sample: `📅 4/10 プロジェクト定例メモ
+
+参加：田中・山田・鈴木
+
+今日の主な話
+- 進捗は80%くらい、少し遅れ気味。来週リカバリ策を山田さんが持ってくる
+- 5月末リリースは変えない方針で合意
+- 予算の件は次回に持ち越し
+
+やること
+- 山田：仕様書更新 → 5/20
+- 鈴木：ベンダー確認 → 5/15
+
+次回：5/14（水）14:00〜 同じ部屋で`,
+    extraInstructions: 'カジュアルで読みやすいトーンで書いてください。堅い敬語は不要です。社内Slackに貼るようなイメージで。',
+  },
+] as const;
+
+function StylePreviewPanel({ styleId }: { styleId: string }) {
+  // Shared micro-style helpers
+  const th = 'border border-[#ccc] bg-[#f0f0f0] px-2 py-1 font-semibold text-[11px] text-[#333] align-top w-[30%]';
+  const td = 'border border-[#ccc] px-2 py-1 text-[11px] text-[#222]';
+  const sectionHead = 'border border-[#ccc] bg-[#f0f0f0] px-2 py-1 text-[11px] font-semibold text-[#333]';
+  const sectionBody = 'border border-[#ccc] px-2 py-2 text-[11px] text-[#444]';
+
+  if (styleId === 'form') {
+    return (
+      <div className="rounded bg-white p-3 text-[11px]" style={{ color: '#222' }}>
+        <p className="mb-2 text-center text-[13px] font-bold">会議議事録</p>
+        <table className="w-full border-collapse">
+          <tbody>
+            {[
+              ['会議名', '第1回 プロジェクト定例'],
+              ['開催日時', '2025年4月10日（木）14:00〜15:00'],
+              ['開催場所', '本社 3F 第一会議室'],
+              ['司会', '田中 一郎'],
+              ['書記', '山田 花子'],
+              ['出席者', '田中、山田、鈴木、高橋'],
+              ['欠席者', 'なし'],
+            ].map(([k, v]) => (
+              <tr key={k}>
+                <td className={th}>{k}</td>
+                <td className={td}>{v}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <table className="mt-1 w-full border-collapse">
+          <tbody>
+            <tr><td className={sectionHead}>議題</td></tr>
+            <tr><td className={sectionBody}>1. 開発進捗確認<br/>2. 次期リリース計画</td></tr>
+            <tr><td className={sectionHead}>議事内容</td></tr>
+            <tr><td className={sectionBody}>【議題1】進捗は予定比80%。遅延リスクについて議論。<br/>【議題2】5月末リリースで合意。担当割り振りを山田が調整。</td></tr>
+            <tr><td className={sectionHead}>合意事項・決定事項</td></tr>
+            <tr><td className={sectionBody}>・リリース日を5月末に確定<br/>・担当割り振りは山田が5/20までに提示</td></tr>
+          </tbody>
+        </table>
+        <table className="mt-1 w-full border-collapse">
+          <thead>
+            <tr><th className={th} colSpan={2}>次回会議</th></tr>
+            <tr>
+              <td className={th}>日時</td>
+              <td className={td}>2025年5月15日（木）14:00〜</td>
+            </tr>
+            <tr>
+              <td className={th}>場所</td>
+              <td className={td}>本社 3F 第一会議室</td>
+            </tr>
+          </thead>
+        </table>
+      </div>
+    );
+  }
+
+  if (styleId === 'label') {
+    const labels: Array<{ color: string; bg: string; label: string; content: JSX.Element }> = [
+      { color: '#fff', bg: '#1d4ed8', label: '標題', content: <span>○○開発部 ××開発進捗確認および△△新規提案についての役員級会議</span> },
+      { color: '#fff', bg: '#15803d', label: '日時', content: <span>2025年7月1日（火）13:00〜14:30</span> },
+      { color: '#fff', bg: '#15803d', label: '場所', content: <span>株式会社×× 3階 第一会議室</span> },
+      { color: '#fff', bg: '#15803d', label: '出席者', content: <span>田中専務、開発部 山田部長、鈴木リーダー、山本、高橋（※）</span> },
+      { color: '#fff', bg: '#b45309', label: '議題', content: <span>1. ○○開発の進捗確認　2. △△新規開発提案　3. 開発部A・Bチーム予算分配</span> },
+      { color: '#fff', bg: '#7c3aed', label: '議決事項', content: <><div>・議題1：遅延回復策を提案通り承認</div><div>・議題2：提案の通り承認</div><div>・議題3：継続、次回会議までに調査</div></> },
+      { color: '#fff', bg: '#4b5563', label: '議事', content: <span className="text-[#555]">（※）</span> },
+      { color: '#fff', bg: '#4b5563', label: '所見', content: <span className="text-[#555]">○○の遅延が心配だが、良い改善案が出てよかった。（田中専務）</span> },
+    ];
+    return (
+      <div className="rounded bg-white p-2 text-[11px]" style={{ color: '#222' }}>
+        {labels.map(({ color, bg, label, content }) => (
+          <div key={label} className="mb-1 flex items-start gap-1.5">
+            <span
+              className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold leading-tight"
+              style={{ background: bg, color }}
+            >
+              {label}
+            </span>
+            <span className="leading-relaxed">{content}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (styleId === 'report') {
+    return (
+      <div className="rounded bg-white p-3 text-[11px]" style={{ color: '#222' }}>
+        <p className="mb-0.5 text-center text-[12px] font-bold">第1回 衛生委員会議事録</p>
+        <p className="mb-0.5 text-[10px] text-[#666]">記録者：福田</p>
+        <div className="mb-2 border-b border-[#ccc] pb-2 text-[10px] leading-relaxed text-[#555]">
+          開催日：2025年4月10日（木）　14:00〜15:00　　開催場所：本社 3F会議室<br/>
+          出席者：石野（議長）、山本（副）、福田（書記）、田中、鈴木
+        </div>
+        <div className="mb-1.5">
+          <p className="font-semibold text-[#333]">① 前回議事録の確認</p>
+          <p className="ml-2 text-[#555]">前回内容を確認。修正なし。</p>
+        </div>
+        <div className="mb-1.5">
+          <p className="font-semibold text-[#333]">② 報告事項</p>
+          <div className="ml-2 text-[#555]">
+            <p>・労働災害：発生0件、通常扱い：0件</p>
+            <p>・時間外労働：直近3ヶ月の平均：○時間</p>
+          </div>
+        </div>
+        <div className="mb-1.5">
+          <p className="font-semibold text-[#333]">③ 議事</p>
+          <p className="ml-2 font-medium text-[#444]">議題1：オフィスでのコエジカの発生について</p>
+          <div className="ml-4 text-[#555]">
+            <p>現状：昨年より散発している</p>
+            <p>対策：芳香剤スプレーの導入、清掃の見直しを検討</p>
+          </div>
+        </div>
+        <div className="mt-2 border-t border-[#ccc] pt-1.5 text-[10px] text-[#666]">
+          次回会議：5月14日（水）14:00〜　本社3F会議室
+        </div>
+      </div>
+    );
+  }
+
+  if (styleId === 'action') {
+    return (
+      <div className="rounded bg-white p-3 text-[11px]" style={{ color: '#222' }}>
+        <p className="mb-2 text-[12px] font-bold">アクションリスト</p>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              {['No', 'アクション', '担当', '期限', '状態'].map((h) => (
+                <th key={h} className="border border-[#ccc] bg-[#1d4ed8] px-1.5 py-1 text-[10px] text-white">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              ['1', '仕様書更新', '山田', '5/20', '未着手'],
+              ['2', 'ベンダー確認', '鈴木', '5/15', '進行中'],
+              ['3', '予算案作成', '田中', '5/31', '未着手'],
+            ].map(([no, action, who, due, status]) => (
+              <tr key={no}>
+                <td className="border border-[#ccc] px-1.5 py-1 text-center text-[#555]">{no}</td>
+                <td className="border border-[#ccc] px-1.5 py-1">{action}</td>
+                <td className="border border-[#ccc] px-1.5 py-1 text-center">{who}</td>
+                <td className="border border-[#ccc] px-1.5 py-1 text-center">{due}</td>
+                <td className="border border-[#ccc] px-1.5 py-1 text-center text-[#888]">{status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mt-2 font-semibold text-[#333]">決定事項</p>
+        <ul className="ml-3 mt-1 list-disc text-[#555]">
+          <li>リリース日：5月末に確定</li>
+          <li>予算：300万円枠で進める</li>
+        </ul>
+        <p className="mt-2 font-semibold text-[#333]">議論の要点</p>
+        <p className="mt-0.5 text-[#555]">進捗は80%、遅延リスクあり。リカバリ策を来週提示予定。</p>
+      </div>
+    );
+  }
+
+  if (styleId === 'summary') {
+    return (
+      <div className="rounded bg-white p-3 text-[11px]" style={{ color: '#222' }}>
+        <p className="mb-0.5 text-[12px] font-bold">会議サマリー</p>
+        <p className="mb-2 text-[10px] text-[#888]">2025年4月10日　プロジェクト定例</p>
+        <div className="mb-2 rounded bg-[#eff6ff] px-2 py-1.5">
+          <p className="font-semibold text-[#1d4ed8]">結論・決定事項</p>
+          <ul className="ml-3 mt-0.5 list-disc text-[#374151]">
+            <li>新機能リリースを5月末に決定</li>
+            <li>担当：山田主導、鈴木サポート</li>
+          </ul>
+        </div>
+        <div className="mb-2">
+          <p className="font-semibold text-[#333]">主な議論ポイント</p>
+          <ul className="ml-3 mt-0.5 list-disc text-[#555]">
+            <li>現状進捗は予定比80%、遅延リスクあり</li>
+            <li>予算超過の懸念は次回に持ち越し</li>
+          </ul>
+        </div>
+        <div>
+          <p className="font-semibold text-[#333]">ネクストアクション</p>
+          <ul className="ml-3 mt-0.5 list-disc text-[#555]">
+            <li>山田：仕様書更新（5/20まで）</li>
+            <li>鈴木：ベンダー調整（5/15まで）</li>
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
+  if (styleId === 'casual') {
+    return (
+      <div className="rounded bg-white p-3 text-[11px]" style={{ color: '#222' }}>
+        <p className="mb-1 text-[12px] font-bold">📅 4/10 プロジェクト定例メモ</p>
+        <p className="mb-2 text-[#888]">参加：田中・山田・鈴木</p>
+        <p className="mb-1 font-semibold text-[#333]">今日の主な話</p>
+        <ul className="mb-2 ml-3 list-disc text-[#555]">
+          <li>進捗は80%くらい、少し遅れ気味</li>
+          <li>5月末リリースは変えない方針で合意</li>
+          <li>予算の件は次回持ち越し</li>
+        </ul>
+        <p className="mb-1 font-semibold text-[#333]">やること</p>
+        <ul className="mb-2 ml-3 list-disc text-[#555]">
+          <li>山田：仕様書更新 → 5/20</li>
+          <li>鈴木：ベンダー確認 → 5/15</li>
+        </ul>
+        <p className="text-[#888]">次回：5/14（水）14:00〜 同じ部屋</p>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+const EXPORT_OPTS = [
+  { fmt: 'docx' as ExportFmt, label: 'Word', icon: '📄' },
+  { fmt: 'xlsx' as ExportFmt, label: 'Excel', icon: '📊' },
+  { fmt: 'pdf' as ExportFmt, label: 'PDF', icon: '📕' },
+  { fmt: 'txt' as ExportFmt, label: 'テキスト', icon: '📝' },
+] as const;
+
 // ─── 議事録ペイン ─────────────────────────────────────────
 
-function MinutesPane({
+export function MinutesPane({
   id,
   onGenerated,
+  onBack,
+  mode = 'notebook',
+  notebookId,
 }: {
   id: string;
   onGenerated: () => void;
+  onBack?: () => void;
+  mode?: 'notebook' | 'deliverables';
+  notebookId?: string;
 }) {
+  // deliverables モードでは notebook id を使わず /api/minutes/* を叩く。
+  // notebook モードでは従来どおり /api/notebooks/:id/minutes/* を叩く。
+  const nbId = notebookId ?? id;
+  const minutesBase = mode === 'deliverables' ? '/api/minutes' : `/api/notebooks/${nbId}/minutes`;
   const [presets, setPresets] = useState<MinutesPresetsResponse | null>(null);
   const [patterns, setPatterns] = useState<MinutesPattern[]>([]);
-  const [loadingPresets, setLoadingPresets] = useState(true);
-  const [inputMode, setInputMode] = useState<'text' | 'audio'>('text');
+  const [, setLoadingPresets] = useState(true);
+  const [inputMode, setInputMode] = useState<'text' | 'audio' | 'file'>('text');
   const [inputText, setInputText] = useState('');
   const audioInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [transcribing, setTranscribing] = useState(false);
   const [transcribeError, setTranscribeError] = useState<string | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const [selectedStyles, setSelectedStyles] = useState<Set<string>>(() => new Set(['form']));
+  const [previewStyleId, setPreviewStyleId] = useState<string | null>(null);
+  const [selectedExportFormats, setSelectedExportFormats] = useState<Set<ExportFmt>>(() => new Set<ExportFmt>(['docx']));
+  // 生成後の編集用
+  const [generatedContent, setGeneratedContent] = useState<string | null>(null);
+  const [editedContent, setEditedContent] = useState<string>('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [saveEditError, setSaveEditError] = useState<string | null>(null);
+  const [saveEditOk, setSaveEditOk] = useState(false);
   const [selectedType, setSelectedType] = useState<MinutesType>('decisions');
   const [selectedFormat, setSelectedFormat] = useState<MinutesFormat>('sections');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
@@ -1236,6 +1518,8 @@ function MinutesPane({
   const [genPct, setGenPct] = useState(0);
   const [genError, setGenError] = useState<string | null>(null);
   const [genReport, setGenReport] = useState<string | null>(null);
+  const [lastArtifact, setLastArtifact] = useState<{ relpath: string; name: string } | null>(null);
+  const [exporting, setExporting] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/notebooks/minutes/presets')
@@ -1271,13 +1555,59 @@ function MinutesPane({
     setSelectedTemplateId(preset?.templates[0]?.id ?? '');
   }, [selectedType, presets]);
 
+  useEffect(() => {
+    // 最初に選択されたスタイルの type/format を使う（複数選択時は最初の one を基準）
+    const firstId = Array.from(selectedStyles)[0];
+    const style = MINUTES_STYLES.find((s) => s.id === firstId);
+    if (style) {
+      setSelectedType(style.type);
+      setSelectedFormat(style.format);
+    }
+  }, [selectedStyles]);
+
+  const triggerDownload = useCallback(
+    async (relpath: string, name: string, fmt: ExportFmt) => {
+      setExporting(fmt);
+      try {
+        const fileUrl =
+          mode === 'deliverables'
+            ? `/api/deliverables/file?path=${encodeURIComponent(relpath)}&inline=1`
+            : `/api/notebooks/${nbId}/file?path=${encodeURIComponent(relpath)}&inline=1`;
+        const fileRes = await fetch(fileUrl);
+        if (!fileRes.ok) throw new Error('ファイルの取得に失敗しました。');
+        const content = await fileRes.text();
+        const exportRes = await fetch(`${minutesBase}/export`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content, format: fmt, filename: name }),
+        });
+        if (!exportRes.ok) {
+          const err = (await exportRes.json().catch(() => ({}))) as { error?: string };
+          throw new Error(err.error ?? 'エクスポートに失敗しました。');
+        }
+        const blob = await exportRes.blob();
+        const dlUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = dlUrl;
+        a.download = `${name.replace(/\.[^.]+$/, '')}.${fmt}`;
+        a.click();
+        URL.revokeObjectURL(dlUrl);
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'エクスポートに失敗しました。');
+      } finally {
+        setExporting(null);
+      }
+    },
+    [mode, nbId, minutesBase],
+  );
+
   const handleAudioFile = useCallback(
     (file: File) => {
       setTranscribing(true);
       setTranscribeError(null);
       const fd = new FormData();
       fd.append('audio', file);
-      fetch('/api/notebooks/' + id + '/minutes/transcribe', { method: 'POST', body: fd })
+      fetch(minutesBase + '/transcribe', { method: 'POST', body: fd })
         .then(async (res) => {
           const body = (await res.json().catch(() => ({}))) as MinutesTranscribeResponse;
           if (res.ok && body.text) {
@@ -1290,87 +1620,180 @@ function MinutesPane({
         .catch(() => setTranscribeError('ネットワークエラーで文字起こしに失敗しました。'))
         .finally(() => setTranscribing(false));
     },
-    [id],
+    [minutesBase],
   );
 
-  const generate = useCallback(() => {
+  const handleExtractFile = useCallback(
+    (file: File) => {
+      setExtracting(true);
+      setExtractError(null);
+      const fd = new FormData();
+      fd.append('file', file);
+      fetch(minutesBase + '/extract-file', { method: 'POST', body: fd })
+        .then(async (res) => {
+          const body = (await res.json().catch(() => ({}))) as { text?: string; error?: string };
+          if (res.ok && body.text) {
+            setInputText(body.text);
+            setInputMode('text');
+          } else {
+            setExtractError(body.error || 'テキスト抽出に失敗しました。');
+          }
+        })
+        .catch(() => setExtractError('ネットワークエラーでテキスト抽出に失敗しました。'))
+        .finally(() => setExtracting(false));
+    },
+    [minutesBase],
+  );
+
+  const runSingleGenerate = useCallback(
+    async (styleId: string): Promise<{ relpath: string; name: string } | null> => {
+      const style = MINUTES_STYLES.find((s) => s.id === styleId);
+      const preset = presets?.types.find((t) => t.type === (style?.type ?? selectedType));
+      const tmpl = preset?.templates.find((t) => t.id === selectedTemplateId);
+      const mergedInstructions = [style?.extraInstructions, customInstructions.trim()]
+        .filter(Boolean)
+        .join('\n');
+      const res = await fetch(minutesBase + '/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        body: JSON.stringify({
+          inputText: inputText.trim(),
+          type: style?.type ?? selectedType,
+          format: style?.format ?? selectedFormat,
+          templateId: selectedTemplateId || undefined,
+          templateBody: tmpl?.body || undefined,
+          customInstructions: mergedInstructions || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as MinutesGenerateResponse;
+        throw new Error(body.error || '生成に失敗しました（HTTP ' + String(res.status) + '）。');
+      }
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('no body');
+      const decoder = new TextDecoder();
+      let buf = '';
+      let result: { relpath: string; name: string } | null = null;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let evt: {
+            type?: string;
+            pct?: number;
+            ok?: boolean;
+            created?: Array<{ name?: string; relpath?: string }>;
+            report?: string;
+            error?: string;
+          } = {};
+          try { evt = JSON.parse(line.slice(6)) as typeof evt; } catch { continue; }
+          if (evt.type === 'progress' && typeof evt.pct === 'number') {
+            setGenPct(evt.pct);
+          } else if (evt.type === 'done') {
+            setGenPct(100);
+            if (!evt.ok) {
+              throw new Error(evt.error || '議事録を作成できませんでした。');
+            }
+            const first = evt.created?.[0];
+            if (first?.relpath && first?.name) {
+              result = { relpath: first.relpath, name: first.name };
+            }
+          }
+        }
+      }
+      return result;
+    },
+    [minutesBase, inputText, selectedType, selectedFormat, selectedTemplateId, customInstructions, presets],
+  );
+
+  const generate = useCallback(async () => {
     if (!inputText.trim() || generating) return;
     setGenerating(true);
     setGenError(null);
     setGenReport(null);
     setGenPct(0);
-    const preset = presets?.types.find((t) => t.type === selectedType);
-    const tmpl = preset?.templates.find((t) => t.id === selectedTemplateId);
-    fetch('/api/notebooks/' + id + '/minutes/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify({
-        inputText: inputText.trim(),
-        type: selectedType,
-        format: selectedFormat,
-        templateId: selectedTemplateId || undefined,
-        templateBody: tmpl?.body || undefined,
-        customInstructions: customInstructions.trim() || undefined,
-      }),
+    setGeneratedContent(null);
+    setEditedContent('');
+    setSaveEditOk(false);
+
+    const stylesArr = Array.from(selectedStyles);
+    let lastArt: { relpath: string; name: string } | null = null;
+
+    try {
+      for (let i = 0; i < stylesArr.length; i++) {
+        const styleId = stylesArr[i];
+        const art = await runSingleGenerate(styleId);
+        if (art) {
+          lastArt = art;
+          setLastArtifact(art);
+        }
+        if (i < stylesArr.length - 1) setGenPct(0); // reset for next
+      }
+
+      const n = stylesArr.length;
+      setGenReport(n > 0 ? String(n) + ' 件の議事録を作成しました。' : '完了しました。');
+
+      // 生成後: 最後のファイルの内容を取得してエディタに表示
+      if (lastArt) {
+        const fileUrl =
+          mode === 'deliverables'
+            ? `/api/deliverables/file?path=${encodeURIComponent(lastArt.relpath)}&inline=1`
+            : `/api/notebooks/${nbId}/file?path=${encodeURIComponent(lastArt.relpath)}&inline=1`;
+        const fileRes = await fetch(fileUrl).catch(() => null);
+        if (fileRes?.ok) {
+          const content = await fileRes.text().catch(() => '');
+          setGeneratedContent(content);
+          setEditedContent(content);
+        }
+
+        // 全選択エクスポート形式を自動ダウンロード
+        for (const fmt of selectedExportFormats) {
+          await triggerDownload(lastArt.relpath, lastArt.name, fmt).catch(() => {});
+        }
+      }
+
+      onGenerated();
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : 'ネットワークエラーで議事録を生成できませんでした。');
+    } finally {
+      setGenerating(false);
+    }
+  }, [mode, nbId, inputText, selectedStyles, selectedExportFormats, customInstructions, generating, onGenerated, triggerDownload, runSingleGenerate]);
+
+  const saveEdit = useCallback(() => {
+    if (!lastArtifact || savingEdit) return;
+    // deliverables モードには成果物の上書き API が無いため、ローカル反映のみ行う。
+    if (mode === 'deliverables') {
+      setSaveEditOk(true);
+      setGeneratedContent(editedContent);
+      onGenerated();
+      return;
+    }
+    setSavingEdit(true);
+    setSaveEditError(null);
+    setSaveEditOk(false);
+    fetch(`/api/notebooks/${nbId}/artifacts`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ relpath: lastArtifact.relpath, content: editedContent }),
     })
       .then(async (res) => {
-        if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as MinutesGenerateResponse;
-          setGenError(body.error || '生成に失敗しました（HTTP ' + String(res.status) + '）。');
-          setGenerating(false);
-          return;
-        }
-        const reader = res.body?.getReader();
-        if (!reader) throw new Error('no body');
-        const decoder = new TextDecoder();
-        let buf = '';
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split('\n');
-          buf = lines.pop() ?? '';
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            let evt: {
-              type?: string;
-              pct?: number;
-              ok?: boolean;
-              created?: unknown[];
-              report?: string;
-              error?: string;
-            } = {};
-            try {
-              evt = JSON.parse(line.slice(6)) as typeof evt;
-            } catch {
-              continue;
-            }
-            if (evt.type === 'progress' && typeof evt.pct === 'number') {
-              setGenPct(evt.pct);
-            } else if (evt.type === 'done') {
-              setGenPct(100);
-              if (!evt.ok) {
-                setGenError(evt.error || '議事録を作成できませんでした。');
-              } else {
-                const n = evt.created?.length ?? 0;
-                setGenReport(
-                  n > 0
-                    ? String(n) + ' 件の議事録を作成しました。'
-                    : evt.report || '完了しました。',
-                );
-              }
-              onGenerated();
-              setGenerating(false);
-            }
-          }
+        if (res.ok) {
+          setSaveEditOk(true);
+          setGeneratedContent(editedContent);
+          onGenerated();
+        } else {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          setSaveEditError(body.error || '保存に失敗しました。');
         }
       })
-      .catch((e: unknown) => {
-        if (e instanceof Error && e.name === 'AbortError') return;
-        setGenError('ネットワークエラーで議事録を生成できませんでした。');
-        setGenerating(false);
-      });
-  }, [id, inputText, selectedType, selectedFormat, selectedTemplateId, customInstructions, presets, generating, onGenerated]);
+      .catch(() => setSaveEditError('ネットワークエラーで保存できませんでした。'))
+      .finally(() => setSavingEdit(false));
+  }, [mode, nbId, lastArtifact, editedContent, savingEdit, onGenerated]);
 
   const savePattern = useCallback(() => {
     if (!patternName.trim() || savingPattern) return;
@@ -1405,13 +1828,19 @@ function MinutesPane({
       .finally(() => setSavingPattern(false));
   }, [patternName, selectedType, selectedFormat, selectedTemplateId, customInstructions, presets, savingPattern]);
 
-  const currentTemplates: MinutesTemplate[] =
-    (presets?.types.find((t: MinutesTypePreset) => t.type === selectedType)?.templates) ?? [];
-
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-faint">
-        議事録
+      <div className="border-b border-border px-3 py-2 flex items-center gap-2">
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs text-text-muted hover:bg-surface-2 hover:text-text"
+          >
+            ← 戻る
+          </button>
+        )}
+        <span className="text-xs font-semibold uppercase tracking-wide text-text-faint">議事録</span>
       </div>
       <div className="flex-1 overflow-y-auto p-3">
         <div className="flex flex-col gap-3">
@@ -1435,33 +1864,24 @@ function MinutesPane({
 
           <div>
             <div className="mb-1.5 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setInputMode('text')}
-                className={
-                  'rounded-full px-3 py-1 text-xs transition-colors ' +
-                  (inputMode === 'text'
-                    ? 'bg-accent font-semibold text-bg'
-                    : 'bg-surface-2 text-text-muted hover:text-text')
-                }
-              >
-                テキスト入力
-              </button>
-              <button
-                type="button"
-                onClick={() => setInputMode('audio')}
-                className={
-                  'rounded-full px-3 py-1 text-xs transition-colors ' +
-                  (inputMode === 'audio'
-                    ? 'bg-accent font-semibold text-bg'
-                    : 'bg-surface-2 text-text-muted hover:text-text')
-                }
-              >
-                音声入力
-              </button>
+              {(['text', 'audio', 'file'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setInputMode(mode)}
+                  className={
+                    'rounded-full px-3 py-1 text-xs transition-colors ' +
+                    (inputMode === mode
+                      ? 'bg-accent font-semibold text-bg'
+                      : 'bg-surface-2 text-text-muted hover:text-text')
+                  }
+                >
+                  {mode === 'text' ? 'テキスト' : mode === 'audio' ? '音声' : 'ファイル'}
+                </button>
+              ))}
             </div>
 
-            {inputMode === 'audio' ? (
+            {inputMode === 'audio' && (
               <div className="rounded-lg border border-dashed border-border bg-surface p-3 text-center">
                 <input
                   ref={audioInputRef}
@@ -1481,31 +1901,57 @@ function MinutesPane({
                   disabled={transcribing}
                   className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-bg disabled:opacity-50"
                 >
-                  {transcribing ? (
-                    <>
-                      <Spinner />
-                      文字起こし中…
-                    </>
-                  ) : (
-                    '音声ファイルを選択'
-                  )}
+                  {transcribing ? <><Spinner />文字起こし中…</> : '音声ファイルを選択'}
                 </button>
                 {transcribeError && (
-                  <div
-                    role="alert"
-                    className="mt-2 text-xs"
-                    style={{ color: 'var(--mc-stalled)' }}
-                  >
+                  <div role="alert" className="mt-2 text-xs" style={{ color: 'var(--mc-stalled)' }}>
                     {transcribeError}
                   </div>
                 )}
                 {inputText && (
                   <p className="mt-2 text-xs text-text-faint">
-                    文字起こし完了。テキスト入力モードで確認・編集できます。
+                    文字起こし完了。テキストタブで確認・編集できます。
                   </p>
                 )}
               </div>
-            ) : (
+            )}
+
+            {inputMode === 'file' && (
+              <div className="rounded-lg border border-dashed border-border bg-surface p-3 text-center">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.txt,.csv,.md,.png,.jpg,.jpeg,.webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleExtractFile(f);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                />
+                <p className="mb-2 text-xs text-text-muted">PDF / テキスト / 画像（PNG・JPG）に対応</p>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={extracting}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-bg disabled:opacity-50"
+                >
+                  {extracting ? <><Spinner />テキスト抽出中…</> : 'ファイルを選択'}
+                </button>
+                {extractError && (
+                  <div role="alert" className="mt-2 text-xs" style={{ color: 'var(--mc-stalled)' }}>
+                    {extractError}
+                  </div>
+                )}
+                {inputText && (
+                  <p className="mt-2 text-xs text-text-faint">
+                    抽出完了。テキストタブで確認・編集できます。
+                  </p>
+                )}
+              </div>
+            )}
+
+            {inputMode === 'text' && (
               <textarea
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
@@ -1517,78 +1963,66 @@ function MinutesPane({
             )}
           </div>
 
-          {!loadingPresets && presets && (
-            <>
-              <div>
-                <label className="mb-1 block text-[11px] text-text-faint">種類</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {presets.types.map((t) => (
-                    <button
-                      key={t.type}
-                      type="button"
-                      onClick={() => {
-                        setSelectedType(t.type);
-                        setSelectedPatternId('');
-                      }}
-                      disabled={generating}
-                      title={t.description}
-                      className={
-                        'rounded-full px-2.5 py-0.5 text-xs transition-colors disabled:opacity-50 ' +
-                        (selectedType === t.type
-                          ? 'bg-accent font-semibold text-bg'
-                          : 'bg-surface-2 text-text-muted hover:text-text')
-                      }
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {currentTemplates.length > 1 && (
-                <div>
-                  <label className="mb-1 block text-[11px] text-text-faint">テンプレート</label>
-                  <select
-                    value={selectedTemplateId}
-                    onChange={(e) => setSelectedTemplateId(e.target.value)}
-                    disabled={generating}
-                    className="w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-text focus:border-accent focus:outline-none disabled:opacity-60"
-                  >
-                    {currentTemplates.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div>
-                <label className="mb-1 block text-[11px] text-text-faint">出力形式</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {presets.formats.map((f) => (
-                    <button
-                      key={f.format}
-                      type="button"
-                      onClick={() => {
-                        setSelectedFormat(f.format);
-                        setSelectedPatternId('');
-                      }}
-                      disabled={generating}
-                      className={
-                        'rounded-full px-2.5 py-0.5 text-xs transition-colors disabled:opacity-50 ' +
-                        (selectedFormat === f.format
-                          ? 'bg-accent font-semibold text-bg'
-                          : 'bg-surface-2 text-text-muted hover:text-text')
-                      }
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
+          <div>
+            <label className="mb-1.5 block text-[11px] text-text-faint">スタイル（複数選択可）</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {MINUTES_STYLES.map((s) => {
+                const isSelected = selectedStyles.has(s.id);
+                const isPreviewing = previewStyleId === s.id;
+                return (
+                  <div key={s.id} className="flex flex-col">
+                    <div className={
+                      'flex rounded-lg border transition-colors ' +
+                      (isSelected ? 'border-accent bg-accent/10' : 'border-border bg-surface')
+                    }>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedStyles((prev) => {
+                            const n = new Set(prev);
+                            if (n.has(s.id)) { n.delete(s.id); } else { n.add(s.id); }
+                            return n;
+                          });
+                          setSelectedPatternId('');
+                        }}
+                        disabled={generating}
+                        className="flex flex-1 flex-col px-2.5 py-2 text-left disabled:opacity-50"
+                      >
+                        <span className="flex items-center gap-1 text-sm">
+                          {isSelected && <span className="text-accent">✓</span>}
+                          {s.emoji} <span className={isSelected ? 'font-semibold text-accent' : 'text-text'}>{s.label}</span>
+                        </span>
+                        <span className="mt-0.5 text-[10px] leading-tight text-text-faint">{s.desc}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewStyleId(isPreviewing ? null : s.id)}
+                        title="プレビュー"
+                        className={
+                          'flex items-start rounded-r-lg border-l px-1.5 pt-2 text-[10px] transition-colors ' +
+                          (isPreviewing
+                            ? 'border-accent bg-accent/10 text-accent'
+                            : 'border-border text-text-faint hover:bg-surface-2 hover:text-text-muted')
+                        }
+                      >
+                        👁
+                      </button>
+                    </div>
+                    {isPreviewing && (
+                      <div className="mt-1 overflow-hidden rounded-lg border border-border">
+                        <div className="border-b border-border bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-faint">
+                          サンプル — {s.label}
+                        </div>
+                        <div className="overflow-y-auto" style={{ maxHeight: 320 }}>
+                          <StylePreviewPanel styleId={s.id} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
           <div>
             <label className="mb-1 block text-[11px] text-text-faint">追加指示（任意）</label>
@@ -1602,10 +2036,41 @@ function MinutesPane({
             />
           </div>
 
+          <div>
+            <label className="mb-1.5 block text-[11px] text-text-faint">エクスポート形式（複数選択可）</label>
+            <div className="flex gap-1.5">
+              {EXPORT_OPTS.map(({ fmt, label, icon }) => {
+                const isSelFmt = selectedExportFormats.has(fmt);
+                return (
+                  <button
+                    key={fmt}
+                    type="button"
+                    onClick={() => setSelectedExportFormats((prev) => {
+                      const n = new Set(prev);
+                      if (n.has(fmt)) { n.delete(fmt); } else { n.add(fmt); }
+                      return n;
+                    })}
+                    disabled={generating}
+                    className={
+                      'flex flex-1 flex-col items-center rounded-lg border py-2 text-xs transition-colors disabled:opacity-50 ' +
+                      (isSelFmt
+                        ? 'border-accent bg-accent/10 font-semibold text-accent'
+                        : 'border-border bg-surface text-text-muted hover:border-accent/50 hover:text-text')
+                    }
+                  >
+                    <span className="text-base">{icon}</span>
+                    <span className="mt-0.5">{label}</span>
+                    {isSelFmt && <span className="text-[9px] text-accent">✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <button
             type="button"
-            onClick={generate}
-            disabled={generating || !inputText.trim()}
+            onClick={() => void generate()}
+            disabled={generating || !inputText.trim() || selectedStyles.size === 0}
             className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition-opacity disabled:opacity-40"
           >
             {generating ? (
@@ -1616,7 +2081,7 @@ function MinutesPane({
             ) : (
               <>
                 <SparkIcon width={15} height={15} />
-                議事録を生成
+                議事録を生成{selectedStyles.size > 1 ? `（${selectedStyles.size}スタイル）` : ''}
               </>
             )}
           </button>
@@ -1650,9 +2115,56 @@ function MinutesPane({
             </div>
           )}
           {genReport && !genError && (
-            <p className="text-xs" style={{ color: 'var(--mc-active)' }}>
-              {genReport}
-            </p>
+            <div className="flex flex-col gap-2">
+              <p className="text-xs" style={{ color: 'var(--mc-active)' }}>
+                {genReport}
+              </p>
+
+              {/* 生成後編集エリア */}
+              {generatedContent !== null && lastArtifact && (
+                <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3">
+                  <p className="text-[11px] text-text-faint">生成内容を編集して保存できます</p>
+                  <textarea
+                    value={editedContent}
+                    onChange={(e) => { setEditedContent(e.target.value); setSaveEditOk(false); }}
+                    rows={10}
+                    className="w-full resize-y rounded border border-border bg-bg px-2 py-1.5 text-xs font-mono text-text focus:border-accent focus:outline-none"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={saveEdit}
+                      disabled={savingEdit || editedContent === generatedContent}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-bg disabled:opacity-50"
+                    >
+                      {savingEdit ? <><Spinner />保存中…</> : '保存'}
+                    </button>
+                    {saveEditOk && <span className="text-[11px]" style={{ color: 'var(--mc-active)' }}>保存しました</span>}
+                    {saveEditError && <span className="text-[11px]" style={{ color: 'var(--mc-stalled)' }}>{saveEditError}</span>}
+                  </div>
+                </div>
+              )}
+
+              {lastArtifact && (
+                <div>
+                  <p className="mb-1 text-[11px] text-text-faint">別形式で再ダウンロード</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {EXPORT_OPTS.map(({ fmt, label, icon }) => (
+                      <button
+                        key={fmt}
+                        type="button"
+                        disabled={exporting !== null}
+                        onClick={() => void triggerDownload(lastArtifact.relpath, lastArtifact.name, fmt)}
+                        className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 text-xs font-medium text-text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
+                      >
+                        {exporting === fmt ? <Spinner /> : <span>{icon}</span>}
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           <div className="border-t border-border pt-3">
@@ -1716,6 +2228,7 @@ function MinutesPane({
   );
 }
 
+
 // ─── 詳細画面（3 ペイン / モバイルはタブ）────────────────────────
 
 type DetailTab = 'sources' | 'chat' | 'artifacts' | 'minutes';
@@ -1723,12 +2236,14 @@ type DetailTab = 'sources' | 'chat' | 'artifacts' | 'minutes';
 function NotebookDetailView({
   id,
   onBack,
+  initialTab = 'sources',
 }: {
   id: string;
   onBack: () => void;
+  initialTab?: DetailTab;
 }) {
   const { data, error, loading, refetch } = useLiveResource<NotebookDetail>(`/api/notebooks/${id}`);
-  const [tab, setTab] = useState<DetailTab>('sources');
+  const [tab, setTab] = useState<DetailTab>(initialTab === 'chat' ? 'sources' : initialTab);
   const [preview, setPreview] = useState<NotebookFileRef | null>(null);
 
   // インライン名称編集
@@ -1741,7 +2256,6 @@ function NotebookDetailView({
   const detail = data && data.meta ? data : null;
   const sources = detail?.sources ?? [];
   const artifacts = detail?.artifacts ?? [];
-  const chat = detail?.chat ?? [];
   const hasSources = sources.length > 0;
 
   const startEditing = useCallback(() => {
@@ -1792,11 +2306,10 @@ function NotebookDetailView({
     setRenameError(null);
   }, []);
 
+  const [showMinutesPane, setShowMinutesPane] = useState(initialTab === 'minutes');
+
   const sourcesPane = (
     <SourcesPane id={id} sources={sources} onChanged={refetch} onPreview={setPreview} />
-  );
-  const chatPane = (
-    <ChatPane id={id} chat={chat} hasSources={hasSources} onAnswered={refetch} />
   );
   const artifactsPane = (
     <ArtifactsPane
@@ -1805,15 +2318,24 @@ function NotebookDetailView({
       hasSources={hasSources}
       onGenerated={refetch}
       onPreview={setPreview}
+      onOpenMinutes={() => {
+        setShowMinutesPane(true);
+        setTab('minutes');
+      }}
     />
   );
 
-  const minutesPane = <MinutesPane id={id} onGenerated={refetch} />;
+  const minutesPane = (
+    <MinutesPane
+      id={id}
+      onGenerated={refetch}
+      onBack={() => { setShowMinutesPane(false); setTab('artifacts'); }}
+    />
+  );
 
   const TABS: { key: DetailTab; label: string; count?: number }[] = [
     { key: 'sources', label: '資料', count: sources.length },
-    { key: 'chat', label: 'チャット' },
-    { key: 'artifacts', label: '生成物', count: artifacts.length },
+    { key: 'artifacts', label: 'フォルダ', count: artifacts.length },
     { key: 'minutes', label: '議事録' },
   ];
 
@@ -1867,7 +2389,7 @@ function NotebookDetailView({
               <p className="mt-0.5 text-xs text-text-muted">資料 {sources.length}・生成物 {artifacts.length}</p>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onBack}
@@ -1906,17 +2428,18 @@ function NotebookDetailView({
         <ResourceState loading={loading} error={error} hasData={!!detail}>
           {detail && (
             <>
-              {/* デスクトップ: 4 ペイン */}
-              <div className="hidden h-full md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
-                <div className="min-h-0 border-r border-border">{sourcesPane}</div>
-                <div className="min-h-0 border-r border-border">{chatPane}</div>
-                <div className="min-h-0 border-r border-border">{artifactsPane}</div>
-                <div className="min-h-0">{minutesPane}</div>
-              </div>
+              {/* デスクトップ: 議事録全画面 or 2ペイン（資料 / フォルダ） */}
+              {showMinutesPane ? (
+                <div className="hidden h-full md:block">{minutesPane}</div>
+              ) : (
+                <div className="hidden h-full md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                  <div className="min-h-0 border-r border-border">{sourcesPane}</div>
+                  <div className="min-h-0">{artifactsPane}</div>
+                </div>
+              )}
               {/* モバイル: display:none で切り替え（アンマウントしないため生成中 state を保持）*/}
               <div className="h-full md:hidden">
                 <div className="h-full" style={{ display: tab === 'sources' ? undefined : 'none' }}>{sourcesPane}</div>
-                <div className="h-full" style={{ display: tab === 'chat' ? undefined : 'none' }}>{chatPane}</div>
                 <div className="h-full" style={{ display: tab === 'artifacts' ? undefined : 'none' }}>{artifactsPane}</div>
                 <div className="h-full" style={{ display: tab === 'minutes' ? undefined : 'none' }}>{minutesPane}</div>
               </div>
@@ -2073,11 +2596,13 @@ function NotebookCard({
           </button>
         </div>
       </div>
-      <button type="button" onClick={onOpen} className="mt-2 flex items-center gap-3 text-left text-xs text-text-faint">
-        <span>資料 {nb.sourceCount}</span>
-        <span>生成物 {nb.artifactCount}</span>
-        <span>{relativeTime(nb.updatedAt)}</span>
-      </button>
+      <div className="mt-2">
+        <button type="button" onClick={onOpen} className="flex items-center gap-3 text-left text-xs text-text-faint">
+          <span>資料 {nb.sourceCount}</span>
+          <span>生成物 {nb.artifactCount}</span>
+          <span>{relativeTime(nb.updatedAt)}</span>
+        </button>
+      </div>
 
       {confirming && (
         <div className="mt-3 rounded-lg border border-border bg-surface-2 p-3" role="alertdialog" aria-label="削除の確認">
@@ -2125,16 +2650,38 @@ interface NotebooksListResponse {
 }
 
 export default function Notebooks() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const autoTab = (location.state as { autoTab?: string } | null)?.autoTab as DetailTab | undefined;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { data, error, loading, fetchedAt, refetch } =
     useLiveResource<NotebooksListResponse>('/api/notebooks');
 
   const notebooks = data?.notebooks ?? [];
 
+  useEffect(() => {
+    if (!autoTab || !data) return;
+    navigate(location.pathname, { replace: true, state: null });
+    const firstId = data.notebooks?.[0]?.id;
+    if (firstId) {
+      setSelectedId(firstId);
+    } else {
+      fetch('/api/notebooks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: '議事録' }),
+      })
+        .then((r) => r.json())
+        .then((b: { id?: string }) => { if (b.id) setSelectedId(b.id); refetch(); })
+        .catch(() => {});
+    }
+  }, [data, autoTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (selectedId) {
     return (
       <NotebookDetailView
         id={selectedId}
+        initialTab={autoTab === 'minutes' ? 'minutes' : 'sources'}
         onBack={() => {
           setSelectedId(null);
           refetch();

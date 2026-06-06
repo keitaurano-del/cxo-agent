@@ -11,6 +11,9 @@
 //     - tmux main が無ければ作成（TERMINAL_TMUX_START_CMD で林 CLI を起動）。
 //     - ttyd（systemd ユニット）が停止していれば start する。
 //     - 既に両方稼働中なら何もせず ok を返す（no-op）。
+//   GET  /api/terminal/model?terminal=<id> — 指定ターミナルの現在モデルを返す。
+//   POST /api/terminal/model — ターミナルのモデルを変更する。
+//     body: { terminal: number, model: string }
 //
 // セキュリティ:
 //   - 子プロセス起動は execFile 系（argv 直渡し・シェル経由なし）でシェルインジェクションを回避。
@@ -23,9 +26,13 @@
 //     稼働中なら触らない）。
 
 import { execFile } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { Router, type Request, type Response } from 'express';
 
+import { join } from 'node:path';
+
 import {
+  DATA_HOME,
   TERMINAL_TMUX_TARGET,
   TERMINAL_TMUX_PATH,
   TERMINAL_TMUX_START_CMD,
@@ -36,6 +43,28 @@ import {
   type TerminalDef,
   type TerminalRemote,
 } from './config.js';
+
+// ─── settings.json パス ─────────────────────────────────────
+/** local（この箱）の claude settings.json パス。 */
+const LOCAL_SETTINGS_PATH = join(DATA_HOME, '.claude', 'settings.json');
+/** 旧箱の claude settings.json パス（SSH で読み書き）。 */
+const REMOTE_SETTINGS_PATH = '/home/dev/.claude/settings.json';
+/** openclaw.json のパス（ターミナル4 のモデル設定）。 */
+const OPENCLAW_JSON_PATH = join(DATA_HOME, '.openclaw', 'openclaw.json');
+/** アカウントラベルの永続化ファイル（data/ 配下）。 */
+const ACCOUNT_LABELS_PATH = join(DATA_HOME, 'projects', 'cxo-agent', 'data', 'terminal-account-labels.json');
+/** エージェント情報の永続化ファイル（data/ 配下）。 */
+const AGENT_INFO_PATH = join(DATA_HOME, 'projects', 'cxo-agent', 'data', 'terminal-agent-info.json');
+/** 許可するモデル名のセット（これ以外への書き換えは拒否）。 */
+const ALLOWED_MODELS = new Set<string>([
+  'claude-sonnet-4-6',
+  'claude-opus-4-8',
+  'claude-haiku-4-5-20251001',
+]);
+/** 許可するアカウントラベルのセット。 */
+const ALLOWED_ACCOUNTS = new Set<string>(['Claude1', 'Claude2']);
+/** デフォルトのアカウントラベル（ターミナル id → label）。 */
+const DEFAULT_ACCOUNT_LABELS: Record<number, string> = { 1: 'Claude1', 2: 'Claude2', 3: 'Claude1', 4: 'Claude1' };
 
 // ─── 子プロセス実行ヘルパ（execFile を Promise 化）────────────────
 
@@ -296,14 +325,20 @@ async function handleStatus(req: Request, res: Response): Promise<void> {
   }
 }
 
-/** 全ターミナルの定義 + 状態を一括返却（タブ UI の初期描画用）。 */
+/** 全ターミナルの定義 + 状態 + モデル + アカウントラベルを一括返却（タブ UI の初期描画用）。 */
 async function handleStatusAll(_req: Request, res: Response): Promise<void> {
   try {
+    const accountLabels = readAccountLabels();
+    const agentInfo = readAgentInfo();
     const terminals = await Promise.all(
       TERMINALS.map(async (t) => ({
         id: t.id,
         label: t.label,
+        account: accountLabels[t.id] ?? DEFAULT_ACCOUNT_LABELS[t.id] ?? 'Claude1',
+        model: await getModelForTerminal(t),
         status: await collectStatusFor(t),
+        agentName: agentInfo[t.id]?.name ?? null,
+        agentEmoji: agentInfo[t.id]?.emoji ?? null,
       })),
     );
     res.json({ terminals });
@@ -439,9 +474,269 @@ async function handleSendKeys(req: Request, res: Response): Promise<void> {
   }
 }
 
+// ─── モデル取得・変更（タブ内モデル表示 / 切り替え）──────────────
+//
+// GET /api/terminal/model?terminal=<id>
+//   指定ターミナルの Claude モデル名を返す。
+//   ターミナル1/3（local）: /home/dev/.claude/settings.json の model フィールドを読む。
+//   ターミナル2（remote）: SSH 経由で旧箱の settings.json を読む。
+//   ターミナル4（openclaw）: 固定値 claude-sonnet-4-6 を返す。
+//   読み取り失敗時は { model: null } を返す（エラーにしない）。
+//
+// POST /api/terminal/model
+//   body: { terminal: number, model: string }
+//   settings.json の model フィールドを書き換える。
+//   ターミナル4（openclaw）は変更不可（エラー返却）。
+//   JSON パースエラー時は書き込まない（整合性保護）。
+
+// ─── openclaw.json 読み書き（ターミナル4）────────────────────
+//
+// openclaw.json の agents.defaults.model.primary フィールドを読み書きする。
+// ファイルが存在しない場合は null を返す（エラーにしない）。
+// JSON パースエラーは書き込みをせず throw する（呼び出し元が 500 を返す）。
+
+/**
+ * openclaw.json の agents.defaults.model.primary を読んで返す。
+ * "anthropic/claude-sonnet-4-6" → "claude-sonnet-4-6"（"anthropic/" prefix を除去）。
+ * ファイルが無い場合は null（読み取り失敗もすべて null）。
+ */
+function readOpenclawModel(): string | null {
+  try {
+    const raw = readFileSync(OPENCLAW_JSON_PATH, 'utf-8');
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    const primary = (obj as { agents?: { defaults?: { model?: { primary?: unknown } } } })
+      ?.agents?.defaults?.model?.primary;
+    if (typeof primary !== 'string' || primary.trim() === '') return null;
+    // "anthropic/claude-sonnet-4-6" → "claude-sonnet-4-6"
+    const parts = primary.split('/');
+    return parts.length >= 2 ? parts.slice(1).join('/') : primary;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * openclaw.json の agents.defaults.model.primary を書き換える。
+ * フロントからは "claude-sonnet-4-6" 形式、JSON には "anthropic/claude-sonnet-4-6" で保存。
+ * JSON パースエラー時は書き込まずに throw する（呼び出し元が 500 を返す）。
+ */
+function writeOpenclawModel(model: string): void {
+  const raw = readFileSync(OPENCLAW_JSON_PATH, 'utf-8');
+  // parse エラーは throw させる（整合性保護）
+  const obj = JSON.parse(raw) as Record<string, unknown>;
+  // ネストを安全に掘り下げてセットする
+  type AgentDefaults = { model?: { primary?: string } };
+  type AgentsSection = { defaults?: AgentDefaults };
+  const agents = (obj.agents ?? {}) as AgentsSection;
+  const defaults = (agents.defaults ?? {}) as AgentDefaults;
+  const modelSection = (defaults.model ?? {}) as { primary?: string };
+  modelSection.primary = `anthropic/${model}`;
+  defaults.model = modelSection;
+  agents.defaults = defaults;
+  obj.agents = agents;
+  writeFileSync(OPENCLAW_JSON_PATH, JSON.stringify(obj, null, 2) + '\n', 'utf-8');
+}
+
+/** local の settings.json から model を読む。読み取り失敗は null。 */
+function readLocalModel(): string | null {
+  try {
+    const raw = readFileSync(LOCAL_SETTINGS_PATH, 'utf-8');
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    const model = obj.model;
+    return typeof model === 'string' && model.trim() !== '' ? model : null;
+  } catch {
+    return null;
+  }
+}
+
+/** local の settings.json の model フィールドを書き換える。パースエラーは書き込まない。 */
+function writeLocalModel(model: string): void {
+  const raw = readFileSync(LOCAL_SETTINGS_PATH, 'utf-8');
+  const obj = JSON.parse(raw) as Record<string, unknown>;
+  obj.model = model;
+  writeFileSync(LOCAL_SETTINGS_PATH, JSON.stringify(obj, null, 2) + '\n', 'utf-8');
+}
+
+/**
+ * SSH で旧箱の settings.json の model フィールドを読む。
+ * BatchMode=yes, ConnectTimeout=2 で失敗しても null を返す。
+ */
+async function readRemoteModel(remote: TerminalRemote): Promise<string | null> {
+  try {
+    const r = await run(
+      'ssh',
+      [
+        '-i', remote.sshKey,
+        '-o', 'BatchMode=yes',
+        '-o', 'ConnectTimeout=5',
+        `${remote.sshUser}@${remote.sshHost}`,
+        `cat ${REMOTE_SETTINGS_PATH}`,
+      ],
+      tmuxEnv(),
+    );
+    if (r.code !== 0 || !r.stdout.trim()) return null;
+    const obj = JSON.parse(r.stdout) as Record<string, unknown>;
+    const model = obj.model;
+    return typeof model === 'string' && model.trim() !== '' ? model : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * SSH で旧箱の settings.json の model フィールドを書き換える。
+ * python3 で JSON を安全に更新（パースエラー時は書き込まない）。
+ */
+async function writeRemoteModel(remote: TerminalRemote, model: string): Promise<void> {
+  // python3 でファイル読み込み→model 書き換え→書き出し（シェルで直接 sed しない）。
+  const safeModel = model.replace(/'/g, `'\\''`);
+  const pyScript = [
+    `import json,sys`,
+    `f=open('${REMOTE_SETTINGS_PATH}','r')`,
+    `obj=json.load(f)`,
+    `f.close()`,
+    `obj['model']='${safeModel}'`,
+    `f=open('${REMOTE_SETTINGS_PATH}','w')`,
+    `json.dump(obj,f,indent=2)`,
+    `f.write('\\n')`,
+    `f.close()`,
+  ].join(';');
+  const r = await run(
+    'ssh',
+    [
+      '-i', remote.sshKey,
+      '-o', 'BatchMode=yes',
+      '-o', 'ConnectTimeout=2',
+      `${remote.sshUser}@${remote.sshHost}`,
+      `python3 -c "${pyScript}"`,
+    ],
+    tmuxEnv(),
+  );
+  if (r.code !== 0) {
+    throw new Error(`remote model write failed (code ${r.code}): ${r.stderr.trim() || r.stdout.trim()}`);
+  }
+}
+
+// ─── アカウントラベル読み書き ─────────────────────────────────
+
+/** 全ターミナルのアカウントラベルを返す（ファイルなければデフォルト値）。 */
+function readAccountLabels(): Record<number, string> {
+  try {
+    const raw = readFileSync(ACCOUNT_LABELS_PATH, 'utf-8');
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    const result = { ...DEFAULT_ACCOUNT_LABELS };
+    for (const t of TERMINALS) {
+      const v = obj[String(t.id)];
+      if (typeof v === 'string' && ALLOWED_ACCOUNTS.has(v)) result[t.id] = v;
+    }
+    return result;
+  } catch {
+    return { ...DEFAULT_ACCOUNT_LABELS };
+  }
+}
+
+/** エージェント情報（name/emoji）を読む。ファイルなければ空オブジェクト。 */
+function readAgentInfo(): Record<number, { name: string; emoji: string }> {
+  try {
+    const raw = readFileSync(AGENT_INFO_PATH, 'utf-8');
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    const result: Record<number, { name: string; emoji: string }> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      const id = parseInt(k, 10);
+      if (!isNaN(id) && v && typeof v === 'object') {
+        const info = v as Record<string, unknown>;
+        if (typeof info.name === 'string' && typeof info.emoji === 'string') {
+          result[id] = { name: info.name, emoji: info.emoji };
+        }
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+/** 指定ターミナルのアカウントラベルを保存する。 */
+function writeAccountLabel(terminalId: number, account: string): void {
+  const labels = readAccountLabels();
+  labels[terminalId] = account;
+  const obj: Record<string, string> = {};
+  for (const [k, v] of Object.entries(labels)) obj[k] = v;
+  writeFileSync(ACCOUNT_LABELS_PATH, JSON.stringify(obj, null, 2) + '\n', 'utf-8');
+}
+
+/** 指定ターミナルのモデル名を取得する（失敗時は null）。 */
+async function getModelForTerminal(t: TerminalDef): Promise<string | null> {
+  if (t.id === 4) return readOpenclawModel();
+  if (t.remote) return readRemoteModel(t.remote);
+  return readLocalModel();
+}
+
+async function handleGetModel(req: Request, res: Response): Promise<void> {
+  try {
+    const t = resolveTerminal(req.query.terminal);
+    const model = await getModelForTerminal(t);
+    res.json({ model });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('[terminal-control] get-model failed:', message);
+    res.json({ model: null });
+  }
+}
+
+async function handleSetModel(req: Request, res: Response): Promise<void> {
+  try {
+    const body = (req.body ?? {}) as { terminal?: unknown; model?: unknown };
+    const t = resolveTerminal(body.terminal);
+    const model = body.model;
+
+    if (typeof model !== 'string' || !ALLOWED_MODELS.has(model)) {
+      res.status(400).json({ ok: false, error: `モデル名が不正です。許可モデル: ${[...ALLOWED_MODELS].join(', ')}` });
+      return;
+    }
+
+    if (t.id === 4) {
+      // ターミナル4（openclaw/Masayoshi）: openclaw.json を更新する
+      writeOpenclawModel(model);
+    } else if (t.remote) {
+      await writeRemoteModel(t.remote, model);
+    } else {
+      writeLocalModel(model);
+    }
+    res.json({ ok: true, model });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('[terminal-control] set-model failed:', message);
+    res.status(500).json({ ok: false, error: message });
+  }
+}
+
+// ─── アカウントラベルハンドラ ─────────────────────────────────
+
+function handleGetAccountLabels(_req: Request, res: Response): void {
+  res.json(readAccountLabels());
+}
+
+function handleSetAccountLabel(req: Request, res: Response): void {
+  try {
+    const body = (req.body ?? {}) as { terminal?: unknown; account?: unknown };
+    const t = resolveTerminal(body.terminal);
+    const account = body.account;
+    if (typeof account !== 'string' || !ALLOWED_ACCOUNTS.has(account)) {
+      res.status(400).json({ ok: false, error: `account は Claude1 または Claude2 のみ有効です。` });
+      return;
+    }
+    writeAccountLabel(t.id, account);
+    res.json({ ok: true, terminal: t.id, account });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    res.status(500).json({ ok: false, error: message });
+  }
+}
+
 // ─── Router 組み立て ─────────────────────────────────────────
 
-/** /api/terminal 配下の status / start / output / send-keys ルータ。index.ts で auth ミドルウェア配下に mount する。 */
+/** /api/terminal 配下の status / start / output / send-keys / model / account ルータ。index.ts で auth ミドルウェア配下に mount する。 */
 export function terminalControlRouter(): Router {
   const router = Router();
   router.get('/status', (req, res) => void handleStatus(req, res));
@@ -449,5 +744,9 @@ export function terminalControlRouter(): Router {
   router.post('/start', (req, res) => void handleStart(req, res));
   router.get('/output', (req, res) => void handleOutput(req, res));
   router.post('/send-keys', (req, res) => void handleSendKeys(req, res));
+  router.get('/model', (req, res) => void handleGetModel(req, res));
+  router.post('/model', (req, res) => void handleSetModel(req, res));
+  router.get('/account', (req, res) => void handleGetAccountLabels(req, res));
+  router.post('/account', (req, res) => void handleSetAccountLabel(req, res));
   return router;
 }

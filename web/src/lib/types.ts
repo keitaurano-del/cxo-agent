@@ -218,6 +218,7 @@ export type DeliverableKind =
   | 'image'
   | 'markdown'
   | 'text'
+  | 'folder'
   | 'other';
 
 export interface DeliverableFile {
@@ -227,6 +228,7 @@ export interface DeliverableFile {
   mtime: string; // ISO
   ext: string;
   kind: DeliverableKind;
+  isDir?: boolean; // 空ディレクトリのエントリ
 }
 
 export interface DeliverablesResponse {
@@ -532,4 +534,17 @@ export interface MinutesGenerateResponse {
   artifacts: NotebookFileRef[];
   report?: string;
   error?: string;
+  deliverableRelpath?: string; // Deliverables 直接保存版で保存された議事録の relpath
+}
+
+// ─── フォルダツリー（artifacts/ のサブフォルダ構造）──────────────────────
+
+export interface NotebookFolderEntry {
+  name: string;
+  files: NotebookFileRef[];
+}
+
+export interface NotebookFolderTree {
+  folders: NotebookFolderEntry[];
+  rootFiles: NotebookFileRef[];
 }

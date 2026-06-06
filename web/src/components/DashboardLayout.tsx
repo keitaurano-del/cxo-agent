@@ -1,11 +1,11 @@
-// ダッシュボード（/）配下の 5 タブを束ねるレイアウト（MC-76）。
-// タブバー（俯瞰 / 今日 / エージェント / 消費量）+ <Outlet/> で
-// 各ビュー本体を差し込む。子ビューの URL（/today /feed /agents /usage /agents/:id）は
-// そのまま温存され、deep link・SSE・横断検索からの遷移に影響しない。
+// ダッシュボード（/）配下のタブを束ねるレイアウト（MC-76）。
+// タブバー（俯瞰 / 今日 / ニュース / 活動 / Claude）+ <Outlet/> で
+// 各ビュー本体を差し込む。子ビューの URL は deep link・SSE・横断検索からの遷移に影響しない。
+// エージェントタブは俯瞰（/）に統合済み。ティック+消費量は活動（/activity）に統合済み。
 // PC は横並び tablist、モバイルは横スクロール（Tasks のステータスタブと同じパターン）。
 import { NavLink, Outlet } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { GridIcon, NoteIcon, UsersIcon, UsageIcon, LoopIcon, GaugeIcon, NewsIcon } from './icons';
+import { GridIcon, NoteIcon, ActivityIcon, GaugeIcon, NewsIcon } from './icons';
 
 interface DashTab {
   to: string;
@@ -18,9 +18,7 @@ const DASH_TABS: DashTab[] = [
   { to: '/', label: '俯瞰', icon: <GridIcon width={16} height={16} /> },
   { to: '/today', label: '今日', icon: <NoteIcon width={16} height={16} /> },
   { to: '/news', label: 'ニュース', icon: <NewsIcon width={16} height={16} /> },
-  { to: '/agents', label: 'エージェント', icon: <UsersIcon width={16} height={16} /> },
-  { to: '/ticks', label: 'ティック', icon: <LoopIcon width={16} height={16} /> },
-  { to: '/usage', label: '消費量', icon: <UsageIcon width={16} height={16} /> },
+  { to: '/activity', label: '活動', icon: <ActivityIcon width={16} height={16} /> },
   { to: '/plan-usage', label: 'Claude', icon: <GaugeIcon width={16} height={16} /> },
 ];
 
