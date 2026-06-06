@@ -2034,3 +2034,32 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 実行コマンド | `sudo systemctl restart mission-control.service` |
 | 受け入れ条件（DoD） | restart 後 `/api/healthz` が 200 を返すこと。 |
 | 更新日 | 2026-06-06 |
+
+| MC-151 | ノートブック議事録生成機能の実装 | P1 | DONE（2026-06-06 tsc/build green・API 動作確認・Apollo 12:57 反映済み） | dev-logic |
+| MC-152 | ノートブック議事録 RAG 化（パターン学習・再利用） | P2 | DONE | dev-logic |
+
+### MC-151 — ノートブック議事録生成機能の実装
+
+| 項目 | 内容 |
+|------|------|
+| ID | MC-151 |
+| タイトル | ノートブック議事録生成機能の実装 |
+| 優先度 | P1 |
+| ステータス | DONE |
+| 担当 | dev-logic |
+| 詳細 | Notebooks 画面に「議事録」タブを追加。テキスト入力または音声アップロード（Gemini 2.0 Flash で文字起こし）→ 4種類×3形式テンプレートで Claude が議事録を SSE ストリーム生成→成果物として保存。バックエンド: lib/transcribe.ts（音声→テキスト）、lib/minutesPresets.ts（テンプレート定義）、lib/minutesPatterns.ts（パターン CRUD）、notebookRouter.ts に 6 エンドポイント追加。フロントエンド: Notebooks.tsx に MinutesPane コンポーネント追加（入力モード切替・テンプレート選択・パターン保存・ストリーム進捗）。commit 5ab4084。 |
+| 受け入れ条件（DoD） | (1) 音声/テキスト入力から議事録が生成され成果物に保存される。(2) tsc --noEmit と build がグリーン。(3) Apollo 上で MinutesPane タブが表示・操作できる。 |
+| 完了エビデンス | (1) /api/notebooks/minutes/presets が 200 返却確認。(2) server tsc --noEmit 0 エラー・web build success（dist/index-B5brZQDr.js 生成）。(3) Apollo 12:57 起動（commit 5ab4084 反映後）・MinutesPane タブ L1918 実装・API 疎通確認済み。 |
+| 更新日 | 2026-06-06 |
+
+### MC-152 — ノートブック議事録 RAG 化（パターン学習・再利用）
+
+| 項目 | 内容 |
+|------|------|
+| ID | MC-152 |
+| タイトル | ノートブック議事録 RAG 化（パターン学習・再利用） |
+| 優先度 | P2 |
+| ステータス | DONE |
+| 担当 | dev-logic |
+| 詳細 | 議事録生成時に使ったプロンプト設定（種類・形式・カスタム指示）をパターンとして保存・再利用できる仕組みを実装。data/minutes-patterns.json に CRUD、GET /api/notebooks/minutes/patterns・POST・DELETE を追加。フロントの MinutesPane でパターン選択時に設定が自動セットされる。 |
+| 更新日 | 2026-06-06 |
