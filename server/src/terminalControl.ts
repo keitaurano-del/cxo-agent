@@ -711,13 +711,22 @@ async function handleSetModel(req: Request, res: Response): Promise<void> {
   }
 }
 
+// ─── アカウント認証ディレクトリマッピング ─────────────────────
+// CLAUDE_CONFIG_DIR 環境変数でアカウントを切り替える。
+// Claude1: keita.urano (Max 20x)  → ~/.claude
+// Claude2: keita.urano2 (Max 5x)  → ~/.claude-urano2
+const ACCOUNT_CONFIG_DIR: Record<string, string> = {
+  Claude1: join(DATA_HOME, '.claude'),
+  Claude2: join(DATA_HOME, '.claude-urano2'),
+};
+
 // ─── アカウントラベルハンドラ ─────────────────────────────────
 
 function handleGetAccountLabels(_req: Request, res: Response): void {
   res.json(readAccountLabels());
 }
 
-function handleSetAccountLabel(req: Request, res: Response): void {
+async function handleSetAccountLabel(req: Request, res: Response): Promise<void> {
   try {
     const body = (req.body ?? {}) as { terminal?: unknown; account?: unknown };
     const t = resolveTerminal(body.terminal);
@@ -726,7 +735,22 @@ function handleSetAccountLabel(req: Request, res: Response): void {
       res.status(400).json({ ok: false, error: `account は Claude1 または Claude2 のみ有効です。` });
       return;
     }
+
+    // 1. ラベル保存
     writeAccountLabel(t.id, account);
+
+    // 2. 対象 tmux ペインに CLAUDE_CONFIG_DIR を注入して即座に有効化
+    //    （実行中の claude は C-c で止め、env を export してから再起動）
+    const configDir = ACCOUNT_CONFIG_DIR[account];
+    if (configDir) {
+      const target = t.tmuxSession;
+      // C-c で現在のプロセスを停止
+      await runTmux(t, ['send-keys', '-t', target, 'C-c']).catch(() => null);
+      // CLAUDE_CONFIG_DIR を export（リテラル送信）
+      await runTmux(t, ['send-keys', '-t', target, '-l', `export CLAUDE_CONFIG_DIR=${configDir}`]).catch(() => null);
+      await runTmux(t, ['send-keys', '-t', target, 'Enter']).catch(() => null);
+    }
+
     res.json({ ok: true, terminal: t.id, account });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
