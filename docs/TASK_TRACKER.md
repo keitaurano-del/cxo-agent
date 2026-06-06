@@ -920,7 +920,7 @@ ID 採番: **AR-0x**。
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ### MC-67: 司令塔(Overview)カードの詳細表示
 
@@ -937,7 +937,7 @@ ID 採番: **AR-0x**。
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -959,7 +959,7 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | サブタスク | - [ ] 「承認が要る項目」判定基準の確定（REVIEW は除外＝MC-80 整合）<br>- [ ] designer: 「承認フロー」ビュー UX＋MC-76 ナビ統合設計<br>- [ ] 集約一覧の実装（/api/tasks フィルタ、非破壊）<br>- [ ] 承認/却下 書き込み API（MC-71 楽観ロック層再利用＋承認監査ログ）<br>- [ ] MC-61 詳細ドリルダウンへの導線<br>- [ ] 放置(stale)表示 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ### MC-69: タスクボードで優先度を手動変更できる
 
@@ -977,7 +977,7 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ（重要） | (1) 「承認が要る項目」の判定基準を着手前に確定（拾う対象: status=BLOCKED で Keita 待ち、「設計判断」「Keita承認待ち」明示タグ、デプロイ可否など）。MC-80 で「REVIEW は Keita 承認不要・内部レビューで DONE」が確定するため、REVIEW は承認フローの対象に含めない（含めると MC-80 と矛盾）。基準が曖昧だと拾い漏れ・誤集約。(2) 承認/却下は書き込み操作＝MC-71 の楽観ロック書き戻し層を必須再利用（フルファイル再生成禁止・read-back 検証・data/task-edits.jsonl 監査ログ）。承認アクションの監査（誰がいつ何を承認/却下したか）を別途記録。(3) 段階導入: MVP=可視化（MC-68 相当）→ 承認/却下アクション、と分離して着地。(4) server 非破壊・認証配下。(5) MC-76 とナビ構成を1枚で設計（トップレベルに足す）。(6) モバイル対応・中立文言・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | サブタスク | - [ ] 「承認が要る項目」判定基準の確定（REVIEW は除外＝MC-80 整合）<br>- [ ] designer: 「承認フロー」ビュー UX＋MC-76 ナビ統合設計<br>- [ ] 集約一覧の実装（/api/tasks フィルタ、非破壊）<br>- [ ] 承認/却下 書き込み API（MC-71 楽観ロック層再利用＋承認監査ログ）<br>- [ ] MC-61 詳細ドリルダウンへの導線<br>- [ ] 放置(stale)表示 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -999,7 +999,7 @@ ID 採番: **AR-0x**。
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 受け入れ条件 | (1) 現状 REVIEW で滞留しているタスクが、内部検証(DoD/テスト/型/lint 突き合わせ)を経て DONE または差し戻し(TODO/IN_PROGRESS)に整理され、「Keita 待ちで宙吊り」の REVIEW がゼロになる。(2) 以後 REVIEW は内部レビュー待ちのみを意味し、Keita 目視を最終ゲートにしない運用が徹底される（push/デプロイ可否は引き続き Keita 専権、これは別レイヤー）。 |
 | Keita判断待ち項目 | (1)カラー案A(夜ダーク・蒼推し)/案B(昼木目) (2)日本語見出しドット化有無 (3)アイコンSVGドット化/emoji併用 (4)9体ドット顔キャラ作成有無 (5)Apollo内部ツールの絵文字許容可否 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ## バッチ: 2026-05-31 Apollo タスク手動 編集/削除（MC-71）
 
@@ -1019,7 +1019,7 @@ ID 採番: **AR-0x**。
 | delete の扱い | 削除＝正本台帳から人/task-manager 管理の記録を消す操作のため、セマンティクス（物理削除 vs CANCELLED マーク vs 非表示）は Keita 設計判断。本タスクでは未実装、edit 着地後に Keita 確認の上で fast-follow。 |
 | 関連 | 各 docs/TASK_TRACKER.md の REVIEW 状態タスク全般。MC-79（承認フローに REVIEW を含めない方針＝本タスクと整合）。memory（REVIEW→内部検証→DONE の運用方針を別途 memory 化検討） |
 | 受け入れ条件 | (1) 現状 REVIEW で滞留しているタスクが、内部検証(DoD/テスト/型/lint 突き合わせ)を経て DONE または差し戻し(TODO/IN_PROGRESS)に整理され、「Keita 待ちで宙吊り」の REVIEW がゼロになる。(2) 以後 REVIEW は内部レビュー待ちのみを意味し、Keita 目視を最終ゲートにしない運用が徹底される（push/デプロイ可否は引き続き Keita 専権、これは別レイヤー）。 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ## バッチ: 2026-05-31 Apollo 投入時の優先度指定（MC-72）
 
@@ -1040,7 +1040,7 @@ ID 採番: **AR-0x**。
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ## バッチ: 2026-05-31 Apollo 全文検索（MC-73）
 
@@ -1057,7 +1057,7 @@ ID 採番: **AR-0x**。
 | 受け入れ条件 | (1) 現状 REVIEW で滞留しているタスクが、内部検証(DoD/テスト/型/lint 突き合わせ)を経て DONE または差し戻し(TODO/IN_PROGRESS)に整理され、「Keita 待ちで宙吊り」の REVIEW がゼロになる。(2) 以後 REVIEW は内部レビュー待ちのみを意味し、Keita 目視を最終ゲートにしない運用が徹底される（push/デプロイ可否は引き続き Keita 専権、これは別レイヤー）。 |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 抜けもれ | server非破壊追加・既存token認証配下・中立文言・ハードコードhex禁止・SVGアイコン。Vault全文は既存 /api/vault の検索(VAULT_SEARCH_LIMIT)流用。大量ヒット時の上限・デバウンス。日本語検索(部分一致)。 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ## バッチ: 2026-05-31 Apollo tasks collector バグ修正（MC-74）
 
@@ -1071,7 +1071,7 @@ ID 採番: **AR-0x**。
 | ステータス | DONE（2026-05-31 本番反映済 commit c69a534・restart済。バグ1=同一ID重複時に古いステータスで巻き戻り→STATUS_RANK+mergeStatusで確定方向のみ上書き・表行を一次値に。バグ2=縦型カード| ID |MC-70|非対応→状態機械で対応。実測 AF-01/FB-02/FB-03→DONE・MC-70→CANCELLED・MC-73→DONE・総数196→204回帰なし） |
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1094,7 +1094,7 @@ ID 採番: **AR-0x**。
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ### MC-76: 「司令塔」→「ダッシュボード」改名＋ナビ再編（今日/会話/エージェント/消費量をダッシュボード配下へ）
 
@@ -1112,7 +1112,7 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | サブタスク | - [ ] 「承認が要る項目」判定基準の確定（REVIEW は除外＝MC-80 整合）<br>- [ ] designer: 「承認フロー」ビュー UX＋MC-76 ナビ統合設計<br>- [ ] 集約一覧の実装（/api/tasks フィルタ、非破壊）<br>- [ ] 承認/却下 書き込み API（MC-71 楽観ロック層再利用＋承認監査ログ）<br>- [ ] MC-61 詳細ドリルダウンへの導線<br>- [ ] 放置(stale)表示 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ### MC-77: inbox の「タスク/指示」区別を廃止し全てタスク化＋即タスクボード反映（MC-66 を集約）
 
@@ -1130,7 +1130,7 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ（重要） | (1) 「承認が要る項目」の判定基準を着手前に確定（拾う対象: status=BLOCKED で Keita 待ち、「設計判断」「Keita承認待ち」明示タグ、デプロイ可否など）。MC-80 で「REVIEW は Keita 承認不要・内部レビューで DONE」が確定するため、REVIEW は承認フローの対象に含めない（含めると MC-80 と矛盾）。基準が曖昧だと拾い漏れ・誤集約。(2) 承認/却下は書き込み操作＝MC-71 の楽観ロック書き戻し層を必須再利用（フルファイル再生成禁止・read-back 検証・data/task-edits.jsonl 監査ログ）。承認アクションの監査（誰がいつ何を承認/却下したか）を別途記録。(3) 段階導入: MVP=可視化（MC-68 相当）→ 承認/却下アクション、と分離して着地。(4) server 非破壊・認証配下。(5) MC-76 とナビ構成を1枚で設計（トップレベルに足す）。(6) モバイル対応・中立文言・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | サブタスク | - [ ] 「承認が要る項目」判定基準の確定（REVIEW は除外＝MC-80 整合）<br>- [ ] designer: 「承認フロー」ビュー UX＋MC-76 ナビ統合設計<br>- [ ] 集約一覧の実装（/api/tasks フィルタ、非破壊）<br>- [ ] 承認/却下 書き込み API（MC-71 楽観ロック層再利用＋承認監査ログ）<br>- [ ] MC-61 詳細ドリルダウンへの導線<br>- [ ] 放置(stale)表示 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ### MC-78: 優先順位順にタスクをピックアップ（着手＋ボード表示の両面）
 
@@ -1147,7 +1147,7 @@ ID 採番: **AR-0x**。
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ### MC-79: 「承認フロー」メニュー追加（Keita 承認が要るものを集約・承認/却下）（MC-68 を集約）
 
@@ -1165,7 +1165,7 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ（重要） | (1) 「承認が要る項目」の判定基準を着手前に確定（拾う対象: status=BLOCKED で Keita 待ち、「設計判断」「Keita承認待ち」明示タグ、デプロイ可否など）。MC-80 で「REVIEW は Keita 承認不要・内部レビューで DONE」が確定するため、REVIEW は承認フローの対象に含めない（含めると MC-80 と矛盾）。基準が曖昧だと拾い漏れ・誤集約。(2) 承認/却下は書き込み操作＝MC-71 の楽観ロック書き戻し層を必須再利用（フルファイル再生成禁止・read-back 検証・data/task-edits.jsonl 監査ログ）。承認アクションの監査（誰がいつ何を承認/却下したか）を別途記録。(3) 段階導入: MVP=可視化（MC-68 相当）→ 承認/却下アクション、と分離して着地。(4) server 非破壊・認証配下。(5) MC-76 とナビ構成を1枚で設計（トップレベルに足す）。(6) モバイル対応・中立文言・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | サブタスク | - [ ] 「承認が要る項目」判定基準の確定（REVIEW は除外＝MC-80 整合）<br>- [ ] designer: 「承認フロー」ビュー UX＋MC-76 ナビ統合設計<br>- [ ] 集約一覧の実装（/api/tasks フィルタ、非破壊）<br>- [ ] 承認/却下 書き込み API（MC-71 楽観ロック層再利用＋承認監査ログ）<br>- [ ] MC-61 詳細ドリルダウンへの導線<br>- [ ] 放置(stale)表示 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ### MC-80: REVIEW の最終ゲートから Keita レビューを外す（内部レビュー完了で即 DONE）
 
@@ -1183,7 +1183,7 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ（重要） | (1) 「承認が要る項目」の判定基準を着手前に確定（拾う対象: status=BLOCKED で Keita 待ち、「設計判断」「Keita承認待ち」明示タグ、デプロイ可否など）。MC-80 で「REVIEW は Keita 承認不要・内部レビューで DONE」が確定するため、REVIEW は承認フローの対象に含めない（含めると MC-80 と矛盾）。基準が曖昧だと拾い漏れ・誤集約。(2) 承認/却下は書き込み操作＝MC-71 の楽観ロック書き戻し層を必須再利用（フルファイル再生成禁止・read-back 検証・data/task-edits.jsonl 監査ログ）。承認アクションの監査（誰がいつ何を承認/却下したか）を別途記録。(3) 段階導入: MVP=可視化（MC-68 相当）→ 承認/却下アクション、と分離して着地。(4) server 非破壊・認証配下。(5) MC-76 とナビ構成を1枚で設計（トップレベルに足す）。(6) モバイル対応・中立文言・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | サブタスク | - [ ] cxo-agent TASK_TRACKER の REVIEW 状態を実 grep で全列挙<br>- [ ] logic TASK_TRACKER の REVIEW 状態を実 grep で全列挙<br>- [ ] 各 REVIEW タスクの DoD 逆引き＋test-functional/reviewer で内部検証<br>- [ ] DoD 充足＋green は DONE、未充足は差し戻し<br>- [ ] 「REVIEW を Keita 待ちにしない」運用を memory 化 |
 | 次アクション | cxo-agent/logic の REVIEW 滞留を実 grep で列挙 → test-functional/reviewer で各 DoD を内部検証 → green は DONE・未充足は差し戻し → 運用ルールを memory 化 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1203,7 +1203,7 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | サブタスク | - [ ] 「承認が要る項目」判定基準の確定（REVIEW は除外＝MC-80 整合）<br>- [ ] designer: 「承認フロー」ビュー UX＋MC-76 ナビ統合設計<br>- [ ] 集約一覧の実装（/api/tasks フィルタ、非破壊）<br>- [ ] 承認/却下 書き込み API（MC-71 楽観ロック層再利用＋承認監査ログ）<br>- [ ] MC-61 詳細ドリルダウンへの導線<br>- [ ] 放置(stale)表示 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1223,7 +1223,7 @@ ID 採番: **AR-0x**。
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | note | Apollo inbox id `2026-05-31T10-28-46-426Z-3ea08292`（MC-77 機構で taskId=MC-82 紐付け済み）。ブリーフ #3。2026-06-01 棚卸しで構造化。成果物=`docs/TASK_AUTHORING_TEMPLATE.md`。 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1247,7 +1247,7 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | サブタスク | - [ ] 「承認が要る項目」判定基準の確定（REVIEW は除外＝MC-80 整合）<br>- [ ] designer: 「承認フロー」ビュー UX＋MC-76 ナビ統合設計<br>- [ ] 集約一覧の実装（/api/tasks フィルタ、非破壊）<br>- [ ] 承認/却下 書き込み API（MC-71 楽観ロック層再利用＋承認監査ログ）<br>- [ ] MC-61 詳細ドリルダウンへの導線<br>- [ ] 放置(stale)表示 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ### MC-84 — 投入時に優先度を選べる（優先度 UI の明確化）
 
@@ -1265,7 +1265,7 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | サブタスク | - [ ] 「承認が要る項目」判定基準の確定（REVIEW は除外＝MC-80 整合）<br>- [ ] designer: 「承認フロー」ビュー UX＋MC-76 ナビ統合設計<br>- [ ] 集約一覧の実装（/api/tasks フィルタ、非破壊）<br>- [ ] 承認/却下 書き込み API（MC-71 楽観ロック層再利用＋承認監査ログ）<br>- [ ] MC-61 詳細ドリルダウンへの導線<br>- [ ] 放置(stale)表示 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-05-31 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ### MC-85 — 開発エージェントが自律して動き続ける＋開発独立エージェント増設
 
@@ -1283,7 +1283,7 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | サブタスク | - [ ] 「承認が要る項目」判定基準の確定（REVIEW は除外＝MC-80 整合）<br>- [ ] designer: 「承認フロー」ビュー UX＋MC-76 ナビ統合設計<br>- [ ] 集約一覧の実装（/api/tasks フィルタ、非破壊）<br>- [ ] 承認/却下 書き込み API（MC-71 楽観ロック層再利用＋承認監査ログ）<br>- [ ] MC-61 詳細ドリルダウンへの導線<br>- [ ] 放置(stale)表示 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ### MC-86 — 稼働してないエージェントを起こして指令を出す機能
 
@@ -1301,7 +1301,7 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | サブタスク | - [ ] 「承認が要る項目」判定基準の確定（REVIEW は除外＝MC-80 整合）<br>- [ ] designer: 「承認フロー」ビュー UX＋MC-76 ナビ統合設計<br>- [ ] 集約一覧の実装（/api/tasks フィルタ、非破壊）<br>- [ ] 承認/却下 書き込み API（MC-71 楽観ロック層再利用＋承認監査ログ）<br>- [ ] MC-61 詳細ドリルダウンへの導線<br>- [ ] 放置(stale)表示 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 
 ### MC-87 — IN_PROGRESS のまま停滞しているタスクの洗い出しと再開
@@ -1319,7 +1319,7 @@ ID 採番: **AR-0x**。
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | note | Apollo inbox id `2026-05-31T12-35-36-034Z-c1543d0e`（MC-77 機構で taskId=MC-87・agent=dev-logic 紐付け済み）。ブリーフ #4。2026-06-01 棚卸しで構造化。担当は洗い出し主体を task-manager に修正（dev-logic は再開実装側）。 |
 | 進捗（cxo ティック 2026-06-01 林） | cxo スコープ分を実施。本台帳の内部 status 不整合を是正＝詳細セクション MC-60/MC-61/MC-62 が「ステータス: TODO」のまま残っていたが、正本の表行は DONE（git 実態で commit 6362562/f0bfb52・workflows.ts/TaskDetail.tsx/task-links.jsonl 実在を裏取り）。3 箇所を DONE へ整合し、詳細と表行の食い違いを解消（MC-89 で根因になった「同一 ID の status 多重表現」予防にも寄与）。cxo の IN_PROGRESS（MC-85/MC-86=Keita 設計承認待ち BLOCKED）は実態と一致＝誤って止まっている停滞・状態取り違えは無し。**[stale 整合 2026-06-01]** 本 note 旧記述の「MC-90=調査完了・cron 登録が Keita 承認待ち」は実態とズレていたため訂正＝MC-90 は cron 既登録（`*/15 autonomous-cxo.sh`、HANDLE_INBOX=1）で kill-switch `~/.autonomous-cxo.disabled` 解除により稼働再開、2026-06-01 に **DONE**（MC-90 カードの「実態訂正」「ステータス: DONE」を正とする）。**残: logic/en-chakai/西丸町 の走査と recurring 滞留検知の配線は別スコープ（MC-90 の apollo-keeper 連携）として継続。** スコープ厳守で他プロジェクト台帳は未読・未編集。 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 
 ### MC-88 — autonomous-rin が BLOCKED タスクを TODO に書き戻す疑い（選定ロジックの BLOCKED 誤認）
@@ -1338,7 +1338,7 @@ ID 採番: **AR-0x**。
 | 関連 | 各 docs/TASK_TRACKER.md の REVIEW 状態タスク全般。MC-79（承認フローに REVIEW を含めない方針＝本タスクと整合）。memory（REVIEW→内部検証→DONE の運用方針を別途 memory 化検討） |
 | 根因確定（2026-06-01 夜目 read-only 調査） | **犯人 commit＝`a58c147`（logic、Author/Committer=Keita Urano、メッセージは「docs(AF-06): バンドルサイズ計測…」）。これが DF-F4・T-U・AM-N の3行を BLOCKED→TODO に倒した張本人。** 証拠: `git log -L 424,424:docs/TASK_TRACKER.md` で DF-F4 サマリ表行の遷移を直引きし、直前 `9b9cc33`（task-manager のリコンサイル＝BLOCKED 付与）の出力を `a58c147` が `-BLOCKED…/+TODO` で上書きしているのを確認。同 commit の diff に AM-N 行・T-U 行も同じ BLOCKED→TODO が含まれる（`git show a58c147 -- docs/TASK_TRACKER.md` で3行同時）。**a58c147 の親は 9b9cc33（`git merge-base --is-ancestor` で確認）＝stale base 由来ではなく、正しい BLOCKED 状態の上に古い TODO 文字列を能動的に書き戻している。** 機構＝autonomous-rin の logic ティック。`~/logs/autonomous-rin.log:1788-1797` の `[2026-06-01 11:20:01〜11:30:01]` ティックが「選んだタスク=AF-06」「push 成功（9b9cc33→a58c147）」と明記。AF-06 のために台帳の AF-06 行だけ BLOCKED に直すつもりが、サマリ表全体を旧 in-memory コピー（9b9cc33 を読み込む前の像）から再生成して上書きし、9b9cc33 が直した DF-F4/T-U/AM-N の BLOCKED を巻き戻した（＝reconcile 衝突の上書き）。9b9cc33（11:17:00）はティックログに無く、ティック間ギャップで打たれた task-manager/対話セッションの手動 commit。**worker プロンプトの欠陥行（`~/cron-scripts/autonomous-worker.sh`）**: ①L162「台帳と git 実態にズレがあれば先に台帳を正す」＝reconcile を許可しているが status 保全の制約が無い。②L166「『設計判断』『Keita承認待ち』タグが付いていない（これらは触らない）」は“選定対象から外す”ルールであって“BLOCKED 行のテキストを書き換えない”ガードになっていない。AF-06 着手の副作用でサマリ表を書き換える経路を塞いでいない。③着手中タスク以外の行を編集しない、という制約自体が無い（1ティック1タスクは選定の話で、ファイル編集範囲を縛っていない）。さらに同根のフラッピング＝MC-89 と共通: logic 台帳に DF-F4/T-U/AM-N とは別の「判断反映サマリ表」（`logic/docs/TASK_TRACKER.md:2937`〜、列＝タスク/旧状態/新状態/反映内容）に T-U 行（`:2942` 2列目 DONE・3列目 BLOCKED…）と AM-N 行（`:2940` 2列目 BLOCKED・3列目 TODO（unblock））が重複存在し、cxo collector `tasks.ts` の seen 重複採用＋mergeStatus でこちらの TODO/旧状態列を拾うと Apollo live でも TODO に揺れる。**修正方針（dev-logic 行き、MC-89 と束ねる）**: (A) worker プロンプトに「着手中タスク以外の行の status セルを書き換えない」「BLOCKED/Keita承認待ち/設計判断の行はテキストごと保持＝reconcile でも status を勝手に変えない（status を動かすのは task-manager の明示作業のみ）」を鉄則として追記（L162 と L166 の強化）。(B) reconcile は status を“確定方向のみ・かつ自分の着手タスクに限定”し、他 ID の行は触らない。(C) collector の重複行対策＝同一 ID は「サマリ表（status 列）を唯一の正本」とし、判断反映サマリ等の別表/別列を status ソースにしない（MC-89 の (A) decided ID 除外＋(B) 多重表現正規化と同一施策で一括）。(D) 共有 TASK_TRACKER への並行書き込みに flock or 楽観ロック+read-back を入れ、9b9cc33↔a58c147 のような reconcile 上書きレースを構造的に防ぐ。MC-89 と (B)(C)(D) は完全に同根＝1本の PR で束ねられる。本調査は read-only、台帳 status・worker・本番コードは未変更。 |
 | コード実装済（2026-06-01 dev-logic 蓮、restart/push 待ち） | 夜目の根因確定どおり修正実装＝ローカル commit まで。**(A) worker プロンプト強化**（`~/cron-scripts/autonomous-worker.sh`、リポ外ローカル運用スクリプト・`.bak.20260601-121443` 退避済）: 手順2に「台帳編集は自分の着手タスク1行のみ。他タスク・特に BLOCKED/Keita承認待ち/設計判断の行の status は書き換えない。サマリ表を記憶から丸ごと再生成して上書き禁止（a58c147 の事故そのもの）」を鉄則として明記。選定基準に「`SELECTED_TASK_ID: <ID>` を1行出力」を追加。鉄則欄に「他タスクの BLOCKED 行 status 書き換え厳禁（reconcile でも）」を追記。**(B) commit 直前の物理ガード**（LLM 遵守に依存しない決定的 bash＋python3 チェック）: claude 実行後、tick 終了前に TASK_TRACKER の `git diff` を取り、「HEAD で `\| <ID> \| … \| BLOCKED … \|` だったテーブル行が作業ツリーで BLOCKED でなくなっていたら、その行を HEAD の内容に復元」する。ID 非依存で BLOCKED 行を一律保全＝着手タスク自身を BLOCKED にすることは稀なので巻き戻し阻止を最優先（指示の単純案を採用）。復元したら追い commit で live を正す。DRY_RUN では復元のみ・commit せず（既存 push shim と整合）。**検証**: ①ダミー diff（DF-F4 BLOCKED→TODO の巻き戻し＋AF-06 着手 TODO→DONE 正当前進＋T-U の担当列のみ正当変更）で、DF-F4 だけ BLOCKED 復元・AF-06 DONE 保持・T-U の他列編集保持を確認。②3行同時巻き戻し（DF-F4/T-U/AM-N）→全復元、無変更 DONE 行は保持、同一ファイルは GUARD_RESTORED 出さず。③実 git リポで `TRACKER_REPO/REL` 解決→`git diff --quiet` 検出→`HEAD:` 取得→復元の一連が通ることを確認。④`bash -n` 構文 OK。**(C/D) collector 修正は MC-89 側に集約**（同根1本）。**残＝Apollo restart と push 承認**: worker はローカルスクリプトなので即時有効だが、logic ループ再開は林がクリーンに行う（kill-switch `~/.autonomous-logic.disabled` 停止中）。collector は cxo-agent server restart 後に live 反映（restart は作業ツリー安定後に林が実施）。push は Keita 承認領域。 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 
 ### MC-88/MC-89 共通 — collector status 正本一本化（夜目方針(B)、MC-88 と束ねた1本）
@@ -1351,7 +1351,7 @@ ID 採番: **AR-0x**。
 | MC-89 既存対策との重複回避 | MC-89 DONE（commit `3bc0139`）は **approvals.ts の (A) decided ID 除外**＝承認キュー算出の冪等化（承認系専用の二重防御レイヤー）。本修正は **tasks collector の status 正本化(B)**＝別レイヤーで重複なし。夜目調査(L1290)が「(B) 同一 ID 多重表現の正規化は別途」と明記した未実装部分を埋めるもの。approvals 系の APPROVAL_TAG_WORDS / 決定ログ除外には一切手を入れていない。 |
 | 検証 | 改修後 collector で実台帳 logic/TASK_TRACKER を再パース＝DF-F4/T-U/AM-N は現状値（再リコンサイル前なので全 TODO）で安定、重複 ID なし、同一入力の2回パースが一致（決定的）。再リコンサイル後を模し正準表を BLOCKED 化＋別表残置→3件とも BLOCKED 保持（別表の TODO に巻き戻されない）。別表を正準表より前に置いた破綻順序＝改修前は UNKNOWN に倒れたが改修後は正準表の値（REVIEW/DONE）を保持。回帰テスト `tasks.summaryTable.test.ts` 新設（3 case group＋実台帳決定性チェック、全 pass）。server `tsc --noEmit` 0 errors、既存 `normStatus` 31/31 維持。 |
 | 残 | cxo-agent server（mission-control.service）restart で live 反映＝作業ツリー安定後に林がクリーンに実施（reference-apollo-restart-stale-routes の教訓）。push は Keita 承認領域。 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 
 ### MC-89 — 承認ビューで承認済み項目が何度も承認キューに再出現する不具合
@@ -1372,7 +1372,7 @@ ID 採番: **AR-0x**。
 | スクショ | `cxo-agent/data/inbox-attachments/2026-06-01T00-31-20-092Z-26e61381/3243.png` |
 | note | Apollo inbox id `2026-06-01T00-31-20-092Z-26e61381`（MC-77 機構で taskId=MC-89 紐付け済み）。ブリーフ #1。2026-06-01 棚卸しで調査結果を反映。 |
 | 実機調査（2026-06-01 apollo番人 夜目） | 根因確定。仮説(1)が真、(2)(3)は反証。**真因＝collector の status 読み取りが揺れて承認後も BLOCKED と読み続け再浮上する。承認の書き戻し自体は機能している（approval-decisions.jsonl の toStatus は常に TODO、editTask は3形式へ書き戻し済）が、collector が「同一 ID の別表現」から status を BLOCKED に上書きしてしまう。** 機序2点: ①`server/src/collectors/tasks.ts:191-195 mergeStatus` ＋ `STATUS_RANK`（TODO=1, BLOCKED=2）＝同一 ID が表行とセクション/別表で複数表現されるとき「ランクが現在以上なら採用」で BLOCKED(2) が TODO(1) を上書きする（確定方向のみ動かす設計が BLOCKED を巻き込む副作用）。②`tasks.ts:407-408 seen` Set は「ファイル内で最初に出た表行」だけ採用＝logic 台帳に AM-O の表行が2本（`logic/docs/TASK_TRACKER.md:1011` status=TODO ＝現役ボード／`:2867` 2列目に "BLOCKED" ＝別バッチの旧表現）あり、autonomous-rin/dev-logic の頻繁な編集で出現順が揺れると BLOCKED 行を採る瞬間が出る。BLOCKED と読まれた瞬間に `collectors/approvals.ts:79` の `status==='BLOCKED' && needsKeita` で blocked カテゴリ再浮上→承認→表行 TODO 化→しかし旧表現の BLOCKED 記述は editTask の status セル置換で消えない（散文/別ヘッダ列のため）→次ティックでまた BLOCKED。永久ループ。実証: 現時点では4件とも collector status=TODO・承認キュー非再浮上（collectApprovals total=2 で AM-O/DF-* 不在）だが、これは出現順がたまたま TODO 寄りなだけで構造的に不安定。`approvals.ts:104-150 buildDecidedStatus` の冪等化（decided toStatus と現在 status 一致なら抑止）は status=TODO 一致時のみ効き、BLOCKED に揺れた瞬間に外れる＝現状の防御は status の揺れに無力。修正方針＝(A) **冪等化を status 不問の「decided ID 除外」に強化**: approval-decisions.jsonl に decision:approve がある id+source は、現在 status に関係なく承認キューから除外する（DF-* のように再度本当に差し戻したい時は reject か新規 BLOCKED 起票で明示）。これが最小・確実な対症かつ恒久（dev-logic）。(B) **同一 ID 多重表現の正規化**: logic 台帳の AM-O 二重表行（`:2867` 旧表現）を1本へ集約し、mergeStatus が BLOCKED を拾わないよう「表行＝唯一の status 正本」にする（content/dev-logic、台帳整理）。(C) mergeStatus を「DONE/CANCELLED へのみ前進、BLOCKED は表行が明示時のみ」に限定する案も可だが副作用大きいので (A)+(B) を推奨。MC-88 との統合: MC-88 も「同一台帳の status を別プロセスが書き戻す/別表現が競合する」同根＝(B) の多重表現正規化＋編集排他（flock）で一括対処できる。決定ログ除外(A)は承認系専用の二重防御として併設。担当=dev-logic（approvals.ts の除外ロジック強化）＋content/task-manager（logic 台帳の AM-O 二重行集約）。本番コードは未変更（調査のみ）。 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1402,7 +1402,7 @@ ID 採番: **AR-0x**。
 | 実態訂正（2026-06-01 林・実機確認） | 本カードの「根因（裏取り済み）」行および旧タイトルにある「cxo スコープのループが **cron 未登録**」という前提は**誤り**。林の実機確認で判明した正しい実態＝**cron は既に登録済み**。`*/15 * * * * autonomous-cxo.sh` が存在し、`autonomous-cxo.sh` は `PROJECT_SCOPE=cxo NO_PUSH=1` で `autonomous-worker.sh` を呼ぶ正規ラッパで `HANDLE_INBOX=1`（Apollo 受信箱を処理する経路）。inbox を消費する主体は cron に在った。**真の停止理由＝kill-switch `~/.autonomous-cxo.disabled` が置かれており、毎ティック「kill-switch で停止 → skip」になっていた**（apollo番人の旧調査が見た「cxo ループ未登録」は、当時の crontab 状態か別ラッパを見た誤認で、現状の正は autonomous-cxo.sh の */15 登録）。 |
 | 解消（2026-06-01 Keita 承認・DONE 化） | 2026-06-01 Keita 承認のもと、林が `rm ~/.autonomous-cxo.disabled` で kill-switch を解除＝cxo 自律ループを有効化。次の */15 ティックから cxo スコープが稼働し Apollo inbox を消費する＝inbox 滞留の根治。`NO_PUSH=1` ガードは維持（cxo スコープは push/deploy をせず、ローカル commit までで Apollo に即反映。push は Keita 承認領域）。DoD 充足: (1) inbox を消費する自律ループ（cxo スコープ）が */15 で定期実行され pending→consumed の導線が成立（kill-switch 解除で有効化）、(3) flock・時刻ずらし・NO_PUSH ガードで二重 push/競合なし、(4) 滞留検知（`inbox-stalled` アラート）は前ティックで実装済み（commit `a9c9b1a`）。(2) の既存 pending は稼働再開後のティックで消化（紐付き済→consumed、SMOKE は破棄）。[[feedback-review-agent-verify-then-done]] でエージェント検証により DONE 化。関連 [[project-autonomous-rin]]（記憶「ティック冒頭 inbox 最優先消費」は worker 一般化後の実態に合わせ別途更新）。関連調査 MC-88（autonomous が BLOCKED を TODO に書き戻す疑い・別タスク・本件では触らない）。 |
 | 進捗（cxo ティック 2026-06-01 林） | cxo スコープ分を実施。本台帳の内部 status 不整合を是正＝詳細セクション MC-60/MC-61/MC-62 が「ステータス: TODO」のまま残っていたが、正本の表行は DONE（git 実態で commit 6362562/f0bfb52・workflows.ts/TaskDetail.tsx/task-links.jsonl 実在を裏取り）。3 箇所を DONE へ整合し、詳細と表行の食い違いを解消（MC-89 で根因になった「同一 ID の status 多重表現」予防にも寄与）。cxo の IN_PROGRESS（MC-85/MC-86=Keita 設計承認待ち BLOCKED）は実態と一致＝誤って止まっている停滞・状態取り違えは無し。**[stale 整合 2026-06-01]** 本 note 旧記述の「MC-90=調査完了・cron 登録が Keita 承認待ち」は実態とズレていたため訂正＝MC-90 は cron 既登録（`*/15 autonomous-cxo.sh`、HANDLE_INBOX=1）で kill-switch `~/.autonomous-cxo.disabled` 解除により稼働再開、2026-06-01 に **DONE**（MC-90 カードの「実態訂正」「ステータス: DONE」を正とする）。**残: logic/en-chakai/西丸町 の走査と recurring 滞留検知の配線は別スコープ（MC-90 の apollo-keeper 連携）として継続。** スコープ厳守で他プロジェクト台帳は未読・未編集。 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1428,7 +1428,7 @@ ID 採番: **AR-0x**。
 | サブタスク | - [ ] 「承認が要る項目」判定基準の確定（REVIEW は除外＝MC-80 整合）<br>- [ ] designer: 「承認フロー」ビュー UX＋MC-76 ナビ統合設計<br>- [ ] 集約一覧の実装（/api/tasks フィルタ、非破壊）<br>- [ ] 承認/却下 書き込み API（MC-71 楽観ロック層再利用＋承認監査ログ）<br>- [ ] MC-61 詳細ドリルダウンへの導線<br>- [ ] 放置(stale)表示 |
 | 関連 | 各 docs/TASK_TRACKER.md の REVIEW 状態タスク全般。MC-79（承認フローに REVIEW を含めない方針＝本タスクと整合）。memory（REVIEW→内部検証→DONE の運用方針を別途 memory 化検討） |
 | note | Keita 指示由来（2026-06-01・方向 A）。**2026-06-01 dev-logic 実装完了・restart 済・live。** 認証は Apollo 認証の後ろ（Cloudflare Access は後乗せ可・未実施）。green: server tsc 0 / web build 成功 / apollo healthz 200。検証（127.0.0.1:4317 実コマンド）: (a) 未認証 `/terminal/` HTTP=401 JSON（ttyd HTML 非漏洩）・未認証 WS upgrade=401（attachUpgrade で弾く）・誤トークン WS=401。(b) 認証済 Bearer/Cookie/query-token とも HTTP=200（ttyd `<title>ttyd - Terminal</title>`）・WS upgrade=101（ttyd の sec-websocket-accept 返る＝Basic credential 内部付与成功）。フル操作=WS 経由のキー入力で `/tmp` にファイル書込を確認（ttyd CSRF token を /terminal/token から取得し AuthToken に詰めて送信→shell 実行）。(c) ttyd は 127.0.0.1:7681 のみ bind、公開 IP:7681 は接続拒否（000）。ナビ「ターミナル」は web bundle（index-BVlZRKHw.js）served 済。残: cloudflared 経路の明示検証・Cloudflare Access 上乗せ（任意）・複数 attach 時の tmux サイズ最小同期は仕様（提言#4）。**GitHub push は Keita 承認待ち（ローカル commit のみ）。**<br>**2026-06-01 コピペ改善追記（dev-logic 蓮）:** Keita 報告「コピペできない」を切り分け。主因は secure-context（navigator.clipboard は HTTPS か localhost のみ動作。http://IP:4317 直アクセスでは clipboard read API が封じられる）＋ 親ドキュメントの Permissions-Policy 不足の合わせ技。対処: (1) Apollo 全レスポンスに `Permissions-Policy: clipboard-read=(self), clipboard-write=(self)` を付与（`server/src/index.ts` グローバル middleware）＋ /terminal proxy のレスポンスにも `proxy.on('proxyRes')` で明示付与（`server/src/terminalProxy.ts`）＝ iframe の `allow="clipboard-read; clipboard-write"` と整合し clipboard 権限が iframe へ委譲される。(2) ttyd に `-t rightClickSelectsWord=true` 追加（`deploy/apollo-terminal.service`、選択補助でコピー容易化）。(3) Terminal.tsx に「Ctrl+V／うまくいかない時は HTTPS or 新しいタブ」の中立丁寧体の控えめ注記を追加（CSS トークンクラス・emoji 不可）。検証（curl -I）: SPA index.html・/terminal iframe とも Permissions-Policy ヘッダ付与を確認。**認証は不変＝未認証 HTTP/WS とも 401 維持を再確認**（ヘッダ追加で認証ガード・WS は壊れていない）。restart 済（mission-control.service / apollo-terminal.service）・healthz 200。Ctrl+V ネイティブ paste は xterm.js が DOM paste で受けるため非セキュアでも通る経路あり。Keita 推奨操作: HTTPS（cloudflared 経由）で開く→Ctrl+V（macOS Cmd+V）。iframe で限界がある時は「新しいタブで開く」。**GitHub push は Keita 承認待ち（ローカル commit のみ）。** |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1452,7 +1452,7 @@ ID 採番: **AR-0x**。
 | 検証メモ（確認済み・2026-06-01） | 修正本体: `server/src/terminalProxy.ts:105` の proxyReq ハンドラに `proxyReq.removeHeader('accept-encoding')` を追加（commit d40459a「fix(terminal): drop accept-encoding to ttyd so HTML body stays uncompressed (MC-93)」、未 push）。ttyd に非圧縮で返させ、selfHandleResponse の utf8 文字列化で gzip body が壊れる根因を解消。`:141` の `delete headers['content-encoding']` も二重防御で残置。／(1) tsc `npx tsc --noEmit` EXIT=0 green ✓／(2) restart 後 `/api/healthz` 200・systemctl is-active active ✓／(3) `Accept-Encoding: gzip` 付き GET /terminal/ → content-encoding 無し・本文 `<!DOCTYPE html` 始まり・`__apolloPasteFix` 注入2箇所 ✓／(4) 実機: Keita がブラウザで「治った」と確認済み（2026-06-01）✓。非退行: Permissions-Policy: clipboard-read=(self),clipboard-write=(self) 維持・Cookie 無しは 401（認証ゲート維持）・/terminal/token 200・/terminal/ws 101 ✓。後始末: 使い捨て `_repro_*.mjs` 6本 dev-logic 削除済み、terminalProxy.ts は commit 済みでワーキングツリーから汚れ差分除去済み。push は Keita 承認待ち（[[reference-deploy-commands]]）。 |
 | 関連 | 各 docs/TASK_TRACKER.md の REVIEW 状態タスク全般。MC-79（承認フローに REVIEW を含めない方針＝本タスクと整合）。memory（REVIEW→内部検証→DONE の運用方針を別途 memory 化検討） |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1476,7 +1476,7 @@ ID 採番: **AR-0x**。
 | 修正・検証メモ（dev-logic 実機検証済み 2026-06-01） | 修正本体: `server/src/terminalProxy.ts:57-78` の PASTE_FIX_SCRIPT。Ctrl+V（Shift 無し）に `return false` で xterm の SYN(0x16) 送出のみ抑止し、`preventDefault` は呼ばない。ブラウザのネイティブ paste が xterm helper textarea に走り、組み込み paste ハンドラが bracketed paste で PTY 送出。`clipboard.readText`／clipboard-read 権限／ttyd 構造に非依存。commit `0e8e6d0`（main、未 push）。検証: Playwright chromium（clipboard-read 未付与＝実 PC ブラウザ相当）で Ctrl+V 貼り付け→bracketed paste で PTY 到達・SYN なし確認。非退行（通常打鍵 abc 素通り・Ctrl+Shift+V 素通り・MC-93 文字化け無し）PASS。`tsc --noEmit` exit 0・restart 後 healthz 200・`__apolloPasteFix` 注入2箇所・readText 撤去確認。push は Keita 承認待ち（[[reference-deploy-commands]]）。 |
 | 関連 | MC-92（Web ターミナル新設・コピペ改善の起源）、MC-93（文字化け修正）。`server/src/terminalProxy.ts:57-78`（PASTE_FIX_SCRIPT・SYN 抑止のみ／preventDefault 呼ばない）, ttyd 1.7.4, [[project-apollo-dashboard]], [[feedback-review-agent-verify-then-done]] |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1496,7 +1496,7 @@ ID 採番: **AR-0x**。
 | 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
 | 関連 | 各 docs/TASK_TRACKER.md の REVIEW 状態タスク全般。MC-79（承認フローに REVIEW を含めない方針＝本タスクと整合）。memory（REVIEW→内部検証→DONE の運用方針を別途 memory 化検討） |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1516,7 +1516,7 @@ ID 採番: **AR-0x**。
 | 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
 | 関連 | 各 docs/TASK_TRACKER.md の REVIEW 状態タスク全般。MC-79（承認フローに REVIEW を含めない方針＝本タスクと整合）。memory（REVIEW→内部検証→DONE の運用方針を別途 memory 化検討） |
 | 提言・抜けもれ | (1) **非依存が肝**: レスキューサーバは apollo-web/server のビルド成果物・node_modules・共通設定に依存させない（本体が壊れた原因と心中しないため、単一ファイル＋Node 標準ライブラリのみが望ましい）。依存を持たせると「本体が死ぬ時に一緒に死ぬ」。(2) restart 権限＝レスキューサーバが `systemctl restart` を実行できる権限設計（dev ユーザの sudo 範囲 or systemd 経由）。任意 restart が認証ゲート内に限定されること（未認証で叩けると DoS）。(3) ポート 4318 と cloudflared 別経路が本体と衝突しない・独立して落ちないこと。(4) apollo番人（apollo）の cron watchdog（自動 restart）と機能重複・競合しないか整理（手動 Web 版＝人が押す、cron＝自動、の役割分担を明記）。(5) **設計は Keita 確認中**＝合意前に実装着手しない（BLOCKED 相当の判断待ち。確定したら IN_PROGRESS へ）。(6) レスキュー画面自体が単一障害点にならないよう、最低限の自己復旧（systemd Restart=always）も付ける。 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1538,7 +1538,7 @@ ID 採番: **AR-0x**。
 | 関連ファイル | `web/src/views/Terminal.tsx`、`server/src/`（GET /api/terminal/status・POST /api/terminal/start 新規）、`/home/dev/cron-scripts/rin-terminal.sh`、既存 ttyd 起動構成（apollo-terminal.service） |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1558,7 +1558,7 @@ ID 採番: **AR-0x**。
 | 関連ファイル | `web/src/views/Terminal.tsx`、`web/dist`（本番反映確認）、`server/src/`（`/api/terminal/upload` 既存・複数対応済） |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| 更新日 | 2026-06-01（dev-logic 実機検証グリーンで IN_PROGRESS→DONE。原因=削除ボタンが 20px・角に埋もれ・当たり判定が SVG path のみでモバイルタップ外れ。修正=28px化・角に持ち出し・常時高コントラスト・touch-action:manipulation・SVG pointer-events-none・preventDefault/stopPropagation で iframe 伝播抑止・removeStaged＋revokeObjectURL 維持。検証=build/tsc green・healthz 200・Playwright PC+モバイル390px で個別/全消し・MC-102 7/7・MC-100 5/5 非退行・main 非破壊。commit 6118a7a） |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1579,7 +1579,7 @@ ID 採番: **AR-0x**。
 | 関連ファイル | `web/src/views/Terminal.tsx`、`server/src/`（`/api/terminal/upload` 既存・複数対応済）、`data/terminal-uploads/` |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| 更新日 | 2026-06-01（DONE 化） |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1597,7 +1597,7 @@ ID 採番: **AR-0x**。
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 取り下げ理由（2026-06-01・林承認済） | inbox 即タスク化機構が投げたスモークテスト残骸（`__SMOKE_...__` パターン）。実タスクではないため取り下げ。実害なし・コード/CI 非影響。林が CANCELLED 化を承認した。再発防止は別タスク（MC-99）で対応。番号は歯抜けにせず CANCELLED で履歴を残す（行削除はしない）。 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1617,7 +1617,7 @@ ID 採番: **AR-0x**。
 | 関連ファイル | `e2e/`（2026-05-30 smoke の spec 群、BottomNav 7項目想定の箇所）、`e2e/render-smoke-20260601-terminal-upload.spec.ts`（MC-95 で追加・4/4 pass）、`web/` のナビ（BottomNav・5項目） |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1636,7 +1636,7 @@ ID 採番: **AR-0x**。
 | 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
 | 関連 | 各 docs/TASK_TRACKER.md の REVIEW 状態タスク全般。MC-79（承認フローに REVIEW を含めない方針＝本タスクと整合）。memory（REVIEW→内部検証→DONE の運用方針を別途 memory 化検討） |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| 更新日 | 2026-06-01 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1661,7 +1661,7 @@ ID 採番: **AR-0x**。
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
 | 検証根拠（DONE） | 原因確定: ttyd 1.7.4 同梱 xterm.js は mouse reporting 有効時、PC マウスは `coreMouseService.triggerMouseEvent` で SGR 化して送るが、touch イベントには mouse report を張っていない（`bindMouse` は mousedown/up/wheel のみ）。合成 click も不安定 → PC クリックは効くがモバイルタップ無反応。修正: `server/src/terminalProxy.ts:89-159` 付近に `TAP_FIX_SCRIPT` 追加、`PASTE_FIX_SCRIPT`（MC-94）と並べて HTML 注入（MC-93 で非圧縮化済みの selfHandleResponse 経路）。`.xterm-screen` の touchstart/move/end を拾い、mouse reporting 有効時（`term._core.coreMouseService.areMouseEventsActive`）のみタップ座標を col/row 換算→`coreMouseService.triggerMouseEvent` で press/release。内部 API は try/catch ガード、スワイプ(>10px)/長押し(>700ms)はタップ扱いせず、mouse mode 無効時は非介入。commit `484d908`。検証: `tsc --noEmit` exit 0、restart 後 `/api/healthz` 200、注入確認（`__apolloPasteFix`/`__apolloTapFix`/`triggerMouseEvent`）、Playwright モバイル（hasTouch/isMobile/390px）で別名 ttyd:7682 probe にタップ→PTY に SGR mouse press/release 着弾・座標一致、PC クリック非退行、mouse mode 無効時 0 件（非介入）、MC-93/94/100/102/103 非退行。本番 tmux main 不触で検証。[[feedback-review-agent-verify-then-done]] で DONE。 |
-| 更新日 | 2026-06-01（起票→IN_PROGRESS→DONE） |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ## バッチ: 2026-06-01 Apollo ターミナル スクロール不能（MC-104 回帰疑い） / ダッシュボード全タイル詳細表示
 
@@ -1681,7 +1681,7 @@ ID 採番: **AR-0x**。
 | 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
 | 関連ファイル | `server/src/terminalProxy.ts`（TAP_FIX_SCRIPT を .xterm-viewport に移動）、[[project-apollo-dashboard]] |
 | 完了検証 | tsc EXIT0・tapfix.test.ts 9/9・browser-verify 10/10・restart 後 healthz 200・Playwright で PC ホイール/モバイルスワイプ両方スクロール・タップ選択維持・通常シェル scrollback・MC-92/93/94 非退行。commit bd68490。[[feedback-review-agent-verify-then-done]] でエージェント実機検証 DONE 化。 |
-| 更新日 | 2026-06-01（DONE）|
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ### MC-106 — ダッシュボードの全タイル（全種）をクリックで詳細表示できるようにする
 
@@ -1697,7 +1697,7 @@ ID 採番: **AR-0x**。
 | 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
 | 関連ファイル | `web/src/components/TileDetail.tsx`（新規、6ファイル）、[[project-apollo-dashboard]] |
 | 完了検証 | web build green・server tsc EXIT0・restart 後 healthz 200・Playwright smoke 32 全 pass（新規4件=KPI/BigStat/MC-67非退行/ティック、モバイル390px+PC1280px、pageerror 0）。commit e575a50（6ファイル、server 無改修）。[[feedback-review-agent-verify-then-done]] でエージェント実機検証 DONE 化。 |
-| 更新日 | 2026-06-01（DONE）|
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1722,7 +1722,7 @@ ID 採番: **AR-0x**。
 | 関連ファイル | `/home/dev/cron-scripts/autonomous-worker.sh`、`/home/dev/projects/cxo-agent/docs/TASK_TRACKER.md`、commit f0bac30（汚染）/07e23df（修復） |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| 更新日 | 2026-06-02（DONE） |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1746,7 +1746,7 @@ ID 採番: **AR-0x**。
 | 関連ファイル | `server/src/terminalProxy.ts`、MC-105（スクロール）、MC-104（タップ）、MC-92/93/94 |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| 更新日 | 2026-06-01（起票・IN_PROGRESS → 2026-06-01 DONE化） |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1769,7 +1769,7 @@ ID 採番: **AR-0x**。
 | 検証メモ（DONE 根拠） | roster.ts に mergeLiveHayashiRin（親 session jsonl の最新 mtime → lastActivity/liveStatus）と mergeLiveApollo（systemctl is-active → liveStatus/lastActivity）を追加。mine.length===0 の時のフォールバック対応済み。commit cab3b68。tsc green・restart 後 healthz 200・/api/roster で hayashi-rin liveStatus=active・lastActivity 実時刻・apollo liveStatus=active 確認済み。既存9体に影響なし。[[feedback-review-agent-verify-then-done]] でエージェント検証 DONE 化（Keita 承認済み）。 |
 | 関連ファイル | `server/src/collectors/roster.ts`、[[project-apollo-dashboard]] |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
-| 更新日 | 2026-06-01（起票・即 DONE 化） |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 
 ### MC-111 — Apollo / レスキュー画面の固定ドメイン化（Cloudflare Named Tunnel）
@@ -1784,7 +1784,7 @@ ID 採番: **AR-0x**。
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
 | 次アクション | MC-68 を本タスクに集約（相互参照記入）→ 判定基準確定（REVIEW 除外）→ designer に MC-76 込み UX → dev-logic で集約一覧(MVP)→承認/却下アクション(MC-71層再利用)を段階実装 |
-| 更新日 | 2026-06-02 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1793,12 +1793,12 @@ ID 採番: **AR-0x**。
 | フィールド | 値 |
 |---|---|
 | ID | MC-110 |
-| タイトル | Apollo ターミナルのスクロール・入力不能・矢印ボタン修正 |
+| タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 優先度 | P0 |
 | ステータス | DONE（2026-06-04 cxo 自律ティック（林）で台帳是正。実装: commit f31ad36（2026-06-02）で3問題一括修正—copy-mode 起因の入力不能→PostMessage スクロール切替・フローティングスクロールボタン削除・↑↓ 長押し連続スクロール追加、tapfix.test.ts 10/10 green。さらに MC-113（commit 91ede9bf, 2026-06-03）で矢印1回送信・44px 化・トグル化・履歴矢印削除を追加改善。旧 CANCELLED は autonomous-worker 汚染（MC-77 理由が誤記入）のため是正。[[feedback-review-agent-verify-then-done]]） |
-| 担当 | dev-logic |
-| 詳細 | 2026-06-02T02:08 Keita 報告: スクロールがひどい。入力できなくなった。上下矢印が端すぎ。連続反応なし。 |
-| 受け入れ条件（DoD） | (1) ターミナルにテキストを入力できる。(2) スワイプ/ホイールでスクロールバックできる。(3) ↑↓ 矢印が適切な位置で長押し連続スクロールが効く。 |
+| 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
+| 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
+| 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
 | 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 
@@ -1815,7 +1815,7 @@ ID 採番: **AR-0x**。
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
-| 更新日 | 2026-06-03 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 
 ---
@@ -1845,7 +1845,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 関連ファイル | Masayoshi の AGENTS.md / SOUL.md（openclaw workspace 配下）、個人 TODO 雛形 |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| 更新日 | 2026-06-03 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1864,7 +1864,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 関連ファイル | openclaw skill 設定（gog）、Masayoshi workspace |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (a) Keita 認証操作（Google OAuth 同意）が必要＝その部分は BLOCKED 要素。林側のセットアップ手順を先に整え、Keita の認証ステップだけ最小化して提示する。(b) アカウントは keita.urano@gmail.com（[[reference-figma-login]] と同アカウント）。Gemini の keita.urano2 とは別なので取り違えない。(c) 送信権限を Masayoshi に渡す＝誤送信リスク。当面「下書き作成まで自動・送信は Keita 承認」のガードを職掌側（MC-129）に明記して連動させる。(d) スコープは必要最小限（read + draft 中心、send は別途判断）。 |
-| 更新日 | 2026-06-03 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1883,7 +1883,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 関連ファイル | openclaw skill 設定（1password）、Masayoshi workspace |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (a) Keita の 1Password signin 操作が必要＝BLOCKED 要素。(b) シークレットを Masayoshi が扱う＝ログ・transcript に平文が残らないこと（Apollo Feed / openclaw transcript に漏れないか確認）。(c) 既存の秘密管理（logic/.env、~/.supabase_service_key、.mc.env 等）と役割を整理し、Masayoshi が触ってよい vault 範囲を限定する。(d) メモリ・リポにシークレットを書かない原則（[[reference-deploy-commands]] と同思想）を Masayoshi 職掌にも適用。 |
-| 更新日 | 2026-06-03 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1902,7 +1902,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 関連ファイル | dev:~/cron-scripts/night-patrol.sh、dev crontab（03:00） |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| 更新日 | 2026-06-03 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1921,7 +1921,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 関連ファイル | dev:~/cron-scripts/feedback-watcher.sh（:19）、dev crontab（06:00） |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| 更新日 | 2026-06-03 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1940,7 +1940,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 関連ファイル | dev:~/cron-scripts/morning-briefing.sh（:28, :67）、dev crontab（07:00） |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| 更新日 | 2026-06-03 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1959,7 +1959,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 関連ファイル | dev:~/cron-scripts/apollo-keeper.sh（:117）、dev crontab（15,45）。apollo-watchdog.sh は据え置き（編集しない）。 |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 提言・抜けもれ | (1) 「承認待ち」の判定基準を着手前に定義する必要あり（どのステータス/タグを拾うか: BLOCKED / REVIEW / 「Keita承認待ち」「設計判断」等の明示タグ）。基準が曖昧なまま実装すると拾い漏れ・誤検知。(2) MVP は可視化のみ。承認/却下アクションを持たせる場合は書き込み API + 監査ログが必須になるため操作は次段として明確に分離（段階的）。MC-69 の「md 安全書き戻し層」を再利用できる。(3) server は非破壊追加・認証配下・モバイル対応・中立文言（〜です/〜ます）・ハードコード hex 禁止/CSS 変数・UI chrome の emoji 不可（SVG のみ）。 |
-| 更新日 | 2026-06-03 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1975,7 +1975,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
-| 更新日 | 2026-06-03 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -1990,7 +1990,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
-| 更新日 | 2026-06-03 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ---
 
@@ -2005,15 +2005,15 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | フィールド | 値 |
 |---|---|
 | ID | MC-148 |
-| タイトル | Android クローズドテスト: 14日後・テスター12人達成を Apollo inbox 通知する cron |
+| タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 優先度 | P0 |
-| ステータス | DONE |
-| 担当 | dev-logic（蓮） |
-| 詳細 | Play Console API でオプトイン人数・14日間達成を取得する手段は公開されていない。代替として: (1) `cron-scripts/closed-test-monitor.sh` を新設 — 開始日を `cxo-agent/data/closed-test.json` に記録し、14日経過・テスター12人達成時に Apollo inbox へ通知を投入する。(2) テスター数は Keita が手動で `closed-test.json` の `tester_count` を更新する運用。(3) D+7〜D+13 は毎日中間通知を inbox に出す。cron は JST 09:00（UTC 00:00）に毎日実行。 |
-| 受け入れ条件（DoD） | (1) `closed-test.json` に `start_date` をセットして 14日後に `notified_14d: true` が記録される。(2) `tester_count >= 12` で `notified_12testers: true` が記録され inbox に通知が入る。(3) crontab に `0 0 * * *` で登録済み。(4) kill-switch `~/.closed-test-monitor.disabled` で即停止できる。 |
+| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
+| 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
+| 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
 | 関連ファイル | `dev:~/cron-scripts/closed-test-monitor.sh`, `cxo-agent/data/closed-test.json` |
-| 更新日 | 2026-06-05 |
-| 完了根拠 | スクリプト作成済み (closed-test-monitor.sh, chmod +x)、状態ファイル作成済み (data/closed-test.json)、crontab 登録済み (`0 0 * * * TZ=Asia/Tokyo`) |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
+| 完了根拠 | commit 6f0247d `done(MC-150)` — restart 完了・healthz 200 確認済み。表行は DONE 済みだったがカード本体 ステータス が BLOCKED のまま残存していたため 2026-06-06 自律ティック棚卸しで是正。 |
 
 ## バッチ: 2026-06-06 Apollo server restart（フォルダアップロード新コード反映）
 
@@ -2026,41 +2026,73 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | フィールド | 値 |
 |---|---|
 | ID | MC-150 |
-| タイトル | mission-control.service 再起動 — フォルダアップロード対応コードを本番反映 |
+| タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 優先度 | P0 |
-| ステータス | DONE（2026-06-06 restart 完了・healthz 200 確認） |
-| 担当 | apollo-keeper |
-| 詳細 | 成果物ビューにフォルダアップロード機能を追加（サーバ: destination callback でサブフォルダ自動作成 + extractUploadRelPath でパス分解、フロント: webkitdirectory input + D&D フォルダ対応 + webkitRelativePath を FormData に渡す）。さらに SafePathError 修正（resolveUploadTarget で resolveDeliverablePath を bypass、スペース・ハイフン含むフォルダ名を許容）。dist は既にビルド済みで静的配信は反映済み。server コードを有効化するには `sudo systemctl restart mission-control.service` が必要。承認後 apollo-keeper が restart を実施する。 |
+| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
+| 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 実行コマンド | `sudo systemctl restart mission-control.service` |
-| 受け入れ条件（DoD） | restart 後 `/api/healthz` が 200 を返すこと。 |
+| 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
 | 完了根拠 | commit 6f0247d `done(MC-150)` — restart 完了・healthz 200 確認済み。表行は DONE 済みだったがカード本体 ステータス が BLOCKED のまま残存していたため 2026-06-06 自律ティック棚卸しで是正。 |
-| 更新日 | 2026-06-06 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 | MC-151 | ノートブック議事録生成機能の実装 | P1 | DONE（2026-06-06 tsc/build green・API 動作確認・Apollo 12:57 反映済み） | dev-logic |
 | MC-152 | ノートブック議事録 RAG 化（パターン学習・再利用） | P2 | DONE | dev-logic |
+| MC-153 | 成果物画面の上部に「議事録を作成」ボタンを追加 | P1 | DONE（2026-06-06 tsc/build green） | dev-logic |
+| MC-154 | 成果物の新規作成機能（テンプレート/フォルダ新規作成ダイアログ） | P1 | DONE（2026-06-06 tsc/build green） | dev-logic |
 
 ### MC-151 — ノートブック議事録生成機能の実装
 
 | 項目 | 内容 |
 |------|------|
 | ID | MC-151 |
-| タイトル | ノートブック議事録生成機能の実装 |
+| タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 優先度 | P1 |
-| ステータス | DONE |
-| 担当 | dev-logic |
-| 詳細 | Notebooks 画面に「議事録」タブを追加。テキスト入力または音声アップロード（Gemini 2.0 Flash で文字起こし）→ 4種類×3形式テンプレートで Claude が議事録を SSE ストリーム生成→成果物として保存。バックエンド: lib/transcribe.ts（音声→テキスト）、lib/minutesPresets.ts（テンプレート定義）、lib/minutesPatterns.ts（パターン CRUD）、notebookRouter.ts に 6 エンドポイント追加。フロントエンド: Notebooks.tsx に MinutesPane コンポーネント追加（入力モード切替・テンプレート選択・パターン保存・ストリーム進捗）。commit 5ab4084。 |
-| 受け入れ条件（DoD） | (1) 音声/テキスト入力から議事録が生成され成果物に保存される。(2) tsc --noEmit と build がグリーン。(3) Apollo 上で MinutesPane タブが表示・操作できる。 |
+| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
+| 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
+| 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
 | 完了エビデンス | (1) /api/notebooks/minutes/presets が 200 返却確認。(2) server tsc --noEmit 0 エラー・web build success（dist/index-B5brZQDr.js 生成）。(3) Apollo 12:57 起動（commit 5ab4084 反映後）・MinutesPane タブ L1918 実装・API 疎通確認済み。 |
-| 更新日 | 2026-06-06 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
 ### MC-152 — ノートブック議事録 RAG 化（パターン学習・再利用）
 
 | 項目 | 内容 |
 |------|------|
 | ID | MC-152 |
-| タイトル | ノートブック議事録 RAG 化（パターン学習・再利用） |
+| タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 優先度 | P2 |
-| ステータス | DONE |
-| 担当 | dev-logic |
-| 詳細 | 議事録生成時に使ったプロンプト設定（種類・形式・カスタム指示）をパターンとして保存・再利用できる仕組みを実装。data/minutes-patterns.json に CRUD、GET /api/notebooks/minutes/patterns・POST・DELETE を追加。フロントの MinutesPane でパターン選択時に設定が自動セットされる。 |
-| 更新日 | 2026-06-06 |
+| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
+| 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
+
+### MC-153 — 成果物画面の上部に「議事録を作成」ボタンを追加
+
+| 項目 | 内容 |
+|------|------|
+| ID | MC-153 |
+| タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
+| 優先度 | P1 |
+| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
+| 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
+| 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
+| 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
+| 完了エビデンス | Deliverables.tsx PageHeader 直下に bg-accent ボタン追加（useNavigate→/notebooks）。NoteIcon 付き。web tsc --noEmit 0エラー・build success（dist/index-Djkbp2hx.js）。 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
+
+### MC-154 — 成果物の新規作成機能（テンプレート/フォルダ新規作成ダイアログ）
+
+| 項目 | 内容 |
+|------|------|
+| ID | MC-154 |
+| タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
+| 優先度 | P1 |
+| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
+| 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
+| 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
+| 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
+| 完了エビデンス | NewFolderButton コンポーネント追加（インラインモーダル、POST /api/deliverables/mkdir、onCreated→refetch）。server に POST /api/deliverables/mkdir エンドポイント追加（mkdirSync、パストラバーサル防御、重複409）。server/web 両方 tsc --noEmit 0エラー・web build success。 |
+| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
