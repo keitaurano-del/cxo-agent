@@ -24,8 +24,18 @@
 //   林はそのパスを Read で画像として読める。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ImageFileIcon, CloseIcon, TerminalIcon, PlusIcon, KeyboardIcon } from '../components/icons';
 import { Spinner } from '../components/ui';
+
+// ─── 利用可能モデル定義 ─────────────────────────────────────
+const AVAILABLE_MODELS = [
+  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
+  { id: 'claude-opus-4-8', label: 'Opus 4.8' },
+  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
+] as const;
+
+type ModelId = (typeof AVAILABLE_MODELS)[number]['id'];
 
 // ─── ターミナル定義 ───────────────────────────────────────────
 // path は iframe src のベース（末尾スラッシュ付き＝相対アセットの解決基準）。
@@ -36,13 +46,14 @@ interface TerminalTab {
   id: number;
   label: string;
   path: string; // iframe src（例: '/terminal/', '/terminal/2/'）
+  account: string; // 'Claude1' (keita.urano) | 'Claude2' (keita.urano2)
 }
 
 const TERMINAL_TABS: TerminalTab[] = [
-  { id: 1, label: 'ターミナル1', path: '/terminal/' },
-  { id: 2, label: 'ターミナル2', path: '/terminal/2/' },
-  { id: 3, label: 'ターミナル3', path: '/terminal/3/' },
-  { id: 4, label: 'ターミナル4', path: '/terminal/4/' },
+  { id: 1, label: 'ターミナル1', path: '/terminal/',  account: 'Claude1' },
+  { id: 2, label: 'ターミナル2', path: '/terminal/2/', account: 'Claude2' },
+  { id: 3, label: 'ターミナル3', path: '/terminal/3/', account: 'Claude1' },
+  { id: 4, label: 'ターミナル4', path: '/terminal/4/', account: 'Claude1' },
 ];
 
 const ACTIVE_TAB_STORAGE_KEY = 'apollo.terminal.activeTab';
@@ -61,21 +72,37 @@ async function postSendKeys(keys: string, terminal: number): Promise<void> {
   }
 }
 
-const ACCEPTED_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const ACCEPTED_IMAGE_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const ACCEPTED_TEXT_EXT = new Set(['.txt', '.md', '.ts', '.js', '.py', '.json', '.yaml', '.yml', '.csv']);
 const MAX_IMAGES = 5;
-const MAX_BYTES = 10 * 1024 * 1024; // 10MB / 枚
+const MAX_BYTES = 10 * 1024 * 1024; // 10MB / ファイル
 
-// ステージング中の 1 枚。file は送信用、url はサムネ表示用（unmount/削除/送信成功で revoke）。
+/** MIME またはファイル拡張子でテキスト系ファイルか判定する。 */
+function isAcceptedFile(f: File): boolean {
+  if (ACCEPTED_IMAGE_MIME.includes(f.type)) return true;
+  if (f.type.startsWith('text/')) return true;
+  if (f.type === 'application/json' || f.type === 'application/javascript') return true;
+  // MIME が空または unknown のときは拡張子で判断する（ローカルファイルで多い）。
+  const dotIdx = f.name.lastIndexOf('.');
+  if (dotIdx >= 0) {
+    const ext = f.name.slice(dotIdx).toLowerCase();
+    if (ACCEPTED_TEXT_EXT.has(ext)) return true;
+  }
+  return false;
+}
+
+// ステージング中の 1 ファイル。file は送信用、url は画像サムネ表示用（非画像は url=''）。
 interface StagedImage {
   id: string;
   file: File;
-  url: string;
+  url: string; // 画像のみ ObjectURL。テキスト系は ''。
+  isImage: boolean;
 }
 
 type UploadState =
   | { kind: 'idle' }
   | { kind: 'uploading' }
-  | { kind: 'done'; count: number; injected: boolean; paths: string[] }
+  | { kind: 'done'; count: number; injected: boolean; paths: string[]; distribution?: Array<{ terminal: number; count: number; paths: string[] }> }
   | { kind: 'error'; message: string };
 
 /** バイト数を人が読める単位に整形する（サムネのキャプション用）。 */
@@ -98,6 +125,16 @@ interface TerminalStatusResponse {
   ttydService?: boolean;
   ttydReachable?: boolean;
   ready?: boolean;
+}
+
+interface TerminalStatusAllItem {
+  id: number;
+  label: string;
+  account: string | null;
+  model: string | null;
+  status: TerminalStatusResponse;
+  agentName: string | null;
+  agentEmoji: string | null;
 }
 
 /** 出力表示モーダル: 現在タブのターミナルの最近の出力を通常テキストで表示→選択・コピー可（MC-123）。 */
@@ -191,6 +228,10 @@ export default function Terminal() {
   const activeIdRef = useRef(activeId);
   activeIdRef.current = activeId;
 
+  // ── iframe ref マップ（各ターミナルの iframe DOM 要素を保持）────────
+  // Enter キー連動 sendStaged のため contentWindow にアクセスできるよう ref を管理する。
+  const iframeRefsMap = useRef<Map<number, HTMLIFrameElement>>(new Map());
+
   // ── モバイル仮想キーバー（スマホ専用）──────────────────────
   const [keyInput, setKeyInput] = useState('');
 
@@ -278,6 +319,92 @@ export default function Terminal() {
     };
   }, []);
 
+  // ── モデル状態（各ターミナルの現在モデル）────────────────────
+  const [models, setModels] = useState<Record<number, string | null>>(() => {
+    const init: Record<number, string | null> = {};
+    for (const t of TERMINAL_TABS) init[t.id] = null;
+    return init;
+  });
+  // モデル切替ドロップダウンを開いているターミナル番号（null=閉じている）。
+  const [modelDropdownOpen, setModelDropdownOpen] = useState<number | null>(null);
+  // ドロップダウンの表示座標（portal 描画用）。
+  const [dropdownAnchor, setDropdownAnchor] = useState<{ top: number; left: number } | null>(null);
+  // モデル切替中のターミナル番号（null=なし）。
+  const [modelSwitching, setModelSwitching] = useState<number | null>(null);
+
+  // ── アカウントラベル状態（各ターミナルの Claude1/Claude2）────
+  const [accountLabels, setAccountLabels] = useState<Record<number, string>>(() => {
+    const init: Record<number, string> = {};
+    for (const t of TERMINAL_TABS) init[t.id] = t.account;
+    return init;
+  });
+  // アカウント切替ドロップダウンを開いているターミナル番号（null=閉じている）。
+  const [accountDropdownOpen, setAccountDropdownOpen] = useState<number | null>(null);
+  // アカウントドロップダウンの表示座標（portal 描画用）。
+  const [accountDropdownAnchor, setAccountDropdownAnchor] = useState<{ top: number; left: number } | null>(null);
+  // アカウント切替中のターミナル番号（null=なし）。
+  const [accountSwitching, setAccountSwitching] = useState<number | null>(null);
+
+  const [, setAgentInfoMap] = useState<Record<number, { name: string; emoji: string } | null>>({});
+
+  const setModel = useCallback((id: number, model: string | null) => {
+    setModels((prev) => ({ ...prev, [id]: model }));
+  }, []);
+
+  const setAccountLabel = useCallback((id: number, account: string) => {
+    setAccountLabels((prev) => ({ ...prev, [id]: account }));
+  }, []);
+
+  // POST /api/terminal/account でアカウントラベルを切り替える。
+  const switchAccount = useCallback(
+    async (terminalId: number, account: string) => {
+      setAccountSwitching(terminalId);
+      setAccountDropdownOpen(null);
+      setAccountDropdownAnchor(null);
+      try {
+        const res = await fetch('/api/terminal/account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ terminal: terminalId, account }),
+        });
+        const body = (await res.json()) as { ok: boolean; account?: string; error?: string };
+        if (body.ok && body.account) {
+          setAccountLabel(terminalId, body.account);
+        }
+      } catch {
+        // 失敗しても UI をブロックしない
+      } finally {
+        setAccountSwitching(null);
+      }
+    },
+    [setAccountLabel],
+  );
+
+  // POST /api/terminal/model でモデルを切り替える。
+  const switchModel = useCallback(
+    async (terminalId: number, modelId: ModelId) => {
+      setModelSwitching(terminalId);
+      setModelDropdownOpen(null);
+      setDropdownAnchor(null);
+      try {
+        const res = await fetch('/api/terminal/model', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ terminal: terminalId, model: modelId }),
+        });
+        const body = (await res.json()) as { ok: boolean; model?: string; error?: string };
+        if (body.ok && body.model) {
+          setModel(terminalId, body.model);
+        }
+      } catch {
+        // 失敗しても UI をブロックしない
+      } finally {
+        setModelSwitching(null);
+      }
+    },
+    [setModel],
+  );
+
   // ── バックエンド復旧（MC-100 / MC-119）────────────────────────
   // 各ターミナルごとに状態を持つ（id → BackendState）。
   const [backends, setBackends] = useState<Record<number, BackendState>>(() => {
@@ -356,9 +483,34 @@ export default function Terminal() {
     [refreshStatus, setBackend],
   );
 
-  // マウント時に全ターミナルの状態確認、以降は定期ポーリングで切断を検知する。
+  // マウント時に全ターミナルの状態確認 + モデル初期取得、以降は定期ポーリングで切断を検知する。
   useEffect(() => {
-    for (const t of TERMINAL_TABS) void refreshStatus(t.id);
+    // 初回: status-all でバックエンド状態とモデルを一括取得する。
+    const initAll = async () => {
+      try {
+        const res = await fetch('/api/terminal/status-all');
+        if (res.ok) {
+          const body = (await res.json()) as { terminals?: TerminalStatusAllItem[] };
+          if (Array.isArray(body.terminals)) {
+            const newAgentMap: Record<number, { name: string; emoji: string } | null> = {};
+            for (const item of body.terminals) {
+              const ready = Boolean(item.status?.ready);
+              setBackend(item.id, ready ? { kind: 'ready' } : { kind: 'down' });
+              setModel(item.id, item.model ?? null);
+              if (item.account) setAccountLabel(item.id, item.account);
+              newAgentMap[item.id] = item.agentName ? { name: item.agentName, emoji: item.agentEmoji ?? '' } : null;
+            }
+            setAgentInfoMap(newAgentMap);
+            return; // status-all 成功なら個別 refreshStatus は不要。
+          }
+        }
+      } catch {
+        // 失敗時は個別 refreshStatus にフォールバック。
+      }
+      for (const t of TERMINAL_TABS) void refreshStatus(t.id);
+    };
+    void initAll();
+
     const intId = window.setInterval(() => {
       for (const t of TERMINAL_TABS) {
         // starting 中はポーリングしない（start 側が状態を握る）。
@@ -367,46 +519,48 @@ export default function Terminal() {
       }
     }, 15000);
     return () => window.clearInterval(intId);
-  }, [refreshStatus]);
+  }, [refreshStatus, setBackend, setModel]);
 
-  // 選択/貼付した画像をステージング配列に追加する（即送信しない）。
+  // 選択/貼付したファイルをステージング配列に追加する（即送信しない）。
   const addToStaging = useCallback((files: File[]) => {
-    const images = files.filter((f) => ACCEPTED_MIME.includes(f.type));
-    if (images.length === 0) {
-      setState({ kind: 'error', message: '対応する画像（PNG / JPEG / WebP / GIF）が見つかりませんでした。' });
+    const accepted = files.filter((f) => isAcceptedFile(f));
+    if (accepted.length === 0) {
+      setState({ kind: 'error', message: '対応するファイル（画像 PNG/JPEG/WebP/GIF またはテキスト系）が見つかりませんでした。' });
       return;
     }
-    const tooLarge = images.find((f) => f.size > MAX_BYTES);
+    const tooLarge = accepted.find((f) => f.size > MAX_BYTES);
     if (tooLarge) {
-      setState({ kind: 'error', message: '各画像は 10MB までです。' });
+      setState({ kind: 'error', message: '各ファイルは 10MB までです。' });
       return;
     }
     setStaged((prev) => {
       const room = MAX_IMAGES - prev.length;
       if (room <= 0) {
-        setState({ kind: 'error', message: `画像は合計 ${MAX_IMAGES} 枚までです。先に何枚か削除してください。` });
+        setState({ kind: 'error', message: `ファイルは合計 ${MAX_IMAGES} 個までです。先に何個か削除してください。` });
         return prev;
       }
-      const accepted = images.slice(0, room);
-      if (accepted.length < images.length) {
+      const toAdd = accepted.slice(0, room);
+      if (toAdd.length < accepted.length) {
         setState({
           kind: 'error',
-          message: `画像は合計 ${MAX_IMAGES} 枚までです。${images.length - accepted.length} 枚は追加できませんでした。`,
+          message: `ファイルは合計 ${MAX_IMAGES} 個までです。${accepted.length - toAdd.length} 個は追加できませんでした。`,
         });
       } else {
         setState({ kind: 'idle' });
       }
-      const next = accepted.map((f, i) => {
+      const next = toAdd.map((f, i) => {
+        const isImage = ACCEPTED_IMAGE_MIME.includes(f.type);
         const named =
           f.name && f.name.trim() !== ''
             ? f
-            : new File([f], `pasted-${Date.now()}-${i}.${f.type.split('/')[1] || 'png'}`, {
+            : new File([f], `pasted-${Date.now()}-${i}.${f.type.split('/')[1] || 'bin'}`, {
                 type: f.type,
               });
         return {
           id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}`,
           file: named,
-          url: URL.createObjectURL(named),
+          url: isImage ? URL.createObjectURL(named) : '',
+          isImage,
         };
       });
       return [...prev, ...next];
@@ -416,7 +570,7 @@ export default function Terminal() {
   const removeStaged = useCallback((id: string) => {
     setStaged((prev) => {
       const target = prev.find((s) => s.id === id);
-      if (target) URL.revokeObjectURL(target.url);
+      if (target?.url) URL.revokeObjectURL(target.url);
       return prev.filter((s) => s.id !== id);
     });
   }, []);
@@ -447,6 +601,7 @@ export default function Terminal() {
         count?: number;
         injected?: boolean;
         paths?: string[];
+        distribution?: Array<{ terminal: number; count: number; paths: string[] }>;
       };
       const sentCount = items.length;
       setState({
@@ -454,9 +609,12 @@ export default function Terminal() {
         count: body.count ?? sentCount,
         injected: body.injected ?? false,
         paths: Array.isArray(body.paths) ? body.paths : [],
+        distribution: Array.isArray(body.distribution) ? body.distribution : undefined,
       });
       setStaged((prev) => {
-        for (const s of prev) URL.revokeObjectURL(s.url);
+        for (const s of prev) {
+          if (s.url) URL.revokeObjectURL(s.url);
+        }
         return [];
       });
     } catch (e) {
@@ -497,7 +655,75 @@ export default function Terminal() {
     return () => window.removeEventListener('paste', onPaste);
   }, [addToStaging]);
 
+  // iframe 内 Enter キーで sendStaged を自動呼び出し（staged がある間だけリスナーを登録）。
+  // 同一オリジン iframe なので contentWindow に直接アクセスできる（MC-119 冒頭コメント参照）。
+  useEffect(() => {
+    if (staged.length === 0) return; // staged がない時はリスナー不要
+
+    const iframe = iframeRefsMap.current.get(activeId);
+    if (!iframe) return;
+
+    const attachListener = (win: Window) => {
+      const onKeydown = (event: KeyboardEvent) => {
+        if (event.key !== 'Enter') return;
+        // 二重呼び出しガード: uploading 中、または staged が空なら何もしない
+        if (stagedRef.current.length === 0) return;
+        if (state.kind === 'uploading') return;
+        void sendStaged();
+      };
+      win.addEventListener('keydown', onKeydown);
+      return onKeydown;
+    };
+
+    let win: Window | null = null;
+    let handler: ((e: KeyboardEvent) => void) | null = null;
+
+    if (iframe.contentWindow) {
+      win = iframe.contentWindow;
+      handler = attachListener(win);
+    } else {
+      // iframe がまだロードされていない場合は load イベント後に登録する
+      const onLoad = () => {
+        if (iframe.contentWindow) {
+          win = iframe.contentWindow;
+          handler = attachListener(win);
+        }
+      };
+      iframe.addEventListener('load', onLoad, { once: true });
+      return () => {
+        iframe.removeEventListener('load', onLoad);
+      };
+    }
+
+    return () => {
+      if (win && handler) win.removeEventListener('keydown', handler);
+    };
+  }, [staged.length, activeId, sendStaged, state.kind]);
+
   const activeBackend = backends[activeId] ?? { kind: 'checking' };
+
+  // ドロップダウンの外側クリックで閉じる（portal 内クリックは除外）。
+  useEffect(() => {
+    if (modelDropdownOpen === null) return;
+    const handler = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest('[data-model-dropdown]')) return;
+      setModelDropdownOpen(null);
+      setDropdownAnchor(null);
+    };
+    window.addEventListener('click', handler, { capture: true });
+    return () => window.removeEventListener('click', handler, { capture: true });
+  }, [modelDropdownOpen]);
+
+  useEffect(() => {
+    if (accountDropdownOpen === null) return;
+    const handler = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest('[data-account-dropdown]')) return;
+      setAccountDropdownOpen(null);
+      setAccountDropdownAnchor(null);
+    };
+    window.addEventListener('click', handler, { capture: true });
+    return () => window.removeEventListener('click', handler, { capture: true });
+  }, [accountDropdownOpen]);
 
   return (
     <div className="flex h-full flex-col" style={{ overscrollBehavior: 'none' }}>
@@ -506,27 +732,88 @@ export default function Terminal() {
         {TERMINAL_TABS.map((t) => {
           const isActive = t.id === activeId;
           const st = backends[t.id]?.kind ?? 'checking';
+          const currentModel = models[t.id] ?? null;
+          const modelLabel = currentModel
+            ? (AVAILABLE_MODELS.find((m) => m.id === currentModel)?.label ?? currentModel.split('-')[1] ?? currentModel)
+            : null;
+          const isSwitching = modelSwitching === t.id;
+          const currentAccount = accountLabels[t.id] ?? t.account;
+          const isAccountSwitching = accountSwitching === t.id;
           return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => switchTab(t.id)}
-              aria-pressed={isActive}
-              style={{ touchAction: 'manipulation' }}
-              className={`flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
-                isActive
-                  ? 'border-active/50 bg-active-bg text-active'
-                  : 'border-border bg-surface-2 text-text-muted hover:bg-surface-3 hover:text-text'
-              }`}
-            >
-              <TerminalIcon width={13} height={13} className="pointer-events-none" />
-              {t.label}
-              {/* 稼働状態ドット: ready=active色 / それ以外=muted。 */}
-              <span
-                aria-hidden
-                className={`h-1.5 w-1.5 rounded-full ${st === 'ready' ? 'bg-active' : 'bg-text-faint'}`}
-              />
-            </button>
+            <div key={t.id} className="flex shrink-0 items-stretch">
+              {/* タブ本体: クリックでアクティブ切替 */}
+              <button
+                type="button"
+                onClick={() => switchTab(t.id)}
+                aria-pressed={isActive}
+                style={{ touchAction: 'manipulation' }}
+                className={`flex shrink-0 items-center gap-1.5 rounded-l-md border border-r-0 px-3 py-1.5 text-xs font-medium transition-colors ${
+                  isActive
+                    ? 'border-active/50 bg-active-bg text-active'
+                    : 'border-border bg-surface-2 text-text-muted hover:bg-surface-3 hover:text-text'
+                }`}
+              >
+                <TerminalIcon width={13} height={13} className="pointer-events-none" />
+                <span className="flex flex-col items-start leading-tight">
+                  <span
+                    role="button"
+                    tabIndex={-1}
+                    aria-label={`${t.label} のアカウントを変更`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (accountDropdownOpen === t.id) {
+                        setAccountDropdownOpen(null);
+                        setAccountDropdownAnchor(null);
+                        return;
+                      }
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      setAccountDropdownAnchor({ top: rect.bottom + 4, left: rect.left });
+                      setAccountDropdownOpen(t.id);
+                    }}
+                    className={`text-[9px] font-semibold cursor-pointer underline-offset-2 hover:underline ${
+                      currentAccount === 'Claude2' ? 'text-amber-400/80' : 'text-sky-400/90'
+                    } ${isAccountSwitching ? 'opacity-50' : ''}`}
+                  >
+                    {isAccountSwitching ? '…' : currentAccount}
+                  </span>
+                  <span>{t.label}</span>
+                  {modelLabel && (
+                    <span className="text-[10px] text-text-faint font-normal">{modelLabel}</span>
+                  )}
+                </span>
+                {/* 稼働状態ドット */}
+                <span
+                  aria-hidden
+                  className={`h-1.5 w-1.5 rounded-full ${st === 'ready' ? 'bg-active' : 'bg-text-faint'}`}
+                />
+              </button>
+              {/* モデル切替ドロップダウントリガー（▾ ボタン）: タブ右端に連結して overflow 内に収める */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (modelDropdownOpen === t.id) {
+                    setModelDropdownOpen(null);
+                    setDropdownAnchor(null);
+                    return;
+                  }
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  setDropdownAnchor({ top: rect.bottom + 4, left: rect.left });
+                  setModelDropdownOpen(t.id);
+                }}
+                aria-label={`${t.label} のモデルを変更`}
+                title="モデルを変更"
+                disabled={isSwitching}
+                style={{ touchAction: 'manipulation' }}
+                className={`flex shrink-0 items-center justify-center rounded-r-md border px-1.5 text-[9px] transition-colors disabled:opacity-50 ${
+                  isActive
+                    ? 'border-active/50 bg-active-bg text-active/70 hover:text-active'
+                    : 'border-border bg-surface-2 text-text-faint hover:bg-surface-3 hover:text-text'
+                }`}
+              >
+                {isSwitching ? '…' : '▾'}
+              </button>
+            </div>
           );
         })}
       </div>
@@ -537,7 +824,7 @@ export default function Terminal() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
+            accept="image/*,text/*,.ts,.js,.py,.json,.yaml,.yml,.csv,.md,.txt"
             multiple
             onChange={(e) => handleFiles(e.target.files)}
             className="hidden"
@@ -550,7 +837,7 @@ export default function Terminal() {
             className="flex items-center gap-1.5 rounded border border-border bg-surface-2 px-2 py-1 text-xs text-text hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ImageFileIcon width={13} height={13} />
-            画像を選択
+            ファイルを選択
           </button>
           {staged.length > 0 && (
             <span className="text-[11px] text-text-faint">{staged.length} / {MAX_IMAGES}</span>
@@ -572,7 +859,7 @@ export default function Terminal() {
           </a>
         </div>
 
-        {/* ステージング中のサムネ一覧（ターミナル1 のみ表示される）。 */}
+        {/* ステージング中のサムネ一覧。画像はサムネ表示、テキスト系はファイル名表示。 */}
         {staged.length > 0 && (
           <div className="mt-2.5 flex flex-wrap gap-2">
             {staged.map((s) => (
@@ -580,11 +867,22 @@ export default function Terminal() {
                 key={s.id}
                 className="relative w-20 rounded-md border border-border bg-surface-2"
               >
-                <img
-                  src={s.url}
-                  alt={s.file.name}
-                  className="h-16 w-full rounded-t-md object-cover"
-                />
+                {s.isImage ? (
+                  <img
+                    src={s.url}
+                    alt={s.file.name}
+                    className="h-16 w-full rounded-t-md object-cover"
+                  />
+                ) : (
+                  <div
+                    className="flex h-16 w-full items-center justify-center rounded-t-md bg-surface-3 px-1"
+                    title={s.file.name}
+                  >
+                    <span className="truncate text-center text-[9px] text-text-muted leading-tight">
+                      {s.file.name}
+                    </span>
+                  </div>
+                )}
                 <button
                   type="button"
                   aria-label={`${s.file.name} を削除`}
@@ -628,7 +926,7 @@ export default function Terminal() {
               ) : (
                 <>
                   <PlusIcon width={14} height={14} />
-                  送る（{staged.length} 枚）
+                  送る（{staged.length} 個）
                 </>
               )}
             </button>
@@ -650,7 +948,9 @@ export default function Terminal() {
               <CloseIcon width={12} height={12} />
             </button>
             <span>
-              {state.injected
+              {state.distribution
+                ? `${state.count} 個を分散送信しました（${state.distribution.map((d) => `ターミナル${d.terminal}: ${d.count}個`).join('、')}）`
+                : state.injected
                 ? `追加しました`
                 : `追加しました（パス: ${state.paths.join('  ')}）`}
             </span>
@@ -689,6 +989,13 @@ export default function Terminal() {
               {st.kind === 'ready' ? (
                 <iframe
                   key={iframeKeys[t.id]}
+                  ref={(el) => {
+                    if (el) {
+                      iframeRefsMap.current.set(t.id, el);
+                    } else {
+                      iframeRefsMap.current.delete(t.id);
+                    }
+                  }}
                   src={t.path}
                   title={`Apollo ${t.label}`}
                   className="h-full w-full border-0"
@@ -844,6 +1151,72 @@ export default function Terminal() {
         </div>
       )}
       {showOutput && <OutputModal terminal={activeId} onClose={() => setShowOutput(false)} />}
+      {/* アカウント切替ドロップダウン（portal）*/}
+      {accountDropdownOpen !== null && accountDropdownAnchor && createPortal(
+        <div
+          data-account-dropdown=""
+          style={{
+            position: 'fixed',
+            top: accountDropdownAnchor.top,
+            left: accountDropdownAnchor.left,
+            zIndex: 9999,
+          }}
+          className="min-w-28 rounded-md border border-border bg-surface shadow-md"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {(['Claude1', 'Claude2'] as const).map((acc) => {
+            const current = accountLabels[accountDropdownOpen] ?? 'Claude1';
+            return (
+              <button
+                key={acc}
+                type="button"
+                onClick={() => void switchAccount(accountDropdownOpen, acc)}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface-2 ${
+                  current === acc ? 'font-medium text-active' : 'text-text'
+                }`}
+              >
+                {current === acc && <span className="text-active">✓</span>}
+                {current !== acc && <span className="w-3" />}
+                {acc}
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      )}
+      {/* モデル切替ドロップダウン（portal: overflow クリップを避けるため body に直接マウント）*/}
+      {modelDropdownOpen !== null && dropdownAnchor && createPortal(
+        <div
+          data-model-dropdown=""
+          style={{
+            position: 'fixed',
+            top: dropdownAnchor.top,
+            left: dropdownAnchor.left,
+            zIndex: 9999,
+          }}
+          className="min-w-36 rounded-md border border-border bg-surface shadow-md"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {AVAILABLE_MODELS.map((m) => {
+            const currentModel = models[modelDropdownOpen] ?? null;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => void switchModel(modelDropdownOpen, m.id)}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface-2 ${
+                  currentModel === m.id ? 'font-medium text-active' : 'text-text'
+                }`}
+              >
+                {currentModel === m.id && <span className="text-active">✓</span>}
+                {currentModel !== m.id && <span className="w-3" />}
+                {m.label}
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
