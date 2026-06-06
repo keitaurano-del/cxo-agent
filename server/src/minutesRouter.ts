@@ -348,6 +348,9 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
     }
     let saved: ReturnType<typeof saveMinutesToDeliverables> | null = null;
     let saveError: string | undefined;
+    // エクスポートで実際に書き出せたファイル（created/artifacts に反映する）
+    const exportedFiles: Array<{ name: string; relpath: string; sizeBytes: number; ext: string }> = [];
+    const exportErrors: string[] = [];
     if (markdown.trim()) {
       try {
         const title = deriveTitle(markdown, '議事録');
@@ -363,14 +366,29 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
         });
 
         // 選択されたエクスポート形式もフォルダに保存する
+        console.log(
+          `[minutes-export] exportFormats=${JSON.stringify(exportFormats)} folder=${saved?.folderRelpath ?? '(none)'}`,
+        );
         if (saved && exportFormats.length > 0) {
           const folderAbs = join(DELIVERABLES_DIR, saved.folderRelpath);
           for (const fmt of exportFormats) {
             try {
               const { buffer, ext } = await exportMinutes(markdown, fmt, title);
-              writeFileSync(join(folderAbs, `議事録.${ext}`), buffer);
-            } catch {
-              // エクスポート失敗は警告のみ（MD保存は成功済み）
+              const outName = `議事録.${ext}`;
+              const outPath = join(folderAbs, outName);
+              writeFileSync(outPath, buffer);
+              exportedFiles.push({
+                name: outName,
+                relpath: join(saved.folderRelpath, outName),
+                sizeBytes: buffer.length,
+                ext: `.${ext}`,
+              });
+              console.log(`[minutes-export] wrote ${outPath} (${buffer.length} bytes)`);
+            } catch (e) {
+              // エクスポート失敗はログに残す（MD保存は成功済みなので処理は続行）
+              const msg = e instanceof Error ? e.message : String(e);
+              exportErrors.push(`${fmt}: ${msg}`);
+              console.error('[minutes-export] failed', fmt, msg);
             }
           }
         }
@@ -386,16 +404,25 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
 
     // ファイルが見つかり保存できていれば ok=true（claude の exit code は参考程度）
     const ok = !!saved;
+    const nowIso = new Date().toISOString();
     const created = saved
       ? [
           {
             name: '議事録.md',
             relpath: saved.minutesRelpath,
             sizeBytes: Buffer.byteLength(markdown, 'utf-8'),
-            mtime: new Date().toISOString(),
+            mtime: nowIso,
             ext: '.md',
             kind: 'markdown' as const,
           },
+          ...exportedFiles.map((f) => ({
+            name: f.name,
+            relpath: f.relpath,
+            sizeBytes: f.sizeBytes,
+            mtime: nowIso,
+            ext: f.ext,
+            kind: 'file' as const,
+          })),
         ]
       : [];
 
@@ -408,6 +435,7 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
       ...(result.error || saveError
         ? { error: result.error || saveError || '議事録を保存できませんでした。' }
         : {}),
+      ...(exportErrors.length > 0 ? { exportErrors } : {}),
     };
 
     if (wantsStream) {

@@ -1031,7 +1031,7 @@ const MINUTES_STYLES = [
 | 日時 | 場所 |
 |------|------|
 | 5月15日 14:00 | 本社 3F |`,
-    extraInstructions: `以下の構造で議事録を作成してください。
+    extraInstructions: `必ず以下の Markdown 形式そのままで議事録を出力してください。見出しや表の構造を変更したり、絵文字を追加してはいけません。
 
 ## 会議議事録
 
@@ -1040,24 +1040,28 @@ const MINUTES_STYLES = [
 | 会議名 | （テキストから読み取る） |
 | 開催日時 | （テキストから読み取る） |
 | 開催場所 | （テキストから読み取る） |
-| 司会 | （テキストから読み取る） |
-| 書記 | （テキストから読み取る） |
+| 司会 | （テキストから読み取る、不明なら「（記載なし）」） |
+| 書記 | （テキストから読み取る、不明なら「（記載なし）」） |
 | 出席者 | （テキストから読み取る） |
 | 欠席者 | （テキストから読み取る、いなければ「なし」） |
 
 ### 議題
-（議題を番号付きで列挙）
+1. （議題1）
+2. （議題2）
 
 ### 議事内容
-（各議題の討議内容を詳しく記載）
+（各議題の討議内容を「【議題1】…」「【議題2】…」のように記載）
 
 ### 合意事項・決定事項
-（決定した事項を箇条書きで列挙）
+- （決定した事項を箇条書きで列挙）
 
 ### 次回会議
+
 | 日時 | 場所 |
 |------|------|
-| （日時） | （場所） |`,
+| （日時、不明なら「未定」） | （場所、不明なら「未定」） |
+
+注意: 見出しに絵文字（📋 等）を付けないこと。表のヘッダー行・区切り行（|---|）を省略しないこと。`,
   },
   {
     id: 'label',
@@ -1087,7 +1091,7 @@ const MINUTES_STYLES = [
 
 **【所見】**
 …（特記コメント）`,
-    extraInstructions: `以下のラベルブロック形式で議事録を作成してください。各ラベルは太字で表示します。
+    extraInstructions: `必ず以下のラベルブロック形式そのままで議事録を出力してください。各ラベルは「**【ラベル】**」の太字で始め、絵文字は付けないこと。
 
 **【標題】** （会議名と目的を1行で）
 
@@ -1095,23 +1099,23 @@ const MINUTES_STYLES = [
 
 **【場所】** （開催場所）
 
-**【出席者】** （氏名（役職）をカンマ区切りで。※は欠席）
+**【出席者】** （氏名（役職）をカンマ区切りで。※は欠席を表す）
 
 **【議題】**
 1. （議題1）
 2. （議題2）
-…
 
 **【議決事項】**
 - 議題1：（決定内容）
 - 議題2：（決定内容）
-…
 
 **【議事】**
 （各議題の審議内容・発言要旨を段落形式で）
 
 **【所見】**
-（特記事項・コメント。特になければ省略）`,
+（特記事項・コメント。特になければ「特になし」）
+
+注意: 上記のラベル（標題/日時/場所/出席者/議題/議決事項/議事/所見）以外の見出しや絵文字を追加しないこと。`,
   },
   {
     id: 'report',
@@ -1149,7 +1153,7 @@ const MINUTES_STYLES = [
 **次回会議予定**
 - 日時：5月14日 14:00〜
 - 場所：本社 3階会議室`,
-    extraInstructions: `以下のレポート形式で議事録を作成してください。
+    extraInstructions: `必ず以下のレポート形式そのままで議事録を出力してください。見出しの番号構造（## 1.〜## 4.）を維持し、絵文字は付けないこと。
 
 # 第○回 [会議名] 議事録
 
@@ -1164,23 +1168,25 @@ const MINUTES_STYLES = [
 （前回からの積み残し・報告事項。特になければ「特になし」）
 
 ## 2. 報告事項
-（各報告項目を小見出しで整理）
+（各報告項目を「### 小見出し」で整理）
 
 ## 3. 議事
 ### 議題1：（タイトル）
-（内容・討議・結論）
+（内容・討議・結論を文章体で記述）
 
 ### 議題2：（タイトル）
-（内容・討議・結論）
+（内容・討議・結論を文章体で記述）
 
 ## 4. その他
-（その他の共有事項）
+（その他の共有事項。なければ「特になし」）
 
 ---
 
 **次回会議予定**
-- 日時：（日時）
-- 場所：（場所）`,
+- 日時：（日時、不明なら「未定」）
+- 場所：（場所、不明なら「未定」）
+
+注意: 各項目は文章体（です・ます調）で記述すること。見出しに絵文字を付けないこと。`,
   },
   {
     id: 'action',
@@ -1202,7 +1208,22 @@ const MINUTES_STYLES = [
 
 ## 議論の要点
 …（主な議論の概要）`,
-    extraInstructions: 'アクションアイテムと担当者・期限を最優先で先頭の表に記載し、その後に議論の要点を簡潔に記述してください。アクション表は「No / アクション / 担当者 / 期限 / ステータス」の列を持つMarkdownテーブルで。',
+    extraInstructions: `必ず以下の形式そのままで議事録を出力してください。先頭にアクションリストの表を置き、絵文字は付けないこと。
+
+## アクションリスト
+
+| No | アクション | 担当者 | 期限 | ステータス |
+|----|-----------|--------|------|-----------|
+| 1 | （やること） | （担当者） | （期限） | 未着手 |
+| 2 | （やること） | （担当者） | （期限） | 進行中 |
+
+## 決定事項
+- （決定した事項を箇条書きで列挙）
+
+## 議論の要点
+（主な議論の概要を簡潔に文章で記述）
+
+注意: アクション表は「No / アクション / 担当者 / 期限 / ステータス」の5列を必ず維持し、ヘッダー行と区切り行（|---|）を省略しないこと。担当者・期限が不明な場合は「未定」と記載すること。`,
   },
   {
     id: 'summary',
@@ -1224,7 +1245,20 @@ const MINUTES_STYLES = [
 ### ネクストアクション
 - 山田：仕様書更新（5/20まで）
 - 鈴木：ベンダー調整（5/15まで）`,
-    extraInstructions: '全体を3〜5分で読み切れるコンパクトなサマリーにしてください。各セクションは箇条書き中心で。',
+    extraInstructions: `必ず以下の形式そのままで、コンパクトな要約議事録を出力してください。絵文字は付けないこと。
+
+## 会議サマリー（（日付））
+
+### 結論・決定事項
+- （決定した事項を箇条書きで、最大5項目）
+
+### 主な議論ポイント
+- （主な論点を箇条書きで、最大5項目）
+
+### ネクストアクション
+- （担当者）：（やること）（期限）
+
+注意: 全体を3〜5分で読み切れる分量にし、各セクションは箇条書き中心にすること。長い文章や余計な見出しを追加しないこと。見出しに絵文字を付けないこと。`,
   },
   {
     id: 'casual',
@@ -1247,220 +1281,170 @@ const MINUTES_STYLES = [
 - 鈴木：ベンダー確認 → 5/15
 
 次回：5/14（水）14:00〜 同じ部屋で`,
-    extraInstructions: 'カジュアルで読みやすいトーンで書いてください。堅い敬語は不要です。社内Slackに貼るようなイメージで。',
+    extraInstructions: `必ず以下の形式そのままで、カジュアルな箇条書きメモを出力してください。社内Slackに貼るようなライトなトーンで、堅い敬語は不要です。
+
+📅 （日付） （会議名）メモ
+
+参加：（参加者を「・」区切りで）
+
+今日の主な話
+- （話したことを箇条書きで）
+- （話したことを箇条書きで）
+
+やること
+- （担当者）：（やること） → （期限）
+
+次回：（日時・場所）
+
+注意: 上記の見出し（今日の主な話／やること／次回）の構成を維持すること。冒頭の📅以外に絵文字を多用しないこと。Markdownの表や##見出しは使わず、プレーンな箇条書きで書くこと。`,
   },
 ] as const;
 
+// 各スタイルの sample（Markdown / プレーンテキスト）をそのまま簡易レンダリングする。
+// プレビュー＝生成物のサンプル、という単一の真実の源にするため JSX ハードコードは廃止。
+function renderSampleInline(text: string, keyBase: string): Array<JSX.Element | string> {
+  // **bold** のみ簡易対応
+  const parts = text.split(/(\*\*[^*]+\*\*)/g).filter((s) => s !== '');
+  return parts.map((p, i) => {
+    if (p.startsWith('**') && p.endsWith('**')) {
+      return (
+        <strong key={`${keyBase}-b${i}`} className="font-semibold">
+          {p.slice(2, -2)}
+        </strong>
+      );
+    }
+    return p;
+  });
+}
+
 function StylePreviewPanel({ styleId }: { styleId: string }) {
-  // Shared micro-style helpers
-  const th = 'border border-[#ccc] bg-[#f0f0f0] px-2 py-1 font-semibold text-[11px] text-[#333] align-top w-[30%]';
-  const td = 'border border-[#ccc] px-2 py-1 text-[11px] text-[#222]';
-  const sectionHead = 'border border-[#ccc] bg-[#f0f0f0] px-2 py-1 text-[11px] font-semibold text-[#333]';
-  const sectionBody = 'border border-[#ccc] px-2 py-2 text-[11px] text-[#444]';
+  const style = MINUTES_STYLES.find((s) => s.id === styleId);
+  if (!style) return null;
+  const lines = style.sample.split('\n');
 
-  if (styleId === 'form') {
-    return (
-      <div className="rounded bg-white p-3 text-[11px]" style={{ color: '#222' }}>
-        <p className="mb-2 text-center text-[13px] font-bold">会議議事録</p>
-        <table className="w-full border-collapse">
+  const td = 'border border-[#ccc] px-2 py-1 text-[11px] text-[#222] align-top';
+  const thCell = 'border border-[#ccc] bg-[#f0f0f0] px-2 py-1 text-[11px] font-semibold text-[#333] align-top';
+
+  const blocks: JSX.Element[] = [];
+  let i = 0;
+  let key = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // 空行
+    if (trimmed === '') {
+      i += 1;
+      continue;
+    }
+
+    // 水平線
+    if (/^-{3,}$/.test(trimmed)) {
+      blocks.push(<hr key={`hr-${key++}`} className="my-2 border-[#ddd]" />);
+      i += 1;
+      continue;
+    }
+
+    // 表（| で始まる連続行）
+    if (trimmed.startsWith('|')) {
+      const tableLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith('|')) {
+        tableLines.push(lines[i].trim());
+        i += 1;
+      }
+      const rows = tableLines
+        .filter((r) => !/^\|[\s|:-]+\|?$/.test(r)) // 区切り行（|---|）を除外
+        .map((r) =>
+          r
+            .replace(/^\||\|$/g, '')
+            .split('|')
+            .map((c) => c.trim()),
+        );
+      // 1行目をヘッダー扱い
+      const [head, ...body] = rows;
+      blocks.push(
+        <table key={`tbl-${key++}`} className="my-1 w-full border-collapse">
+          {head && (
+            <thead>
+              <tr>
+                {head.map((c, ci) => (
+                  <th key={ci} className={thCell}>
+                    {renderSampleInline(c, `th-${key}-${ci}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+          )}
           <tbody>
-            {[
-              ['会議名', '第1回 プロジェクト定例'],
-              ['開催日時', '2025年4月10日（木）14:00〜15:00'],
-              ['開催場所', '本社 3F 第一会議室'],
-              ['司会', '田中 一郎'],
-              ['書記', '山田 花子'],
-              ['出席者', '田中、山田、鈴木、高橋'],
-              ['欠席者', 'なし'],
-            ].map(([k, v]) => (
-              <tr key={k}>
-                <td className={th}>{k}</td>
-                <td className={td}>{v}</td>
+            {body.map((row, ri) => (
+              <tr key={ri}>
+                {row.map((c, ci) => (
+                  <td key={ci} className={td}>
+                    {renderSampleInline(c, `td-${key}-${ri}-${ci}`)}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
-        </table>
-        <table className="mt-1 w-full border-collapse">
-          <tbody>
-            <tr><td className={sectionHead}>議題</td></tr>
-            <tr><td className={sectionBody}>1. 開発進捗確認<br/>2. 次期リリース計画</td></tr>
-            <tr><td className={sectionHead}>議事内容</td></tr>
-            <tr><td className={sectionBody}>【議題1】進捗は予定比80%。遅延リスクについて議論。<br/>【議題2】5月末リリースで合意。担当割り振りを山田が調整。</td></tr>
-            <tr><td className={sectionHead}>合意事項・決定事項</td></tr>
-            <tr><td className={sectionBody}>・リリース日を5月末に確定<br/>・担当割り振りは山田が5/20までに提示</td></tr>
-          </tbody>
-        </table>
-        <table className="mt-1 w-full border-collapse">
-          <thead>
-            <tr><th className={th} colSpan={2}>次回会議</th></tr>
-            <tr>
-              <td className={th}>日時</td>
-              <td className={td}>2025年5月15日（木）14:00〜</td>
-            </tr>
-            <tr>
-              <td className={th}>場所</td>
-              <td className={td}>本社 3F 第一会議室</td>
-            </tr>
-          </thead>
-        </table>
-      </div>
+        </table>,
+      );
+      continue;
+    }
+
+    // 見出し（#, ##, ###）
+    const headingMatch = /^(#{1,6})\s+(.*)$/.exec(trimmed);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const cls =
+        level <= 1
+          ? 'mt-1 mb-1 text-[13px] font-bold text-[#222]'
+          : level === 2
+            ? 'mt-2 mb-0.5 text-[12px] font-bold text-[#333]'
+            : 'mt-1.5 mb-0.5 text-[11px] font-semibold text-[#444]';
+      blocks.push(
+        <p key={`h-${key++}`} className={cls}>
+          {renderSampleInline(headingMatch[2], `h-${key}`)}
+        </p>,
+      );
+      i += 1;
+      continue;
+    }
+
+    // リスト（-, *, 1.）の連続
+    if (/^([-*]|\d+\.)\s+/.test(trimmed)) {
+      const items: string[] = [];
+      const ordered = /^\d+\.\s+/.test(trimmed);
+      while (i < lines.length && /^([-*]|\d+\.)\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^([-*]|\d+\.)\s+/, ''));
+        i += 1;
+      }
+      const listCls = 'my-1 ml-4 text-[11px] text-[#444] ' + (ordered ? 'list-decimal' : 'list-disc');
+      blocks.push(
+        <ul key={`ul-${key++}`} className={listCls}>
+          {items.map((it, ii) => (
+            <li key={ii} className="mb-0.5">
+              {renderSampleInline(it, `li-${key}-${ii}`)}
+            </li>
+          ))}
+        </ul>,
+      );
+      continue;
+    }
+
+    // 通常段落
+    blocks.push(
+      <p key={`p-${key++}`} className="my-0.5 text-[11px] leading-relaxed text-[#444]">
+        {renderSampleInline(trimmed, `p-${key}`)}
+      </p>,
     );
+    i += 1;
   }
 
-  if (styleId === 'label') {
-    const labels: Array<{ color: string; bg: string; label: string; content: JSX.Element }> = [
-      { color: '#fff', bg: '#1d4ed8', label: '標題', content: <span>○○開発部 ××開発進捗確認および△△新規提案についての役員級会議</span> },
-      { color: '#fff', bg: '#15803d', label: '日時', content: <span>2025年7月1日（火）13:00〜14:30</span> },
-      { color: '#fff', bg: '#15803d', label: '場所', content: <span>株式会社×× 3階 第一会議室</span> },
-      { color: '#fff', bg: '#15803d', label: '出席者', content: <span>田中専務、開発部 山田部長、鈴木リーダー、山本、高橋（※）</span> },
-      { color: '#fff', bg: '#b45309', label: '議題', content: <span>1. ○○開発の進捗確認　2. △△新規開発提案　3. 開発部A・Bチーム予算分配</span> },
-      { color: '#fff', bg: '#7c3aed', label: '議決事項', content: <><div>・議題1：遅延回復策を提案通り承認</div><div>・議題2：提案の通り承認</div><div>・議題3：継続、次回会議までに調査</div></> },
-      { color: '#fff', bg: '#4b5563', label: '議事', content: <span className="text-[#555]">（※）</span> },
-      { color: '#fff', bg: '#4b5563', label: '所見', content: <span className="text-[#555]">○○の遅延が心配だが、良い改善案が出てよかった。（田中専務）</span> },
-    ];
-    return (
-      <div className="rounded bg-white p-2 text-[11px]" style={{ color: '#222' }}>
-        {labels.map(({ color, bg, label, content }) => (
-          <div key={label} className="mb-1 flex items-start gap-1.5">
-            <span
-              className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold leading-tight"
-              style={{ background: bg, color }}
-            >
-              {label}
-            </span>
-            <span className="leading-relaxed">{content}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (styleId === 'report') {
-    return (
-      <div className="rounded bg-white p-3 text-[11px]" style={{ color: '#222' }}>
-        <p className="mb-0.5 text-center text-[12px] font-bold">第1回 衛生委員会議事録</p>
-        <p className="mb-0.5 text-[10px] text-[#666]">記録者：福田</p>
-        <div className="mb-2 border-b border-[#ccc] pb-2 text-[10px] leading-relaxed text-[#555]">
-          開催日：2025年4月10日（木）　14:00〜15:00　　開催場所：本社 3F会議室<br/>
-          出席者：石野（議長）、山本（副）、福田（書記）、田中、鈴木
-        </div>
-        <div className="mb-1.5">
-          <p className="font-semibold text-[#333]">① 前回議事録の確認</p>
-          <p className="ml-2 text-[#555]">前回内容を確認。修正なし。</p>
-        </div>
-        <div className="mb-1.5">
-          <p className="font-semibold text-[#333]">② 報告事項</p>
-          <div className="ml-2 text-[#555]">
-            <p>・労働災害：発生0件、通常扱い：0件</p>
-            <p>・時間外労働：直近3ヶ月の平均：○時間</p>
-          </div>
-        </div>
-        <div className="mb-1.5">
-          <p className="font-semibold text-[#333]">③ 議事</p>
-          <p className="ml-2 font-medium text-[#444]">議題1：オフィスでのコエジカの発生について</p>
-          <div className="ml-4 text-[#555]">
-            <p>現状：昨年より散発している</p>
-            <p>対策：芳香剤スプレーの導入、清掃の見直しを検討</p>
-          </div>
-        </div>
-        <div className="mt-2 border-t border-[#ccc] pt-1.5 text-[10px] text-[#666]">
-          次回会議：5月14日（水）14:00〜　本社3F会議室
-        </div>
-      </div>
-    );
-  }
-
-  if (styleId === 'action') {
-    return (
-      <div className="rounded bg-white p-3 text-[11px]" style={{ color: '#222' }}>
-        <p className="mb-2 text-[12px] font-bold">アクションリスト</p>
-        <table className="w-full border-collapse">
-          <thead>
-            <tr>
-              {['No', 'アクション', '担当', '期限', '状態'].map((h) => (
-                <th key={h} className="border border-[#ccc] bg-[#1d4ed8] px-1.5 py-1 text-[10px] text-white">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {[
-              ['1', '仕様書更新', '山田', '5/20', '未着手'],
-              ['2', 'ベンダー確認', '鈴木', '5/15', '進行中'],
-              ['3', '予算案作成', '田中', '5/31', '未着手'],
-            ].map(([no, action, who, due, status]) => (
-              <tr key={no}>
-                <td className="border border-[#ccc] px-1.5 py-1 text-center text-[#555]">{no}</td>
-                <td className="border border-[#ccc] px-1.5 py-1">{action}</td>
-                <td className="border border-[#ccc] px-1.5 py-1 text-center">{who}</td>
-                <td className="border border-[#ccc] px-1.5 py-1 text-center">{due}</td>
-                <td className="border border-[#ccc] px-1.5 py-1 text-center text-[#888]">{status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="mt-2 font-semibold text-[#333]">決定事項</p>
-        <ul className="ml-3 mt-1 list-disc text-[#555]">
-          <li>リリース日：5月末に確定</li>
-          <li>予算：300万円枠で進める</li>
-        </ul>
-        <p className="mt-2 font-semibold text-[#333]">議論の要点</p>
-        <p className="mt-0.5 text-[#555]">進捗は80%、遅延リスクあり。リカバリ策を来週提示予定。</p>
-      </div>
-    );
-  }
-
-  if (styleId === 'summary') {
-    return (
-      <div className="rounded bg-white p-3 text-[11px]" style={{ color: '#222' }}>
-        <p className="mb-0.5 text-[12px] font-bold">会議サマリー</p>
-        <p className="mb-2 text-[10px] text-[#888]">2025年4月10日　プロジェクト定例</p>
-        <div className="mb-2 rounded bg-[#eff6ff] px-2 py-1.5">
-          <p className="font-semibold text-[#1d4ed8]">結論・決定事項</p>
-          <ul className="ml-3 mt-0.5 list-disc text-[#374151]">
-            <li>新機能リリースを5月末に決定</li>
-            <li>担当：山田主導、鈴木サポート</li>
-          </ul>
-        </div>
-        <div className="mb-2">
-          <p className="font-semibold text-[#333]">主な議論ポイント</p>
-          <ul className="ml-3 mt-0.5 list-disc text-[#555]">
-            <li>現状進捗は予定比80%、遅延リスクあり</li>
-            <li>予算超過の懸念は次回に持ち越し</li>
-          </ul>
-        </div>
-        <div>
-          <p className="font-semibold text-[#333]">ネクストアクション</p>
-          <ul className="ml-3 mt-0.5 list-disc text-[#555]">
-            <li>山田：仕様書更新（5/20まで）</li>
-            <li>鈴木：ベンダー調整（5/15まで）</li>
-          </ul>
-        </div>
-      </div>
-    );
-  }
-
-  if (styleId === 'casual') {
-    return (
-      <div className="rounded bg-white p-3 text-[11px]" style={{ color: '#222' }}>
-        <p className="mb-1 text-[12px] font-bold">📅 4/10 プロジェクト定例メモ</p>
-        <p className="mb-2 text-[#888]">参加：田中・山田・鈴木</p>
-        <p className="mb-1 font-semibold text-[#333]">今日の主な話</p>
-        <ul className="mb-2 ml-3 list-disc text-[#555]">
-          <li>進捗は80%くらい、少し遅れ気味</li>
-          <li>5月末リリースは変えない方針で合意</li>
-          <li>予算の件は次回持ち越し</li>
-        </ul>
-        <p className="mb-1 font-semibold text-[#333]">やること</p>
-        <ul className="mb-2 ml-3 list-disc text-[#555]">
-          <li>山田：仕様書更新 → 5/20</li>
-          <li>鈴木：ベンダー確認 → 5/15</li>
-        </ul>
-        <p className="text-[#888]">次回：5/14（水）14:00〜 同じ部屋</p>
-      </div>
-    );
-  }
-
-  return null;
+  return (
+    <div className="rounded bg-white p-3" style={{ color: '#222' }}>
+      {blocks}
+    </div>
+  );
 }
 
 const EXPORT_OPTS = [
