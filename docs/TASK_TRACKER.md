@@ -2014,3 +2014,23 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 関連ファイル | `dev:~/cron-scripts/closed-test-monitor.sh`, `cxo-agent/data/closed-test.json` |
 | 更新日 | 2026-06-05 |
 | 完了根拠 | スクリプト作成済み (closed-test-monitor.sh, chmod +x)、状態ファイル作成済み (data/closed-test.json)、crontab 登録済み (`0 0 * * * TZ=Asia/Tokyo`) |
+
+## バッチ: 2026-06-06 Apollo server restart（フォルダアップロード新コード反映）
+
+| ID | タイトル | 優先度 | ステータス | 担当 |
+|----|---------|--------|-----------|------|
+| MC-150 | mission-control.service を再起動して成果物フォルダアップロードの新コードを反映する | P0 | BLOCKED（Keita承認待ち・デプロイ承認） | apollo-keeper |
+
+### MC-150 — Apollo server restart（フォルダアップロード新コード反映）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-150 |
+| タイトル | mission-control.service 再起動 — フォルダアップロード対応コードを本番反映 |
+| 優先度 | P0 |
+| ステータス | BLOCKED（Keita承認待ち・デプロイ承認） |
+| 担当 | apollo-keeper |
+| 詳細 | 成果物ビューにフォルダアップロード機能を追加（サーバ: destination callback でサブフォルダ自動作成 + extractUploadRelPath でパス分解、フロント: webkitdirectory input + D&D フォルダ対応 + webkitRelativePath を FormData に渡す）。さらに SafePathError 修正（resolveUploadTarget で resolveDeliverablePath を bypass、スペース・ハイフン含むフォルダ名を許容）。dist は既にビルド済みで静的配信は反映済み。server コードを有効化するには `sudo systemctl restart mission-control.service` が必要。承認後 apollo-keeper が restart を実施する。 |
+| 実行コマンド | `sudo systemctl restart mission-control.service` |
+| 受け入れ条件（DoD） | restart 後 `/api/healthz` が 200 を返すこと。 |
+| 更新日 | 2026-06-06 |
