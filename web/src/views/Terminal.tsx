@@ -362,16 +362,6 @@ export default function Terminal() {
     [setAccountLabel, markSwitching],
   );
 
-  // バッジクリックで Claude1 ↔ Claude2 をトグルする。
-  const toggleAccount = useCallback(
-    (terminalId: number) => {
-      const current = accountLabels[terminalId] ?? 'Claude1';
-      const next = current === 'Claude1' ? 'Claude2' : 'Claude1';
-      void switchAccount(terminalId, next);
-    },
-    [accountLabels, switchAccount],
-  );
-
   // ── 使用量ベース自動切替 ────────────────────────────────────
   // /api/terminal/usage-summary を取得し、remaining が多い方（=使用率が低い方）の
   // アカウントへ全ターミナルを切り替える。silent=true は初回ロード時の静かな切替用。
@@ -747,32 +737,28 @@ export default function Terminal() {
             >
               <TerminalIcon width={13} height={13} className="pointer-events-none" />
               <span>{t.label}</span>
-              {/* アカウントバッジ（C1 / C2）。クリックで Claude1 ↔ Claude2 をトグル。 */}
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label={`${t.label} のアカウント: ${account}（クリックで切替）`}
-                title={`${account}（クリックで切替）`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!switching) toggleAccount(t.id);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
+              {/* アカウントプルダウン */}
+              {switching ? (
+                <span className="flex h-5 w-10 items-center justify-center"><Spinner /></span>
+              ) : (
+                <select
+                  value={account}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
                     e.stopPropagation();
-                    if (!switching) toggleAccount(t.id);
-                  }
-                }}
-                style={{ touchAction: 'manipulation' }}
-                className={`flex h-5 min-w-[1.75rem] items-center justify-center rounded px-1 text-[10px] font-semibold leading-none ${
-                  isC2
-                    ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
-                    : 'bg-sky-500/20 text-sky-600 dark:text-sky-400'
-                }`}
-              >
-                {switching ? <Spinner /> : isC2 ? 'C2' : 'C1'}
-              </span>
+                    void switchAccount(t.id, e.target.value);
+                  }}
+                  aria-label={`${t.label} のアカウント`}
+                  className={`h-5 rounded border-0 px-0.5 text-[10px] font-semibold leading-none outline-none cursor-pointer ${
+                    isC2
+                      ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                      : 'bg-sky-500/20 text-sky-600 dark:text-sky-400'
+                  }`}
+                >
+                  <option value="Claude1">C1</option>
+                  <option value="Claude2">C2</option>
+                </select>
+              )}
               {/* 稼働状態ドット */}
               <span
                 aria-hidden
