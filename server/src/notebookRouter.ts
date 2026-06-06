@@ -48,6 +48,16 @@ import { extractSourceText } from './lib/notebookExtract.js';
 import { runClaude, runClaudeStream } from './lib/notebookClaude.js';
 import { convertOfficeToPdf, isConvertibleToPdf } from './lib/officeToPdf.js';
 import { buildIndex, searchChunks, deleteIndex, type Chunk } from './lib/notebookIndex.js';
+import { transcribeAudio } from './lib/transcribe.js';
+import {
+  MINUTES_TYPES,
+  MINUTES_FORMATS,
+  getTypePreset,
+  buildMinutesPrompt,
+  type MinutesType,
+  type MinutesFormat,
+} from './lib/minutesPresets.js';
+import { listPatterns, createPattern, deletePattern, type MinutesPattern } from './lib/minutesPatterns.js';
 
 /** :id パラメータを string に正規化する（express 5 は string | string[] 型）。 */
 function idParam(req: Request): string {
@@ -107,6 +117,27 @@ const storage = multer.diskStorage({
 const uploadSources = multer({
   storage,
 }).array('files');
+
+// 音声文字起こし用 multer（memoryStorage: base64 変換後に Gemini API へ渡す）
+const uploadAudio = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } }).single('audio');
+
+function runAudioUpload(req: Request, res: Response): Promise<Express.Multer.File | null> {
+  return new Promise((resolve) => {
+    uploadAudio(req, res, (err: unknown) => {
+      if (err) {
+        if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+          res.status(413).json({ error: '音声ファイルが大きすぎます（上限 100MB）。' });
+        } else {
+          const msg = err instanceof Error ? err.message : String(err);
+          res.status(400).json({ error: msg });
+        }
+        resolve(null);
+        return;
+      }
+      resolve((req as Request & { file?: Express.Multer.File }).file ?? null);
+    });
+  });
+}
 
 function cleanupPartial(req: Request): void {
   const r = req as Request & { _savedSources?: SavedSourceRef[] };
@@ -668,6 +699,239 @@ async function handleReindex(req: Request, res: Response): Promise<void> {
   });
 }
 
+// ─── 議事録（Minutes）────────────────────────────────────────────
+
+// GET /minutes/presets — ビルトインの種類・形式一覧
+function handleGetPresets(_req: Request, res: Response): void {
+  res.json({ types: MINUTES_TYPES, formats: MINUTES_FORMATS });
+}
+
+// GET /minutes/patterns — パターン一覧
+function handleListPatterns(_req: Request, res: Response): void {
+  try {
+    res.json({ patterns: listPatterns() });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+// POST /minutes/patterns — パターン作成
+function handleCreatePattern(req: Request, res: Response): void {
+  const { name, type, format, templateId, templateBody, instructions } = req.body as {
+    name?: string;
+    type?: string;
+    format?: string;
+    templateId?: string;
+    templateBody?: string;
+    instructions?: string;
+  };
+  if (!name?.trim()) {
+    res.status(400).json({ error: 'name は必須です。' });
+    return;
+  }
+  if (!type || !['verbatim', 'summary', 'decisions', 'chronological'].includes(type)) {
+    res.status(400).json({ error: 'type は verbatim/summary/decisions/chronological のいずれかです。' });
+    return;
+  }
+  if (!format || !['markdown', 'sections', 'plain'].includes(format)) {
+    res.status(400).json({ error: 'format は markdown/sections/plain のいずれかです。' });
+    return;
+  }
+  try {
+    const pattern = createPattern({
+      name: name.trim(),
+      type,
+      format,
+      ...(templateId ? { templateId } : {}),
+      ...(templateBody ? { templateBody } : {}),
+      ...(instructions ? { instructions } : {}),
+    });
+    res.status(201).json(pattern);
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+// DELETE /minutes/patterns/:patternId — パターン削除
+function handleDeletePattern(req: Request, res: Response): void {
+  const pid = req.params.patternId;
+  const patternId = Array.isArray(pid) ? (pid[0] ?? '') : (pid ?? '');
+  if (!patternId) {
+    res.status(400).json({ error: 'patternId が必要です。' });
+    return;
+  }
+  try {
+    const removed = deletePattern(patternId);
+    if (!removed) {
+      res.status(404).json({ error: 'パターンが見つかりません。' });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+// POST /:id/minutes/transcribe — 音声文字起こし
+async function handleTranscribe(req: Request, res: Response): Promise<void> {
+  const id = idParam(req);
+  try {
+    resolveNotebookDir(id, true);
+  } catch (e) {
+    if (e instanceof SafePathError) {
+      res.status(/not found/i.test(e.message) ? 404 : 400).json({ error: e.message });
+      return;
+    }
+    throw e;
+  }
+  const file = await runAudioUpload(req, res);
+  if (!file) return;
+  try {
+    const text = await transcribeAudio(file.buffer, file.mimetype || 'audio/mpeg');
+    res.json({ text });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[transcribe error]', msg);
+    res.status(500).json({ error: msg });
+  }
+}
+
+// POST /:id/minutes/generate — 議事録生成（Claude 使用、既存の generate と同パターン）
+async function handleMinutesGenerate(req: Request, res: Response): Promise<void> {
+  const id = idParam(req);
+  const {
+    inputText,
+    type,
+    format,
+    templateId,
+    templateBody: reqTemplateBody,
+    patternId,
+    customInstructions,
+  } = req.body as {
+    inputText?: string;
+    type?: string;
+    format?: string;
+    templateId?: string;
+    templateBody?: string;
+    patternId?: string;
+    customInstructions?: string;
+  };
+
+  // patternId 指定時はパターンから設定を解決
+  let resolvedType: string = type || 'summary';
+  let resolvedFormat: string = format || 'markdown';
+  let resolvedTemplateBody: string | undefined = reqTemplateBody;
+  let resolvedInstructions: string | undefined = customInstructions;
+
+  if (patternId) {
+    const pat = listPatterns().find((p: MinutesPattern) => p.id === patternId);
+    if (!pat) {
+      res.status(404).json({ error: '指定されたパターンが見つかりません。' });
+      return;
+    }
+    resolvedType = pat.type;
+    resolvedFormat = pat.format;
+    resolvedTemplateBody = resolvedTemplateBody || pat.templateBody;
+    resolvedInstructions = resolvedInstructions || pat.instructions;
+  }
+
+  if (!inputText?.trim()) {
+    res.status(400).json({ error: 'inputText は必須です。' });
+    return;
+  }
+  if (!['verbatim', 'summary', 'decisions', 'chronological'].includes(resolvedType)) {
+    res.status(400).json({ error: 'type が不正です。' });
+    return;
+  }
+  if (!['markdown', 'sections', 'plain'].includes(resolvedFormat)) {
+    res.status(400).json({ error: 'format が不正です。' });
+    return;
+  }
+
+  // templateId からテンプレート本文を解決（templateBody の方が優先）
+  if (!resolvedTemplateBody && templateId) {
+    const tmpl = getTypePreset(resolvedType as MinutesType)?.templates.find(
+      (t) => t.id === templateId,
+    );
+    if (tmpl) resolvedTemplateBody = tmpl.body;
+  }
+
+  let dir: string;
+  try {
+    dir = resolveNotebookDir(id, true);
+  } catch (e) {
+    if (e instanceof SafePathError) {
+      res.status(/not found/i.test(e.message) ? 404 : 400).json({ error: e.message });
+      return;
+    }
+    throw e;
+  }
+
+  // artifacts/ の合計サイズチェック
+  const maxArtifacts = NOTEBOOK_ARTIFACT_MAX_TOTAL_BYTES;
+  if (maxArtifacts > 0 && totalArtifactBytes(id) >= maxArtifacts) {
+    const mb = Math.round(maxArtifacts / (1024 * 1024));
+    res.status(413).json({
+      error: 'artifacts の合計サイズが上限（' + mb + 'MB）に達しています。不要な生成物を削除してから再実行してください。',
+    });
+    return;
+  }
+
+  const prompt = buildMinutesPrompt({
+    inputText: inputText.trim(),
+    type: resolvedType as MinutesType,
+    format: resolvedFormat as MinutesFormat,
+    templateBody: resolvedTemplateBody,
+    customInstructions: resolvedInstructions,
+  });
+
+  const before = artifactNames(id);
+  const wantsStream = (req.headers.accept ?? '').includes('text/event-stream');
+
+  if (wantsStream) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+    sseWrite(res, { type: 'progress', pct: 0 });
+    let totalChars = 0;
+    const EXPECTED_CHARS = 6000;
+    const result = await runClaudeStream(dir, prompt, (chunk) => {
+      sseWrite(res, { type: 'chunk', text: chunk });
+      totalChars += chunk.length;
+      sseWrite(res, { type: 'progress', pct: Math.min(99, Math.round((totalChars / EXPECTED_CHARS) * 100)) });
+    });
+    sseWrite(res, { type: 'progress', pct: 100 });
+    const detail = getNotebookDetail(id);
+    const allArtifacts = detail?.artifacts ?? [];
+    const created = allArtifacts.filter((a) => !before.has(a.name));
+    touchNotebook(id);
+    sseWrite(res, {
+      type: 'done',
+      ok: result.ok && created.length > 0,
+      created,
+      artifacts: allArtifacts,
+      report: (result.stdout || '').trim(),
+      ...(result.error ? { error: result.error } : {}),
+    });
+    res.end();
+    return;
+  }
+
+  const result = await runClaude(dir, prompt);
+  const detail = getNotebookDetail(id);
+  const allArtifacts = detail?.artifacts ?? [];
+  const created = allArtifacts.filter((a) => !before.has(a.name));
+  touchNotebook(id);
+  res.status(200).json({
+    ok: result.ok && created.length > 0,
+    created,
+    artifacts: allArtifacts,
+    report: (result.stdout || '').trim(),
+    ...(result.error ? { error: result.error } : {}),
+  });
+}
+
 // ─── ファイル配信（資料／生成物のダウンロード・プレビュー）──────────────
 
 /** ファイル名を RFC5987（filename*）でエンコードする（日本語ファイル名対応）。 */
@@ -740,6 +1004,11 @@ async function handleFile(req: Request, res: Response): Promise<void> {
 
 export function notebookRouter(): Router {
   const router = Router();
+  // 議事録グローバルルート（/:id より前に定義すること）
+  router.get('/minutes/presets', handleGetPresets);
+  router.get('/minutes/patterns', handleListPatterns);
+  router.post('/minutes/patterns', handleCreatePattern);
+  router.delete('/minutes/patterns/:patternId', handleDeletePattern);
   router.get('/', handleList);
   router.post('/', handleCreate);
   router.get('/:id', handleGet);
@@ -751,5 +1020,7 @@ export function notebookRouter(): Router {
   router.post('/:id/ask', (req, res) => void handleAsk(req, res));
   router.post('/:id/generate', (req, res) => void handleGenerate(req, res));
   router.post('/:id/reindex', (req, res) => void handleReindex(req, res));
+  router.post('/:id/minutes/transcribe', (req, res) => void handleTranscribe(req, res));
+  router.post('/:id/minutes/generate', (req, res) => void handleMinutesGenerate(req, res));
   return router;
 }

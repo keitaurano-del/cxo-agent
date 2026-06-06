@@ -481,3 +481,55 @@ export interface NotebookGenerateResponse {
   report: string; // claude の最終報告（作成ファイル名等）
   error?: string;
 }
+
+// ─── 議事録（Minutes）──────────────────────────────────────
+
+export type MinutesType = 'verbatim' | 'summary' | 'decisions' | 'chronological';
+export type MinutesFormat = 'markdown' | 'sections' | 'plain';
+
+export interface MinutesTemplate {
+  id: string;
+  label: string;
+  body: string;
+}
+
+export interface MinutesTypePreset {
+  type: MinutesType;
+  label: string;
+  description: string;
+  templates: MinutesTemplate[];
+}
+
+export interface MinutesPattern {
+  id: string;
+  name: string;
+  type: string;
+  format: string;
+  templateId?: string;
+  templateBody?: string;
+  instructions?: string;
+  createdAt: string;
+}
+
+export interface MinutesPresetsResponse {
+  types: MinutesTypePreset[];
+  formats: { format: MinutesFormat; label: string }[];
+}
+
+export interface MinutesTranscribeResponse {
+  text?: string;
+  error?: string;
+}
+
+export interface MinutesPatternsResponse {
+  patterns: MinutesPattern[];
+  error?: string;
+}
+
+export interface MinutesGenerateResponse {
+  ok: boolean;
+  created: NotebookFileRef[];
+  artifacts: NotebookFileRef[];
+  report?: string;
+  error?: string;
+}

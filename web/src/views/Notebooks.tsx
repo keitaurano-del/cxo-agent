@@ -18,6 +18,15 @@ import type {
   NotebookAskResponse,
   NotebookGenerateKind,
   NotebookGenerateResponse,
+  MinutesType,
+  MinutesFormat,
+  MinutesTypePreset,
+  MinutesTemplate,
+  MinutesPattern,
+  MinutesPresetsResponse,
+  MinutesTranscribeResponse,
+  MinutesPatternsResponse,
+  MinutesGenerateResponse,
 } from '../lib/types';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, EmptyState, Spinner } from '../components/ui';
@@ -1197,9 +1206,519 @@ function ArtifactsPane({
   );
 }
 
+// ─── 議事録ペイン ─────────────────────────────────────────
+
+function MinutesPane({
+  id,
+  onGenerated,
+}: {
+  id: string;
+  onGenerated: () => void;
+}) {
+  const [presets, setPresets] = useState<MinutesPresetsResponse | null>(null);
+  const [patterns, setPatterns] = useState<MinutesPattern[]>([]);
+  const [loadingPresets, setLoadingPresets] = useState(true);
+  const [inputMode, setInputMode] = useState<'text' | 'audio'>('text');
+  const [inputText, setInputText] = useState('');
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcribeError, setTranscribeError] = useState<string | null>(null);
+  const [selectedType, setSelectedType] = useState<MinutesType>('decisions');
+  const [selectedFormat, setSelectedFormat] = useState<MinutesFormat>('sections');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  const [customInstructions, setCustomInstructions] = useState('');
+  const [selectedPatternId, setSelectedPatternId] = useState<string>('');
+  const [patternName, setPatternName] = useState('');
+  const [savingPattern, setSavingPattern] = useState(false);
+  const [savePatternError, setSavePatternError] = useState<string | null>(null);
+  const [showPatternSave, setShowPatternSave] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [genPct, setGenPct] = useState(0);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [genReport, setGenReport] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/notebooks/minutes/presets')
+      .then((r) => r.json().catch(() => null))
+      .then((data: MinutesPresetsResponse | null) => {
+        if (data) setPresets(data);
+        setLoadingPresets(false);
+      })
+      .catch(() => setLoadingPresets(false));
+    fetch('/api/notebooks/minutes/patterns')
+      .then((r) => r.json().catch(() => null))
+      .then((data: MinutesPatternsResponse | null) => {
+        if (data?.patterns) setPatterns(data.patterns);
+      })
+      .catch(() => {});
+  }, []);
+
+  const applyPattern = useCallback(
+    (patId: string) => {
+      setSelectedPatternId(patId);
+      if (!patId) return;
+      const pat = patterns.find((p) => p.id === patId);
+      if (!pat) return;
+      setSelectedType(pat.type as MinutesType);
+      setSelectedFormat(pat.format as MinutesFormat);
+      if (pat.instructions) setCustomInstructions(pat.instructions);
+    },
+    [patterns],
+  );
+
+  useEffect(() => {
+    const preset = presets?.types.find((t) => t.type === selectedType);
+    setSelectedTemplateId(preset?.templates[0]?.id ?? '');
+  }, [selectedType, presets]);
+
+  const handleAudioFile = useCallback(
+    (file: File) => {
+      setTranscribing(true);
+      setTranscribeError(null);
+      const fd = new FormData();
+      fd.append('audio', file);
+      fetch('/api/notebooks/' + id + '/minutes/transcribe', { method: 'POST', body: fd })
+        .then(async (res) => {
+          const body = (await res.json().catch(() => ({}))) as MinutesTranscribeResponse;
+          if (res.ok && body.text) {
+            setInputText(body.text);
+            setInputMode('text');
+          } else {
+            setTranscribeError(body.error || '文字起こしに失敗しました。');
+          }
+        })
+        .catch(() => setTranscribeError('ネットワークエラーで文字起こしに失敗しました。'))
+        .finally(() => setTranscribing(false));
+    },
+    [id],
+  );
+
+  const generate = useCallback(() => {
+    if (!inputText.trim() || generating) return;
+    setGenerating(true);
+    setGenError(null);
+    setGenReport(null);
+    setGenPct(0);
+    const preset = presets?.types.find((t) => t.type === selectedType);
+    const tmpl = preset?.templates.find((t) => t.id === selectedTemplateId);
+    fetch('/api/notebooks/' + id + '/minutes/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: JSON.stringify({
+        inputText: inputText.trim(),
+        type: selectedType,
+        format: selectedFormat,
+        templateId: selectedTemplateId || undefined,
+        templateBody: tmpl?.body || undefined,
+        customInstructions: customInstructions.trim() || undefined,
+      }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as MinutesGenerateResponse;
+          setGenError(body.error || '生成に失敗しました（HTTP ' + String(res.status) + '）。');
+          setGenerating(false);
+          return;
+        }
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error('no body');
+        const decoder = new TextDecoder();
+        let buf = '';
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            let evt: {
+              type?: string;
+              pct?: number;
+              ok?: boolean;
+              created?: unknown[];
+              report?: string;
+              error?: string;
+            } = {};
+            try {
+              evt = JSON.parse(line.slice(6)) as typeof evt;
+            } catch {
+              continue;
+            }
+            if (evt.type === 'progress' && typeof evt.pct === 'number') {
+              setGenPct(evt.pct);
+            } else if (evt.type === 'done') {
+              setGenPct(100);
+              if (!evt.ok) {
+                setGenError(evt.error || '議事録を作成できませんでした。');
+              } else {
+                const n = evt.created?.length ?? 0;
+                setGenReport(
+                  n > 0
+                    ? String(n) + ' 件の議事録を作成しました。'
+                    : evt.report || '完了しました。',
+                );
+              }
+              onGenerated();
+              setGenerating(false);
+            }
+          }
+        }
+      })
+      .catch((e: unknown) => {
+        if (e instanceof Error && e.name === 'AbortError') return;
+        setGenError('ネットワークエラーで議事録を生成できませんでした。');
+        setGenerating(false);
+      });
+  }, [id, inputText, selectedType, selectedFormat, selectedTemplateId, customInstructions, presets, generating, onGenerated]);
+
+  const savePattern = useCallback(() => {
+    if (!patternName.trim() || savingPattern) return;
+    setSavingPattern(true);
+    setSavePatternError(null);
+    const preset = presets?.types.find((t) => t.type === selectedType);
+    const tmpl = preset?.templates.find((t) => t.id === selectedTemplateId);
+    fetch('/api/notebooks/minutes/patterns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: patternName.trim(),
+        type: selectedType,
+        format: selectedFormat,
+        templateId: selectedTemplateId || undefined,
+        templateBody: tmpl?.body || undefined,
+        instructions: customInstructions.trim() || undefined,
+      }),
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          const pat = (await res.json()) as MinutesPattern;
+          setPatterns((prev) => [pat, ...prev]);
+          setPatternName('');
+          setShowPatternSave(false);
+        } else {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          setSavePatternError(body.error || '保存に失敗しました。');
+        }
+      })
+      .catch(() => setSavePatternError('ネットワークエラーで保存に失敗しました。'))
+      .finally(() => setSavingPattern(false));
+  }, [patternName, selectedType, selectedFormat, selectedTemplateId, customInstructions, presets, savingPattern]);
+
+  const currentTemplates: MinutesTemplate[] =
+    (presets?.types.find((t: MinutesTypePreset) => t.type === selectedType)?.templates) ?? [];
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-faint">
+        議事録
+      </div>
+      <div className="flex-1 overflow-y-auto p-3">
+        <div className="flex flex-col gap-3">
+          {patterns.length > 0 && (
+            <div>
+              <label className="mb-1 block text-[11px] text-text-faint">保存済みパターン</label>
+              <select
+                value={selectedPatternId}
+                onChange={(e) => applyPattern(e.target.value)}
+                className="w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-text focus:border-accent focus:outline-none"
+              >
+                <option value="">パターンを選択…</option>
+                {patterns.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <div className="mb-1.5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setInputMode('text')}
+                className={
+                  'rounded-full px-3 py-1 text-xs transition-colors ' +
+                  (inputMode === 'text'
+                    ? 'bg-accent font-semibold text-bg'
+                    : 'bg-surface-2 text-text-muted hover:text-text')
+                }
+              >
+                テキスト入力
+              </button>
+              <button
+                type="button"
+                onClick={() => setInputMode('audio')}
+                className={
+                  'rounded-full px-3 py-1 text-xs transition-colors ' +
+                  (inputMode === 'audio'
+                    ? 'bg-accent font-semibold text-bg'
+                    : 'bg-surface-2 text-text-muted hover:text-text')
+                }
+              >
+                音声入力
+              </button>
+            </div>
+
+            {inputMode === 'audio' ? (
+              <div className="rounded-lg border border-dashed border-border bg-surface p-3 text-center">
+                <input
+                  ref={audioInputRef}
+                  type="file"
+                  accept="audio/*,.mp3,.m4a,.wav,.webm,.ogg"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleAudioFile(f);
+                    if (audioInputRef.current) audioInputRef.current.value = '';
+                  }}
+                />
+                <p className="mb-2 text-xs text-text-muted">mp3 / m4a / wav / webm に対応</p>
+                <button
+                  type="button"
+                  onClick={() => audioInputRef.current?.click()}
+                  disabled={transcribing}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-bg disabled:opacity-50"
+                >
+                  {transcribing ? (
+                    <>
+                      <Spinner />
+                      文字起こし中…
+                    </>
+                  ) : (
+                    '音声ファイルを選択'
+                  )}
+                </button>
+                {transcribeError && (
+                  <div
+                    role="alert"
+                    className="mt-2 text-xs"
+                    style={{ color: 'var(--mc-stalled)' }}
+                  >
+                    {transcribeError}
+                  </div>
+                )}
+                {inputText && (
+                  <p className="mt-2 text-xs text-text-faint">
+                    文字起こし完了。テキスト入力モードで確認・編集できます。
+                  </p>
+                )}
+              </div>
+            ) : (
+              <textarea
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                disabled={generating}
+                rows={6}
+                placeholder="文字起こし済みテキストや議事メモを貼り付けてください…"
+                className="w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none disabled:opacity-60"
+              />
+            )}
+          </div>
+
+          {!loadingPresets && presets && (
+            <>
+              <div>
+                <label className="mb-1 block text-[11px] text-text-faint">種類</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {presets.types.map((t) => (
+                    <button
+                      key={t.type}
+                      type="button"
+                      onClick={() => {
+                        setSelectedType(t.type);
+                        setSelectedPatternId('');
+                      }}
+                      disabled={generating}
+                      title={t.description}
+                      className={
+                        'rounded-full px-2.5 py-0.5 text-xs transition-colors disabled:opacity-50 ' +
+                        (selectedType === t.type
+                          ? 'bg-accent font-semibold text-bg'
+                          : 'bg-surface-2 text-text-muted hover:text-text')
+                      }
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {currentTemplates.length > 1 && (
+                <div>
+                  <label className="mb-1 block text-[11px] text-text-faint">テンプレート</label>
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(e) => setSelectedTemplateId(e.target.value)}
+                    disabled={generating}
+                    className="w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-text focus:border-accent focus:outline-none disabled:opacity-60"
+                  >
+                    {currentTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="mb-1 block text-[11px] text-text-faint">出力形式</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {presets.formats.map((f) => (
+                    <button
+                      key={f.format}
+                      type="button"
+                      onClick={() => {
+                        setSelectedFormat(f.format);
+                        setSelectedPatternId('');
+                      }}
+                      disabled={generating}
+                      className={
+                        'rounded-full px-2.5 py-0.5 text-xs transition-colors disabled:opacity-50 ' +
+                        (selectedFormat === f.format
+                          ? 'bg-accent font-semibold text-bg'
+                          : 'bg-surface-2 text-text-muted hover:text-text')
+                      }
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          <div>
+            <label className="mb-1 block text-[11px] text-text-faint">追加指示（任意）</label>
+            <textarea
+              value={customInstructions}
+              onChange={(e) => setCustomInstructions(e.target.value)}
+              disabled={generating}
+              rows={2}
+              placeholder="例: 参加者名を敬称付きで記載してください…"
+              className="w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-xs text-text placeholder:text-text-faint focus:border-accent focus:outline-none disabled:opacity-60"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={generate}
+            disabled={generating || !inputText.trim()}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition-opacity disabled:opacity-40"
+          >
+            {generating ? (
+              <>
+                <Spinner />
+                議事録を生成中…
+              </>
+            ) : (
+              <>
+                <SparkIcon width={15} height={15} />
+                議事録を生成
+              </>
+            )}
+          </button>
+          {!inputText.trim() && (
+            <p className="text-[11px] text-text-faint">
+              テキストを入力または音声をアップロードすると生成できます。
+            </p>
+          )}
+
+          {generating && (
+            <div role="status" aria-live="polite">
+              <div className="mb-1 flex justify-between text-[11px] text-text-muted">
+                <span>生成しています…</span>
+                <span>{genPct}%</span>
+              </div>
+              <div className="h-1 w-full overflow-hidden rounded-full bg-surface-2">
+                <div
+                  className="h-1 rounded-full bg-accent transition-[width] duration-150"
+                  style={{ width: String(genPct) + '%' }}
+                />
+              </div>
+            </div>
+          )}
+          {genError && (
+            <div
+              role="alert"
+              className="rounded-lg border border-stalled/40 bg-stalled-bg/60 px-3 py-2 text-xs"
+              style={{ color: 'var(--mc-stalled)' }}
+            >
+              {genError}
+            </div>
+          )}
+          {genReport && !genError && (
+            <p className="text-xs" style={{ color: 'var(--mc-active)' }}>
+              {genReport}
+            </p>
+          )}
+
+          <div className="border-t border-border pt-3">
+            {!showPatternSave ? (
+              <button
+                type="button"
+                onClick={() => setShowPatternSave(true)}
+                className="text-xs text-text-faint hover:text-text"
+              >
+                + 現在の設定をパターンとして保存
+              </button>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <p className="text-[11px] text-text-faint">
+                  現在の設定（種類・テンプレート・形式・追加指示）を保存します
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={patternName}
+                    onChange={(e) => setPatternName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        savePattern();
+                      }
+                    }}
+                    placeholder="パターン名…"
+                    className="flex-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={savePattern}
+                    disabled={savingPattern || !patternName.trim()}
+                    className="rounded-full bg-accent px-3 py-1 text-xs font-semibold text-bg disabled:opacity-50"
+                  >
+                    {savingPattern ? '保存中…' : '保存'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowPatternSave(false);
+                      setSavePatternError(null);
+                    }}
+                    className="rounded-full px-2 py-1 text-xs text-text-muted hover:text-text"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+                {savePatternError && (
+                  <p className="text-[11px]" style={{ color: 'var(--mc-stalled)' }}>
+                    {savePatternError}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── 詳細画面（3 ペイン / モバイルはタブ）────────────────────────
 
-type DetailTab = 'sources' | 'chat' | 'artifacts';
+type DetailTab = 'sources' | 'chat' | 'artifacts' | 'minutes';
 
 function NotebookDetailView({
   id,
@@ -1289,10 +1808,13 @@ function NotebookDetailView({
     />
   );
 
+  const minutesPane = <MinutesPane id={id} onGenerated={refetch} />;
+
   const TABS: { key: DetailTab; label: string; count?: number }[] = [
     { key: 'sources', label: '資料', count: sources.length },
     { key: 'chat', label: 'チャット' },
     { key: 'artifacts', label: '生成物', count: artifacts.length },
+    { key: 'minutes', label: '議事録' },
   ];
 
   // ヘッダのタイトル部分（インライン編集対応）
@@ -1384,17 +1906,19 @@ function NotebookDetailView({
         <ResourceState loading={loading} error={error} hasData={!!detail}>
           {detail && (
             <>
-              {/* デスクトップ: 3 ペイン */}
-              <div className="hidden h-full md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1fr)]">
+              {/* デスクトップ: 4 ペイン */}
+              <div className="hidden h-full md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
                 <div className="min-h-0 border-r border-border">{sourcesPane}</div>
                 <div className="min-h-0 border-r border-border">{chatPane}</div>
-                <div className="min-h-0">{artifactsPane}</div>
+                <div className="min-h-0 border-r border-border">{artifactsPane}</div>
+                <div className="min-h-0">{minutesPane}</div>
               </div>
               {/* モバイル: display:none で切り替え（アンマウントしないため生成中 state を保持）*/}
               <div className="h-full md:hidden">
                 <div className="h-full" style={{ display: tab === 'sources' ? undefined : 'none' }}>{sourcesPane}</div>
                 <div className="h-full" style={{ display: tab === 'chat' ? undefined : 'none' }}>{chatPane}</div>
                 <div className="h-full" style={{ display: tab === 'artifacts' ? undefined : 'none' }}>{artifactsPane}</div>
+                <div className="h-full" style={{ display: tab === 'minutes' ? undefined : 'none' }}>{minutesPane}</div>
               </div>
             </>
           )}
