@@ -750,9 +750,10 @@ async function handleSetAccountLabel(req: Request, res: Response): Promise<void>
     writeAccountLabel(t.id, account);
 
     // 2. 対象 tmux ペインに CLAUDE_CONFIG_DIR を注入して即座に有効化
-    //    （実行中の claude は C-c で止め、env を export してから再起動）
+    //    ターミナル4（OpenClaw/Masayoshi）は独自 auth のため CLAUDE_CONFIG_DIR 切替不可。
+    //    ラベル保存のみ行い、env 注入はスキップ。
     const dirMap = t.remote ? ACCOUNT_CONFIG_DIR_REMOTE : ACCOUNT_CONFIG_DIR_LOCAL;
-    const configDir = dirMap[account];
+    const configDir = t.id !== 4 ? dirMap[account] : null;
     if (configDir) {
       const target = t.tmuxSession;
       // C-c で現在のプロセスを停止
