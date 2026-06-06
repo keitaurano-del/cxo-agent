@@ -29,6 +29,7 @@ import Agents from './views/Agents';
 import Feed from './views/Feed';
 import Tasks from './views/Tasks';
 import Narrative from './views/Narrative';
+import News from './views/News';
 import Vault from './views/Vault';
 import Deliverables from './views/Deliverables';
 import Notebooks from './views/Notebooks';
@@ -445,6 +446,7 @@ export default function App() {
               <Route path="/agents/:agentId" element={<Agents />} />
               <Route path="/feed" element={<Feed />} />
               <Route path="/today" element={<Narrative />} />
+              <Route path="/news" element={<News />} />
               <Route path="/ticks" element={<Ticks />} />
               <Route path="/usage" element={<Usage />} />
               <Route path="/plan-usage" element={<PlanUsage />} />
