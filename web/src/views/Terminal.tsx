@@ -379,9 +379,9 @@ export default function Terminal() {
         const r2 = typeof body.claude2?.remaining === 'number' ? body.claude2.remaining : 100;
         // remaining が多い方を選ぶ。同点なら Claude1 を既定にする。
         const best = r2 > r1 ? 'Claude2' : 'Claude1';
-        // 既に best のターミナルは触らず、違うものだけ切り替える。
+        // T2/T4 は OpenClaw 独自認証のため自動切替対象外。
         await Promise.all(
-          TERMINAL_TABS.map((t) =>
+          TERMINAL_TABS.filter((t) => t.id !== 2 && t.id !== 4).map((t) =>
             (accountLabels[t.id] ?? 'Claude1') === best
               ? Promise.resolve()
               : switchAccount(t.id, best, true),
