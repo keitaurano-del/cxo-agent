@@ -263,6 +263,42 @@ app.get('/api/claude-usage', (_req, res, next) => {
     .catch(next);
 });
 
+// ─── ターミナル使用量サマリ（Claude1/Claude2 集計）──────────────
+// 各ターミナルのアカウントバッジ自動切替（使用量ベース）用に、Claude1（local）/
+// Claude2（oldbox）の現在セッション(5h)使用率を { used, limit, remaining } 形へ整形して返す。
+// 内部で collectClaudeUsage() を再利用（180s 強キャッシュ）するため 429 を増やさない。
+// 取得失敗・error 要素はダミー { used: 0, limit: 100, remaining: 100 } に畳んで常に 200 で返す。
+app.get('/api/terminal/usage-summary', (_req, res, next) => {
+  collectClaudeUsage()
+    .then((data) => {
+      const toBucket = (key: 'local' | 'oldbox') => {
+        const acc = data.accounts.find((a) => a.key === key);
+        // error または pct 不明はダミー（残量 100 = フル扱い）にフォールバック。
+        if (!acc || acc.error || acc.session.pct === null) {
+          return { used: 0, limit: 100, remaining: 100 };
+        }
+        const used = Math.max(0, Math.min(100, Math.round(acc.session.pct)));
+        return { used, limit: 100, remaining: 100 - used };
+      };
+      if (!res.headersSent) {
+        res.json({
+          claude1: toBucket('local'),
+          claude2: toBucket('oldbox'),
+        });
+      }
+    })
+    .catch(() => {
+      // 取得自体に失敗してもダミーで 200（UI を落とさない）。
+      if (!res.headersSent) {
+        res.json({
+          claude1: { used: 0, limit: 100, remaining: 100 },
+          claude2: { used: 0, limit: 100, remaining: 100 },
+        });
+      }
+      void next;
+    });
+});
+
 // ─── Deploys（deploy 連動 MC-64）──────────────────────────────
 // GitHub Actions の deploy 系 workflow（logic: deploy-production / android-deploy、
 // en-chakai: deploy-production）の直近 run 状態を gh CLI で取得し、TaskDetail に表示する。

@@ -24,7 +24,6 @@
 //   林はそのパスを Read で画像として読める。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { ImageFileIcon, CloseIcon, TerminalIcon, PlusIcon, KeyboardIcon } from '../components/icons';
 import { Spinner } from '../components/ui';
 
@@ -319,11 +318,10 @@ export default function Terminal() {
     for (const t of TERMINAL_TABS) init[t.id] = t.account;
     return init;
   });
-  // アカウント切替ドロップダウンを開いているターミナル番号（null=閉じている）。
-  const [accountDropdownOpen, setAccountDropdownOpen] = useState<number | null>(null);
-  // アカウントドロップダウンの表示座標（portal 描画用）。
-  const [accountDropdownAnchor, setAccountDropdownAnchor] = useState<{ top: number; left: number } | null>(null);
-  const [, setAccountSwitching] = useState<number | null>(null);
+  // 切替処理中のターミナル番号集合（バッジにスピナーを出す）。
+  const [accountSwitching, setAccountSwitching] = useState<Set<number>>(new Set());
+  // 使用量ベース自動切替の実行中フラグ（ボタンにスピナーを出す）。
+  const [autoSwitching, setAutoSwitching] = useState(false);
 
   const [, setAgentInfoMap] = useState<Record<number, { name: string; emoji: string } | null>>({});
 
@@ -331,12 +329,20 @@ export default function Terminal() {
     setAccountLabels((prev) => ({ ...prev, [id]: account }));
   }, []);
 
+  const markSwitching = useCallback((id: number, on: boolean) => {
+    setAccountSwitching((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
   // POST /api/terminal/account でアカウントラベルを切り替える。
+  // silent=true のときは切替中スピナー表示を抑制する（自動切替・初回ロード用）。
   const switchAccount = useCallback(
-    async (terminalId: number, account: string) => {
-      setAccountSwitching(terminalId);
-      setAccountDropdownOpen(null);
-      setAccountDropdownAnchor(null);
+    async (terminalId: number, account: string, silent = false) => {
+      if (!silent) markSwitching(terminalId, true);
       try {
         const res = await fetch('/api/terminal/account', {
           method: 'POST',
@@ -350,10 +356,54 @@ export default function Terminal() {
       } catch {
         // 失敗しても UI をブロックしない
       } finally {
-        setAccountSwitching(null);
+        if (!silent) markSwitching(terminalId, false);
       }
     },
-    [setAccountLabel],
+    [setAccountLabel, markSwitching],
+  );
+
+  // バッジクリックで Claude1 ↔ Claude2 をトグルする。
+  const toggleAccount = useCallback(
+    (terminalId: number) => {
+      const current = accountLabels[terminalId] ?? 'Claude1';
+      const next = current === 'Claude1' ? 'Claude2' : 'Claude1';
+      void switchAccount(terminalId, next);
+    },
+    [accountLabels, switchAccount],
+  );
+
+  // ── 使用量ベース自動切替 ────────────────────────────────────
+  // /api/terminal/usage-summary を取得し、remaining が多い方（=使用率が低い方）の
+  // アカウントへ全ターミナルを切り替える。silent=true は初回ロード時の静かな切替用。
+  const autoSwitchByUsage = useCallback(
+    async (silent = false) => {
+      if (!silent) setAutoSwitching(true);
+      try {
+        const res = await fetch('/api/terminal/usage-summary');
+        if (!res.ok) return;
+        const body = (await res.json()) as {
+          claude1?: { remaining?: number };
+          claude2?: { remaining?: number };
+        };
+        const r1 = typeof body.claude1?.remaining === 'number' ? body.claude1.remaining : 100;
+        const r2 = typeof body.claude2?.remaining === 'number' ? body.claude2.remaining : 100;
+        // remaining が多い方を選ぶ。同点なら Claude1 を既定にする。
+        const best = r2 > r1 ? 'Claude2' : 'Claude1';
+        // 既に best のターミナルは触らず、違うものだけ切り替える。
+        await Promise.all(
+          TERMINAL_TABS.map((t) =>
+            (accountLabels[t.id] ?? 'Claude1') === best
+              ? Promise.resolve()
+              : switchAccount(t.id, best, true),
+          ),
+        );
+      } catch {
+        // 失敗してもサイレント（手動バッジ操作は引き続き可能）。
+      } finally {
+        if (!silent) setAutoSwitching(false);
+      }
+    },
+    [accountLabels, switchAccount],
   );
 
 
@@ -659,16 +709,18 @@ export default function Terminal() {
 
   const activeBackend = backends[activeId] ?? { kind: 'checking' };
 
+  // ページロード時に一度だけ、使用量ベースの自動切替を静かに実行する。
+  // status-all によるラベル初期化と競合しないよう、少し遅らせて 1 回だけ走らせる。
+  const didAutoSwitchRef = useRef(false);
   useEffect(() => {
-    if (accountDropdownOpen === null) return;
-    const handler = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest('[data-account-dropdown]')) return;
-      setAccountDropdownOpen(null);
-      setAccountDropdownAnchor(null);
-    };
-    window.addEventListener('click', handler, { capture: true });
-    return () => window.removeEventListener('click', handler, { capture: true });
-  }, [accountDropdownOpen]);
+    if (didAutoSwitchRef.current) return;
+    didAutoSwitchRef.current = true;
+    const id = window.setTimeout(() => {
+      void autoSwitchByUsage(true);
+    }, 1200);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="flex h-full flex-col" style={{ overscrollBehavior: 'none' }}>
@@ -677,6 +729,9 @@ export default function Terminal() {
         {TERMINAL_TABS.map((t) => {
           const isActive = t.id === activeId;
           const st = backends[t.id]?.kind ?? 'checking';
+          const account = accountLabels[t.id] ?? 'Claude1';
+          const isC2 = account === 'Claude2';
+          const switching = accountSwitching.has(t.id);
           return (
             <button
               key={t.id}
@@ -692,6 +747,32 @@ export default function Terminal() {
             >
               <TerminalIcon width={13} height={13} className="pointer-events-none" />
               <span>{t.label}</span>
+              {/* アカウントバッジ（C1 / C2）。クリックで Claude1 ↔ Claude2 をトグル。 */}
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label={`${t.label} のアカウント: ${account}（クリックで切替）`}
+                title={`${account}（クリックで切替）`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!switching) toggleAccount(t.id);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!switching) toggleAccount(t.id);
+                  }
+                }}
+                style={{ touchAction: 'manipulation' }}
+                className={`flex h-5 min-w-[1.75rem] items-center justify-center rounded px-1 text-[10px] font-semibold leading-none ${
+                  isC2
+                    ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                    : 'bg-sky-500/20 text-sky-600 dark:text-sky-400'
+                }`}
+              >
+                {switching ? <Spinner /> : isC2 ? 'C2' : 'C1'}
+              </span>
               {/* 稼働状態ドット */}
               <span
                 aria-hidden
@@ -700,6 +781,19 @@ export default function Terminal() {
             </button>
           );
         })}
+
+        {/* 使用量ベース自動切替（全ターミナル共通）。残量が多い側へ寄せる。 */}
+        <button
+          type="button"
+          onClick={() => void autoSwitchByUsage(false)}
+          disabled={autoSwitching}
+          title="使用量を見て、残量が多いアカウントへ全ターミナルを自動切替"
+          style={{ touchAction: 'manipulation' }}
+          className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-text-muted transition-colors hover:bg-surface-3 hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {autoSwitching ? <Spinner /> : null}
+          自動切替
+        </button>
       </div>
 
       {/* ツールバー: 画像添付・出力・新しいタブで開く。補助機能はターミナル1のみ有効。 */}
@@ -1035,39 +1129,6 @@ export default function Terminal() {
         </div>
       )}
       {showOutput && <OutputModal terminal={activeId} onClose={() => setShowOutput(false)} />}
-      {/* アカウント切替ドロップダウン（portal）*/}
-      {accountDropdownOpen !== null && accountDropdownAnchor && createPortal(
-        <div
-          data-account-dropdown=""
-          style={{
-            position: 'fixed',
-            top: accountDropdownAnchor.top,
-            left: accountDropdownAnchor.left,
-            zIndex: 9999,
-          }}
-          className="min-w-28 rounded-md border border-border bg-surface shadow-md"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {(['Claude1', 'Claude2'] as const).map((acc) => {
-            const current = accountLabels[accountDropdownOpen] ?? 'Claude1';
-            return (
-              <button
-                key={acc}
-                type="button"
-                onClick={() => void switchAccount(accountDropdownOpen, acc)}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface-2 ${
-                  current === acc ? 'font-medium text-active' : 'text-text'
-                }`}
-              >
-                {current === acc && <span className="text-active">✓</span>}
-                {current !== acc && <span className="w-3" />}
-                {acc}
-              </button>
-            );
-          })}
-        </div>,
-        document.body
-      )}
     </div>
   );
 }
