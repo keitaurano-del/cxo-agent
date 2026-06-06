@@ -713,11 +713,21 @@ async function handleSetModel(req: Request, res: Response): Promise<void> {
 
 // ─── アカウント認証ディレクトリマッピング ─────────────────────
 // CLAUDE_CONFIG_DIR 環境変数でアカウントを切り替える。
-// Claude1: keita.urano (Max 20x)  → ~/.claude
-// Claude2: keita.urano2 (Max 5x)  → ~/.claude-urano2
-const ACCOUNT_CONFIG_DIR: Record<string, string> = {
+//
+// ローカル箱 (terminal 1/3/4):
+//   Claude1: keita.urano  (Max 20x) → ~/.claude
+//   Claude2: keita.urano2 (Max 5x)  → ~/.claude-urano2
+//
+// 旧箱 (terminal 2, remote SSH):
+//   Claude1: keita.urano  (Max 20x) → ~/.claude-urano1  (新箱からコピー済み)
+//   Claude2: keita.urano2 (Max 5x)  → ~/.claude         (旧箱のデフォルト)
+const ACCOUNT_CONFIG_DIR_LOCAL: Record<string, string> = {
   Claude1: join(DATA_HOME, '.claude'),
   Claude2: join(DATA_HOME, '.claude-urano2'),
+};
+const ACCOUNT_CONFIG_DIR_REMOTE: Record<string, string> = {
+  Claude1: '/home/dev/.claude-urano1',
+  Claude2: '/home/dev/.claude',
 };
 
 // ─── アカウントラベルハンドラ ─────────────────────────────────
@@ -741,7 +751,8 @@ async function handleSetAccountLabel(req: Request, res: Response): Promise<void>
 
     // 2. 対象 tmux ペインに CLAUDE_CONFIG_DIR を注入して即座に有効化
     //    （実行中の claude は C-c で止め、env を export してから再起動）
-    const configDir = ACCOUNT_CONFIG_DIR[account];
+    const dirMap = t.remote ? ACCOUNT_CONFIG_DIR_REMOTE : ACCOUNT_CONFIG_DIR_LOCAL;
+    const configDir = dirMap[account];
     if (configDir) {
       const target = t.tmuxSession;
       // C-c で現在のプロセスを停止
