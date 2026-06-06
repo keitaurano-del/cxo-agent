@@ -28,16 +28,25 @@ function todayYmd(): string {
   return `${y}-${m}-${day}`;
 }
 
+export interface OriginalFileInput {
+  name: string;
+  buffer: Buffer;
+  ext: string;
+}
+
 export interface SaveMinutesOptions {
   title: string;
   markdownContent: string;
-  originalFile?: { name: string; buffer: Buffer; ext: string };
+  originalFile?: OriginalFileInput;
+  /** 入力に使った元ファイル群（音声・テキスト・PDF など）。sources/ サブフォルダに保存する。 */
+  sourceFiles?: OriginalFileInput[];
 }
 
 export interface SaveMinutesResult {
   folderRelpath: string;
   minutesRelpath: string;
   originalRelpath?: string;
+  sourceRelpaths?: string[];
   relpaths: string[];
 }
 
@@ -66,10 +75,40 @@ export function saveMinutesToDeliverables(opts: SaveMinutesOptions): SaveMinutes
     relpaths.push(originalRelpath);
   }
 
+  // 入力ファイル群を sources/ サブフォルダに保存する。
+  const sourceRelpaths: string[] = [];
+  if (opts.sourceFiles && opts.sourceFiles.length > 0) {
+    const sourcesAbs = join(folderAbs, 'sources');
+    mkdirSync(sourcesAbs, { recursive: true });
+    const usedNames = new Set<string>();
+    for (const sf of opts.sourceFiles) {
+      let baseName = sanitizeSegment(sf.name || `source${sf.ext || ''}`);
+      // 同名ファイルが複数ある場合は連番でユニーク化する。
+      let finalName = baseName;
+      let n = 1;
+      while (usedNames.has(finalName)) {
+        const dot = baseName.lastIndexOf('.');
+        if (dot > 0) {
+          finalName = `${baseName.slice(0, dot)}_${n}${baseName.slice(dot)}`;
+        } else {
+          finalName = `${baseName}_${n}`;
+        }
+        n += 1;
+      }
+      usedNames.add(finalName);
+      const srcAbs = join(sourcesAbs, finalName);
+      writeFileSync(srcAbs, sf.buffer);
+      const srcRel = toDeliverableRelative(srcAbs);
+      sourceRelpaths.push(srcRel);
+      relpaths.push(srcRel);
+    }
+  }
+
   return {
     folderRelpath: toDeliverableRelative(folderAbs),
     minutesRelpath,
     ...(originalRelpath ? { originalRelpath } : {}),
+    ...(sourceRelpaths.length > 0 ? { sourceRelpaths } : {}),
     relpaths,
   };
 }

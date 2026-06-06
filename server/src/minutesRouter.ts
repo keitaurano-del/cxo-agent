@@ -40,6 +40,33 @@ const uploadFileExtract = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
 }).single('file');
 
+// 生成時の元ファイル添付用 multer（複数可、議事録フォルダの sources/ に保存する）
+const uploadSourceFiles = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 100 * 1024 * 1024, files: 10 },
+}).array('sourceFiles', 10);
+
+function runSourceUpload(req: Request, res: Response): Promise<Express.Multer.File[]> {
+  return new Promise((resolve) => {
+    uploadSourceFiles(req, res, (err: unknown) => {
+      if (err) {
+        // アップロード失敗時もファイルなしで処理続行（元ファイル保存は best-effort）。
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[minutes source upload error]', msg);
+        resolve([]);
+        return;
+      }
+      const files = (req as Request & { files?: Express.Multer.File[] }).files;
+      resolve(Array.isArray(files) ? files : []);
+    });
+  });
+}
+
+function extOf(name: string): string {
+  const m = /\.[^.]+$/.exec(name || '');
+  return m ? m[0] : '';
+}
+
 function runAudioUpload(req: Request, res: Response): Promise<Express.Multer.File | null> {
   return new Promise((resolve) => {
     uploadAudio(req, res, (err: unknown) => {
@@ -155,6 +182,14 @@ function deriveTitle(markdown: string, fallback: string): string {
 }
 
 async function handleMinutesGenerate(req: Request, res: Response): Promise<void> {
+  // multipart/form-data の場合は元ファイル群を受け取る（body フィールドは文字列で来る）。
+  const isMultipart = (req.headers['content-type'] ?? '').includes('multipart/form-data');
+  let sourceFiles: Express.Multer.File[] = [];
+  if (isMultipart) {
+    sourceFiles = await runSourceUpload(req, res);
+    if (res.headersSent) return;
+  }
+
   const {
     inputText,
     type,
@@ -163,6 +198,8 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
     templateBody: reqTemplateBody,
     patternId,
     customInstructions,
+    feedback,
+    previousContent,
   } = req.body as {
     inputText?: string;
     type?: string;
@@ -171,6 +208,8 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
     templateBody?: string;
     patternId?: string;
     customInstructions?: string;
+    feedback?: string;
+    previousContent?: string;
   };
 
   let resolvedType: string = type || 'summary';
@@ -223,6 +262,8 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
     format: resolvedFormat as MinutesFormat,
     templateBody: resolvedTemplateBody,
     customInstructions: resolvedInstructions,
+    feedback: typeof feedback === 'string' ? feedback : undefined,
+    previousContent: typeof previousContent === 'string' ? previousContent : undefined,
     // './artifacts' を指定: wrapper script が artifacts/ を rsync で新箱に転送する。
     // 絶対パスを渡すと、リモート実行時にそのパスが存在せず書き込みに失敗する。
     outputFolder: './artifacts',
@@ -299,7 +340,16 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
     if (markdown.trim()) {
       try {
         const title = deriveTitle(markdown, '議事録');
-        saved = saveMinutesToDeliverables({ title, markdownContent: markdown });
+        const mappedSources = sourceFiles.map((f) => ({
+          name: f.originalname || `source${extOf(f.originalname)}`,
+          buffer: f.buffer,
+          ext: extOf(f.originalname),
+        }));
+        saved = saveMinutesToDeliverables({
+          title,
+          markdownContent: markdown,
+          ...(mappedSources.length > 0 ? { sourceFiles: mappedSources } : {}),
+        });
       } catch (e) {
         saveError = e instanceof Error ? e.message : String(e);
       }
@@ -351,16 +401,38 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
     sseWrite(res, { type: 'progress', pct: 0 });
+
+    // 進捗の現在値。chunk ベースと時間ベースのうち大きい方を採用し、後退させない。
+    let reportedPct = 0;
+    const pushProgress = (pct: number): void => {
+      const next = Math.min(99, Math.max(0, Math.round(pct)));
+      if (next > reportedPct) {
+        reportedPct = next;
+        sseWrite(res, { type: 'progress', pct: reportedPct });
+      }
+    };
+
+    // SSH ラッパー経由だと stdout が逐次来ず最後にまとめて flush される。
+    // その間バーが固まらないよう、時間ベースの疑似進捗（sqrt カーブ、最大95%）を定期送出する。
+    const startedStream = Date.now();
+    const EXPECTED_MS = 120_000; // 想定 2 分
+    const timer = setInterval(() => {
+      const elapsed = Date.now() - startedStream;
+      pushProgress(Math.sqrt(elapsed / EXPECTED_MS) * 95);
+    }, 1000);
+
     let totalChars = 0;
     const EXPECTED_CHARS = 6000;
-    const result = await runClaudeStream(workDir, prompt, (chunk) => {
-      sseWrite(res, { type: 'chunk', text: chunk });
-      totalChars += chunk.length;
-      sseWrite(res, {
-        type: 'progress',
-        pct: Math.min(99, Math.round((totalChars / EXPECTED_CHARS) * 100)),
+    let result: Awaited<ReturnType<typeof runClaudeStream>>;
+    try {
+      result = await runClaudeStream(workDir, prompt, (chunk) => {
+        sseWrite(res, { type: 'chunk', text: chunk });
+        totalChars += chunk.length;
+        pushProgress((totalChars / EXPECTED_CHARS) * 100);
       });
-    });
+    } finally {
+      clearInterval(timer);
+    }
     finish({ ok: result.ok, error: result.error, report: (result.stdout || '').trim() });
     return;
   }

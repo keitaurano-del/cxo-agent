@@ -152,8 +152,12 @@ export function buildMinutesPrompt(params: {
   templateBody?: string;
   customInstructions?: string;
   outputFolder?: string;
+  /** 直前の生成結果に対する修正依頼（再生成時）。 */
+  feedback?: string;
+  /** 直前に生成した議事録本文（再生成時のベース）。 */
+  previousContent?: string;
 }): string {
-  const { inputText, type, format, templateBody, customInstructions, outputFolder } = params;
+  const { inputText, type, format, templateBody, customInstructions, outputFolder, feedback, previousContent } = params;
   const targetFolder = outputFolder ?? './artifacts/議事録';
 
   const typePreset = getTypePreset(type);
@@ -199,6 +203,18 @@ export function buildMinutesPrompt(params: {
     lines.push('');
     lines.push('## 追加指示');
     lines.push(customInstructions);
+  }
+
+  if (previousContent?.trim()) {
+    lines.push('');
+    lines.push('## 前回生成した議事録（これをベースに修正してください）');
+    lines.push(previousContent.trim());
+  }
+
+  if (feedback?.trim()) {
+    lines.push('');
+    lines.push('## 修正依頼（最優先で反映してください）');
+    lines.push(feedback.trim());
   }
 
   lines.push('## 会議テキスト');

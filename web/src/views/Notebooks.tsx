@@ -8,6 +8,8 @@
 //
 // バックエンド API は全て auth 配下で Cookie mc_token が same-origin 自動付与される。
 import { useCallback, useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useLiveResource } from '../lib/useLiveData';
 import type {
@@ -1520,6 +1522,17 @@ export function MinutesPane({
   const [genReport, setGenReport] = useState<string | null>(null);
   const [lastArtifact, setLastArtifact] = useState<{ relpath: string; name: string } | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
+  // 入力に使った元ファイル（音声・テキスト・PDF など）。生成時に sources/ へ保存させる。
+  const [sourceFiles, setSourceFiles] = useState<File[]>([]);
+  // 生成完了後はプレビュー表示モードに遷移し、ダウンロード直行をやめる。
+  const [previewMode, setPreviewMode] = useState(false);
+  // プレビューの表示切替（rendered = マークダウンレンダリング / raw = 編集用テキスト）。
+  const [previewView, setPreviewView] = useState<'rendered' | 'raw'>('rendered');
+  // フィードバック→再生成
+  const [feedbackText, setFeedbackText] = useState('');
+  const [regenerating, setRegenerating] = useState(false);
+  // ステップ進捗ラベル（アップロード→文字起こし→生成→完了）。
+  const [genStage, setGenStage] = useState<string>('');
 
   useEffect(() => {
     fetch('/api/notebooks/minutes/presets')
@@ -1536,6 +1549,21 @@ export function MinutesPane({
       })
       .catch(() => {});
   }, []);
+
+  // 生成中、実際の progress イベントが来ない間も時間ベースで擬似的にバーを進める。
+  // SSH ラッパー経由で claude stdout がバッファされ chunk が逐次来ないため、
+  // sqrt カーブで最大95%まで自動増加させる。実 progress/done が来たらそちらが上書きする。
+  useEffect(() => {
+    if (!generating && !regenerating) return;
+    const start = Date.now();
+    const EXPECTED_MS = 120_000; // 想定 2 分
+    const timer = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const pct = Math.min(95, Math.round(Math.sqrt(elapsed / EXPECTED_MS) * 95));
+      setGenPct((prev) => Math.max(prev, pct));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [generating, regenerating]);
 
   const applyPattern = useCallback(
     (patId: string) => {
@@ -1612,6 +1640,8 @@ export function MinutesPane({
           const body = (await res.json().catch(() => ({}))) as MinutesTranscribeResponse;
           if (res.ok && body.text) {
             setInputText(body.text);
+            // 元ファイルを保持し、生成時に sources/ へ保存させる。
+            setSourceFiles((prev) => [...prev, file]);
             setInputMode('text');
           } else {
             setTranscribeError(body.error || '文字起こしに失敗しました。');
@@ -1634,6 +1664,8 @@ export function MinutesPane({
           const body = (await res.json().catch(() => ({}))) as { text?: string; error?: string };
           if (res.ok && body.text) {
             setInputText(body.text);
+            // 元ファイルを保持し、生成時に sources/ へ保存させる。
+            setSourceFiles((prev) => [...prev, file]);
             setInputMode('text');
           } else {
             setExtractError(body.error || 'テキスト抽出に失敗しました。');
@@ -1646,25 +1678,52 @@ export function MinutesPane({
   );
 
   const runSingleGenerate = useCallback(
-    async (styleId: string): Promise<{ relpath: string; name: string } | null> => {
+    async (
+      styleId: string,
+      opts?: { feedback?: string; previousContent?: string; attachSources?: boolean },
+    ): Promise<{ relpath: string; name: string } | null> => {
       const style = MINUTES_STYLES.find((s) => s.id === styleId);
       const preset = presets?.types.find((t) => t.type === (style?.type ?? selectedType));
       const tmpl = preset?.templates.find((t) => t.id === selectedTemplateId);
       const mergedInstructions = [style?.extraInstructions, customInstructions.trim()]
         .filter(Boolean)
         .join('\n');
-      const res = await fetch(minutesBase + '/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-        body: JSON.stringify({
-          inputText: inputText.trim(),
-          type: style?.type ?? selectedType,
-          format: style?.format ?? selectedFormat,
-          templateId: selectedTemplateId || undefined,
-          templateBody: tmpl?.body || undefined,
-          customInstructions: mergedInstructions || undefined,
-        }),
-      });
+
+      // 元ファイルがあれば multipart で送って sources/ へ保存させる。なければ JSON。
+      const useMultipart = !!opts?.attachSources && sourceFiles.length > 0;
+      let res: Response;
+      if (useMultipart) {
+        const fd = new FormData();
+        fd.append('inputText', inputText.trim());
+        fd.append('type', String(style?.type ?? selectedType));
+        fd.append('format', String(style?.format ?? selectedFormat));
+        if (selectedTemplateId) fd.append('templateId', selectedTemplateId);
+        if (tmpl?.body) fd.append('templateBody', tmpl.body);
+        if (mergedInstructions) fd.append('customInstructions', mergedInstructions);
+        if (opts?.feedback) fd.append('feedback', opts.feedback);
+        if (opts?.previousContent) fd.append('previousContent', opts.previousContent);
+        for (const f of sourceFiles) fd.append('sourceFiles', f, f.name);
+        res = await fetch(minutesBase + '/generate', {
+          method: 'POST',
+          headers: { Accept: 'text/event-stream' },
+          body: fd,
+        });
+      } else {
+        res = await fetch(minutesBase + '/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+          body: JSON.stringify({
+            inputText: inputText.trim(),
+            type: style?.type ?? selectedType,
+            format: style?.format ?? selectedFormat,
+            templateId: selectedTemplateId || undefined,
+            templateBody: tmpl?.body || undefined,
+            customInstructions: mergedInstructions || undefined,
+            feedback: opts?.feedback || undefined,
+            previousContent: opts?.previousContent || undefined,
+          }),
+        });
+      }
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as MinutesGenerateResponse;
         throw new Error(body.error || '生成に失敗しました（HTTP ' + String(res.status) + '）。');
@@ -1707,7 +1766,20 @@ export function MinutesPane({
       }
       return result;
     },
-    [minutesBase, inputText, selectedType, selectedFormat, selectedTemplateId, customInstructions, presets],
+    [minutesBase, inputText, selectedType, selectedFormat, selectedTemplateId, customInstructions, presets, sourceFiles],
+  );
+
+  const fetchArtifactContent = useCallback(
+    async (relpath: string): Promise<string> => {
+      const fileUrl =
+        mode === 'deliverables'
+          ? `/api/deliverables/file?path=${encodeURIComponent(relpath)}&inline=1`
+          : `/api/notebooks/${nbId}/file?path=${encodeURIComponent(relpath)}&inline=1`;
+      const fileRes = await fetch(fileUrl).catch(() => null);
+      if (fileRes?.ok) return fileRes.text().catch(() => '');
+      return '';
+    },
+    [mode, nbId],
   );
 
   const generate = useCallback(async () => {
@@ -1716,9 +1788,12 @@ export function MinutesPane({
     setGenError(null);
     setGenReport(null);
     setGenPct(0);
+    setGenStage('生成を準備しています…');
     setGeneratedContent(null);
     setEditedContent('');
     setSaveEditOk(false);
+    setPreviewMode(false);
+    setPreviewView('rendered');
 
     const stylesArr = Array.from(selectedStyles);
     let lastArt: { relpath: string; name: string } | null = null;
@@ -1726,7 +1801,13 @@ export function MinutesPane({
     try {
       for (let i = 0; i < stylesArr.length; i++) {
         const styleId = stylesArr[i];
-        const art = await runSingleGenerate(styleId);
+        setGenStage(
+          stylesArr.length > 1
+            ? `議事録を生成しています…（${i + 1}/${stylesArr.length}）`
+            : '議事録を生成しています…',
+        );
+        // 1スタイル目だけ元ファイルを添付して sources/ に保存させる（重複保存を避ける）。
+        const art = await runSingleGenerate(styleId, { attachSources: i === 0 });
         if (art) {
           lastArt = art;
           setLastArtifact(art);
@@ -1734,35 +1815,75 @@ export function MinutesPane({
         if (i < stylesArr.length - 1) setGenPct(0); // reset for next
       }
 
+      setGenStage('完了しました');
       const n = stylesArr.length;
       setGenReport(n > 0 ? String(n) + ' 件の議事録を作成しました。' : '完了しました。');
 
-      // 生成後: 最後のファイルの内容を取得してエディタに表示
+      // 生成後: 最後のファイルの内容を取得してプレビュー表示（ダウンロードはしない）。
       if (lastArt) {
-        const fileUrl =
-          mode === 'deliverables'
-            ? `/api/deliverables/file?path=${encodeURIComponent(lastArt.relpath)}&inline=1`
-            : `/api/notebooks/${nbId}/file?path=${encodeURIComponent(lastArt.relpath)}&inline=1`;
-        const fileRes = await fetch(fileUrl).catch(() => null);
-        if (fileRes?.ok) {
-          const content = await fileRes.text().catch(() => '');
-          setGeneratedContent(content);
-          setEditedContent(content);
-        }
-
-        // 全選択エクスポート形式を自動ダウンロード
-        for (const fmt of selectedExportFormats) {
-          await triggerDownload(lastArt.relpath, lastArt.name, fmt).catch(() => {});
-        }
+        const content = await fetchArtifactContent(lastArt.relpath);
+        setGeneratedContent(content);
+        setEditedContent(content);
+        setPreviewMode(true);
       }
 
       onGenerated();
     } catch (e) {
       setGenError(e instanceof Error ? e.message : 'ネットワークエラーで議事録を生成できませんでした。');
+      setGenStage('');
     } finally {
       setGenerating(false);
     }
-  }, [mode, nbId, inputText, selectedStyles, selectedExportFormats, customInstructions, generating, onGenerated, triggerDownload, runSingleGenerate]);
+  }, [inputText, selectedStyles, generating, onGenerated, runSingleGenerate, fetchArtifactContent]);
+
+  // フィードバックを反映して再生成する。
+  const regenerateWithFeedback = useCallback(async () => {
+    const fb = feedbackText.trim();
+    if (!fb || regenerating || generating) return;
+    setRegenerating(true);
+    setGenError(null);
+    setGenPct(0);
+    setGenStage('修正を反映して再生成しています…');
+    setSaveEditOk(false);
+
+    const stylesArr = Array.from(selectedStyles);
+    const styleId = stylesArr[0] ?? 'form';
+    const base = editedContent || generatedContent || '';
+
+    try {
+      const art = await runSingleGenerate(styleId, { feedback: fb, previousContent: base });
+      if (art) {
+        setLastArtifact(art);
+        const content = await fetchArtifactContent(art.relpath);
+        setGeneratedContent(content);
+        setEditedContent(content);
+      }
+      setGenStage('完了しました');
+      setGenReport('修正を反映して再生成しました。');
+      setFeedbackText('');
+      setPreviewView('rendered');
+      onGenerated();
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : 'ネットワークエラーで再生成できませんでした。');
+    } finally {
+      setRegenerating(false);
+    }
+  }, [feedbackText, regenerating, generating, selectedStyles, editedContent, generatedContent, runSingleGenerate, fetchArtifactContent, onGenerated]);
+
+  // プレビューを閉じて新規作成のため入力フォームへ戻す。
+  const backToForm = useCallback(() => {
+    setPreviewMode(false);
+    setGenReport(null);
+    setGenPct(0);
+    setGenStage('');
+    setGeneratedContent(null);
+    setEditedContent('');
+    setLastArtifact(null);
+    setFeedbackText('');
+    setInputText('');
+    setSourceFiles([]);
+    setSaveEditOk(false);
+  }, []);
 
   const saveEdit = useCallback(() => {
     if (!lastArtifact || savingEdit) return;
@@ -1844,6 +1965,7 @@ export function MinutesPane({
       </div>
       <div className="flex-1 overflow-y-auto p-3">
         <div className="flex flex-col gap-3">
+          {!previewMode && (<>
           {patterns.length > 0 && (
             <div>
               <label className="mb-1 block text-[11px] text-text-faint">保存済みパターン</label>
@@ -2091,15 +2213,36 @@ export function MinutesPane({
             </p>
           )}
 
-          {generating && (
+          {sourceFiles.length > 0 && (
+            <div className="rounded-lg border border-border bg-surface px-3 py-2">
+              <p className="mb-1 text-[11px] text-text-faint">元ファイル（議事録と一緒に保存されます）</p>
+              <ul className="flex flex-col gap-1">
+                {sourceFiles.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="flex items-center gap-2 text-xs text-text-muted">
+                    <span className="min-w-0 flex-1 truncate" title={f.name}>📎 {f.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSourceFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="text-text-faint hover:text-text"
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          </>)}
+
+          {(generating || regenerating) && (
             <div role="status" aria-live="polite">
               <div className="mb-1 flex justify-between text-[11px] text-text-muted">
-                <span>生成しています…</span>
+                <span>{genStage || '生成しています…'}</span>
                 <span>{genPct}%</span>
               </div>
-              <div className="h-1 w-full overflow-hidden rounded-full bg-surface-2">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
                 <div
-                  className="h-1 rounded-full bg-accent transition-[width] duration-150"
+                  className="h-1.5 rounded-full bg-accent transition-[width] duration-300"
                   style={{ width: String(genPct) + '%' }}
                 />
               </div>
@@ -2114,59 +2257,134 @@ export function MinutesPane({
               {genError}
             </div>
           )}
-          {genReport && !genError && (
-            <div className="flex flex-col gap-2">
-              <p className="text-xs" style={{ color: 'var(--mc-active)' }}>
-                {genReport}
-              </p>
+          {previewMode && generatedContent !== null && lastArtifact && (
+            <div className="flex flex-col gap-3">
+              {/* 完了ヘッダー */}
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-3 py-2">
+                <span className="text-sm font-semibold" style={{ color: 'var(--mc-active)' }}>
+                  ✓ {genReport || '完了しました'}
+                </span>
+                <button
+                  type="button"
+                  onClick={backToForm}
+                  className="ml-auto rounded-full border border-border px-2.5 py-1 text-xs text-text-muted hover:bg-surface-2 hover:text-text"
+                >
+                  新しく作成
+                </button>
+              </div>
 
-              {/* 生成後編集エリア */}
-              {generatedContent !== null && lastArtifact && (
-                <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3">
-                  <p className="text-[11px] text-text-faint">生成内容を編集して保存できます</p>
-                  <textarea
-                    value={editedContent}
-                    onChange={(e) => { setEditedContent(e.target.value); setSaveEditOk(false); }}
-                    rows={10}
-                    className="w-full resize-y rounded border border-border bg-bg px-2 py-1.5 text-xs font-mono text-text focus:border-accent focus:outline-none"
-                  />
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={saveEdit}
-                      disabled={savingEdit || editedContent === generatedContent}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-bg disabled:opacity-50"
-                    >
-                      {savingEdit ? <><Spinner />保存中…</> : '保存'}
-                    </button>
-                    {saveEditOk && <span className="text-[11px]" style={{ color: 'var(--mc-active)' }}>保存しました</span>}
-                    {saveEditError && <span className="text-[11px]" style={{ color: 'var(--mc-stalled)' }}>{saveEditError}</span>}
-                  </div>
+              {/* プレビュー（レンダリング / 編集 切替） */}
+              <div className="flex flex-col overflow-hidden rounded-lg border border-border bg-surface">
+                <div className="flex items-center gap-1 border-b border-border bg-surface-2/60 px-2 py-1.5">
+                  <span className="mr-auto text-[11px] font-semibold uppercase tracking-wide text-text-faint">
+                    プレビュー
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewView('rendered')}
+                    className={
+                      'rounded-full px-2.5 py-0.5 text-[11px] transition-colors ' +
+                      (previewView === 'rendered'
+                        ? 'bg-accent font-semibold text-bg'
+                        : 'text-text-muted hover:text-text')
+                    }
+                  >
+                    表示
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewView('raw')}
+                    className={
+                      'rounded-full px-2.5 py-0.5 text-[11px] transition-colors ' +
+                      (previewView === 'raw'
+                        ? 'bg-accent font-semibold text-bg'
+                        : 'text-text-muted hover:text-text')
+                    }
+                  >
+                    編集
+                  </button>
                 </div>
-              )}
 
-              {lastArtifact && (
-                <div>
-                  <p className="mb-1 text-[11px] text-text-faint">別形式で再ダウンロード</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {EXPORT_OPTS.map(({ fmt, label, icon }) => (
+                {previewView === 'rendered' ? (
+                  <div
+                    className="mc-markdown overflow-auto px-3 py-3"
+                    style={{ maxHeight: 420, overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {editedContent || generatedContent || ''}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2 p-2">
+                    <textarea
+                      value={editedContent}
+                      onChange={(e) => { setEditedContent(e.target.value); setSaveEditOk(false); }}
+                      rows={14}
+                      className="w-full resize-y whitespace-pre-wrap break-words rounded border border-border bg-bg px-2 py-1.5 text-xs font-mono leading-relaxed text-text focus:border-accent focus:outline-none"
+                      style={{ wordBreak: 'break-word' }}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
-                        key={fmt}
                         type="button"
-                        disabled={exporting !== null}
-                        onClick={() => void triggerDownload(lastArtifact.relpath, lastArtifact.name, fmt)}
-                        className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 text-xs font-medium text-text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
+                        onClick={saveEdit}
+                        disabled={savingEdit || editedContent === generatedContent}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-bg disabled:opacity-50"
                       >
-                        {exporting === fmt ? <Spinner /> : <span>{icon}</span>}
-                        {label}
+                        {savingEdit ? <><Spinner />保存中…</> : '編集を保存'}
                       </button>
-                    ))}
+                      {saveEditOk && <span className="text-[11px]" style={{ color: 'var(--mc-active)' }}>保存しました</span>}
+                      {saveEditError && <span className="text-[11px]" style={{ color: 'var(--mc-stalled)' }}>{saveEditError}</span>}
+                    </div>
                   </div>
+                )}
+              </div>
+
+              {/* ダウンロード */}
+              <div>
+                <p className="mb-1 text-[11px] text-text-faint">ダウンロード</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {EXPORT_OPTS.map(({ fmt, label, icon }) => (
+                    <button
+                      key={fmt}
+                      type="button"
+                      disabled={exporting !== null}
+                      onClick={() => void triggerDownload(lastArtifact.relpath, lastArtifact.name, fmt)}
+                      className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 text-xs font-medium text-text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
+                    >
+                      {exporting === fmt ? <Spinner /> : <span>{icon}</span>}
+                      {label}
+                    </button>
+                  ))}
                 </div>
-              )}
+              </div>
+
+              {/* フィードバック→再生成 */}
+              <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3">
+                <p className="text-[11px] font-semibold text-text-muted">修正を依頼する</p>
+                <p className="text-[10px] leading-tight text-text-faint">
+                  例：「もっとコンパクトにして」「箇条書きを増やして」「決定事項を表にして」
+                </p>
+                <textarea
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  disabled={regenerating}
+                  rows={2}
+                  placeholder="修正してほしい内容を入力…"
+                  className="w-full resize-none rounded border border-border bg-bg px-2 py-1.5 text-xs text-text placeholder:text-text-faint focus:border-accent focus:outline-none disabled:opacity-60"
+                />
+                <button
+                  type="button"
+                  onClick={() => void regenerateWithFeedback()}
+                  disabled={regenerating || !feedbackText.trim()}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-bg disabled:opacity-50"
+                >
+                  {regenerating ? <><Spinner />再生成中…</> : <><SparkIcon width={13} height={13} />この内容で再生成</>}
+                </button>
+              </div>
             </div>
           )}
 
+          {!previewMode && (
           <div className="border-t border-border pt-3">
             {!showPatternSave ? (
               <button
@@ -2222,6 +2440,7 @@ export function MinutesPane({
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
     </div>
