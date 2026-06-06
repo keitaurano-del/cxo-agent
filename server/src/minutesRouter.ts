@@ -282,7 +282,7 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
 
   const wantsStream = (req.headers.accept ?? '').includes('text/event-stream');
 
-  const finish = (result: { ok: boolean; error?: string; report: string }): void => {
+  const finish = async (result: { ok: boolean; error?: string; report: string }): Promise<void> => {
     let markdown = '';
     let foundMdPath: string | undefined;
 
@@ -457,12 +457,12 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
     } finally {
       clearInterval(timer);
     }
-    finish({ ok: result.ok, error: result.error, report: (result.stdout || '').trim() });
+    await finish({ ok: result.ok, error: result.error, report: (result.stdout || '').trim() });
     return;
   }
 
   const result = await runClaude(workDir, prompt);
-  finish({ ok: result.ok, error: result.error, report: (result.stdout || '').trim() });
+  await finish({ ok: result.ok, error: result.error, report: (result.stdout || '').trim() });
 }
 
 // ─── Router 組み立て ─────────────────────────────────────

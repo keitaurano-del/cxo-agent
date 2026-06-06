@@ -2040,7 +2040,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-152 | ノートブック議事録 RAG 化（パターン学習・再利用） | P2 | DONE | dev-logic |
 | MC-153 | 成果物画面の上部に「議事録を作成」ボタンを追加 | P1 | DONE（2026-06-06 tsc/build green） | dev-logic |
 | MC-154 | 成果物の新規作成機能（テンプレート/フォルダ新規作成ダイアログ） | P1 | DONE（2026-06-06 tsc/build green） | dev-logic |
-| MC-155 | minutesRouter.ts の finish 関数に async 抜け → Apollo クラッシュループ緊急修正 | P0 | TODO | dev-logic（蓮） |
+| MC-155 | minutesRouter.ts の finish 関数に async 抜け → Apollo クラッシュループ緊急修正 | P0 | DONE（2026-06-06 tsc/build green・ローカル commit） | dev-logic（蓮） |
 
 ### MC-151 — ノートブック議事録生成機能の実装
 
