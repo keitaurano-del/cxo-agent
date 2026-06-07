@@ -4,7 +4,7 @@
 // PC は横並び tablist、モバイルは横スクロール（Tasks のステータスタブと同じパターン）。
 import { NavLink, Outlet } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { NoteIcon, ActivityIcon, GaugeIcon, NewsIcon } from './icons';
+import { NoteIcon, ActivityIcon, GaugeIcon, NewsIcon, UsersIcon } from './icons';
 import { SortableNav, DragHandle } from './SortableNav';
 import { useNavOrder } from '../lib/useNavOrder';
 
@@ -15,6 +15,7 @@ interface DashTab {
 }
 
 const DASH_TABS: DashTab[] = [
+  { to: '/agents-live', label: 'エージェント', icon: <UsersIcon width={16} height={16} /> },
   { to: '/plan-usage', label: 'Claude', icon: <GaugeIcon width={16} height={16} /> },
   { to: '/activity', label: '使用量', icon: <ActivityIcon width={16} height={16} /> },
   { to: '/news', label: 'ニュース', icon: <NewsIcon width={16} height={16} /> },

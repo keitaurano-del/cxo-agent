@@ -26,6 +26,7 @@ import {
 import DashboardLayout from './components/DashboardLayout';
 import { isDashboardPath } from './lib/nav';
 import Agents from './views/Agents';
+import AgentsLive from './views/AgentsLive';
 import Activity from './views/Activity';
 import Feed from './views/Feed';
 import Tasks from './views/Tasks';
@@ -484,6 +485,7 @@ export default function App() {
   // ダッシュボード配下のタブ順序（MC-174）。初期表示の遷移先を決める。
   // NOTE: これは画面表示には使わず、初期リダイレクト判定だけに使う。
   const dashboardTabDefaults = [
+    { to: '/agents-live' },
     { to: '/feed' },
     { to: '/today' },
     { to: '/news' },
@@ -491,6 +493,15 @@ export default function App() {
     { to: '/plan-usage' },
   ];
   const { items: dashboardTabs } = useNavOrder('dashboard', dashboardTabDefaults);
+
+  // MC-165: / の着地先。エージェント擬人化ライブを最優先で着地先にする（要件: トップに大きく出す）。
+  // 保存済みのタブ並び替えがあっても /agents-live を必ず先頭着地にし、過去の「見えない場所に作る」
+  // 失敗を繰り返さない。/agents-live が無い異常時のみ保存順の先頭 → /plan-usage にフォールバック。
+  const dashboardLanding = dashboardTabs.some((t) => t.to === '/agents-live')
+    ? '/agents-live'
+    : dashboardTabs.length > 0
+      ? dashboardTabs[0].to
+      : '/plan-usage';
 
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     return localStorage.getItem('apollo-sidebar-open') !== 'false';
@@ -535,13 +546,10 @@ export default function App() {
               <Route element={<DashboardLayout />}>
                 <Route
                   path="/"
-                  element={
-                    <Navigate
-                      to={dashboardTabs.length > 0 ? dashboardTabs[0].to : '/plan-usage'}
-                      replace
-                    />
-                  }
+                  element={<Navigate to={dashboardLanding} replace />}
                 />
+                {/* MC-165: エージェント擬人化ライブ（ダッシュボード先頭タブ／/ の着地先） */}
+                <Route path="/agents-live" element={<AgentsLive />} />
                 <Route path="/feed" element={<Feed />} />
                 <Route path="/today" element={<Narrative />} />
                 <Route path="/news" element={<News />} />
