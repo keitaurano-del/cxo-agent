@@ -2041,6 +2041,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-153 | 成果物画面の上部に「議事録を作成」ボタンを追加 | P1 | DONE（2026-06-06 tsc/build green） | dev-logic |
 | MC-154 | 成果物の新規作成機能（テンプレート/フォルダ新規作成ダイアログ） | P1 | DONE（2026-06-06 tsc/build green） | dev-logic |
 | MC-155 | minutesRouter.ts の finish 関数に async 抜け → Apollo クラッシュループ緊急修正 | P0 | DONE（2026-06-06 tsc/build green・ローカル commit） | dev-logic（蓮） |
+| MC-156 | Apollo ターミナルビューを2/3/4分割で同時表示できるレイアウト切替を追加（現状はタブで1つずつ表示） | P1 | IN_PROGRESS（2026-06-07 Keita要望。dev-logic に委譲） | dev-logic |
 
 ### MC-151 — ノートブック議事録生成機能の実装
 
