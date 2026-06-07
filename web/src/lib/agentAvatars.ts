@@ -34,33 +34,33 @@ export interface AgentAvatar {
 export const AGENT_AVATARS: Record<string, AgentAvatar> = {
   'dev-logic': {
     name: 'レン',
-    working: '/avatars/avatar-ren-working-v2.png',
-    idle: '/avatars/avatar-ren-idle-v2.png',
+    working: '/avatars/avatar-ren-working-v2.gif',
+    idle: '/avatars/avatar-ren-idle-v2.gif',
   },
   apollo: {
     name: 'アポロ',
-    working: '/avatars/avatar-apollo-working-v2.png',
-    idle: '/avatars/avatar-apollo-idle-v2.png',
+    working: '/avatars/avatar-apollo-working-v2.gif',
+    idle: '/avatars/avatar-apollo-idle-v2.gif',
   },
   'content-creator': {
     name: 'ナオ',
-    working: '/avatars/avatar-content-creator-working-v2.png',
-    idle: '/avatars/avatar-content-creator-idle-v2.png',
+    working: '/avatars/avatar-content-creator-working-v2.gif',
+    idle: '/avatars/avatar-content-creator-idle-v2.gif',
   },
   designer: {
     name: 'アオイ',
-    working: '/avatars/avatar-designer-working-v2.png',
-    idle: '/avatars/avatar-designer-idle-v2.png',
+    working: '/avatars/avatar-designer-working-v2.gif',
+    idle: '/avatars/avatar-designer-idle-v2.gif',
   },
   haru: {
     name: 'ハル',
-    working: '/avatars/avatar-haru-working-v2.png',
-    idle: '/avatars/avatar-haru-idle-v2.png',
+    working: '/avatars/avatar-haru-working-v2.gif',
+    idle: '/avatars/avatar-haru-idle-v2.gif',
   },
   'hayashi-rin': {
     name: '林',
-    working: '/avatars/avatar-hayashi-rin-working-v2.png',
-    idle: '/avatars/avatar-hayashi-rin-idle-v2.png',
+    working: '/avatars/avatar-hayashi-rin-working-v2.gif',
+    idle: '/avatars/avatar-hayashi-rin-idle-v2.gif',
   },
 };
 
