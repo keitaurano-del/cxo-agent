@@ -489,9 +489,18 @@ function TaskDetailBody({
                     <ul className="flex flex-wrap gap-1.5">
                       {view.blockedBy.map((id) => (
                         <li key={id}>
-                          <span className="inline-block rounded-md border border-border bg-surface px-2 py-0.5 font-mono text-[11px] text-text-muted">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // ドリルダウン：タスク詳細を再度開く。Task リスト → クリック → 該当タスク詳細ロード。
+                              // 実装: onTaskIdSelected?() で親へリクエスト、又は /api/tasks/:id で直接 fetch。
+                              // 暫定: console log で確認。
+                              console.log(`ブロッカーをクリック: ${id}`);
+                            }}
+                            className="inline-block rounded-md border border-border bg-surface px-2 py-0.5 font-mono text-[11px] text-text-muted hover:bg-surface-hover transition-colors"
+                          >
                             {id}
-                          </span>
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -503,9 +512,15 @@ function TaskDetailBody({
                     <ul className="flex flex-wrap gap-1.5">
                       {view.dependsOn.map((id) => (
                         <li key={id}>
-                          <span className="inline-block rounded-md border border-border bg-surface px-2 py-0.5 font-mono text-[11px] text-text-muted">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              console.log(`依存タスクをクリック: ${id}`);
+                            }}
+                            className="inline-block rounded-md border border-border bg-surface px-2 py-0.5 font-mono text-[11px] text-text-muted hover:bg-surface-hover transition-colors"
+                          >
                             {id}
-                          </span>
+                          </button>
                         </li>
                       ))}
                     </ul>
