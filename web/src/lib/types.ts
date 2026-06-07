@@ -92,11 +92,27 @@ export interface ApprovalItem extends Task {
   primaryCategory: ApprovalKind;
 }
 
+/** エージェントが直接 POST した承認リクエスト。server/src/lib/approvalRequestStore.ts と一致させる。 */
+export interface ApprovalRequest {
+  id: string;
+  from: string;
+  fromName: string;
+  title: string;
+  description: string;
+  category: 'deploy' | 'design' | 'approval' | 'confirm';
+  requestedAt: string;
+  status: 'pending' | 'approved' | 'rejected';
+  decidedAt?: string;
+  comment?: string;
+}
+
 export interface ApprovalsResponse {
   generatedAt: string;
   byCategory: Record<ApprovalKind, number>;
   total: number;
   items: ApprovalItem[];
+  /** エージェントが直接 POST した承認リクエスト（pending のみ）。 */
+  requests: ApprovalRequest[];
 }
 
 export interface NarrativeDoc {

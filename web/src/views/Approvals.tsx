@@ -16,7 +16,7 @@
 import { useMemo, useState } from 'react';
 import { useLiveResource } from '../lib/useLiveData';
 import { useLiveTick } from '../lib/liveContext';
-import type { ApprovalItem, ApprovalKind, ApprovalsResponse, Task } from '../lib/types';
+import type { ApprovalItem, ApprovalKind, ApprovalRequest, ApprovalsResponse, Task } from '../lib/types';
 import { projectColor, projectLabel, taskStatusMeta } from '../lib/meta';
 import { absoluteTime, relativeTime } from '../lib/time';
 import { PageHeader } from '../components/PageHeader';
@@ -53,6 +53,178 @@ interface DecisionApiResponse {
   hash?: string;
   error?: string;
   code?: string;
+}
+
+// ── エージェント承認リクエスト ────────────────────────────────────────────
+
+async function postRequestDecision(
+  id: string,
+  decision: 'approve' | 'reject',
+  comment?: string,
+): Promise<void> {
+  const res = await fetch(
+    `/api/approvals/request/${encodeURIComponent(id)}/${decision}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(comment !== undefined ? { comment } : {}),
+    },
+  );
+  if (!res.ok) {
+    try {
+      const body = (await res.json()) as { error?: string };
+      throw new Error(body?.error ?? `${decision === 'approve' ? '承認' : '却下'}に失敗しました（HTTP ${res.status}）。`);
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      throw new Error(`${decision === 'approve' ? '承認' : '却下'}に失敗しました（HTTP ${res.status}）。`);
+    }
+  }
+}
+
+/** エージェント承認リクエストの 1 件カード。 */
+function RequestCard({
+  req,
+  onResolved,
+}: {
+  req: ApprovalRequest;
+  onResolved: (id: string) => void;
+}) {
+  const [rejecting, setRejecting] = useState(false);
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState<null | 'approve' | 'reject'>(null);
+  const [error, setError] = useState<string | null>(null);
+  const catMeta = CATEGORY_META[req.category as ApprovalKind] ?? CATEGORY_META['confirm'];
+
+  const handleApprove = async () => {
+    if (busy) return;
+    setBusy('approve');
+    setError(null);
+    try {
+      await postRequestDecision(req.id, 'approve');
+      onResolved(req.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '承認に失敗しました。');
+      setBusy(null);
+    }
+  };
+
+  const handleReject = async () => {
+    if (busy) return;
+    setBusy('reject');
+    setError(null);
+    try {
+      await postRequestDecision(req.id, 'reject', comment.trim() || undefined);
+      onResolved(req.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '却下に失敗しました。');
+      setBusy(null);
+    }
+  };
+
+  return (
+    <li
+      className="rounded-lg border border-border bg-surface p-3"
+      style={{ borderLeft: `3px solid ${catMeta.color}` }}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] text-text-muted">{req.fromName}</span>
+        <Badge color={catMeta.color} bg={catMeta.bg}>{catMeta.label}</Badge>
+      </div>
+      <p className="mt-1 break-words text-[13px] leading-snug text-text">{req.title}</p>
+      <p className="mt-1 break-words text-[12px] leading-relaxed text-text-muted whitespace-pre-wrap">{req.description}</p>
+      <div className="mt-2 text-[10px] text-text-faint">
+        {req.requestedAt && (
+          <span title={absoluteTime(req.requestedAt)}>リクエスト {relativeTime(req.requestedAt)}</span>
+        )}
+      </div>
+
+      {error && (
+        <p
+          role="alert"
+          className="mt-2 rounded-lg border border-border px-2.5 py-1.5 text-[11px]"
+          style={{ color: 'var(--mc-stalled)' }}
+        >
+          {error}
+        </p>
+      )}
+
+      {rejecting && (
+        <div className="mt-2">
+          <label className="mb-1 block text-[11px] text-text-muted" htmlFor={`req-reject-${req.id}`}>
+            却下理由（任意）
+          </label>
+          <textarea
+            id={`req-reject-${req.id}`}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            maxLength={1000}
+            rows={2}
+            className="w-full resize-y rounded-lg border border-border bg-surface-2 px-3 py-2 text-[12px] text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
+            placeholder="却下の理由を入力できます（任意）"
+          />
+        </div>
+      )}
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="ml-auto flex items-center gap-2">
+          {!rejecting ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setRejecting(true);
+                  setError(null);
+                }}
+                disabled={busy !== null}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[12px] text-text-muted hover:bg-surface-2 disabled:opacity-50"
+              >
+                <CloseIcon width={13} height={13} />
+                却下する
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleApprove()}
+                disabled={busy !== null}
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                style={{ color: 'var(--mc-bg)', background: 'var(--mc-active)' }}
+              >
+                {busy === 'approve' ? (
+                  <Spinner />
+                ) : (
+                  <ApprovalIcon width={14} height={14} />
+                )}
+                承認する
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setRejecting(false);
+                  setComment('');
+                }}
+                disabled={busy !== null}
+                className="rounded-lg px-2.5 py-1.5 text-[12px] text-text-muted hover:bg-surface-2 disabled:opacity-50"
+              >
+                やめる
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleReject()}
+                disabled={busy !== null}
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                style={{ color: 'var(--mc-bg)', background: 'var(--mc-stalled)' }}
+              >
+                {busy === 'reject' ? <Spinner /> : <CloseIcon width={13} height={13} />}
+                却下を確定
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </li>
+  );
 }
 
 async function readApiError(res: Response, fallback: string): Promise<string> {
@@ -281,6 +453,8 @@ export default function Approvals() {
   const [selected, setSelected] = useState<Task | null>(null);
   // 楽観的に消した項目（承認/却下直後、refetch が届くまでリストから隠す）。
   const [resolved, setResolved] = useState<Set<string>>(new Set());
+  // 楽観的に消した承認リクエスト。
+  const [resolvedRequests, setResolvedRequests] = useState<Set<string>>(new Set());
 
   const allItems = useMemo(() => data?.items ?? [], [data]);
 
@@ -289,6 +463,21 @@ export default function Approvals() {
     () => allItems.filter((it) => !resolved.has(`${it.source}:${it.id}`)),
     [allItems, resolved],
   );
+
+  // 楽観削除を反映した承認リクエスト一覧。
+  const liveRequests = useMemo(
+    () => (data?.requests ?? []).filter((r) => !resolvedRequests.has(r.id)),
+    [data, resolvedRequests],
+  );
+
+  const handleRequestResolved = (id: string) => {
+    setResolvedRequests((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    window.setTimeout(() => refetch(), 600);
+  };
 
   // カテゴリ別件数（楽観削除反映後の実数で再計算＝タブのバッジを即時に更新）。
   const counts = useMemo(() => {
@@ -389,24 +578,45 @@ export default function Approvals() {
 
       <div className="p-4 md:p-6">
         <ResourceState loading={loading} error={error} hasData={!!data}>
-          {filtered.length === 0 ? (
-            <EmptyState>
-              {liveItems.length === 0
-                ? '承認が必要な項目はありません。'
-                : 'このカテゴリに該当する項目はありません。'}
-            </EmptyState>
-          ) : (
-            <ul className="space-y-2">
-              {filtered.map((item) => (
-                <ApprovalCard
-                  key={`${item.source}:${item.id}`}
-                  item={item}
-                  onOpen={setSelected}
-                  onResolved={handleResolved}
-                />
-              ))}
-            </ul>
-          )}
+          <>
+            {/* エージェント承認リクエストセクション（pending が 1 件以上のときだけ表示） */}
+            {liveRequests.length > 0 && (
+              <div className="mb-6">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                  エージェントからのリクエスト
+                </p>
+                <ul className="space-y-2">
+                  {liveRequests.map((req) => (
+                    <RequestCard
+                      key={req.id}
+                      req={req}
+                      onResolved={handleRequestResolved}
+                    />
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* 既存のタスクタグ由来の承認フロー */}
+            {filtered.length === 0 ? (
+              <EmptyState>
+                {liveItems.length === 0
+                  ? (liveRequests.length === 0 ? '承認が必要な項目はありません。' : '')
+                  : 'このカテゴリに該当する項目はありません。'}
+              </EmptyState>
+            ) : (
+              <ul className="space-y-2">
+                {filtered.map((item) => (
+                  <ApprovalCard
+                    key={`${item.source}:${item.id}`}
+                    item={item}
+                    onOpen={setSelected}
+                    onResolved={handleResolved}
+                  />
+                ))}
+              </ul>
+            )}
+          </>
         </ResourceState>
       </div>
 

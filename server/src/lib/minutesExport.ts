@@ -8,7 +8,6 @@ import {
   Packer,
   Paragraph,
   TextRun,
-  HeadingLevel,
   Table,
   TableRow,
   TableCell,
@@ -18,19 +17,36 @@ import {
   ShadingType,
 } from 'docx';
 import ExcelJS from 'exceljs';
-import PDFDocument from 'pdfkit';
-import { readFileSync } from 'fs';
+import { marked } from 'marked';
+import { chromium } from 'playwright-core';
+import { existsSync } from 'fs';
 
-const IPA_FONT = '/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf';
+const CHROMIUM_PATHS = [
+  '/home/dev/.cache/ms-playwright/chromium-1223/chrome-linux64/chrome',
+  '/usr/bin/google-chrome',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+];
+
+function findChromium(): string | undefined {
+  return CHROMIUM_PATHS.find((p) => existsSync(p));
+}
 
 export type ExportFormat = 'docx' | 'xlsx' | 'txt' | 'pdf';
 
-// ── Markdown パーサ（軽量、docx/xlsx 用）─────────────────────────
+// ── Markdown パーサ ──────────────────────────────────────────────────
+
+interface ListItem {
+  text: string;
+  indent: number;
+}
 
 interface MdBlock {
-  type: 'h1' | 'h2' | 'h3' | 'h4' | 'para' | 'table' | 'hr' | 'empty';
-  text?: string;       // h1-h4, para
-  rows?: string[][];   // table rows (including header)
+  type: 'h1' | 'h2' | 'h3' | 'h4' | 'para' | 'table' | 'hr' | 'empty' | 'list' | 'blockquote' | 'pagebreak';
+  text?: string;
+  rows?: string[][];
+  items?: ListItem[];
+  ordered?: boolean;
 }
 
 function parseMarkdown(md: string): MdBlock[] {
@@ -49,20 +65,45 @@ function parseMarkdown(md: string): MdBlock[] {
       blocks.push({ type: 'h2', text: line.slice(3).trim() });
     } else if (line.startsWith('# ')) {
       blocks.push({ type: 'h1', text: line.slice(2).trim() });
-    } else if (line.startsWith('---')) {
-      blocks.push({ type: 'hr' });
+    } else if (line.startsWith('---') || line.startsWith('***') || line.startsWith('___')) {
+      if (line.replace(/[-*_]/g, '').trim() === '') {
+        blocks.push({ type: 'hr' });
+      } else {
+        blocks.push({ type: 'para', text: line });
+      }
     } else if (line.startsWith('|')) {
-      // テーブル: 連続する | 行を集める
       const rows: string[][] = [];
       while (i < lines.length && lines[i].startsWith('|')) {
         const cells = lines[i].split('|').slice(1, -1).map((c) => c.trim());
-        // セパレータ行（:---:など）は除外
         if (!cells.every((c) => /^[-:]+$/.test(c))) {
           rows.push(cells);
         }
         i++;
       }
       if (rows.length > 0) blocks.push({ type: 'table', rows });
+      continue;
+    } else if (line.trim() === '<!-- pagebreak -->') {
+      blocks.push({ type: 'pagebreak' });
+    } else if (line.startsWith('> ')) {
+      const text = line.slice(2).trim();
+      blocks.push({ type: 'blockquote', text });
+    } else if (isListItem(line)) {
+      // 連続するリスト行をまとめて収集
+      const items: ListItem[] = [];
+      const ordered = isOrderedItem(line);
+      while (i < lines.length && (isListItem(lines[i]) || isIndentedContinuation(lines[i], items))) {
+        const l = lines[i];
+        if (isListItem(l)) {
+          const indent = getListIndent(l);
+          const text = stripListPrefix(l);
+          items.push({ text, indent });
+        } else if (l.trim() !== '' && items.length > 0) {
+          // インライン継続行: 直前のアイテムに追記
+          items[items.length - 1].text += ' ' + l.trim();
+        }
+        i++;
+      }
+      if (items.length > 0) blocks.push({ type: 'list', items, ordered });
       continue;
     } else if (line.trim() === '') {
       blocks.push({ type: 'empty' });
@@ -75,129 +116,249 @@ function parseMarkdown(md: string): MdBlock[] {
   return blocks;
 }
 
-// インラインの **bold** / `code` を除去してプレーンテキスト化
+function isListItem(line: string): boolean {
+  return /^(\s*)([-*+]|\d+[.)]) /.test(line);
+}
+
+function isOrderedItem(line: string): boolean {
+  return /^\s*\d+[.)] /.test(line);
+}
+
+function isIndentedContinuation(line: string, items: ListItem[]): boolean {
+  if (items.length === 0) return false;
+  return line.startsWith('   ') && line.trim() !== '' && !line.trim().startsWith('#');
+}
+
+function getListIndent(line: string): number {
+  const m = line.match(/^(\s*)/);
+  const spaces = m ? m[1].length : 0;
+  return Math.floor(spaces / 2);
+}
+
+function stripListPrefix(line: string): string {
+  return line.replace(/^\s*(?:[-*+]|\d+[.)]) /, '').trim();
+}
+
+// インラインの **bold** / `code` / *italic* / [link] を除去してプレーンテキスト化
 function stripInline(text: string): string {
   return text
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/__(.*?)__/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/_(.*?)_/g, '$1')
     .replace(/`(.*?)`/g, '$1')
     .replace(/\[(.*?)\]\(.*?\)/g, '$1');
 }
 
+// インラインの **bold** を TextRun 配列に変換（docx 用）
+function inlineToRuns(text: string, baseSize = 20, color?: string): TextRun[] {
+  const parts = text.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
+  return parts.map((p) => {
+    const base = { size: baseSize, ...(color ? { color } : {}) };
+    if (p.startsWith('**') && p.endsWith('**')) {
+      return new TextRun({ text: p.slice(2, -2), bold: true, ...base });
+    }
+    if (p.startsWith('*') && p.endsWith('*')) {
+      return new TextRun({ text: p.slice(1, -1), italics: true, ...base });
+    }
+    if (p.startsWith('`') && p.endsWith('`')) {
+      return new TextRun({ text: p.slice(1, -1), font: 'Courier New', size: baseSize - 2, ...(color ? { color } : {}) });
+    }
+    return new TextRun({ text: p, ...base });
+  });
+}
+
 // ── Word (.docx) ──────────────────────────────────────────────────
+
+// ── docx スタイル定数（プレビューUIと同一配色） ─────────────────────
+const D = {
+  // テキスト色
+  textMain:   '1E2A3A',  // #1e2a3a  本文
+  textMuted:  '4A5A72',  // #4a5a72  小見出し・補助
+  textFaint:  '7A8FA8',  // #7a8fa8  引用
+  textHeader: '333333',  // #333333  テーブルヘッダーテキスト
+  // 罫線
+  border:     'D0D8E4',  // #d0d8e4  テーブル罫線・区切り線
+  borderHr:   'D0D8E4',
+  // 背景
+  headerBg:   'EDF0F5',  // #edf0f5  テーブルヘッダー背景（mc-markdown th）
+  quoteBg:    'F4F6F9',  // #f4f6f9  引用ブロック左ボーダー
+  // フォントサイズ（half-points: pt * 2）
+  H1: 28,   // 14pt
+  H2: 24,   // 12pt
+  H3: 22,   // 11pt
+  H4: 20,   // 10pt
+  BODY: 20, // 10pt
+  TABLE: 20, // 10pt
+  FONT: 'Meiryo',
+};
+
+const tblBorder = (color: string = D.border) => ({
+  style: BorderStyle.SINGLE, size: 4, color,
+});
+
+// ヘッダー名から最適な列幅（DXA単位）を計算する
+function calcColWidths(headers: string[], totalDxa: number): number[] {
+  const WEIGHT: Record<string, number> = {
+    'No': 1, '#': 1, '番号': 1, 'NO': 1,
+    'タスク': 5, '内容': 5, 'アクション': 5, '説明': 4, '詳細': 4, '項目': 4, '議題': 4, '発言': 4,
+    '担当': 2, '担当者': 2,
+    '期限': 2,
+    'ステータス': 2, '状態': 2,
+    '関連議題': 2,
+  };
+  const weights = headers.map(h => WEIGHT[h.trim()] ?? 2);
+  const total = weights.reduce((a, b) => a + b, 0);
+  const widths = weights.map(w => Math.floor((w / total) * totalDxa));
+  // 丸め誤差を最後の列に吸収
+  const diff = totalDxa - widths.reduce((a, b) => a + b, 0);
+  if (widths.length > 0) widths[widths.length - 1] += diff;
+  return widths;
+}
 
 function buildDocx(blocks: MdBlock[]): Promise<Buffer> {
   const children: (Paragraph | Table)[] = [];
+  let nextPageBreak = false; // 次の非空ブロックにpageBreakBefore: trueを付ける
 
   for (const block of blocks) {
+    // pagebreakは後続ブロックにフラグを立てるだけ
+    if (block.type === 'pagebreak') {
+      nextPageBreak = true;
+      continue;
+    }
+    // 空行はページブレクフラグを消費しない
+    if (block.type === 'empty' && nextPageBreak) {
+      children.push(new Paragraph({ text: '', spacing: { after: 0 } }));
+      continue;
+    }
+    const pageBreak = nextPageBreak;
+    nextPageBreak = false;
+
     switch (block.type) {
       case 'h1':
-        children.push(
-          new Paragraph({
-            text: stripInline(block.text ?? ''),
-            heading: HeadingLevel.HEADING_1,
-            spacing: { before: 240, after: 120 },
-          }),
-        );
+        children.push(new Paragraph({
+          children: inlineToRuns(block.text ?? '', D.H1, D.textMain),
+          spacing: { before: 280, after: 120 },
+          border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: D.border } },
+          pageBreakBefore: pageBreak || undefined,
+        }));
         break;
+
       case 'h2':
-        children.push(
-          new Paragraph({
-            text: stripInline(block.text ?? ''),
-            heading: HeadingLevel.HEADING_2,
-            spacing: { before: 200, after: 80 },
-          }),
-        );
+        children.push(new Paragraph({
+          children: inlineToRuns(block.text ?? '', D.H2, D.textMain),
+          spacing: { before: 220, after: 80 },
+          border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: D.border } },
+          pageBreakBefore: pageBreak || undefined,
+        }));
         break;
+
       case 'h3':
-        children.push(
-          new Paragraph({
-            text: stripInline(block.text ?? ''),
-            heading: HeadingLevel.HEADING_3,
-            spacing: { before: 160, after: 60 },
-          }),
-        );
+        children.push(new Paragraph({
+          children: inlineToRuns(block.text ?? '', D.H3, D.textMuted),
+          spacing: { before: 180, after: 60 },
+          pageBreakBefore: pageBreak || undefined,
+        }));
         break;
+
       case 'h4':
-        children.push(
-          new Paragraph({
-            text: stripInline(block.text ?? ''),
-            heading: HeadingLevel.HEADING_4,
-            spacing: { before: 120, after: 40 },
-          }),
-        );
+        children.push(new Paragraph({
+          children: inlineToRuns(block.text ?? '', D.H4, D.textMuted),
+          spacing: { before: 120, after: 40 },
+          pageBreakBefore: pageBreak || undefined,
+        }));
         break;
+
       case 'para': {
-        const raw = block.text ?? '';
-        // **bold** をインライン TextRun で表現
-        const parts = raw.split(/(\*\*.*?\*\*)/g);
-        const runs = parts.map((p) => {
-          if (p.startsWith('**') && p.endsWith('**')) {
-            return new TextRun({ text: p.slice(2, -2), bold: true });
-          }
-          return new TextRun({ text: p });
-        });
-        children.push(new Paragraph({ children: runs, spacing: { after: 60 } }));
+        const runs = inlineToRuns(block.text ?? '', D.BODY, D.textMain);
+        children.push(new Paragraph({
+          children: runs,
+          spacing: { after: 60 },
+          pageBreakBefore: pageBreak || undefined,
+        }));
         break;
       }
-      case 'hr':
-        children.push(
-          new Paragraph({
-            text: '─'.repeat(40),
-            spacing: { before: 80, after: 80 },
-            style: 'Normal',
-          }),
-        );
+
+      case 'blockquote': {
+        children.push(new Paragraph({
+          children: inlineToRuns(block.text ?? '', D.BODY, D.textMuted),
+          indent: { left: 600 },
+          spacing: { after: 60 },
+          border: { left: { style: BorderStyle.THICK, size: 12, color: 'B0BCCE' } },
+          pageBreakBefore: pageBreak || undefined,
+        }));
         break;
+      }
+
+      case 'list': {
+        for (let li = 0; li < (block.items ?? []).length; li++) {
+          const item = (block.items ?? [])[li];
+          const leftIndent = 400 + item.indent * 320;
+          children.push(new Paragraph({
+            children: [
+              new TextRun({ text: '・ ', font: D.FONT, size: D.BODY - 2, color: D.textMuted }),
+              ...inlineToRuns(item.text, D.BODY, D.textMain),
+            ],
+            indent: { left: leftIndent },
+            spacing: { after: 40 },
+            pageBreakBefore: (li === 0 && pageBreak) || undefined,
+          }));
+        }
+        break;
+      }
+
+      case 'hr':
+        children.push(new Paragraph({
+          text: '',
+          spacing: { before: 100, after: 100 },
+          border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: D.borderHr } },
+          pageBreakBefore: pageBreak || undefined,
+        }));
+        break;
+
       case 'table': {
         const rows = block.rows ?? [];
-        const colCount = Math.max(...rows.map((r) => r.length));
-        const colWidth = Math.floor(9000 / colCount);
+        const colCount = Math.max(...rows.map((r) => r.length), 1);
+        const headers = rows[0] ?? [];
+        const colWidths = calcColWidths(headers, 9000);
 
         const tableRows = rows.map((row, ri) =>
           new TableRow({
             tableHeader: ri === 0,
-            children: row.map((cell) =>
+            children: row.map((cell, ci) =>
               new TableCell({
-                children: [
-                  new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: stripInline(cell),
-                        bold: ri === 0,
-                        color: ri === 0 ? 'FFFFFF' : '000000',
-                      }),
-                    ],
-                    alignment: AlignmentType.LEFT,
-                  }),
-                ],
-                shading:
-                  ri === 0
-                    ? { type: ShadingType.SOLID, color: '1F4E79', fill: '1F4E79' }
-                    : ri % 2 === 0
-                      ? { type: ShadingType.SOLID, color: 'D6E4F0', fill: 'D6E4F0' }
-                      : undefined,
-                width: { size: colWidth, type: WidthType.DXA },
+                children: [new Paragraph({
+                  children: inlineToRuns(
+                    cell,
+                    D.TABLE,
+                    ri === 0 ? D.textHeader : D.textMain,
+                  ),
+                  alignment: AlignmentType.LEFT,
+                  pageBreakBefore: (ri === 0 && pageBreak) || undefined,
+                })],
+                shading: ri === 0
+                  ? { type: ShadingType.SOLID, color: D.headerBg, fill: D.headerBg }
+                  : undefined,
+                width: { size: colWidths[ci] ?? Math.floor(9000 / colCount), type: WidthType.DXA },
                 borders: {
-                  top: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
-                  bottom: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
-                  left: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
-                  right: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
+                  top:    tblBorder(),
+                  bottom: tblBorder(),
+                  left:   tblBorder(),
+                  right:  tblBorder(),
                 },
               }),
             ),
           }),
         );
 
-        children.push(
-          new Table({
-            rows: tableRows,
-            width: { size: 9000, type: WidthType.DXA },
-          }),
-        );
-        children.push(new Paragraph({ text: '', spacing: { after: 120 } }));
+        children.push(new Table({
+          rows: tableRows,
+          width: { size: 9000, type: WidthType.DXA },
+        }));
+        children.push(new Paragraph({ text: '', spacing: { after: 100 } }));
         break;
       }
+
       case 'empty':
         children.push(new Paragraph({ text: '', spacing: { after: 40 } }));
         break;
@@ -210,20 +371,37 @@ function buildDocx(blocks: MdBlock[]): Promise<Buffer> {
         {
           id: 'Normal',
           name: 'Normal',
-          run: { font: 'MS Gothic', size: 22 },
+          run: { font: D.FONT, size: D.BODY, color: D.textMain },
+        },
+        {
+          id: 'Heading1',
+          name: 'Heading 1',
+          basedOn: 'Normal',
+          next: 'Normal',
+          run: { font: D.FONT, size: D.H1, bold: true, color: D.textMain },
+        },
+        {
+          id: 'Heading2',
+          name: 'Heading 2',
+          basedOn: 'Normal',
+          next: 'Normal',
+          run: { font: D.FONT, size: D.H2, bold: true, color: D.textMain },
+        },
+        {
+          id: 'Heading3',
+          name: 'Heading 3',
+          basedOn: 'Normal',
+          next: 'Normal',
+          run: { font: D.FONT, size: D.H3, bold: true, color: D.textMuted },
         },
       ],
     },
-    sections: [
-      {
-        properties: {
-          page: {
-            margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
-          },
-        },
-        children,
+    sections: [{
+      properties: {
+        page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } },
       },
-    ],
+      children,
+    }],
   });
 
   return Packer.toBuffer(doc);
@@ -233,18 +411,25 @@ function buildDocx(blocks: MdBlock[]): Promise<Buffer> {
 
 async function buildXlsx(blocks: MdBlock[], title: string): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'Mission Control';
+  wb.creator = 'Apollo';
 
   const ws = wb.addWorksheet('議事録', { views: [{ state: 'frozen', ySplit: 1 }] });
 
-  // タイトル行
+  // タイトル行: プレビューH1配色に合わせ薄いグレー
   ws.mergeCells('A1:F1');
   const titleCell = ws.getCell('A1');
   titleCell.value = title;
-  titleCell.font = { name: 'MS Gothic', bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
-  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } };
-  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
-  ws.getRow(1).height = 28;
+  titleCell.font = { name: 'Meiryo', bold: true, size: 13, color: { argb: 'FF1E2A3A' } };
+  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDF0F5' } };
+  titleCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+  titleCell.border = {
+    bottom: { style: 'medium', color: { argb: 'FFD0D8E4' } },
+  };
+  ws.getRow(1).height = 26;
+
+  // 共通罫線色
+  const THIN_BORDER = { style: 'thin' as const, color: { argb: 'FFD0D8E4' } };
+  const cellBorder = { top: THIN_BORDER, bottom: THIN_BORDER, left: THIN_BORDER, right: THIN_BORDER };
 
   let row = 2;
 
@@ -259,218 +444,222 @@ async function buildXlsx(blocks: MdBlock[], title: string): Promise<Buffer> {
         cell.value = stripInline(block.text ?? '');
         const sizes: Record<string, number> = { h1: 13, h2: 12, h3: 11, h4: 10 };
         const bgColors: Record<string, string> = {
-          h1: 'FF2E4057',
-          h2: 'FF3A6186',
-          h3: 'FF4A7EB5',
-          h4: 'FFDAE8F5',
+          h1: 'FFEDF0F5',
+          h2: 'FFF4F6F9',
+          h3: 'FFFFFFFF',
+          h4: 'FFFFFFFF',
         };
         const fontColors: Record<string, string> = {
-          h1: 'FFFFFFFF',
-          h2: 'FFFFFFFF',
-          h3: 'FFFFFFFF',
-          h4: 'FF1F4E79',
+          h1: 'FF1E2A3A',
+          h2: 'FF1E2A3A',
+          h3: 'FF4A5A72',
+          h4: 'FF4A5A72',
         };
-        cell.font = {
-          name: 'MS Gothic',
-          bold: true,
-          size: sizes[block.type],
-          color: { argb: fontColors[block.type] },
-        };
+        cell.font = { name: 'Meiryo', bold: true, size: sizes[block.type], color: { argb: fontColors[block.type] } };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColors[block.type] } };
-        cell.alignment = { vertical: 'middle', indent: block.type === 'h1' ? 0 : 1 };
-        ws.getRow(row).height = 20;
+        cell.alignment = { vertical: 'middle', indent: 1 };
+        if (block.type === 'h1' || block.type === 'h2') {
+          cell.border = { bottom: { style: 'thin', color: { argb: 'FFD0D8E4' } } };
+        }
+        ws.getRow(row).height = block.type === 'h1' ? 22 : 20;
         row++;
         break;
       }
-      case 'para': {
+      case 'para':
+      case 'blockquote': {
         ws.mergeCells(`A${row}:F${row}`);
         const cell = ws.getCell(`A${row}`);
         cell.value = stripInline(block.text ?? '');
-        cell.font = { name: 'MS Gothic', size: 10 };
-        cell.alignment = { wrapText: true, indent: 1 };
+        cell.font = {
+          name: 'Meiryo', size: 10,
+          italic: block.type === 'blockquote',
+          color: { argb: block.type === 'blockquote' ? 'FF4A5A72' : 'FF1E2A3A' },
+        };
+        cell.alignment = { wrapText: true, indent: block.type === 'blockquote' ? 2 : 1 };
         row++;
+        break;
+      }
+      case 'list': {
+        for (const item of block.items ?? []) {
+          ws.mergeCells(`A${row}:F${row}`);
+          const cell = ws.getCell(`A${row}`);
+          cell.value = `${'　'.repeat(item.indent)}・ ${stripInline(item.text)}`;
+          cell.font = { name: 'Meiryo', size: 10, color: { argb: 'FF1E2A3A' } };
+          cell.alignment = { wrapText: true, indent: 1 };
+          row++;
+        }
         break;
       }
       case 'table': {
         const tableRows = block.rows ?? [];
+        const colCount = Math.max(...tableRows.map((r) => r.length), 1);
         for (let ri = 0; ri < tableRows.length; ri++) {
           const cells = tableRows[ri];
-          for (let ci = 0; ci < cells.length; ci++) {
+          for (let ci = 0; ci < colCount; ci++) {
             const col = String.fromCharCode(65 + ci);
             const cell = ws.getCell(`${col}${row}`);
-            cell.value = stripInline(cells[ci]);
+            cell.value = stripInline(cells[ci] ?? '');
             cell.font = {
-              name: 'MS Gothic',
+              name: 'Meiryo',
               bold: ri === 0,
               size: 10,
-              color: { argb: ri === 0 ? 'FFFFFFFF' : 'FF000000' },
+              color: { argb: ri === 0 ? 'FF333333' : 'FF1E2A3A' },
             };
             cell.fill = {
               type: 'pattern',
               pattern: 'solid',
-              fgColor: {
-                argb: ri === 0 ? 'FF1F4E79' : ri % 2 === 0 ? 'FFD6E4F0' : 'FFFFFFFF',
-              },
+              fgColor: { argb: ri === 0 ? 'FFEDF0F5' : 'FFFFFFFF' },
             };
-            cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
-            cell.border = {
-              top: { style: 'thin', color: { argb: 'FFAAAAAA' } },
-              bottom: { style: 'thin', color: { argb: 'FFAAAAAA' } },
-              left: { style: 'thin', color: { argb: 'FFAAAAAA' } },
-              right: { style: 'thin', color: { argb: 'FFAAAAAA' } },
-            };
+            cell.alignment = { wrapText: true, vertical: 'top', indent: 1 };
+            cell.border = cellBorder;
           }
           ws.getRow(row).height = 18;
           row++;
         }
-        row++; // テーブル後の空白行
+        row++; // テーブル後に空行
         break;
       }
-      case 'hr':
-        row++; // 空白行で区切り
+      case 'hr': {
+        ws.mergeCells(`A${row}:F${row}`);
+        ws.getCell(`A${row}`).border = { bottom: { style: 'thin', color: { argb: 'FFD0D8E4' } } };
+        ws.getRow(row).height = 8;
+        row++;
         break;
+      }
       case 'empty':
+        ws.getRow(row).height = 8;
         row++;
         break;
     }
   }
 
-  // 列幅設定
-  ws.getColumn('A').width = 8;
-  ws.getColumn('B').width = 32;
-  ws.getColumn('C').width = 16;
-  ws.getColumn('D').width = 14;
-  ws.getColumn('E').width = 10;
-  ws.getColumn('F').width = 14;
+  // 列幅（アクションリストに最適化）
+  ws.getColumn('A').width = 6;   // No
+  ws.getColumn('B').width = 36;  // アクション
+  ws.getColumn('C').width = 14;  // 担当者
+  ws.getColumn('D').width = 12;  // 期限
+  ws.getColumn('E').width = 12;  // ステータス
+  ws.getColumn('F').width = 12;  // 予備
 
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
 }
 
-// ── PDF ───────────────────────────────────────────────────────────
+// ── PDF（playwright + marked でプレビューと同じ描画）──────────────
 
-function buildPdf(blocks: MdBlock[]): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    const doc = new PDFDocument({
-      size: 'A4',
-      margins: { top: 60, bottom: 60, left: 60, right: 60 },
-      info: { Title: '議事録', Author: 'Mission Control' },
-    });
+async function buildPdf(markdownContent: string): Promise<Buffer> {
+  // <!-- pagebreak --> を CSS ページブレーク div に変換してから marked に渡す
+  const preprocessed = markdownContent.replace(
+    /<!--\s*pagebreak\s*-->/gi,
+    '\n<div class="pagebreak"></div>\n',
+  );
+  const htmlBody = await marked(preprocessed, { gfm: true, breaks: false });
 
-    let fontAvailable = false;
-    try {
-      readFileSync(IPA_FONT);
-      doc.registerFont('ja', IPA_FONT);
-      fontAvailable = true;
-    } catch {
-      // フォントなければ Helvetica にフォールバック
-    }
+  const html = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", "Noto Sans JP", sans-serif;
+    font-size: 11pt;
+    line-height: 1.7;
+    color: #1e2a3a;
+    background: #ffffff;
+    word-break: break-word;
+  }
+  h1, h2, h3, h4 { font-weight: 700; line-height: 1.3; margin: 1.2em 0 0.5em; }
+  h1 { font-size: 1.5em; }
+  h2 { font-size: 1.25em; border-bottom: 1px solid #d0d8e4; padding-bottom: 0.3em; }
+  h3 { font-size: 1.1em; }
+  h4 { font-size: 1em; }
+  p { margin: 0.6em 0; }
+  ul, ol { margin: 0.5em 0; padding-left: 1.6em; }
+  li { margin: 0.25em 0; }
+  code {
+    background: #edf0f5;
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+    font-size: 0.88em;
+    font-family: "Courier New", monospace;
+  }
+  pre {
+    background: #f4f6f9;
+    border: 1px solid #d0d8e4;
+    padding: 0.9em;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 0.88em;
+  }
+  pre code { background: none; padding: 0; }
+  blockquote {
+    border-left: 3px solid #b0bcce;
+    margin: 0.8em 0;
+    padding: 0.2em 0 0.2em 1em;
+    color: #4a5a72;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.8em 0;
+    font-size: 0.92em;
+  }
+  th, td { border: 1px solid #d0d8e4; padding: 0.4em 0.7em; text-align: left; }
+  th { background: #edf0f5; font-weight: 700; }
+  tr:nth-child(even) td { background: #f8f9fc; }
+  hr { border: none; border-top: 1px solid #d0d8e4; margin: 1.2em 0; }
+  .pagebreak { page-break-before: always; height: 0; margin: 0; padding: 0; }
+  strong { font-weight: 700; }
+  em { font-style: italic; }
+  a { color: #3b7dd8; }
+</style>
+</head>
+<body>${htmlBody}</body>
+</html>`;
 
-    const jFont = fontAvailable ? 'ja' : 'Helvetica';
-    const jFontBold = fontAvailable ? 'ja' : 'Helvetica-Bold';
+  const executablePath = findChromium();
+  if (!executablePath) throw new Error('Chromium not found for PDF generation');
 
-    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
-
-    const pageW = doc.page.width - 120; // margin両側
-
-    for (const block of blocks) {
-      switch (block.type) {
-        case 'h1':
-          doc.font(jFontBold).fontSize(18).fillColor('#1F4E79')
-            .text(stripInline(block.text ?? ''), { underline: false });
-          doc.moveDown(0.4);
-          doc.moveTo(60, doc.y).lineTo(60 + pageW, doc.y).stroke('#1F4E79');
-          doc.moveDown(0.4);
-          break;
-        case 'h2':
-          doc.moveDown(0.3);
-          doc.font(jFontBold).fontSize(14).fillColor('#2E4057')
-            .text(stripInline(block.text ?? ''));
-          doc.moveDown(0.2);
-          break;
-        case 'h3':
-          doc.moveDown(0.2);
-          doc.font(jFontBold).fontSize(12).fillColor('#3A6186')
-            .text(stripInline(block.text ?? ''));
-          doc.moveDown(0.15);
-          break;
-        case 'h4':
-          doc.font(jFontBold).fontSize(11).fillColor('#4A7EB5')
-            .text(stripInline(block.text ?? ''));
-          doc.moveDown(0.1);
-          break;
-        case 'para':
-          doc.font(jFont).fontSize(10).fillColor('#000000')
-            .text(stripInline(block.text ?? ''), { lineGap: 2 });
-          doc.moveDown(0.2);
-          break;
-        case 'hr':
-          doc.moveDown(0.2);
-          doc.moveTo(60, doc.y).lineTo(60 + pageW, doc.y).stroke('#CCCCCC');
-          doc.moveDown(0.2);
-          break;
-        case 'table': {
-          const rows = block.rows ?? [];
-          if (rows.length === 0) break;
-          const colCount = Math.max(...rows.map((r) => r.length));
-          const colW = pageW / colCount;
-          const rowH = 18;
-          let x = 60;
-          let y = doc.y;
-
-          for (let ri = 0; ri < rows.length; ri++) {
-            // 改ページチェック
-            if (y + rowH > doc.page.height - 60) {
-              doc.addPage();
-              y = 60;
-            }
-
-            const bgColor = ri === 0 ? '#1F4E79' : ri % 2 === 0 ? '#D6E4F0' : '#FFFFFF';
-            const textColor = ri === 0 ? '#FFFFFF' : '#000000';
-
-            for (let ci = 0; ci < colCount; ci++) {
-              const cellX = x + ci * colW;
-              doc.rect(cellX, y, colW, rowH).fill(bgColor).stroke('#AAAAAA');
-              doc.font(ri === 0 ? jFontBold : jFont)
-                .fontSize(9)
-                .fillColor(textColor)
-                .text(stripInline(rows[ri][ci] ?? ''), cellX + 3, y + 4, {
-                  width: colW - 6,
-                  height: rowH - 4,
-                  ellipsis: true,
-                  lineBreak: false,
-                });
-            }
-            y += rowH;
-          }
-          doc.y = y + 8;
-          doc.moveDown(0.3);
-          break;
-        }
-        case 'empty':
-          doc.moveDown(0.3);
-          break;
-      }
-    }
-
-    doc.end();
+  const browser = await chromium.launch({
+    executablePath,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'domcontentloaded' });
+    const pdf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '20mm', bottom: '20mm', left: '18mm', right: '18mm' },
+    });
+    return Buffer.from(pdf);
+  } finally {
+    await browser.close();
+  }
 }
 
 // ── プレーンテキスト ───────────────────────────────────────────
 
 function buildText(md: string): Buffer {
-  // Markdown 記法をほぼそのままプレーンテキスト化
   const text = md
-    .replace(/^#{1,4} /gm, '')   // 見出し記号除去
-    .replace(/\*\*(.*?)\*\*/g, '【$1】') // **bold** → 【bold】
+    .replace(/^#{1,4} /gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '【$1】')
     .replace(/^\|(.+)\|$/gm, (line) =>
       line.split('|').slice(1, -1).map((c) => c.trim()).join(' | '),
-    ) // テーブル整形
-    .replace(/^[-:]+\|[-:| ]+$/gm, ''); // セパレータ行除去
+    )
+    .replace(/^[-:]+\|[-:| ]+$/gm, '')
+    .replace(/^([-*+]) /gm, '• ')
+    .replace(/^\d+[.)] /gm, (_m, offset, str) => {
+      const preceding = str.slice(0, offset).split('\n').reverse();
+      let n = 1;
+      for (const line of preceding) {
+        if (/^\d+[.)] /.test(line)) n++;
+        else break;
+      }
+      return `${n}. `;
+    });
   return Buffer.from(text, 'utf-8');
 }
 
@@ -493,7 +682,7 @@ export async function exportMinutes(
       return { buffer, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ext: 'xlsx' };
     }
     case 'pdf': {
-      const buffer = await buildPdf(blocks);
+      const buffer = await buildPdf(markdownContent);
       return { buffer, mimeType: 'application/pdf', ext: 'pdf' };
     }
     case 'txt': {

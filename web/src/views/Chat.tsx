@@ -925,6 +925,9 @@ export default function Chat() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const prevChannelRef = useRef<string | null>(null);
+  const scrollToBottomOnLoadRef = useRef(false);
 
   // チャンネル一覧ロード
   const loadChannels = useCallback(async () => {
@@ -1036,8 +1039,37 @@ export default function Chat() {
 
   // 新メッセージ時に最下部へスクロール
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const isChannelSwitch = prevChannelRef.current !== (selectedId ?? null);
+    prevChannelRef.current = selectedId ?? null;
+
+    if (isChannelSwitch) {
+      // チャンネル切替・初回 → 新メッセージが来たタイミングでジャンプするフラグを立てる
+      scrollToBottomOnLoadRef.current = true;
+      return;
+    }
+
+    if (scrollToBottomOnLoadRef.current) {
+      if (messages.length > 0) {
+        // 新チャンネルのメッセージ初回ロード完了 → DOM 確定後に即ジャンプ
+        requestAnimationFrame(() => {
+          if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+          }
+        });
+        scrollToBottomOnLoadRef.current = false;
+      }
+      return;
+    }
+
+    // 同チャンネル内の新着 → 最下部付近にいる場合のみ smooth スクロール
+    const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+    if (nearBottom) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, selectedId]);
 
   // ポーリング（SSE 補完）
   useEffect(() => {
@@ -1395,6 +1427,7 @@ export default function Chat() {
 
               {/* メッセージ一覧 */}
               <div
+                ref={scrollContainerRef}
                 style={{
                   flex: 1,
                   overflowY: 'auto',

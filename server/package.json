@@ -18,9 +18,11 @@
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "http-proxy": "^1.18.1",
+    "marked": "^18.0.5",
     "mime-types": "^3.0.2",
     "multer": "^2.1.1",
-    "pdfkit": "^0.18.0"
+    "pdfkit": "^0.18.0",
+    "playwright-core": "^1.60.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

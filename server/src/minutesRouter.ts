@@ -359,10 +359,25 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
           buffer: f.buffer,
           ext: extOf(f.originalname),
         }));
+        // inputText が空でなければ「入力テキスト.txt」として sources/ に保存する。
+        // 音声文字起こしの場合は inputText に文字起こし結果が入っており、元音声は mappedSources に含まれる。
+        const inputTextTrimmed = typeof inputText === 'string' ? inputText.trim() : '';
+        const inputTextSource: import('./lib/minutesDeliverables.js').OriginalFileInput | undefined =
+          inputTextTrimmed
+            ? {
+                name: '入力テキスト.txt',
+                buffer: Buffer.from(inputTextTrimmed, 'utf-8'),
+                ext: '.txt',
+              }
+            : undefined;
+        const allSources = [
+          ...(inputTextSource ? [inputTextSource] : []),
+          ...mappedSources,
+        ];
         saved = saveMinutesToDeliverables({
           title,
           markdownContent: markdown,
-          ...(mappedSources.length > 0 ? { sourceFiles: mappedSources } : {}),
+          ...(allSources.length > 0 ? { sourceFiles: allSources } : {}),
         });
 
         // 選択されたエクスポート形式もフォルダに保存する

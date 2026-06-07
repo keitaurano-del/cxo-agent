@@ -23,6 +23,10 @@ import { readFileSync } from 'node:fs';
 
 import { collectTasks, type Task } from './tasks.js';
 import { APPROVAL_DECISIONS_FILE, type ApprovalKind } from '../config.js';
+import {
+  listPendingRequests,
+  type ApprovalRequest,
+} from '../lib/approvalRequestStore.js';
 
 // 編集可能 source（MC-71 / taskTrackerWrite の resolveSource と同一集合）。
 // この source の項目のみ承認/却下で正本へ書き戻せるため、承認フローの対象にする。
@@ -49,7 +53,12 @@ export interface ApprovalsResponse {
   total: number;
   /** 個別項目（タスク単位・重複なし）。 */
   items: ApprovalItem[];
+  /** エージェントが直接 POST した承認リクエスト（pending のみ）。 */
+  requests: ApprovalRequest[];
 }
+
+// ApprovalRequest を再 export してフロントエンド側の import に対応。
+export type { ApprovalRequest };
 
 // 主カテゴリの優先順位（小さいほど優先）。BLOCKED 由来を最優先で目立たせる。
 const CATEGORY_PRIORITY: Record<ApprovalKind, number> = {
@@ -193,11 +202,28 @@ export function collectApprovals(): ApprovalsResponse {
       a.id.localeCompare(b.id),
   );
 
+  // エージェント承認リクエスト（pending のみ）。
+  let requests: ApprovalRequest[] = [];
+  try {
+    requests = listPendingRequests();
+  } catch {
+    requests = [];
+  }
+
+  // byCategory と total にリクエストのカテゴリも加算する。
+  for (const req of requests) {
+    // 'blocked' はタスク由来のみ。リクエストの category は deploy/design/approval/confirm のいずれか。
+    if (req.category in byCategory) {
+      byCategory[req.category as ApprovalKind] += 1;
+    }
+  }
+
   return {
     generatedAt: new Date().toISOString(),
     byCategory,
-    total: items.length,
+    total: items.length + requests.length,
     items,
+    requests,
   };
 }
 

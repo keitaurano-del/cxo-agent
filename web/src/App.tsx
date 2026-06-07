@@ -42,6 +42,7 @@ import BottomNav from './components/BottomNav';
 import AddTaskFab from './components/AddTaskFab';
 import { UploadProvider } from './lib/UploadContext';
 import { UploadToast } from './components/UploadToast';
+import { UpdateToast, fireUpdateToast } from './components/UpdateToast';
 
 // ---- テーマ管理 ----
 type ThemeMode = 'auto' | 'dark' | 'light';
@@ -327,9 +328,16 @@ export default function App() {
     // SSE 接続は一度だけ（マウント時のみ）。
     const es = new EventSource('/api/stream');
     es.addEventListener('chat', (e) => {
-      // event.data から channelId を取得
+      // event.data から channelId・送信者・テキストを取得
       let channelId = '';
-      try { channelId = (JSON.parse((e as MessageEvent).data) as { channelId?: string }).channelId ?? ''; } catch { /* ignore */ }
+      let senderName = '';
+      let text = '';
+      try {
+        const d = JSON.parse((e as MessageEvent).data) as { channelId?: string; message?: { senderName?: string; text?: string } };
+        channelId = d.channelId ?? '';
+        senderName = d.message?.senderName ?? '';
+        text = d.message?.text ?? '';
+      } catch { /* ignore */ }
 
       // 現在アクティブなチャンネルへのメッセージなら増やさない
       const activeChannel = localStorage.getItem('chat.activeChannel') ?? '';
@@ -341,6 +349,13 @@ export default function App() {
         localStorage.setItem('chat.unreadBadge', String(next));
         return next;
       });
+
+      // チャットトースト
+      const channelLabel = channelId ? `#${channelId}` : 'チャット';
+      const detail = senderName
+        ? `${senderName}: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`
+        : text.slice(0, 60) || undefined;
+      fireUpdateToast({ id: `chat-${channelId}`, emoji: '💬', label: channelLabel, detail, navTo: '/chat' });
     });
     es.onerror = () => { /* 自動再接続 */ };
     return () => es.close();
@@ -353,6 +368,13 @@ export default function App() {
     vault: '/vault',
     deliverables: '/deliverables',
     agents: '/',
+  };
+  const UPDATE_TOAST_META: Record<string, { emoji: string; label: string }> = {
+    tasks:        { emoji: '📋', label: 'タスクボードが更新されました' },
+    vault:        { emoji: '📚', label: 'Vault が更新されました' },
+    deliverables: { emoji: '📁', label: 'フォルダが更新されました' },
+    agents:       { emoji: '🤖', label: 'エージェント更新' },
+    narrative:    { emoji: '📰', label: 'ブリーフィングが更新されました' },
   };
   const loadBadge = (path: string) => parseInt(localStorage.getItem(`badge.${path}`) ?? '0', 10) || 0;
   const [navBadges, setNavBadges] = useState<Record<string, number>>(() => ({
@@ -379,18 +401,25 @@ export default function App() {
         const data = JSON.parse((e as MessageEvent).data) as { types?: string[] };
         for (const type of data.types ?? []) {
           const navPath = NAV_BADGE_MAP[type];
-          if (!navPath) continue;
           // 現在そのページを見ていたら増やさない
           const cur = pathnameRef.current;
-          const isActive = navPath === '/'
+          const isActive = !navPath ? false : navPath === '/'
             ? cur === '/' || cur.startsWith('/feed') || cur.startsWith('/agents') || cur.startsWith('/today')
             : cur.startsWith(navPath);
-          if (isActive) continue;
-          setNavBadges((prev) => {
-            const next = (prev[navPath] ?? 0) + 1;
-            localStorage.setItem(`badge.${navPath}`, String(next));
-            return { ...prev, [navPath]: next };
-          });
+
+          if (navPath && !isActive) {
+            setNavBadges((prev) => {
+              const next = (prev[navPath] ?? 0) + 1;
+              localStorage.setItem(`badge.${navPath}`, String(next));
+              return { ...prev, [navPath]: next };
+            });
+          }
+
+          // トースト（ページ表示中でも表示 — 何が変わったか一瞬分かるように）
+          const meta = UPDATE_TOAST_META[type];
+          if (meta) {
+            fireUpdateToast({ id: `update-${type}`, emoji: meta.emoji, label: meta.label, navTo: navPath });
+          }
         }
       } catch { /* ignore */ }
     });
@@ -471,6 +500,7 @@ export default function App() {
           <BottomNav items={NAV} badges={badges} />
           {pathname === '/tasks' && <AddTaskFab />}
           <UploadToast />
+          <UpdateToast />
         </div>
       </UploadProvider>
     </LiveContext.Provider>

@@ -823,7 +823,20 @@ export default function Deliverables() {
       <MinutesPane
         id="deliverables"
         mode="deliverables"
-        onGenerated={() => { refetch(); }}
+        onGenerated={(relpath?: string) => {
+          refetch();
+          if (relpath) {
+            const parts = relpath.split('/');
+            parts.pop(); // ファイル名を除去してフォルダパスのみ
+            const toOpen = new Set<string>();
+            let cur = '';
+            for (const part of parts) {
+              cur = cur ? `${cur}/${part}` : part;
+              toOpen.add(cur);
+            }
+            setOpenFolders(prev => new Set([...prev, ...toOpen]));
+          }
+        }}
         onBack={() => setShowMinutesPane(false)}
       />
     );

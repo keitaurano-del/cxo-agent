@@ -753,8 +753,9 @@ async function handleSetAccountLabel(req: Request, res: Response): Promise<void>
     //    ターミナル4（OpenClaw/Masayoshi）は独自 auth のため CLAUDE_CONFIG_DIR 切替不可。
     //    ラベル保存のみ行い、env 注入はスキップ。
     const dirMap = t.remote ? ACCOUNT_CONFIG_DIR_REMOTE : ACCOUNT_CONFIG_DIR_LOCAL;
-    // T2/T4 は OpenClaw 独自 auth のため CLAUDE_CONFIG_DIR 切替不可
-    const configDir = (t.id !== 2 && t.id !== 4) ? dirMap[account] : null;
+    // T1/T3 は Claude Code TUI が動いているため send-keys 注入不可（入力欄に流れ込む）。
+    // T2/T4 は OpenClaw 独自 auth のため CLAUDE_CONFIG_DIR 切替不可。
+    const configDir = (t.id !== 1 && t.id !== 2 && t.id !== 3 && t.id !== 4) ? dirMap[account] : null;
     if (configDir) {
       const target = t.tmuxSession;
       // C-c で現在のプロセスを停止

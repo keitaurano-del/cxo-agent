@@ -365,6 +365,128 @@ function makeChatUpload(channelId: string): multer.Multer {
   });
 }
 
+// ── 自律応答コア ─────────────────────────────────────────────
+
+/** チャンネルごとのティック実行中フラグ（並行起動防止）。 */
+const tickingChannels = new Set<string>();
+
+/**
+ * 指定チャンネル（null = 全チャンネル）に対して自律応答ティックを実行する。
+ * 同一チャンネルの並行実行は in-memory ガードで防ぐ。
+ */
+async function runTickForChannels(
+  channelIds: string[] | null,
+  broadcast: Broadcast,
+): Promise<{ posted: Array<{ channelId: string; agentId: string; messageId: string }> }> {
+  const COOLDOWN_MS = 1800000; // 30分
+  const PROB = 0.20;
+
+  let channels = listChannels();
+  if (Array.isArray(channelIds) && channelIds.length > 0) {
+    channels = channels.filter((ch) => channelIds.includes(ch.id));
+  }
+  // 既にティック中のチャンネルはスキップ
+  const active = channels.filter((ch) => !tickingChannels.has(ch.id));
+  if (active.length === 0) return { posted: [] };
+  active.forEach((ch) => tickingChannels.add(ch.id));
+
+  const personas = collectAgentPersonas();
+  const posted: Array<{ channelId: string; agentId: string; messageId: string }> = [];
+
+  try {
+    for (const channel of active) {
+      const channelId = channel.id;
+      const messages = readMessages(channelId, 50, undefined).reverse();
+      const now = new Date().getTime();
+      const TWO_HOURS_MS = 7200000;
+      let skipSpontaneous = messages.length === 0;
+      if (!skipSpontaneous) {
+        const latestTs = new Date(messages[messages.length - 1].ts).getTime();
+        if (now - latestTs >= TWO_HOURS_MS) skipSpontaneous = true;
+      }
+
+      let spontaneousPostedThisTick = false;
+      const shuffled = [...personas].sort(() => Math.random() - 0.5);
+
+      for (const persona of shuffled) {
+        let lastPostTs = 0;
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].senderId === persona.senderId) {
+            lastPostTs = new Date(messages[i].ts).getTime();
+            break;
+          }
+        }
+
+        const cooldownPassed = now - lastPostTs > COOLDOWN_MS;
+        const senderNameFirst = persona.senderName.split(/[\s（(]/)[0];
+        const isMentioned = messages.some((m) => {
+          if (m.senderId === persona.senderId) return false;
+          const msgTs = new Date(m.ts).getTime();
+          if (msgTs <= lastPostTs) return false;
+          return m.text.includes('@' + persona.senderId) || m.text.includes('@' + senderNameFirst);
+        });
+
+        let shouldPost = false;
+        if (isMentioned) {
+          shouldPost = true;
+        } else if (!skipSpontaneous && cooldownPassed && !spontaneousPostedThisTick && Math.random() < PROB) {
+          const sid = persona.senderId;
+          let channelFit = true;
+          if (channelId === 'dev') {
+            channelFit = ['dev-logic', 'task-manager', 'test-functional'].includes(sid);
+          } else if (channelId === 'releases') {
+            channelFit = ['apollo', 'hayashi-rin'].includes(sid);
+          } else if (channelId === 'general') {
+            channelFit = ['hayashi-rin', 'masayoshi', 'task-manager'].includes(sid);
+          }
+          shouldPost = channelFit;
+        }
+
+        if (!shouldPost) continue;
+
+        const recentHistory = messages.slice(-10).map((m) => `${m.senderName}: ${m.text}`).join('\n');
+        let prompt: string;
+        if (isMentioned) {
+          const mentionMsgs = messages
+            .filter((m) => {
+              if (m.senderId === persona.senderId) return false;
+              const msgTs = new Date(m.ts).getTime();
+              if (msgTs <= lastPostTs) return false;
+              return m.text.includes('@' + persona.senderId) || m.text.includes('@' + senderNameFirst);
+            })
+            .map((m) => `${m.senderName}: ${m.text}`)
+            .join('\n');
+          prompt = `${persona.systemPrompt}\n\nあなた宛メッセージ:\n${mentionMsgs}\n\n最近のチャット:\n${recentHistory || '（まだメッセージはありません）'}\n\n日本語2〜4文で返答してください。`;
+        } else {
+          prompt = `${persona.systemPrompt}\n\n最近のチャット(#${channelId}):\n${recentHistory || '（まだメッセージはありません）'}\n\n何か発言したいことがあれば日本語で述べてください。特になければpassとだけ返してください。`;
+        }
+
+        const result = await runClaude('/home/dev/projects/cxo-agent', prompt);
+        if (!result.ok || !result.stdout.trim()) continue;
+        const text = result.stdout.trim();
+        if (text.toLowerCase() === 'pass') continue;
+
+        const msg: ChatMessage = {
+          id: randomUUID(),
+          ts: new Date().toISOString(),
+          senderId: persona.senderId,
+          senderName: persona.senderName,
+          senderEmoji: '',
+          text,
+        };
+        appendMessage(channelId, msg);
+        broadcast('chat', { channelId, message: msg });
+        posted.push({ channelId, agentId: persona.senderId, messageId: msg.id });
+        if (!isMentioned) spontaneousPostedThisTick = true;
+      }
+    }
+  } finally {
+    active.forEach((ch) => tickingChannels.delete(ch.id));
+  }
+
+  return { posted };
+}
+
 // ── ルーター生成（broadcast を受け取る閉包） ────────────────────
 
 export function chatRouter(broadcast: Broadcast): Router {
@@ -472,6 +594,8 @@ export function chatRouter(broadcast: Broadcast): Router {
     }
     appendMessage(id, msg);
     broadcast('chat', { channelId: id, message: msg });
+    // メッセージ投稿を即時トリガー（fire-and-forget）
+    setImmediate(() => { runTickForChannels([id], broadcast).catch(() => {}); });
     res.status(201).json({ message: msg });
   });
 
@@ -795,141 +919,12 @@ export function autonomousTickHandler(broadcast: Broadcast) {
       return;
     }
 
-    const COOLDOWN_MS = 1800000; // 30分
-    const PROB = 0.20;
-
-    // 1. チャンネル一覧取得（channelIds あれば絞り込み）
-    let channels = listChannels();
-    if (Array.isArray(channelIds) && channelIds.length > 0) {
-      channels = channels.filter((ch) => channelIds.includes(ch.id));
-    }
-
-    // 2. ペルソナ一覧取得
+    const { posted } = await runTickForChannels(
+      Array.isArray(channelIds) && channelIds.length > 0 ? channelIds : null,
+      broadcast,
+    );
+    const channels = listChannels();
     const personas = collectAgentPersonas();
-
-    const posted: Array<{ channelId: string; agentId: string; messageId: string }> = [];
-
-    // 5. 各チャンネルを順に処理
-    for (const channel of channels) {
-      const channelId = channel.id;
-
-      // a. readMessages で古→新順のメッセージ取得
-      const messages = readMessages(channelId, 50, undefined).reverse();
-
-      // b. 最新メッセージが2時間以上前 or メッセージなしなら自発投稿をスキップ
-      const now = new Date().getTime();
-      const TWO_HOURS_MS = 7200000;
-      let skipSpontaneous = false;
-      if (messages.length === 0) {
-        skipSpontaneous = true;
-      } else {
-        const latestTs = new Date(messages[messages.length - 1].ts).getTime();
-        if (now - latestTs >= TWO_HOURS_MS) {
-          skipSpontaneous = true;
-        }
-      }
-
-      // c. spontaneousPostedThisTick フラグ初期化
-      let spontaneousPostedThisTick = false;
-
-      // d. ペルソナを乱数でシャッフルして走査
-      const shuffled = [...personas].sort(() => Math.random() - 0.5);
-
-      for (const persona of shuffled) {
-        // 当エージェントの最終投稿を messages の末尾から検索
-        let lastPostTs = 0;
-        for (let i = messages.length - 1; i >= 0; i--) {
-          if (messages[i].senderId === persona.senderId) {
-            lastPostTs = new Date(messages[i].ts).getTime();
-            break;
-          }
-        }
-
-        const cooldownPassed = now - lastPostTs > COOLDOWN_MS;
-
-        // @メンション: lastPostTs 以降の他エージェントメッセージに "@" + senderId か senderName前半が含まれるか
-        const senderNameFirst = persona.senderName.split(/[\s（(]/)[0];
-        const isMentioned = messages.some((m) => {
-          if (m.senderId === persona.senderId) return false;
-          const msgTs = new Date(m.ts).getTime();
-          if (msgTs <= lastPostTs) return false;
-          return m.text.includes('@' + persona.senderId) || m.text.includes('@' + senderNameFirst);
-        });
-
-        // shouldPost 判定
-        let shouldPost = false;
-        if (isMentioned) {
-          shouldPost = true;
-        } else {
-          if (!skipSpontaneous && cooldownPassed && !spontaneousPostedThisTick && Math.random() < PROB) {
-            // 自発のみチャンネル適合チェック
-            const id = channelId;
-            const sid = persona.senderId;
-            let channelFit = true;
-            if (id === 'dev') {
-              channelFit = ['dev-logic', 'task-manager', 'test-functional'].includes(sid);
-            } else if (id === 'releases') {
-              channelFit = ['apollo', 'hayashi-rin'].includes(sid);
-            } else if (id === 'general') {
-              channelFit = ['hayashi-rin', 'masayoshi', 'task-manager'].includes(sid);
-            }
-            shouldPost = channelFit;
-          }
-        }
-
-        if (!shouldPost) continue;
-
-        // プロンプト生成
-        const recentHistory = messages
-          .slice(-10)
-          .map((m) => `${m.senderName}: ${m.text}`)
-          .join('\n');
-
-        let prompt: string;
-        if (isMentioned) {
-          // メンション時のプロンプト
-          const mentionMsgs = messages
-            .filter((m) => {
-              if (m.senderId === persona.senderId) return false;
-              const msgTs = new Date(m.ts).getTime();
-              if (msgTs <= lastPostTs) return false;
-              return m.text.includes('@' + persona.senderId) || m.text.includes('@' + senderNameFirst);
-            })
-            .map((m) => `${m.senderName}: ${m.text}`)
-            .join('\n');
-          prompt = `${persona.systemPrompt}\n\nあなた宛メッセージ:\n${mentionMsgs}\n\n最近のチャット:\n${recentHistory || '（まだメッセージはありません）'}\n\n日本語2〜4文で返答してください。`;
-        } else {
-          // 自発時のプロンプト
-          prompt = `${persona.systemPrompt}\n\n最近のチャット(#${channelId}):\n${recentHistory || '（まだメッセージはありません）'}\n\n何か発言したいことがあれば日本語で述べてください。特になければpassとだけ返してください。`;
-        }
-
-        // runClaude で生成
-        const result = await runClaude('/home/dev/projects/cxo-agent', prompt);
-        if (!result.ok || !result.stdout.trim()) continue;
-
-        const text = result.stdout.trim();
-        if (text.toLowerCase() === 'pass') continue;
-
-        // appendMessage + broadcast で投稿
-        const msg: ChatMessage = {
-          id: randomUUID(),
-          ts: new Date().toISOString(),
-          senderId: persona.senderId,
-          senderName: persona.senderName,
-          senderEmoji: '',
-          text,
-        };
-        appendMessage(channelId, msg);
-        broadcast('chat', { channelId, message: msg });
-        posted.push({ channelId, agentId: persona.senderId, messageId: msg.id });
-
-        // 自発投稿なら spontaneousPostedThisTick = true
-        if (!isMentioned) {
-          spontaneousPostedThisTick = true;
-        }
-      }
-    }
-
     res.json({ ok: true, posted, channels: channels.length, agents: personas.length });
   };
 }

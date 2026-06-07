@@ -151,6 +151,14 @@ export const TASK_EDITS_FILE = join(INBOX_DATA_DIR, 'task-edits.jsonl');
  */
 export const APPROVAL_DECISIONS_FILE = join(INBOX_DATA_DIR, 'approval-decisions.jsonl');
 
+/**
+ * エージェント承認リクエスト台帳（追記専用 JSONL・last-wins で ID ごとに最新状態を決定）。
+ * autonomous-rin 等のエージェントが「Keita に承認してほしい」内容を直接 POST するための台帳。
+ * タスクタグ方式の承認フロー（TASK_TRACKER 由来）とは別の軽量な承認リクエスト仕組み。
+ * 1 行 = ApprovalRequest 型（id, from, fromName, title, description, category, requestedAt, status, ...）。
+ */
+export const APPROVAL_REQUESTS_FILE = join(INBOX_DATA_DIR, 'approval-requests.jsonl');
+
 /** 添付画像の 1 枚あたり最大バイト数（10MB）。 */
 export const INBOX_MAX_FILE_BYTES = envNum('INBOX_MAX_FILE_BYTES', 10 * 1024 * 1024);
 

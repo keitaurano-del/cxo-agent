@@ -9,11 +9,20 @@
 // 書き戻すアトミック方式＋競合時リトライ（approvalWrite.editWithRetry）で確実に通す。
 // baseHash を body に積んでも無視する（後方互換）。エラーマッピングは taskEditRouter と同一方針:
 //   CONFLICT/AMBIGUOUS→409, VALIDATION_FAILED→422, NOT_FOUND→404, UNSUPPORTED_SOURCE/不正→400。
+//
+// エージェント承認リクエスト API（auth ミドルウェア配下。POST /api/approvals/request は外に登録）:
+//  GET  /api/approvals/request/:id          : リクエスト詳細取得。
+//  POST /api/approvals/request/:id/approve  : { comment? } で承認。
+//  POST /api/approvals/request/:id/reject   : { comment? } で却下。
 
 import { Router, type Request, type Response } from 'express';
 
 import { collectApprovals } from './collectors/approvals.js';
 import { approveTask, rejectTask, TaskEditError } from './lib/approvalWrite.js';
+import {
+  getRequest,
+  updateRequest,
+} from './lib/approvalRequestStore.js';
 import type { ApprovalKind } from './config.js';
 
 const VALID_CATEGORIES = new Set<ApprovalKind>([
@@ -128,11 +137,98 @@ function handleReject(req: Request, res: Response): void {
   }
 }
 
+// ── エージェント承認リクエスト（auth ミドルウェア配下のエンドポイント）──────────
+
+/** GET /api/approvals/request/:id — リクエスト詳細取得。 */
+function handleGetRequest(req: Request, res: Response): void {
+  const id = req.params.id;
+  if (typeof id !== 'string' || id.trim() === '') {
+    res.status(400).json({ error: 'id is required' });
+    return;
+  }
+  const rec = getRequest(id.trim());
+  if (!rec) {
+    res.status(404).json({ error: `approval request not found: ${id}` });
+    return;
+  }
+  res.json(rec);
+}
+
+/** POST /api/approvals/request/:id/approve — リクエストを承認。 */
+function handleApproveRequest(req: Request, res: Response): void {
+  const id = req.params.id;
+  if (typeof id !== 'string' || id.trim() === '') {
+    res.status(400).json({ error: 'id is required' });
+    return;
+  }
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  let comment: string | undefined;
+  if (body.comment !== undefined) {
+    if (typeof body.comment !== 'string') {
+      res.status(400).json({ error: 'comment must be a string' });
+      return;
+    }
+    if (body.comment.length > MAX_COMMENT_LEN) {
+      res.status(400).json({ error: `comment exceeds max length (${MAX_COMMENT_LEN})` });
+      return;
+    }
+    comment = body.comment;
+  }
+  const updated = updateRequest(id.trim(), {
+    status: 'approved',
+    decidedAt: new Date().toISOString(),
+    ...(comment !== undefined ? { comment } : {}),
+  });
+  if (!updated) {
+    res.status(404).json({ error: `approval request not found: ${id}` });
+    return;
+  }
+  res.json(updated);
+}
+
+/** POST /api/approvals/request/:id/reject — リクエストを却下。 */
+function handleRejectRequest(req: Request, res: Response): void {
+  const id = req.params.id;
+  if (typeof id !== 'string' || id.trim() === '') {
+    res.status(400).json({ error: 'id is required' });
+    return;
+  }
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  let comment: string | undefined;
+  if (body.comment !== undefined) {
+    if (typeof body.comment !== 'string') {
+      res.status(400).json({ error: 'comment must be a string' });
+      return;
+    }
+    if (body.comment.length > MAX_COMMENT_LEN) {
+      res.status(400).json({ error: `comment exceeds max length (${MAX_COMMENT_LEN})` });
+      return;
+    }
+    comment = body.comment;
+  }
+  const updated = updateRequest(id.trim(), {
+    status: 'rejected',
+    decidedAt: new Date().toISOString(),
+    ...(comment !== undefined ? { comment } : {}),
+  });
+  if (!updated) {
+    res.status(404).json({ error: `approval request not found: ${id}` });
+    return;
+  }
+  res.json(updated);
+}
+
 /** /api/approvals 配下にマウントする承認ルータ。 */
 export function approvalRouter(): Router {
   const router = Router();
   router.get('/', handleList);
   router.post('/:taskId/approve', (req, res) => handleApprove(req, res));
   router.post('/:taskId/reject', (req, res) => handleReject(req, res));
+  // エージェント承認リクエスト（auth 配下）。
+  // 注意: ':taskId/approve' より後に登録しないと '/request/:id/approve' が ':taskId'='request' で
+  // 既存の taskId ルートにマッチしてしまう。'/request' プレフィックスなので衝突しない。
+  router.get('/request/:id', (req, res) => handleGetRequest(req, res));
+  router.post('/request/:id/approve', (req, res) => handleApproveRequest(req, res));
+  router.post('/request/:id/reject', (req, res) => handleRejectRequest(req, res));
   return router;
 }

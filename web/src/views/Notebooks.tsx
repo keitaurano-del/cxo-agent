@@ -1298,6 +1298,83 @@ const MINUTES_STYLES = [
 
 注意: 上記の見出し（今日の主な話／やること／次回）の構成を維持すること。冒頭の📅以外に絵文字を多用しないこと。Markdownの表や##見出しは使わず、プレーンな箇条書きで書くこと。`,
   },
+  {
+    id: 'exec2page',
+    label: '実務2ページ',
+    emoji: '📊',
+    desc: '1ページ目にアクション・決定・共有、2ページ目に議題別発言まとめ',
+    type: 'decisions' as MinutesType,
+    format: 'sections' as MinutesFormat,
+    sample: `## アクションアイテム（TODO）
+
+| No | タスク | 担当 | 期限 | ステータス | 関連議題 |
+|----|--------|------|------|-----------|---------|
+| 1 | 仕様書更新 | 山田 | 5/20 | 未着手 | 議題1 |
+| 2 | ベンダー確認 | 鈴木 | 5/15 | 未着手 | 議題2 |
+
+## 決定事項
+
+- リリース日を5月末に決定（議題1）
+- 予算は300万円の枠で進める（議題2）
+
+## 共有事項
+
+- 次回は全員参加必須（オンライン可）
+- 資料は前日17:00までに共有
+
+---
+
+*（2ページ目）*
+
+## 議題別 主要発言
+
+### 議題1：開発進捗について
+アクション：#1 ／ 決定：リリース日5月末
+
+（各発言者の主な発言・議論の要旨）
+
+### 議題2：リリース計画
+アクション：#2 ／ 決定：予算300万円
+
+（各発言者の主な発言・議論の要旨）`,
+    extraInstructions: `必ず以下の2ページ構成で議事録を出力してください。「<!-- pagebreak -->」は実際に出力してください（ページ区切りとして処理されます）。
+
+## アクションアイテム（TODO）
+
+| No | タスク | 担当 | 期限 | ステータス | 関連議題 |
+|----|--------|------|------|-----------|---------|
+| 1 | （やること） | （担当者） | （期限） | 未着手 | 議題X |
+
+## 決定事項
+
+- （決定事項）（議題X）
+
+## 共有事項
+
+- （共有・連絡事項を箇条書きで）
+
+<!-- pagebreak -->
+
+## 議題別 主要発言
+
+### 議題1：（議題タイトル）
+アクション：#N（なければ省略） ／ 決定：（決定内容、なければ省略）
+
+（発言者名と主な発言内容・議論の流れを段落形式で。意見の相違・結論に至った経緯も含める）
+
+### 議題2：（議題タイトル）
+アクション：#N ／ 決定：（内容）
+
+（同上）
+
+注意:
+- 1ページ目（アクション・決定・共有）は情報を凝縮してA4 1枚に収まる分量にすること
+- 「<!-- pagebreak -->」は必ずそのまま出力すること（省略・変更不可）
+- 見出しに絵文字を付けないこと
+- アクション表の「関連議題」列で各アクションをどの議題に由来するか明示すること
+- 決定事項の末尾に（議題X）で出典議題を付記すること
+- 2ページ目の各議題見出し直下に「アクション：#N ／ 決定：〜」の参照行を入れること`,
+  },
 ] as const;
 
 // 各スタイルの sample（Markdown / プレーンテキスト）をそのまま簡易レンダリングする。
@@ -1604,8 +1681,21 @@ function DeliverablePickerModal({
       .then((r) => r.json().catch(() => null))
       .then((data: DeliverablesResponse | null) => {
         if (!alive) return;
-        if (data?.files) setFiles(data.files);
-        else setError(data?.error || '成果物の一覧を取得できませんでした。');
+        if (data?.files) {
+          setFiles(data.files);
+          // 全フォルダを閉じた状態で開く
+          const allDirs = new Set<string>();
+          const collectDirs = (node: DeliverableTreeNode) => {
+            for (const dir of node.dirs.values()) {
+              allDirs.add(dir.path);
+              collectDirs(dir);
+            }
+          };
+          collectDirs(buildDeliverableTree(data.files));
+          setCollapsed(allDirs);
+        } else {
+          setError(data?.error || '成果物の一覧を取得できませんでした。');
+        }
       })
       .catch(() => { if (alive) setError('ネットワークエラーで成果物を取得できませんでした。'); });
     return () => { alive = false; };
@@ -1687,7 +1777,7 @@ export function MinutesPane({
   notebookId,
 }: {
   id: string;
-  onGenerated: () => void;
+  onGenerated: (relpath?: string) => void;
   onBack?: () => void;
   mode?: 'notebook' | 'deliverables';
   notebookId?: string;
@@ -1733,7 +1823,6 @@ export function MinutesPane({
   const [genError, setGenError] = useState<string | null>(null);
   const [genReport, setGenReport] = useState<string | null>(null);
   const [lastArtifact, setLastArtifact] = useState<{ relpath: string; name: string } | null>(null);
-  const [exporting, setExporting] = useState<string | null>(null);
   // 入力に使った元ファイル（音声・テキスト・PDF など）。生成時に sources/ へ保存させる。
   const [sourceFiles, setSourceFiles] = useState<File[]>([]);
   // 生成完了後はプレビュー表示モードに遷移し、ダウンロード直行をやめる。
@@ -1804,42 +1893,6 @@ export function MinutesPane({
       setSelectedFormat(style.format);
     }
   }, [selectedStyles]);
-
-  const triggerDownload = useCallback(
-    async (relpath: string, name: string, fmt: ExportFmt) => {
-      setExporting(fmt);
-      try {
-        const fileUrl =
-          mode === 'deliverables'
-            ? `/api/deliverables/file?path=${encodeURIComponent(relpath)}&inline=1`
-            : `/api/notebooks/${nbId}/file?path=${encodeURIComponent(relpath)}&inline=1`;
-        const fileRes = await fetch(fileUrl);
-        if (!fileRes.ok) throw new Error('ファイルの取得に失敗しました。');
-        const content = await fileRes.text();
-        const exportRes = await fetch(`${minutesBase}/export`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content, format: fmt, filename: name }),
-        });
-        if (!exportRes.ok) {
-          const err = (await exportRes.json().catch(() => ({}))) as { error?: string };
-          throw new Error(err.error ?? 'エクスポートに失敗しました。');
-        }
-        const blob = await exportRes.blob();
-        const dlUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = dlUrl;
-        a.download = `${name.replace(/\.[^.]+$/, '')}.${fmt}`;
-        a.click();
-        URL.revokeObjectURL(dlUrl);
-      } catch (e) {
-        alert(e instanceof Error ? e.message : 'エクスポートに失敗しました。');
-      } finally {
-        setExporting(null);
-      }
-    },
-    [mode, nbId, minutesBase],
-  );
 
   const handleAudioFile = useCallback(
     (file: File) => {
@@ -2081,7 +2134,7 @@ export function MinutesPane({
         setPreviewMode(true);
       }
 
-      onGenerated();
+      onGenerated(lastArt?.relpath ?? undefined);
     } catch (e) {
       setGenError(e instanceof Error ? e.message : 'ネットワークエラーで議事録を生成できませんでした。');
       setGenStage('');
@@ -2116,7 +2169,7 @@ export function MinutesPane({
       setGenReport('修正を反映して再生成しました。');
       setFeedbackText('');
       setPreviewView('rendered');
-      onGenerated();
+      onGenerated(art?.relpath ?? undefined);
     } catch (e) {
       setGenError(e instanceof Error ? e.message : 'ネットワークエラーで再生成できませんでした。');
     } finally {
@@ -2141,11 +2194,28 @@ export function MinutesPane({
 
   const saveEdit = useCallback(() => {
     if (!lastArtifact || savingEdit) return;
-    // deliverables モードには成果物の上書き API が無いため、ローカル反映のみ行う。
+    setSavingEdit(true);
+    setSaveEditError(null);
+    setSaveEditOk(false);
+    // deliverables モードは PUT /api/deliverables/file で上書き保存する。
     if (mode === 'deliverables') {
-      setSaveEditOk(true);
-      setGeneratedContent(editedContent);
-      onGenerated();
+      fetch('/api/deliverables/file', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: lastArtifact.relpath, content: editedContent }),
+      })
+        .then(async (res) => {
+          if (res.ok) {
+            setSaveEditOk(true);
+            setGeneratedContent(editedContent);
+            onGenerated(lastArtifact.relpath);
+          } else {
+            const body = (await res.json().catch(() => ({}))) as { error?: string };
+            setSaveEditError(body.error || '保存に失敗しました。');
+          }
+        })
+        .catch(() => setSaveEditError('ネットワークエラーで保存できませんでした。'))
+        .finally(() => setSavingEdit(false));
       return;
     }
     setSavingEdit(true);
@@ -2160,7 +2230,7 @@ export function MinutesPane({
         if (res.ok) {
           setSaveEditOk(true);
           setGeneratedContent(editedContent);
-          onGenerated();
+          onGenerated(lastArtifact.relpath);
         } else {
           const body = (await res.json().catch(() => ({}))) as { error?: string };
           setSaveEditError(body.error || '保存に失敗しました。');
@@ -2607,23 +2677,12 @@ export function MinutesPane({
                 )}
               </div>
 
-              {/* ダウンロード */}
-              <div>
-                <p className="mb-1 text-[11px] text-text-faint">ダウンロード</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {EXPORT_OPTS.map(({ fmt, label, icon }) => (
-                    <button
-                      key={fmt}
-                      type="button"
-                      disabled={exporting !== null}
-                      onClick={() => void triggerDownload(lastArtifact.relpath, lastArtifact.name, fmt)}
-                      className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 text-xs font-medium text-text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
-                    >
-                      {exporting === fmt ? <Spinner /> : <span>{icon}</span>}
-                      {label}
-                    </button>
-                  ))}
-                </div>
+              {/* 保存済み情報 */}
+              <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-2/50 px-3 py-2">
+                <span className="text-[11px] text-text-faint">保存先:</span>
+                <span className="truncate text-[11px] text-text-muted font-mono">
+                  {lastArtifact.relpath.replace(/\/[^/]+$/, '')}
+                </span>
               </div>
 
               {/* フィードバック→再生成 */}

@@ -47,8 +47,10 @@ import { deliverableUploadRouter } from './deliverableUploadRouter.js';
 import { deliverableChunkRouter } from './deliverableChunkRouter.js';
 import { notebookRouter } from './notebookRouter.js';
 import { minutesRouter } from './minutesRouter.js';
+import { exportMinutes } from './lib/minutesExport.js';
 import { taskEditRouter } from './taskEditRouter.js';
 import { approvalRouter } from './approvalRouter.js';
+import { approvalRequestHandler } from './approvalRequestHandler.js';
 import { spawnRouter } from './spawnRouter.js';
 import { terminalHttpHandler, attachUpgrade } from './terminalProxy.js';
 import { startWatch } from './watch.js';
@@ -106,6 +108,13 @@ app.post('/api/chat/agent-message', (req, res) => {
 // token は req.body.token または Bearer ヘッダのどちらからでも受理する。
 app.post('/api/chat/autonomous-tick', (req, res) => {
   void autonomousTickHandler(broadcast)(req, res);
+});
+
+// ─── エージェント承認リクエスト（認証外）──────────────────────────────────
+// POST /api/approvals/request は AGENT_TOKEN で独立認証するため auth ミドルウェアの外に置く。
+// エージェントが Cookie なしで curl から呼べるようにする（agent-message と同じパターン）。
+app.post('/api/approvals/request', (req, res) => {
+  approvalRequestHandler(req, res);
 });
 
 // ─── token 認証（healthz より後、他ルートより前に適用）──────────
@@ -469,6 +478,47 @@ function contentDisposition(name: string, inline: boolean): string {
   );
   return `${disp}; filename="${ascii}"; filename*=UTF-8''${encoded}`;
 }
+
+// PUT /api/deliverables/file — 成果物ファイルをテキストで上書き保存する。
+// 議事録.md を保存する場合は、同フォルダ内の .docx / .xlsx も自動再生成する。
+app.put('/api/deliverables/file', async (req, res) => {
+  try {
+    const relpath = String((req.body as Record<string, unknown>)?.path ?? '');
+    const content = String((req.body as Record<string, unknown>)?.content ?? '');
+    if (!relpath) { res.status(400).json({ error: 'path required' }); return; }
+    const abs = resolveDeliverablePath(relpath);
+    const { writeFileSync, existsSync: fsExists, readdirSync: fsReaddir } = require('node:fs') as typeof import('node:fs');
+    if (!fsExists(abs)) { res.status(404).json({ error: 'file not found' }); return; }
+    writeFileSync(abs, content, 'utf-8');
+
+    // 議事録.md を保存した場合、同フォルダの .docx / .xlsx を再生成する
+    const fileName = basename(abs);
+    if (fileName === '議事録.md' || fileName.endsWith('_議事録.md')) {
+      const folder = dirname(abs);
+      const title = fileName.replace(/\.md$/, '');
+      try {
+        const siblings = fsReaddir(folder);
+        for (const sib of siblings) {
+          const ext = sib.endsWith('.docx') ? 'docx' : sib.endsWith('.xlsx') ? 'xlsx' : null;
+          if (!ext || !sib.startsWith('議事録')) continue;
+          try {
+            const { buffer } = await exportMinutes(content, ext as 'docx' | 'xlsx', title);
+            writeFileSync(join(folder, sib), buffer);
+          } catch (exportErr) {
+            console.warn(`[put-deliverable] re-export ${sib} failed:`, exportErr instanceof Error ? exportErr.message : exportErr);
+          }
+        }
+      } catch {
+        // 再エクスポート失敗はサイレント（.md保存は成功済み）
+      }
+    }
+
+    res.json({ ok: true, relpath: toDeliverableRelative(abs) });
+  } catch (e) {
+    if (e instanceof SafePathError) { res.status(400).json({ error: e.message }); return; }
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
 
 app.get('/api/deliverables/file', (req, res) => {
   try {
