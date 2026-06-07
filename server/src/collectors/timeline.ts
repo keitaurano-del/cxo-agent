@@ -32,14 +32,17 @@ export interface TimelineResponse {
  * - セクション形式（`### ID — タイトル` 下の `- ステータス: value`）にも対応
  * - ステータス・担当が重複して格納される問題を解決
  * - timestamp（更新日）を各イベント単位で正しく管理
+ * - **foundInTable を確実にセット**してセクション形式をスキップするロジックを明確化
  */
 function parseTaskTrackerEvents(content: string, taskId: string): TimelineEvent[] {
   const events: TimelineEvent[] = [];
+  let foundInTable = false;
 
   // 【テーブル形式のパース】
   // 表行の探索：`| ID | タイトル | ... | ステータス | ... |` 形式
+  // テーブルヘッダ（`| ID | ... |`）＋ セパレータ行（`|--...|`）を見つける
   const tableHeaderMatch = content.match(
-    /\|\s*ID\s*\|.*?\n\|-+\|(?:[^\n|-]+-\|)*\n/m
+    /\|\s*ID\s*\|[^\n]*\n\|-+[|-]+\n/m
   );
   if (tableHeaderMatch) {
     // ヘッダ行を取得
@@ -63,20 +66,28 @@ function parseTaskTrackerEvents(content: string, taskId: string): TimelineEvent[
     const tableSection = nextSection > 0 ? content.substring(tableStart, nextSection) : content.substring(tableStart);
 
     const tableLines = tableSection.split('\n').filter((line) => line.startsWith('|'));
+
+    // 対象タスク行を見つけるループ
     for (const line of tableLines) {
       const cols = line
         .split('|')
         .slice(1, -1)
         .map((c) => c.trim());
 
-      // 最初のカラム（ID）を確認
-      if (cols[0]?.toUpperCase() === taskId.toUpperCase()) {
+      // 最初のカラム（ID）を確認し、対象タスクであることを確認
+      if (cols.length > 0 && cols[0]?.toUpperCase() === taskId.toUpperCase()) {
+        // 【重要】対象タスクが見つかった時点で foundInTable = true をセット
+        // これ以降、セクション形式のパースはスキップされる
+        foundInTable = true;
+
         // ステータスカラムを抽出
-        if (statusColIndex >= 0 && cols[statusColIndex]) {
+        // statusColIndex が有効（>= 0）かつ対応するカラム値が存在するかチェック
+        if (statusColIndex >= 0 && statusColIndex < cols.length && cols[statusColIndex]) {
           const statusValue = cols[statusColIndex];
           // 括弧内は DONE/REVIEW状態の詳細（例：`DONE（test-functional 実効性検証○`）
+          // 括弧の前までを抽出し、空文字列チェック
           const status = statusValue.split(/[（(]/)[0].trim();
-          if (status) {
+          if (status && status.length > 0) {
             events.push({
               timestamp: new Date().toISOString(),
               type: 'status',
@@ -87,9 +98,11 @@ function parseTaskTrackerEvents(content: string, taskId: string): TimelineEvent[
         }
 
         // 担当カラムを抽出
-        if (ownerColIndex >= 0 && cols[ownerColIndex]) {
+        // ownerColIndex が有効かつ対応するカラム値が存在するかチェック
+        if (ownerColIndex >= 0 && ownerColIndex < cols.length && cols[ownerColIndex]) {
           const ownerValue = cols[ownerColIndex];
           // 複数エージェント記載の場合も確認（`dev-logic + test-functional` など）
+          // null/undefined/空文字列/「,」をフィルタリング
           if (ownerValue && ownerValue !== ',' && ownerValue.trim().length > 0) {
             events.push({
               timestamp: new Date().toISOString(),
@@ -101,10 +114,11 @@ function parseTaskTrackerEvents(content: string, taskId: string): TimelineEvent[
         }
 
         // 優先度も取得（ボーナス）
-        if (priorityColIndex >= 0 && cols[priorityColIndex]) {
+        // priorityColIndex が有効かつ対応するカラム値が存在するかチェック
+        if (priorityColIndex >= 0 && priorityColIndex < cols.length && cols[priorityColIndex]) {
           const priority = cols[priorityColIndex].trim();
-          if (priority && priority !== 'P0' && priority !== 'P1') {
-            // P0/P1以外なら補足情報として note に
+          // P0/P1以外なら補足情報として note に
+          if (priority && priority.length > 0 && priority !== 'P0' && priority !== 'P1') {
             events.push({
               timestamp: new Date().toISOString(),
               type: 'note',
@@ -113,53 +127,70 @@ function parseTaskTrackerEvents(content: string, taskId: string): TimelineEvent[
             });
           }
         }
+
+        // 対象タスク行の処理が完了したのでループを抜ける
+        // （同じタスク IDが複数行ある場合は最初のものを採用）
+        break;
       }
     }
   }
 
   // 【セクション形式のパース】
   // セクション見出し `### <ID> —` のパターン
-  const sectionRegex = new RegExp(
-    `### ${taskId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} [—\\-]`,
-    'i'
-  );
-  const sectionStart = content.search(sectionRegex);
-  if (sectionStart >= 0) {
-    // セクション終了（次の ### または末尾）を見つける
-    const afterSection = content.substring(sectionStart + 20);
-    const nextSection = afterSection.search(/^### /m);
-    const sectionEnd =
-      nextSection >= 0 ? sectionStart + 20 + nextSection : content.length;
-    const section = content.substring(sectionStart, sectionEnd);
+  // 【重要】テーブル形式で既に見つかった場合は foundInTable = true なのでセクション形式をスキップ
+  // これにより、表形式と詳細セクションの重複パースを防ぐ
+  if (!foundInTable) {
+    const sectionRegex = new RegExp(
+      `### ${taskId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} [—\\-]`,
+      'i'
+    );
+    const sectionStart = content.search(sectionRegex);
+    if (sectionStart >= 0) {
+      // セクション終了（次の ### または末尾）を見つける
+      const afterSection = content.substring(sectionStart + 20);
+      const nextSection = afterSection.search(/^### /m);
+      const sectionEnd =
+        nextSection >= 0 ? sectionStart + 20 + nextSection : content.length;
+      const section = content.substring(sectionStart, sectionEnd);
 
-    // セクション内の `- キー: 値` 形式をパース
-    const lines = section.split('\n');
-    let currentDate: string | null = null;
+      // セクション内の `- キー: 値` 形式をパース
+      const lines = section.split('\n');
+      let currentDate: string | null = null;
 
-    for (const line of lines) {
-      // `- ステータス: <value>` の形式
-      const statusMatch = line.match(/^\s*-\s*ステータス\s*:\s*(.+)$/i);
-      if (statusMatch) {
-        const statusValue = statusMatch[1].trim();
-        const status = statusValue.split(/[（(]/)[0].trim();
-        if (status) {
-          const event: TimelineEvent = {
-            timestamp: currentDate || new Date().toISOString(),
-            type: 'status',
-            message: status,
-            author: '台帳セクション',
-          };
-          // 表行で既に取得していないかチェック（重複排除）
-          if (!events.some((e) => e.type === 'status' && e.message === status)) {
-            events.push(event);
+      for (const line of lines) {
+        // `- ステータス: <value> [/ 担当: <value>]` の形式（両方を同じ行で書くことがあるため）
+        const statusMatch = line.match(/^\s*-\s*ステータス\s*:\s*(.+?)(?:\s*\/\s*担当:|$)/i);
+        if (statusMatch) {
+          const statusValue = statusMatch[1].trim();
+          const status = statusValue.split(/[（(]/)[0].trim();
+          if (status && status.length > 0) {
+            const event: TimelineEvent = {
+              timestamp: currentDate || new Date().toISOString(),
+              type: 'status',
+              message: status,
+              author: '台帳セクション',
+            };
+            // 表行で既に取得していないかチェック（重複排除）
+            if (!events.some((e) => e.type === 'status' && e.message === status)) {
+              events.push(event);
+            }
           }
         }
-      }
 
-      // `- 担当: <value>` の形式
-      const ownerMatch = line.match(/^\s*-\s*担当\s*:\s*(.+)$/i);
-      if (ownerMatch) {
-        const ownerValue = ownerMatch[1].trim();
+        // `- 担当: <value>` の形式（独立行、または同行の `- ステータス: ... / 担当: ...` から抽出）
+        let ownerValue: string | null = null;
+        // パターン1: `- ステータス: ... / 担当: <value>` 同行形式
+        const combinedMatch = line.match(/^\s*-\s*ステータス\s*:.*?\/\s*担当\s*:\s*(.+?)(?:\s*$|$)/i);
+        if (combinedMatch) {
+          ownerValue = combinedMatch[1].trim();
+        } else {
+          // パターン2: `- 担当: <value>` 独立行形式
+          const ownerMatch = line.match(/^\s*-\s*担当\s*:\s*(.+)$/i);
+          if (ownerMatch) {
+            ownerValue = ownerMatch[1].trim();
+          }
+        }
+
         if (ownerValue && ownerValue !== ',' && ownerValue.length > 0) {
           const event: TimelineEvent = {
             timestamp: currentDate || new Date().toISOString(),
@@ -172,33 +203,33 @@ function parseTaskTrackerEvents(content: string, taskId: string): TimelineEvent[
             events.push(event);
           }
         }
-      }
 
-      // `- 更新日: <date>` の形式
-      const updatedMatch = line.match(
-        /^\s*-\s*更新日\s*:\s*([0-9]{4})-([0-9]{2})-([0-9]{2})/i
-      );
-      if (updatedMatch) {
-        currentDate = `${updatedMatch[1]}-${updatedMatch[2]}-${updatedMatch[3]}T00:00:00Z`;
-        // 最後のイベントに currentDate を適用
-        if (events.length > 0) {
-          events[events.length - 1].timestamp = currentDate;
+        // `- 更新日: <date>` の形式
+        const updatedMatch = line.match(
+          /^\s*-\s*更新日\s*:\s*([0-9]{4})-([0-9]{2})-([0-9]{2})/i
+        );
+        if (updatedMatch) {
+          currentDate = `${updatedMatch[1]}-${updatedMatch[2]}-${updatedMatch[3]}T00:00:00Z`;
+          // 最後のイベントに currentDate を適用
+          if (events.length > 0) {
+            events[events.length - 1].timestamp = currentDate;
+          }
         }
-      }
 
-      // `- note: <text>` または `- 注記: <text>` など
-      const noteMatch = line.match(
-        /^\s*-\s*(?:note|注記)\s*:\s*(.+)$/i
-      );
-      if (noteMatch) {
-        const noteValue = noteMatch[1].trim();
-        if (noteValue.length > 0) {
-          events.push({
-            timestamp: currentDate || new Date().toISOString(),
-            type: 'note',
-            message: noteValue,
-            author: '台帳セクション',
-          });
+        // `- note: <text>` または `- 注記: <text>` など
+        const noteMatch = line.match(
+          /^\s*-\s*(?:note|注記)\s*:\s*(.+)$/i
+        );
+        if (noteMatch) {
+          const noteValue = noteMatch[1].trim();
+          if (noteValue.length > 0) {
+            events.push({
+              timestamp: currentDate || new Date().toISOString(),
+              type: 'note',
+              message: noteValue,
+              author: '台帳セクション',
+            });
+          }
         }
       }
     }
