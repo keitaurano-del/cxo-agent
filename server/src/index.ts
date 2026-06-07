@@ -42,6 +42,7 @@ import { makeAuthMiddleware, authEnabled } from './lib/auth.js';
 import { inboxRouter } from './inbox.js';
 import { terminalUploadRouter } from './terminalUpload.js';
 import { terminalControlRouter } from './terminalControl.js';
+import { terminalQueueRouter, startQueueAutoFlush } from './terminalQueue.js';
 import { vaultWriteRouter } from './vaultWriteRouter.js';
 import { deliverableUploadRouter } from './deliverableUploadRouter.js';
 import { deliverableChunkRouter } from './deliverableChunkRouter.js';
@@ -397,6 +398,12 @@ app.use('/api/terminal', terminalUploadRouter());
 // 「ターミナルを開始」ボタンから tmux main（林 CLI）と ttyd を冪等に復旧する。
 // auth ミドルウェア配下＝Cookie 必須。GET /api/terminal/status・POST /api/terminal/start。
 app.use('/api/terminal', terminalControlRouter());
+
+// ─── ターミナル メッセージキュー（MC-173）────────────────────────
+// Agent が busy 中、ターミナルビューで入力したメッセージを local queue に積み、
+// agent が idle になったら自動で flush する。
+// auth ミドルウェア配下＝Cookie 必須。GET/POST/DELETE /api/terminal/queue。
+app.use('/api/terminal/queue', terminalQueueRouter());
 
 // ─── Vault（Obsidian 一元化ビュー・read-only）────────────────────
 // すべてのパス入力は collectors/vault → lib/vaultPath で安全化される。
@@ -895,6 +902,10 @@ const server = app.listen(PORT, () => {
         '公開バインド前に必ず MC_TOKEN を設定してください。',
     );
   }
+
+  // ─── Start terminal queue auto-flush（MC-173）
+  startQueueAutoFlush();
+  console.log('   queue:               auto-flush enabled (10s interval)');
 });
 
 // ─── WebSocket upgrade（MC-92 Web ターミナル）──────────────────────

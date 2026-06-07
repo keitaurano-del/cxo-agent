@@ -485,6 +485,84 @@ export default function Terminal() {
 
   const [, setAgentInfoMap] = useState<Record<number, { name: string; emoji: string } | null>>({});
 
+  // ── メッセージキュー（MC-173）────────────────────────────────────
+  // agent が busy 時にメッセージをキューに積み、idle になったら自動送信する機能
+  interface QueuedMsg {
+    id: string;
+    text: string;
+    timestamp: number;
+    sentCount: number;
+  }
+  const [queuedMessages, setQueuedMessages] = useState<QueuedMsg[]>([]);
+  const [queueInput, setQueueInput] = useState('');
+  const [agentBusy, setAgentBusy] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
+
+  // キューの状態をポーリング（10 秒ごと）
+  useEffect(() => {
+    const pollQueue = async () => {
+      try {
+        const res = await fetch('/api/terminal/queue');
+        if (res.ok) {
+          const body = (await res.json()) as {
+            agentBusy: boolean;
+            messages: QueuedMsg[];
+            queueSize: number;
+          };
+          setAgentBusy(body.agentBusy);
+          setQueuedMessages(body.messages);
+        }
+      } catch (e) {
+        // ポーリング失敗は silent（キュー機能がなくても terminal は動く）
+      }
+    };
+    const intId = window.setInterval(() => {
+      void pollQueue();
+    }, 10000);
+    // 初回ポーリング
+    void pollQueue();
+    return () => window.clearInterval(intId);
+  }, []);
+
+  // メッセージをキューに追加
+  const addToQueue = useCallback(async () => {
+    if (!queueInput.trim()) return;
+    const text = queueInput.trim();
+    try {
+      const res = await fetch('/api/terminal/queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, terminal: activeIdRef.current }),
+      });
+      if (res.ok) {
+        setQueueInput('');
+        // キューを即座に再取得して UI 更新
+        const queueRes = await fetch('/api/terminal/queue');
+        if (queueRes.ok) {
+          const body = (await queueRes.json()) as {
+            agentBusy: boolean;
+            messages: QueuedMsg[];
+          };
+          setQueuedMessages(body.messages);
+          setAgentBusy(body.agentBusy);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to add message to queue:', e);
+    }
+  }, [queueInput]);
+
+  // キューからメッセージを削除
+  const removeFromQueue = useCallback(async (id: string) => {
+    try {
+      await fetch(`/api/terminal/queue/${id}`, { method: 'DELETE' });
+      // UI 更新
+      setQueuedMessages((prev) => prev.filter((m) => m.id !== id));
+    } catch (e) {
+      console.error('Failed to remove message from queue:', e);
+    }
+  }, []);
+
   const setAccountLabel = useCallback((id: number, account: string) => {
     setAccountLabels((prev) => ({ ...prev, [id]: account }));
   }, []);
@@ -1015,6 +1093,22 @@ export default function Terminal() {
           >
             出力を見る
           </button>
+          <button
+            type="button"
+            onClick={() => setShowQueue(!showQueue)}
+            className={`relative rounded border px-2 py-1 text-xs font-medium transition-colors ${
+              showQueue
+                ? 'border-active/50 bg-active-bg text-active'
+                : 'border-border bg-surface-2 text-text-muted hover:bg-surface-3 hover:text-text'
+            }`}
+          >
+            メッセージキュー
+            {queuedMessages.length > 0 && (
+              <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-stalled text-[10px] font-semibold text-surface">
+                {queuedMessages.length}
+              </span>
+            )}
+          </button>
           <a
             href={activeId === 1 ? '/terminal-standalone' : activeTab.path}
             target="_blank"
@@ -1024,6 +1118,78 @@ export default function Terminal() {
             新しいタブで開く
           </a>
         </div>
+
+        {/* メッセージキュー UI（MC-173） */}
+        {showQueue && (
+          <div className="mt-2.5 space-y-2 rounded-md border border-border/50 bg-surface-2/50 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-text">
+                Agent {agentBusy ? '📶 処理中…' : '✅ 待機中'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowQueue(false)}
+                aria-label="キューを閉じる"
+                className="text-xs text-text-muted hover:text-text"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* メッセージ入力フォーム */}
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                value={queueInput}
+                onChange={(e) => setQueueInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    void addToQueue();
+                  }
+                }}
+                placeholder="メッセージをキューに追加…"
+                className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1 text-xs text-text placeholder:text-text-faint focus:outline-none focus:ring-1 focus:ring-active/40"
+              />
+              <button
+                type="button"
+                onClick={() => void addToQueue()}
+                disabled={!queueInput.trim()}
+                className="rounded border border-active/40 bg-active-bg px-2 py-1 text-xs font-medium text-active hover:bg-active/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                追加
+              </button>
+            </div>
+
+            {/* キュー内のメッセージ一覧 */}
+            {queuedMessages.length > 0 ? (
+              <div className="max-h-32 space-y-1 overflow-y-auto">
+                {queuedMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className="flex items-start justify-between gap-2 rounded-sm bg-surface px-2 py-1 text-[11px]"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-text">{msg.text}</p>
+                      <p className="text-text-faint">
+                        {msg.sentCount > 0 ? `✓ 送信済み (${msg.sentCount}回)` : '待機中'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void removeFromQueue(msg.id)}
+                      aria-label="削除"
+                      className="shrink-0 text-text-muted hover:text-text"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-[11px] text-text-faint">キューが空です</p>
+            )}
+          </div>
+        )}
 
         {/* ステージング中のサムネ一覧。画像はサムネ表示、テキスト系はファイル名表示。 */}
         {staged.length > 0 && (
@@ -1231,12 +1397,12 @@ export default function Terminal() {
                   />
                   {/* MC-156: iframe タップ検知用の透過オーバーレイ。
                       分割表示の時だけ表示し、pointerdown で focusedPane を同期。
-                      ただし、フォーカス中のペインには表示しない（!isFocusedPane）。
-                      z-index は -10（iframe より手前・親 container より後ろ）にしてスクロール遮断を防ぐ。
+                      フォーカス中のペインには表示しない（!isFocusedPane）ので直接操作が届く。
+                      フォーカス外ペインは z-10 でiframeの手前に置き、タップを捕捉してフォーカスを移す。
                       wheel イベントは preventDefault しない（親 container へ伝搬させてスクロール効かせる）。 */}
                   {isVisible && effectiveSplit > 1 && !isFocusedPane && (
                     <div
-                      className="absolute inset-0 -z-10 pointer-events-auto"
+                      className="absolute inset-0 z-10 pointer-events-auto"
                       style={{
                         // ポインターイベントだけを捕捉し、視覚的には透過
                         background: 'transparent',
@@ -1244,7 +1410,7 @@ export default function Terminal() {
                       onPointerDown={() => {
                         if (paneIdx >= 0) {
                           setFocusedPane(paneIdx);
-                          // pointerdown は捉えるが、bubble で iframe にも伝搬させてアクティベートさせる
+                          // pointerdown を捉えてフォーカスを移す。iframeへの伝搬はブラウザが行う。
                         }
                       }}
                       onWheel={() => {

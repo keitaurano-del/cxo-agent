@@ -355,15 +355,15 @@ export default function App() {
       const isOnChatPage = pathnameRef.current === '/chat';
       if (isOnChatPage && channelId && channelId === activeChannel) return;
 
-      // 自動発信者を除外（router/agent-event 等の自動チャッター）
-      // 加算条件: Keita メンション or 人間発言（senderId が自動発信プレフィックスを持たない）
-      const isAutoSender = senderName_key.startsWith('router') ||
-                           senderName_key.startsWith('agent-event') ||
-                           senderName_key === 'system';
+      // MC-159: バッジ加算条件を絞る。
+      // Keita（senderId='keita'）以外はすべてエージェント/自動発信者とみなし加算しない。
+      // 例外: メッセージに @keita/@Keita のメンションが含まれる場合は加算する（要注意通知）。
+      const isKeitaMessage = senderName_key === 'keita';
       const isMentioningKeita = text.includes('@keita') || text.includes('@Keita');
 
-      // バッジ加算: Keita メンションか人間発言のみ
-      if (!isAutoSender || isMentioningKeita) {
+      // バッジ加算: Keita 自身の発言（通常は自分のを数えないが一応）か @keita メンションのみ
+      // 実質的には「エージェントが @keita と呼びかけた時だけ」通知する
+      if (isKeitaMessage || isMentioningKeita) {
         setChatUnread((n) => {
           const next = n + 1;
           localStorage.setItem('chat.unreadBadge', String(next));
@@ -371,12 +371,14 @@ export default function App() {
         });
       }
 
-      // チャットトースト（全メッセージに表示 — トースト表示は別要件）
-      const channelLabel = channelId ? `#${channelId}` : 'チャット';
-      const detail = senderName
-        ? `${senderName}: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`
-        : text.slice(0, 60) || undefined;
-      fireUpdateToast({ id: `chat-${channelId}`, emoji: '💬', label: channelLabel, detail, navTo: '/chat' });
+      // チャットトースト（MC-159: @keita メンションのみ表示。自動チャッター間の会話は除外）
+      if (isMentioningKeita || isKeitaMessage) {
+        const channelLabel = channelId ? `#${channelId}` : 'チャット';
+        const detail = senderName
+          ? `${senderName}: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`
+          : text.slice(0, 60) || undefined;
+        fireUpdateToast({ id: `chat-${channelId}`, emoji: '💬', label: channelLabel, detail, navTo: '/chat' });
+      }
     });
     es.onerror = () => { /* 自動再接続 */ };
     return () => es.close();
