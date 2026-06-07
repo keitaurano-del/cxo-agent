@@ -624,7 +624,13 @@ async function buildPdf(markdownContent: string): Promise<Buffer> {
 </html>`;
 
   const executablePath = findChromium();
-  if (!executablePath) throw new Error('Chromium not found for PDF generation');
+  if (!executablePath) {
+    throw new Error(
+      'PDF生成用のChromiumが見つかりませんでした。' +
+        `次のいずれかのパスにブラウザが必要です: ${CHROMIUM_PATHS.join(', ')}。` +
+        'Playwrightのインストール（npx playwright install chromium）を確認してください。',
+    );
+  }
 
   const browser = await chromium.launch({
     executablePath,

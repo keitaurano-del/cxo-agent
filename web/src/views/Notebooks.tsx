@@ -1381,6 +1381,112 @@ type ExportFmt = 'docx' | 'xlsx' | 'pdf' | 'txt';
 
 const MINUTES_STYLES = [
   {
+    id: 'standard',
+    label: '標準',
+    emoji: '⭐',
+    desc: '会議名・日時・参加者(部署/役職)・TODO表・議題・決定事項・保留・次回までを網羅した標準書式',
+    type: 'decisions' as MinutesType,
+    format: 'sections' as MinutesFormat,
+    sample: `# 第1回 プロジェクト定例
+
+**開催日時：** 2025年4月10日（木）14:00〜15:00
+**場所：** 本社 3F 第一会議室
+
+## 出席者・欠席者
+
+**出席者：**
+- 開発部 部長　田中
+- 営業部 課長　山田
+
+**欠席者：**
+- 総務部 担当　鈴木
+
+## TODO・アクション項目
+
+| No. | 内容 | 担当者 | 期限 |
+|-----|------|--------|------|
+| 1 | 仕様書を更新する | 山田 | 05/20 |
+| 2 | ベンダーへ確認する | 田中 | 05/15 |
+
+## 議題一覧
+
+1. 開発進捗について
+2. リリース計画について
+3. その他
+
+## 各議題の要点・決定事項
+
+### 議題1：開発進捗について
+**要点：** 進捗は予定比80%で、一部に遅延リスクがあります。
+**決定事項：** 来週までに回復策を提示することとなりました。
+
+### 議題2：リリース計画について
+**要点：** 5月末のリリース日について議論しました。
+**決定事項：** リリース日は5月末で確定としました。
+
+## 保留事項
+
+- 予算超過の懸念は、次回以降に持ち越しとなりました。
+
+## 次回会議予定
+
+**日時：** 2025年4月17日（木）14:00〜
+**議題（案）：** 回復策の進捗確認`,
+    extraInstructions: `必ず以下の Markdown 形式そのままで議事録を出力してください。見出し・表の構造を変えず、絵文字を付けないこと。各項目は丁寧体（です・ます調）で記述してください。
+
+# {会議名}
+
+**開催日時：** YYYY年MM月DD日（曜日）HH:mm〜HH:mm
+**場所：** （会議室名 / オンライン。不明なら「（記載なし）」）
+
+## 出席者・欠席者
+
+**出席者：**
+- （部署） （役職）　（氏名）
+- （部署） （役職）　（氏名）
+
+**欠席者：**
+- （部署） （役職）　（氏名。いなければ「なし」）
+
+## TODO・アクション項目
+
+| No. | 内容 | 担当者 | 期限 |
+|-----|------|--------|------|
+| 1 | （やること） | （担当者） | （MM/DD。不明なら「未定」） |
+| 2 | （やること） | （担当者） | （MM/DD。不明なら「未定」） |
+
+## 議題一覧
+
+1. （議題1）
+2. （議題2）
+3. その他
+
+## 各議題の要点・決定事項
+
+### 議題1：（タイトル）
+**要点：** （議論の要点）
+**決定事項：** （決定内容。なければ「（決定なし）」）
+
+### 議題2：（タイトル）
+**要点：** （議論の要点）
+**決定事項：** （決定内容。なければ「（決定なし）」）
+
+## 保留事項
+
+- （保留事項と理由。なければ「特になし」）
+
+## 次回会議予定
+
+**日時：** （YYYY年MM月DD日（曜日）HH:mm〜。不明なら「未定」）
+**議題（案）：** （次回の主な議題。不明なら「未定」）
+
+注意:
+- 上記8セクション（会議名／開催日時・場所／出席者・欠席者／TODO・アクション項目／議題一覧／各議題の要点・決定事項／保留事項／次回会議予定）の順序と見出しを変えないこと。
+- 出席者・欠席者は可能な限り部署・役職も記載すること。
+- 議題一覧は番号付きリスト、TODO は「No. / 内容 / 担当者 / 期限」の4列表とし、ヘッダー行・区切り行（|---|）を省略しないこと。
+- 見出しに絵文字を付けないこと。`,
+  },
+  {
     id: 'form',
     label: 'フォーム形式',
     emoji: '📋',
@@ -2180,7 +2286,7 @@ export function MinutesPane({
   const [transcribeError, setTranscribeError] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
-  const [selectedStyles, setSelectedStyles] = useState<Set<string>>(() => new Set(['form']));
+  const [selectedStyles, setSelectedStyles] = useState<Set<string>>(() => new Set(['standard']));
   const [previewStyleId, setPreviewStyleId] = useState<string | null>(null);
   const [selectedExportFormats, setSelectedExportFormats] = useState<Set<ExportFmt>>(() => new Set<ExportFmt>(['docx']));
   // 生成後の編集用
@@ -2202,6 +2308,8 @@ export function MinutesPane({
   const [genPct, setGenPct] = useState(0);
   const [genError, setGenError] = useState<string | null>(null);
   const [genReport, setGenReport] = useState<string | null>(null);
+  // エクスポート（docx/pdf 等）が一部失敗した場合の警告。MD 保存は成功していても表示する。
+  const [exportWarn, setExportWarn] = useState<string | null>(null);
   const [lastArtifact, setLastArtifact] = useState<{ relpath: string; name: string } | null>(null);
   // 入力に使った元ファイル（音声・テキスト・PDF など）。生成時に sources/ へ保存させる。
   const [sourceFiles, setSourceFiles] = useState<File[]>([]);
@@ -2435,6 +2543,7 @@ export function MinutesPane({
             created?: Array<{ name?: string; relpath?: string }>;
             report?: string;
             error?: string;
+            exportErrors?: string[];
           } = {};
           try { evt = JSON.parse(line.slice(6)) as typeof evt; } catch { continue; }
           if (evt.type === 'progress' && typeof evt.pct === 'number') {
@@ -2443,6 +2552,12 @@ export function MinutesPane({
             setGenPct(100);
             if (!evt.ok) {
               throw new Error(evt.error || '議事録を作成できませんでした。');
+            }
+            // エクスポート（PDF/Word 等）が一部失敗していたらユーザーへ表示する。
+            if (Array.isArray(evt.exportErrors) && evt.exportErrors.length > 0) {
+              setExportWarn(
+                '一部の形式の出力に失敗しました：\n' + evt.exportErrors.join('\n'),
+              );
             }
             const first = evt.created?.[0];
             if (first?.relpath && first?.name) {
@@ -2474,6 +2589,7 @@ export function MinutesPane({
     setGenerating(true);
     setGenError(null);
     setGenReport(null);
+    setExportWarn(null);
     setGenPct(0);
     setGenStage('生成を準備しています…');
     setGeneratedContent(null);
@@ -2529,12 +2645,13 @@ export function MinutesPane({
     if (!fb || regenerating || generating) return;
     setRegenerating(true);
     setGenError(null);
+    setExportWarn(null);
     setGenPct(0);
     setGenStage('修正を反映して再生成しています…');
     setSaveEditOk(false);
 
     const stylesArr = Array.from(selectedStyles);
-    const styleId = stylesArr[0] ?? 'form';
+    const styleId = stylesArr[0] ?? 'standard';
     const base = editedContent || generatedContent || '';
 
     try {
@@ -2973,6 +3090,15 @@ export function MinutesPane({
               style={{ color: 'var(--mc-stalled)' }}
             >
               {genError}
+            </div>
+          )}
+          {exportWarn && (
+            <div
+              role="alert"
+              className="whitespace-pre-line rounded-lg border border-stalled/40 bg-stalled-bg/60 px-3 py-2 text-xs"
+              style={{ color: 'var(--mc-stalled)' }}
+            >
+              {exportWarn}
             </div>
           )}
           {previewMode && generatedContent !== null && lastArtifact && (
