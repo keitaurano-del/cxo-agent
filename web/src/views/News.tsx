@@ -1,10 +1,20 @@
 // News — 毎朝のデイリーニュースブリーフィングを表示。
 // Vault の 20-Knowledge/news/daily-YYYY-MM-DD.md を読み込む。
-import { useState, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
+//
+// 可読性方針（MC-191）:
+//  - h2（大セクション）/ h3（各トピック）に余白と視覚的区切りを入れて塊を一目で分かるように。
+//  - 各 h3 トピックは ReactMarkdown では入れ子化できないため、CSS（隣接セレクタ）で
+//    カード風の上余白・区切り線を表現する。
+//  - **🔍 …** **🔎 …** **🔬 …** **📊 …** の段落見出しと 🟢🟡🔴 シナリオ行を callout 風に装飾。
+//  - blockquote（> 本日のキーワード）はバナー風。表は罫線・横スクロール可。
+//  - ```mermaid コードブロックは図解として SVG 描画（失敗時はコードのままフォールバック）。
+//  - ハードコード hex 禁止（var(--mc-*) のみ）。font-size は global --font-scale を尊重（rem/em）。
+import { useState, useEffect, type ReactNode } from 'react';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { PageHeader } from '../components/PageHeader';
 import { Spinner, EmptyState } from '../components/ui';
+import Mermaid from '../components/Mermaid';
 
 function stripFrontmatter(md: string): string {
   return md.replace(/^---\n[\s\S]*?\n---\n?/, '');
@@ -13,6 +23,84 @@ function stripFrontmatter(md: string): string {
 function formatDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+
+/** React children を素のテキストへ落とす（段落の見出し判定用）。 */
+function childrenToText(children: ReactNode): string {
+  if (children == null) return '';
+  if (typeof children === 'string' || typeof children === 'number') return String(children);
+  if (Array.isArray(children)) return children.map(childrenToText).join('');
+  if (typeof children === 'object' && 'props' in children) {
+    const props = (children as { props?: { children?: ReactNode } }).props;
+    return childrenToText(props?.children);
+  }
+  return '';
+}
+
+// なぜなぜ／シナリオ見出しの絵文字 → callout 種別色トークン。
+const ANALYSIS_PREFIXES: { test: RegExp; color: string; bg: string }[] = [
+  { test: /^🔍/, color: 'var(--mc-callout-info)', bg: 'var(--mc-callout-info-bg)' },
+  { test: /^🔎/, color: 'var(--mc-callout-tip)', bg: 'var(--mc-callout-tip-bg)' },
+  { test: /^🔬/, color: 'var(--mc-callout-note)', bg: 'var(--mc-callout-note-bg)' },
+  { test: /^📊/, color: 'var(--mc-callout-warning)', bg: 'var(--mc-callout-warning-bg)' },
+];
+
+// シナリオ行（🟢 楽観 / 🟡 中立 / 🔴 悲観）→ 状態色トークン。
+const SCENARIO_PREFIXES: { test: RegExp; color: string; bg: string }[] = [
+  { test: /^🟢/, color: 'var(--mc-active)', bg: 'var(--mc-active-bg)' },
+  { test: /^🟡/, color: 'var(--mc-idle)', bg: 'var(--mc-idle-bg)' },
+  { test: /^🔴/, color: 'var(--mc-stalled)', bg: 'var(--mc-stalled-bg)' },
+];
+
+const newsComponents: Components = {
+  // ```mermaid → 図解。それ以外のコードは既定。
+  code(props) {
+    const { className, children } = props as {
+      className?: string;
+      children?: ReactNode;
+    };
+    const match = /language-mermaid/.test(className ?? '');
+    if (match) {
+      return <Mermaid code={childrenToText(children)} />;
+    }
+    return <code className={className}>{children}</code>;
+  },
+  // 段落: **🔍 …** などの分析見出しで始まる段落を callout 風に。
+  p({ children }) {
+    const text = childrenToText(children).trim();
+    const analysis = ANALYSIS_PREFIXES.find((a) => a.test.test(text));
+    if (analysis) {
+      return (
+        <p
+          className="mc-news-callout"
+          style={
+            { '--c': analysis.color, '--cb': analysis.bg } as React.CSSProperties
+          }
+        >
+          {children}
+        </p>
+      );
+    }
+    return <p>{children}</p>;
+  },
+  // リスト項目: 🟢🟡🔴 で始まるシナリオ行を色付きチップ風に。
+  li({ children }) {
+    const text = childrenToText(children).trim();
+    const scenario = SCENARIO_PREFIXES.find((s) => s.test.test(text));
+    if (scenario) {
+      return (
+        <li
+          className="mc-news-scenario"
+          style={
+            { '--c': scenario.color, '--cb': scenario.bg } as React.CSSProperties
+          }
+        >
+          {children}
+        </li>
+      );
+    }
+    return <li>{children}</li>;
+  },
+};
 
 export default function News() {
   const today = formatDate(new Date());
@@ -96,8 +184,10 @@ export default function News() {
           </EmptyState>
         )}
         {!loading && !error && body && (
-          <article className="prose prose-invert prose-sm max-w-none prose-headings:font-semibold prose-h2:text-base prose-h3:text-sm prose-p:text-text-muted prose-li:text-text-muted prose-strong:text-text prose-table:text-xs">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
+          <article className="mc-news mx-auto max-w-3xl">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={newsComponents}>
+              {body}
+            </ReactMarkdown>
           </article>
         )}
       </div>
