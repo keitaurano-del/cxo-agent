@@ -81,9 +81,43 @@ export const AGENT_AVATARS: Record<string, AgentAvatar> = {
     working: '/avatars/avatar-son-working-v2.gif',
     idle: '/avatars/avatar-son-idle-v2.gif',
   },
+  'task-manager': {
+    name: 'ユイ',
+    working: '/avatars/avatar-task-manager-working-v2.gif',
+    idle: '/avatars/avatar-task-manager-idle-v2.gif',
+  },
+  'test-functional': {
+    name: 'ケン',
+    working: '/avatars/avatar-test-functional-working-v2.gif',
+    idle: '/avatars/avatar-test-functional-idle-v2.gif',
+  },
+  // 汎用サブエージェント（general-purpose / workflow:* / Explore / unmatched:* 等）共通の
+  // ロボット型アバター。getAgentAvatar が個別人格に一致しない type をここへ寄せる。
+  robot: {
+    name: 'Bot',
+    working: '/avatars/avatar-robot-working-v2.gif',
+    idle: '/avatars/avatar-robot-idle-v2.gif',
+  },
 };
 
-/** subagentType からアバターを引く。未登録なら undefined（フォールバック）。 */
+/**
+ * subagentType からアバターを引く。
+ * 1) 個別人格に完全一致すればそれを返す。
+ * 2) 汎用サブエージェント（general-purpose / Explore / workflow:* / unmatched:*）は
+ *    共通のロボットアバターにフォールバックする（Keita 指示: サブエージェントは専用のロボット）。
+ * 3) どれにも当たらなければ undefined（UI 側で絵文字フォールバック）。
+ */
 export function getAgentAvatar(subagentType: string): AgentAvatar | undefined {
-  return AGENT_AVATARS[subagentType];
+  const exact = AGENT_AVATARS[subagentType];
+  if (exact) return exact;
+  const t = subagentType.toLowerCase();
+  if (
+    t === 'general-purpose' ||
+    t === 'explore' ||
+    t.startsWith('workflow:') ||
+    t.startsWith('unmatched:')
+  ) {
+    return AGENT_AVATARS['robot'];
+  }
+  return undefined;
 }

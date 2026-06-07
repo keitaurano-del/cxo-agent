@@ -93,6 +93,14 @@ CHARS = {
         'expression. Green palette with a red bug-alert accent. Holds a big magnifying glass '
         'and a small bug-net. '
     ),
+    "robot": (
+        'Character "Bot": a friendly general-purpose worker robot, NOT a human, a small '
+        'boxy retro android. Rounded rectangular metal head with a single horizontal glowing '
+        'cyan visor eye-band, a short stubby antenna, segmented brushed-steel-grey arms with '
+        'simple three-finger claw hands, a compact two-legged chassis, a chest panel with a few '
+        'small status LEDs. Brushed steel-grey body with cyan accent lights, visible rivets and '
+        'panel lines. Diligent, busy, helpful worker vibe. Holds a small wrench / utility tool. '
+    ),
 }
 
 def gen(prompt_text, ref_png=None, tries=6):
