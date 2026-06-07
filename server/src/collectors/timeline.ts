@@ -25,82 +25,181 @@ export interface TimelineResponse {
 
 /**
  * TASK_TRACKER.md から task ID を含むセクションを探し出し、
- * 「更新日」「ステータス」「担当」などの行を解析して TimelineEvent を生成する。
+ * 表行をパース（テーブル形式）及びセクション内の key: value 形式をパースして TimelineEvent を生成する。
+ *
+ * 【修正内容】
+ * - テーブル行を正しくパース：ヘッダ行でカラム番号を特定→対象行からステータス・担当を正確に抽出
+ * - セクション形式（`### ID — タイトル` 下の `- ステータス: value`）にも対応
+ * - ステータス・担当が重複して格納される問題を解決
+ * - timestamp（更新日）を各イベント単位で正しく管理
  */
 function parseTaskTrackerEvents(content: string, taskId: string): TimelineEvent[] {
   const events: TimelineEvent[] = [];
 
+  // 【テーブル形式のパース】
+  // 表行の探索：`| ID | タイトル | ... | ステータス | ... |` 形式
+  const tableHeaderMatch = content.match(
+    /\|\s*ID\s*\|.*?\n\|-+\|(?:[^\n|-]+-\|)*\n/m
+  );
+  if (tableHeaderMatch) {
+    // ヘッダ行を取得
+    const headerLine = tableHeaderMatch[0].split('\n')[0];
+    // `|` で分割してカラムを特定
+    const headers = headerLine
+      .split('|')
+      .slice(1, -1)
+      .map((h) => h.trim());
+
+    // ステータス・担当のカラムインデックスを取得
+    const statusColIndex = headers.findIndex((h) =>
+      /^ステータス/.test(h)
+    );
+    const ownerColIndex = headers.findIndex((h) => /^担当/.test(h));
+    const priorityColIndex = headers.findIndex((h) => /^優先度/.test(h));
+
+    // taskId を含む表行を探す
+    const tableStart = content.indexOf(tableHeaderMatch[0]) + tableHeaderMatch[0].length;
+    const nextSection = content.indexOf('\n---', tableStart);
+    const tableSection = nextSection > 0 ? content.substring(tableStart, nextSection) : content.substring(tableStart);
+
+    const tableLines = tableSection.split('\n').filter((line) => line.startsWith('|'));
+    for (const line of tableLines) {
+      const cols = line
+        .split('|')
+        .slice(1, -1)
+        .map((c) => c.trim());
+
+      // 最初のカラム（ID）を確認
+      if (cols[0]?.toUpperCase() === taskId.toUpperCase()) {
+        // ステータスカラムを抽出
+        if (statusColIndex >= 0 && cols[statusColIndex]) {
+          const statusValue = cols[statusColIndex];
+          // 括弧内は DONE/REVIEW状態の詳細（例：`DONE（test-functional 実効性検証○`）
+          const status = statusValue.split(/[（(]/)[0].trim();
+          if (status) {
+            events.push({
+              timestamp: new Date().toISOString(),
+              type: 'status',
+              message: status, // 「ステータス: 」プレフィックスは不要（本体が値そのもの）
+              author: '台帳表行',
+            });
+          }
+        }
+
+        // 担当カラムを抽出
+        if (ownerColIndex >= 0 && cols[ownerColIndex]) {
+          const ownerValue = cols[ownerColIndex];
+          // 複数エージェント記載の場合も確認（`dev-logic + test-functional` など）
+          if (ownerValue && ownerValue !== ',' && ownerValue.trim().length > 0) {
+            events.push({
+              timestamp: new Date().toISOString(),
+              type: 'owner',
+              message: ownerValue.trim(),
+              author: '台帳表行',
+            });
+          }
+        }
+
+        // 優先度も取得（ボーナス）
+        if (priorityColIndex >= 0 && cols[priorityColIndex]) {
+          const priority = cols[priorityColIndex].trim();
+          if (priority && priority !== 'P0' && priority !== 'P1') {
+            // P0/P1以外なら補足情報として note に
+            events.push({
+              timestamp: new Date().toISOString(),
+              type: 'note',
+              message: `優先度: ${priority}`,
+              author: '台帳表行',
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // 【セクション形式のパース】
   // セクション見出し `### <ID> —` のパターン
   const sectionRegex = new RegExp(
     `### ${taskId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} [—\\-]`,
     'i'
   );
   const sectionStart = content.search(sectionRegex);
-  if (sectionStart < 0) return events;
+  if (sectionStart >= 0) {
+    // セクション終了（次の ### または末尾）を見つける
+    const afterSection = content.substring(sectionStart + 20);
+    const nextSection = afterSection.search(/^### /m);
+    const sectionEnd =
+      nextSection >= 0 ? sectionStart + 20 + nextSection : content.length;
+    const section = content.substring(sectionStart, sectionEnd);
 
-  // セクション終了（次の ### または末尾）を見つける
-  const afterSection = content.substring(sectionStart + 20);
-  const nextSection = afterSection.search(/^### /m);
-  const sectionEnd =
-    nextSection >= 0 ? sectionStart + 20 + nextSection : content.length;
-  const section = content.substring(sectionStart, sectionEnd);
+    // セクション内の `- キー: 値` 形式をパース
+    const lines = section.split('\n');
+    let currentDate: string | null = null;
 
-  // 縦型カード形式（`| 項目 | 値 |`）をパース
-  const lines = section.split('\n');
-  for (let i = 0; i < lines.length - 1; i++) {
-    const line = lines[i];
-
-    // ステータス行: `| ステータス | <value> |`
-    const statusMatch = line.match(/\|\s*ステータス\s*\|\s*([^\|]+)\s*\|/i);
-    if (statusMatch) {
-      const value = statusMatch[1].trim();
-      // status 行は通常 `DONE` / `IN_PROGRESS（理由）` のような形式
-      // 括弧内を削除して素のステータスを抽出
-      const status = value.split(/[（(]/)[0].trim();
-      if (status) {
-        events.push({
-          timestamp: new Date().toISOString(), // 更新日が無い時は現在時刻（後で修正可）
-          type: 'status',
-          message: `ステータス: ${status}`,
-          author: '台帳',
-        });
+    for (const line of lines) {
+      // `- ステータス: <value>` の形式
+      const statusMatch = line.match(/^\s*-\s*ステータス\s*:\s*(.+)$/i);
+      if (statusMatch) {
+        const statusValue = statusMatch[1].trim();
+        const status = statusValue.split(/[（(]/)[0].trim();
+        if (status) {
+          const event: TimelineEvent = {
+            timestamp: currentDate || new Date().toISOString(),
+            type: 'status',
+            message: status,
+            author: '台帳セクション',
+          };
+          // 表行で既に取得していないかチェック（重複排除）
+          if (!events.some((e) => e.type === 'status' && e.message === status)) {
+            events.push(event);
+          }
+        }
       }
-    }
 
-    // 担当行: `| 担当 | <value> |`
-    const ownerMatch = line.match(/\|\s*担当\s*\|\s*([^\|]+)\s*\|/i);
-    if (ownerMatch) {
-      const owner = ownerMatch[1].trim();
-      events.push({
-        timestamp: new Date().toISOString(),
-        type: 'owner',
-        message: `担当: ${owner}`,
-        author: '台帳',
-      });
-    }
-
-    // 更新日行: `| 更新日 | <date> |` または `更新日 | <date>` など
-    const updatedMatch = line.match(
-      /更新日\s*[\|：]\s*([0-9]{4})-([0-9]{2})-([0-9]{2})/i
-    );
-    if (updatedMatch) {
-      const isoDate = `${updatedMatch[1]}-${updatedMatch[2]}-${updatedMatch[3]}T00:00:00Z`;
-      // 最後の events の timestamp を更新（最新の更新日を反映させる）
-      if (events.length > 0) {
-        events[events.length - 1].timestamp = isoDate;
+      // `- 担当: <value>` の形式
+      const ownerMatch = line.match(/^\s*-\s*担当\s*:\s*(.+)$/i);
+      if (ownerMatch) {
+        const ownerValue = ownerMatch[1].trim();
+        if (ownerValue && ownerValue !== ',' && ownerValue.length > 0) {
+          const event: TimelineEvent = {
+            timestamp: currentDate || new Date().toISOString(),
+            type: 'owner',
+            message: ownerValue,
+            author: '台帳セクション',
+          };
+          // 表行で既に取得していないかチェック（重複排除）
+          if (!events.some((e) => e.type === 'owner' && e.message === ownerValue)) {
+            events.push(event);
+          }
+        }
       }
-    }
 
-    // 注記行（括弧内、複数行対応）
-    if (line.includes('（') || line.includes('(')) {
-      const noteMatch = line.match(/[（(]([^）)]+)[）)]/);
-      if (noteMatch && noteMatch[1].length > 5) {
-        events.push({
-          timestamp: new Date().toISOString(),
-          type: 'note',
-          message: noteMatch[1],
-          author: '台帳',
-        });
+      // `- 更新日: <date>` の形式
+      const updatedMatch = line.match(
+        /^\s*-\s*更新日\s*:\s*([0-9]{4})-([0-9]{2})-([0-9]{2})/i
+      );
+      if (updatedMatch) {
+        currentDate = `${updatedMatch[1]}-${updatedMatch[2]}-${updatedMatch[3]}T00:00:00Z`;
+        // 最後のイベントに currentDate を適用
+        if (events.length > 0) {
+          events[events.length - 1].timestamp = currentDate;
+        }
+      }
+
+      // `- note: <text>` または `- 注記: <text>` など
+      const noteMatch = line.match(
+        /^\s*-\s*(?:note|注記)\s*:\s*(.+)$/i
+      );
+      if (noteMatch) {
+        const noteValue = noteMatch[1].trim();
+        if (noteValue.length > 0) {
+          events.push({
+            timestamp: currentDate || new Date().toISOString(),
+            type: 'note',
+            message: noteValue,
+            author: '台帳セクション',
+          });
+        }
       }
     }
   }
