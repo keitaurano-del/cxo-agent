@@ -59,7 +59,8 @@ export interface AgentMood {
 let cachedMoods: AgentMood[] = [];
 let cachedHash = '';
 let cachedAt = 0;
-let inflight: Promise<AgentMood[]> | null = null;
+// 背景生成の二重起動ガード。戻り値は使わない（fire-and-forget）ため Promise<void>。
+let inflight: Promise<void> | null = null;
 
 /** 入力集合から再生成要否を決めるハッシュ（key+lastAction+currentTask の集合）。 */
 function inputsHash(inputs: MoodInput[]): string {
