@@ -580,6 +580,7 @@ function ChatPane({
     })
       .then(async (res) => {
         const body = (await res.json().catch(() => ({}))) as NotebookAskResponse;
+        setPendingQuestion(null); // refetch 前に消して2重表示を防ぐ
         if (!res.ok) {
           setError(body.error || `回答の取得に失敗しました（HTTP ${res.status}）。`);
         } else if (body.error && !body.answer) {
