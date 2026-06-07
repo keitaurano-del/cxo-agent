@@ -2060,6 +2060,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-168 | server/src/lib/types.ts Task 型拡張: blockedBy / dependsOn フィールド追加 | P1 | DONE（2026-06-07 林 cxo ティック。Task インターフェースに blockedBy/dependsOn フィールド追加。commit 93404d5） | dev-apollo（ソラ） | MC-167 |
 | MC-169 | server/src/collectors/tasks.ts 拡張: TASK_TRACKER「依存」列をパース→Task オブジェクトに割り当て | P1 | DONE（2026-06-07 林 cxo ティック。extractDepIds() 関数追加、parseTrackerString() を拡張し表行・カード・セクション本文から依存 ID をパース。commit 93404d5。server tsc green） | dev-apollo（ソラ） | MC-168 |
 | MC-170 | web/src/components/TaskDetail.tsx ブロッカー/依存セクション実装: スケルトンをアンコメント＋表示確認 | P1 | DONE（2026-06-07 林 cxo ティック。Task.blockedBy/dependsOn フィールドを TaskDetail に表示。ID バッジをクリック可能に。web build green。commit 7f56d51） | 林 | MC-169 |
+| MC-171 | tasks.ts パーサ修正: 「着手順\|ID\|内容」等 ID 列が先頭でない/ステータス列を持たないプランニング表を非タスク表として除外し、幽霊カード（id=1〜5＝T-J/T-W/T-I/T-K/T-L、T-U の壊れ行）をボードから消す | P1 | TODO | dev-apollo（ソラ） | なし |
 
 ### MC-151 — ノートブック議事録生成機能の実装
 
