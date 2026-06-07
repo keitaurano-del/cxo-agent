@@ -21,7 +21,11 @@
 
 import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
+import { execFile } from 'node:child_process';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { collectAgents } from './collectors/agents.js';
+import { terminalById, DATA_HOME } from './config.js';
 
 // ─── キューデータ構造 ────────────────────────────────
 interface QueuedMessage {
@@ -38,25 +42,83 @@ interface QueueState {
   lastFlushTime: number; // 最後に flush を試みた時刻
 }
 
+// キュー永続化ファイルパス
+const QUEUE_PERSIST_PATH = `${DATA_HOME}/projects/cxo-agent/data/queue-state.json`;
+
 // グローバルキュー状態（プロセス単位）
-const queueState: QueueState = {
+let queueState: QueueState = {
   messages: new Map(),
   lastFlushTime: 0,
 };
 
+/**
+ * キューの状態をファイルに永続化する（メモリ内の Map を JSON に変換）。
+ */
+function persistQueue(): void {
+  try {
+    const dir = dirname(QUEUE_PERSIST_PATH);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+    const serialized = {
+      messages: Array.from(queueState.messages.values()),
+      lastFlushTime: queueState.lastFlushTime,
+    };
+    writeFileSync(QUEUE_PERSIST_PATH, JSON.stringify(serialized, null, 2), 'utf-8');
+    console.log(`[queue] persisted ${serialized.messages.length} messages to ${QUEUE_PERSIST_PATH}`);
+  } catch (e) {
+    console.error('[queue] failed to persist state:', e instanceof Error ? e.message : String(e));
+  }
+}
+
+/**
+ * ファイルから キュー状態をロードし、メモリに復元する（起動時に実行）。
+ */
+function loadPersistedQueue(): void {
+  try {
+    if (!existsSync(QUEUE_PERSIST_PATH)) {
+      console.log('[queue] no persisted state file, starting with empty queue');
+      return;
+    }
+    const content = readFileSync(QUEUE_PERSIST_PATH, 'utf-8');
+    const parsed = JSON.parse(content) as { messages: QueuedMessage[]; lastFlushTime: number };
+    queueState.messages.clear();
+    for (const msg of parsed.messages) {
+      queueState.messages.set(msg.id, msg);
+    }
+    queueState.lastFlushTime = parsed.lastFlushTime;
+    console.log(`[queue] loaded ${parsed.messages.length} messages from persisted state`);
+  } catch (e) {
+    console.error('[queue] failed to load persisted state:', e instanceof Error ? e.message : String(e));
+    // エラーでも起動は止めない（空キューで再開）
+  }
+}
+
 // ─── helper 関数 ────────────────────────────────────
 
 /**
- * 最新のエージェント状態を取得し、現在 busy か確認する。
- * active（8分以内）= busy, idle（8分以上）= idle
+ * 指定ターミナルのエージェント busy 状態を確認する。
+ * メッセージの terminal ID に紐付く agent（session ログ）の最新活動時刻を見て、
+ * 現在時刻から idle 閾値（IDLE_THRESHOLD_MS）以内なら busy と判定する。
+ * PTY プロンプト（claude CLI オンターミナル）の活動ログで判定する。
  */
-function isAgentBusy(): boolean {
+function isAgentBusy(_terminal: number): boolean {
+  const IDLE_THRESHOLD_MS = 60 * 1000; // 60秒をアイドル判定の閾値に短縮（8分は粗すぎた）
   try {
     const agents = collectAgents();
-    // 林（hayashi-rin メイン林）のエージェントログを見て、最新活動が 8 分以内か確認
-    // 簡略的には active status = busy, idle status = not busy
-    const activeCount = agents.filter((a) => a.status === 'active').length;
-    return activeCount > 0; // 1 体以上 active なら busy と判定
+    // このターミナルに関連するエージェント（terminal field で filtering）があるか確認
+    // session.jsonl の最新タイムスタンプで idle/busy を判定する
+    // 将来は _terminal を使った絞り込みに拡張可能
+    const now = Date.now();
+    for (const agent of agents) {
+      // agent が terminal フィールドを持つなら、それで厳密に比較
+      // 持たない場合でも agent.lastActivity をチェック
+      if (typeof agent.lastActivity === 'number' && now - agent.lastActivity < IDLE_THRESHOLD_MS) {
+        // 直近 60 秒以内に活動があればまだ busy
+        return true;
+      }
+    }
+    return false;
   } catch (e) {
     console.error('[queue] failed to collect agent status:', e instanceof Error ? e.message : String(e));
     return true; // エラー時は busy と判定して conservative に（キューに溜める）
@@ -64,44 +126,59 @@ function isAgentBusy(): boolean {
 }
 
 /**
- * キューの先頭メッセージを tmux send-keys で送信する（subprocess）。
- * 送信成功したら queue から削除して sentCount インクリメント。
+ * キューのメッセージを tmux send-keys で送信する（直接実行・auth 不要）。
+ * HTTP fetch ではなく直接 tmux に対して send-keys を実行するため、
+ * auth 外側から呼べる。送信成功したら sentCount をインクリメント。
  */
 async function sendQueuedMessage(msg: QueuedMessage): Promise<boolean> {
-  try {
-    // 注: 本来は postSendKeys() と同じ logic で tmux に送信
-    // ここでは簡略化して fetch で /api/terminal/send-keys を叩く
-    const res = await fetch('http://localhost:4317/api/terminal/send-keys', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keys: msg.text, terminal: msg.terminal }),
-    });
-    if (!res.ok) {
-      console.warn(`[queue] send failed for msg ${msg.id}: HTTP ${res.status}`);
-      return false;
+  return new Promise((resolve) => {
+    try {
+      const termDef = terminalById(msg.terminal);
+      if (!termDef) {
+        console.warn(`[queue] unknown terminal ${msg.terminal}`);
+        resolve(false);
+        return;
+      }
+
+      const target = termDef.tmuxSession;
+      // 任意テキストは "-l" フラグ付きでリテラル送信（key として解釈されないよう）
+      const args = ['send-keys', '-t', target, '-l', msg.text];
+
+      execFile('tmux', args, { timeout: 5000, encoding: 'utf-8' }, (err, stdout, stderr) => {
+        if (err || (typeof err !== 'object' || (err as any).code !== 0)) {
+          console.warn(
+            `[queue] tmux send-keys failed for msg ${msg.id}:`,
+            stderr?.trim() || stdout?.trim() || (err instanceof Error ? err.message : String(err))
+          );
+          resolve(false);
+          return;
+        }
+        msg.sentCount = (msg.sentCount ?? 0) + 1;
+        resolve(true);
+      });
+    } catch (e) {
+      console.error(`[queue] send exception for msg ${msg.id}:`, e instanceof Error ? e.message : String(e));
+      resolve(false);
     }
-    msg.sentCount = (msg.sentCount ?? 0) + 1;
-    return true;
-  } catch (e) {
-    console.error(`[queue] send error for msg ${msg.id}:`, e instanceof Error ? e.message : String(e));
-    return false;
-  }
+  });
 }
 
 /**
- * キューを flush する（agent が idle の場合のみ）。
+ * キューを flush する（メッセージのターミナルのエージェント が idle の場合のみ）。
  * 全メッセージを順に送信し、送信成功したものを queue から削除。
  */
 async function flushQueue(): Promise<{ count: number; flushed: number }> {
   const count = queueState.messages.size;
   if (count === 0) return { count: 0, flushed: 0 };
 
-  if (isAgentBusy()) {
+  // キューの先頭メッセージを取得（なければスキップ）
+  const firstMsg = Array.from(queueState.messages.values())[0];
+  if (!firstMsg || isAgentBusy(firstMsg.terminal)) {
     console.log('[queue] agent still busy, skipping flush');
     return { count, flushed: 0 };
   }
 
-  console.log(`[queue] flushing ${count} messages`);
+  console.log(`[queue] flushing ${count} messages from terminal ${firstMsg.terminal}`);
   let flushed = 0;
   const msgs = Array.from(queueState.messages.values());
 
@@ -117,6 +194,9 @@ async function flushQueue(): Promise<{ count: number; flushed: number }> {
   }
 
   queueState.lastFlushTime = Date.now();
+  if (flushed > 0) {
+    persistQueue(); // flush されたメッセージを永続化に反映
+  }
   return { count, flushed };
 }
 
@@ -130,7 +210,6 @@ export function terminalQueueRouter(): Router {
    * 現在のキュー内容 + agent 状態を返す
    */
   router.get('/', (_req: Request, res: Response) => {
-    const busy = isAgentBusy();
     const messages = Array.from(queueState.messages.values()).map((msg) => ({
       id: msg.id,
       text: msg.text,
@@ -138,6 +217,9 @@ export function terminalQueueRouter(): Router {
       terminal: msg.terminal,
       sentCount: msg.sentCount,
     }));
+
+    // 先頭メッセージ（あれば）のターミナル ID でそのターミナルの busy 状態を返す
+    const busy = messages.length > 0 ? isAgentBusy(messages[0].terminal) : false;
 
     res.json({
       ok: true,
@@ -189,6 +271,10 @@ export function terminalQueueRouter(): Router {
     };
 
     queueState.messages.set(msg.id, msg);
+    console.log(`[queue] added message ${msg.id} to queue for terminal ${msg.terminal}`);
+
+    // 永続化ファイルに保存
+    persistQueue();
 
     // agent が idle だったら即座に flush を試みる
     void flushQueue().catch((e) => {
@@ -199,7 +285,7 @@ export function terminalQueueRouter(): Router {
       ok: true,
       id: msg.id,
       queued: true,
-      agentBusy: isAgentBusy(),
+      agentBusy: isAgentBusy(msg.terminal),
     });
   });
 
@@ -217,6 +303,8 @@ export function terminalQueueRouter(): Router {
     }
 
     queueState.messages.delete(id);
+    console.log(`[queue] deleted message ${id}`);
+    persistQueue(); // 削除後に永続化
     res.json({ ok: true, deleted: true });
   });
 
@@ -226,12 +314,15 @@ export function terminalQueueRouter(): Router {
    */
   router.post('/flush', async (_req: Request, res: Response) => {
     const { count, flushed } = await flushQueue();
+    const msgs = Array.from(queueState.messages.values());
+    const busyTerminal = msgs.length > 0 ? msgs[0].terminal : undefined;
+    const agentBusy = busyTerminal !== undefined ? isAgentBusy(busyTerminal) : false;
     res.json({
       ok: true,
       queued: count,
       flushed,
       remaining: count - flushed,
-      agentBusy: isAgentBusy(),
+      agentBusy,
     });
   });
 
@@ -242,6 +333,8 @@ export function terminalQueueRouter(): Router {
   router.delete('/', (_req: Request, res: Response) => {
     const count = queueState.messages.size;
     queueState.messages.clear();
+    console.log(`[queue] cleared ${count} messages`);
+    persistQueue(); // クリア後に永続化
     res.json({ ok: true, cleared: count });
   });
 
@@ -250,10 +343,14 @@ export function terminalQueueRouter(): Router {
 
 // ─── 定期ポーリング / 自動 flush ────────────────────
 /**
- * サーバ起動時に定期的にキューをチェックし、agent が idle になったら自動 flush する
- * （Interval: 10秒）
+ * サーバ起動時に以下を行う:
+ * 1. 永続化ファイルからキュー状態をロード
+ * 2. 定期的にキューをチェックし、agent が idle になったら自動 flush する（Interval: 10秒）
  */
 export function startQueueAutoFlush(): void {
+  // 起動時にファイルからロード（systemd restart 後の復元）
+  loadPersistedQueue();
+
   const FLUSH_CHECK_INTERVAL_MS = 10000; // 10 秒
   setInterval(() => {
     void flushQueue().catch((e) => {
