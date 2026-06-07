@@ -10,7 +10,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useLocation, useNavigate } from 'react-router-dom';
 import { useLiveResource } from '../lib/useLiveData';
 import type {
   NotebookSummary,
@@ -32,6 +31,7 @@ import type {
   DeliverablesResponse,
   NotebookChatMessage,
   NotebookAskResponse,
+  NotebookEngineErrorKind,
 } from '../lib/types';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, EmptyState, Spinner } from '../components/ui';
@@ -53,7 +53,6 @@ import {
   FileIcon,
   FolderIcon,
   EditIcon,
-  NoteIcon,
   SendIcon,
 } from '../components/icons';
 import { relativeTime } from '../lib/time';
@@ -61,6 +60,13 @@ import { relativeTime } from '../lib/time';
 const IMG_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']);
 const OFFICE_KINDS = new Set<NotebookSourceKind>(['spreadsheet', 'presentation', 'document']);
 const CSV_EXT = '.csv';
+
+// エンジン失敗（上限/エラー）時のユーザー向けバナー文言（MC-202）。
+function engineErrorMessage(kind: NotebookEngineErrorKind): string {
+  return kind === 'model_limit'
+    ? 'AI生成が一時的に利用上限に達しています。しばらく後に再試行してください。'
+    : '生成に失敗しました。再試行してください。';
+}
 
 function humanReadableSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -593,6 +599,9 @@ function ChatPane({
         setPendingQuestion(null); // refetch 前に消して2重表示を防ぐ
         if (!res.ok) {
           setError(body.error || `回答の取得に失敗しました（HTTP ${res.status}）。`);
+        } else if (body.errorKind) {
+          // エンジン失敗（上限/エラー）: 生エラー文字列ではなくバナー文言を表示。
+          setError(engineErrorMessage(body.errorKind));
         } else if (body.error && !body.answer) {
           setError(body.error);
         } else if (body.error) {
@@ -870,6 +879,17 @@ const GENERATE_BUTTONS: { kind: NotebookGenerateKind; label: string }[] = [
   { kind: 'custom', label: 'カスタム' },
 ];
 
+// 各生成物の用途を 1 行で説明する（選択中の種別の下に表示、MC-202③）。
+const GENERATE_DESCRIPTIONS: Record<NotebookGenerateKind, string> = {
+  summary: '資料全体の要点を 1 つにまとめた要約を作成します。',
+  faq: '資料から想定される質問と回答を整理した FAQ を作成します。',
+  timeline: '資料に登場する出来事・日付を時系列に並べた年表を作成します。',
+  template: '資料の書式・項目構成をまねた、記入用の空の雛形ファイルを作成します。',
+  template_extract:
+    '資料の構造を分析し、各項目に「何を・なぜ・どう書くか」の解説を添えた学習ガイド付きテンプレートを作成します。',
+  custom: '指示した内容に沿った成果物を自由に作成します（指示の入力が必要です）。',
+};
+
 // テンプレートで指定できる出力形式。
 const TEMPLATE_FORMATS = ['指定なし', 'xlsx', 'docx', 'pptx', 'md'];
 
@@ -925,14 +945,12 @@ function ArtifactsPane({
   hasSources,
   onGenerated,
   onPreview,
-  onOpenMinutes,
 }: {
   id: string;
   artifacts: NotebookFileRef[];
   hasSources: boolean;
   onGenerated: () => void;
   onPreview: (file: NotebookFileRef) => void;
-  onOpenMinutes?: () => void;
 }) {
   const [activeKind, setActiveKind] = useState<NotebookGenerateKind | null>(null);
   const [instruction, setInstruction] = useState('');
@@ -1097,14 +1115,19 @@ function ArtifactsPane({
           buf = lines.pop() ?? '';
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
-            let evt: { type?: string; pct?: number; ok?: boolean; created?: unknown[]; report?: string; error?: string } = {};
+            let evt: { type?: string; pct?: number; ok?: boolean; created?: unknown[]; report?: string; error?: string; errorKind?: NotebookEngineErrorKind } = {};
             try { evt = JSON.parse(line.slice(6)) as typeof evt; } catch { continue; }
             if (evt.type === 'progress' && typeof evt.pct === 'number') {
               setGenPct(evt.pct);
             } else if (evt.type === 'done') {
               setGenPct(100);
               if (!evt.ok) {
-                setError(evt.error || '生成物を作成できませんでした。資料が十分か確認してください。');
+                // エンジン失敗（上限/エラー）時はバナー文言、それ以外は資料不足等の既定文言。
+                setError(
+                  evt.errorKind
+                    ? engineErrorMessage(evt.errorKind)
+                    : (evt.error || '生成物を作成できませんでした。資料が十分か確認してください。'),
+                );
               } else {
                 const created = evt.created?.length ?? 0;
                 setReport(created > 0 ? `${created} 件の生成物を作成しました。` : (evt.report || '生成が完了しました。'));
@@ -1184,7 +1207,6 @@ function ArtifactsPane({
           <div className="mb-3 flex flex-col gap-2">
             {folderTree.folders.map((folder: NotebookFolderEntry) => {
               const isCollapsed = collapsedFolders.has(folder.name);
-              const isMinutes = folder.name === '議事録';
               return (
                 <div key={folder.name} className="rounded-lg border border-border bg-surface overflow-hidden">
                   <div className="flex items-center justify-between px-2.5 py-2 bg-surface-2">
@@ -1206,22 +1228,12 @@ function ArtifactsPane({
                         style={{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform 0.15s' }}
                       />
                     </button>
-                    {isMinutes && onOpenMinutes && (
-                      <button
-                        type="button"
-                        onClick={onOpenMinutes}
-                        className="ml-2 shrink-0 inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-bg hover:opacity-80"
-                      >
-                        <NoteIcon width={10} height={10} />
-                        作成
-                      </button>
-                    )}
                   </div>
                   {!isCollapsed && (
                     <div className="flex flex-col gap-1.5 p-2">
                       {folder.files.length === 0 ? (
                         <p className="text-[11px] text-text-faint px-1">
-                          {isMinutes ? '議事録はまだありません' : 'ファイルがありません'}
+                          ファイルがありません
                         </p>
                       ) : (
                         folder.files.map((f) => (
@@ -1268,13 +1280,14 @@ function ArtifactsPane({
             ))}
           </div>
 
+          {activeKind && (
+            <p className="mb-2 text-[11px] text-text-muted">
+              {GENERATE_DESCRIPTIONS[activeKind]}
+            </p>
+          )}
+
           {(activeKind === 'template' || activeKind === 'template_extract') && (
             <div className="mb-2">
-              {activeKind === 'template_extract' && (
-                <p className="mb-2 text-[11px] text-text-faint">
-                  資料の構造・書き方を分析し、各セクションに「目的」「書くべき内容」「書き方のコツ」を添えた学習ガイド付きテンプレートを生成します。
-                </p>
-              )}
               <label className="mb-1 block text-[11px] text-text-faint">出力形式</label>
               <div className="flex flex-wrap gap-1.5">
                 {TEMPLATE_FORMATS.map((fmt) => (
@@ -3149,7 +3162,7 @@ export function MinutesPane({
 
 // ─── 詳細画面（3 ペイン / モバイルはタブ）────────────────────────
 
-type DetailTab = 'sources' | 'chat' | 'artifacts' | 'minutes';
+type DetailTab = 'sources' | 'chat' | 'artifacts';
 
 function NotebookDetailView({
   id,
@@ -3225,8 +3238,6 @@ function NotebookDetailView({
     setRenameError(null);
   }, []);
 
-  const [showMinutesPane, setShowMinutesPane] = useState(initialTab === 'minutes');
-
   const sourcesPane = (
     <SourcesPane id={id} sources={sources} onChanged={refetch} onPreview={setPreview} />
   );
@@ -3240,18 +3251,6 @@ function NotebookDetailView({
       hasSources={hasSources}
       onGenerated={refetch}
       onPreview={setPreview}
-      onOpenMinutes={() => {
-        setShowMinutesPane(true);
-        setTab('minutes');
-      }}
-    />
-  );
-
-  const minutesPane = (
-    <MinutesPane
-      id={id}
-      onGenerated={refetch}
-      onBack={() => { setShowMinutesPane(false); setTab('artifacts'); }}
     />
   );
 
@@ -3259,7 +3258,6 @@ function NotebookDetailView({
     { key: 'sources', label: '資料', count: sources.length },
     { key: 'chat', label: 'チャット' },
     { key: 'artifacts', label: 'フォルダ', count: artifacts.length },
-    { key: 'minutes', label: '議事録' },
   ];
 
   // ヘッダのタイトル部分（インライン編集対応）
@@ -3351,22 +3349,17 @@ function NotebookDetailView({
         <ResourceState loading={loading} error={error} hasData={!!detail}>
           {detail && (
             <>
-              {/* デスクトップ: 議事録全画面 or 3ペイン（資料 / チャット / フォルダ） */}
-              {showMinutesPane ? (
-                <div className="hidden h-full md:block">{minutesPane}</div>
-              ) : (
-                <div className="hidden h-full md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
-                  <div className="min-h-0 border-r border-border">{sourcesPane}</div>
-                  <div className="min-h-0 border-r border-border">{chatPane}</div>
-                  <div className="min-h-0">{artifactsPane}</div>
-                </div>
-              )}
+              {/* デスクトップ: 3ペイン（資料 / チャット / フォルダ） */}
+              <div className="hidden h-full md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
+                <div className="min-h-0 border-r border-border">{sourcesPane}</div>
+                <div className="min-h-0 border-r border-border">{chatPane}</div>
+                <div className="min-h-0">{artifactsPane}</div>
+              </div>
               {/* モバイル: display:none で切り替え（アンマウントしないため生成中 state を保持）*/}
               <div className="h-full md:hidden">
                 <div className="h-full" style={{ display: tab === 'sources' ? undefined : 'none' }}>{sourcesPane}</div>
                 <div className="h-full" style={{ display: tab === 'chat' ? undefined : 'none' }}>{chatPane}</div>
                 <div className="h-full" style={{ display: tab === 'artifacts' ? undefined : 'none' }}>{artifactsPane}</div>
-                <div className="h-full" style={{ display: tab === 'minutes' ? undefined : 'none' }}>{minutesPane}</div>
               </div>
             </>
           )}
@@ -3575,38 +3568,16 @@ interface NotebooksListResponse {
 }
 
 export default function Notebooks() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const autoTab = (location.state as { autoTab?: string } | null)?.autoTab as DetailTab | undefined;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { data, error, loading, fetchedAt, refetch } =
     useLiveResource<NotebooksListResponse>('/api/notebooks');
 
   const notebooks = data?.notebooks ?? [];
 
-  useEffect(() => {
-    if (!autoTab || !data) return;
-    navigate(location.pathname, { replace: true, state: null });
-    const firstId = data.notebooks?.[0]?.id;
-    if (firstId) {
-      setSelectedId(firstId);
-    } else {
-      fetch('/api/notebooks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: '議事録' }),
-      })
-        .then((r) => r.json())
-        .then((b: { id?: string }) => { if (b.id) setSelectedId(b.id); refetch(); })
-        .catch(() => {});
-    }
-  }, [data, autoTab]); // eslint-disable-line react-hooks/exhaustive-deps
-
   if (selectedId) {
     return (
       <NotebookDetailView
         id={selectedId}
-        initialTab={autoTab === 'minutes' ? 'minutes' : 'sources'}
         onBack={() => {
           setSelectedId(null);
           refetch();
