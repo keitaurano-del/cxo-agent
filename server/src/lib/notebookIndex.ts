@@ -265,6 +265,8 @@ export async function buildIndex(notebookDir: string): Promise<IndexBuildResult>
   }
 
   // Gemini embed（バッチ）
+  // 並列度制限: embedTexts の batchSize で Gemini API 過負荷を回避
+  // 将来、複数の embedTexts 呼び出しが必要になった場合は pLimit を使用
   let vectors: number[][];
   try {
     vectors = await embedTexts(allChunkTexts);

@@ -22,6 +22,7 @@ import multer from 'multer';
 import {
   NOTEBOOK_UPLOAD_MAX_BYTES,
   NOTEBOOK_ARTIFACT_MAX_TOTAL_BYTES,
+  NOTEBOOK_RAG_TOP_K,
 } from './config.js';
 import { SafePathError } from './lib/vaultPath.js';
 import {
@@ -259,6 +260,12 @@ function handleStatus(req: Request, res: Response): void {
         errorMessage = `meta.json 読み込み失敗: ${e instanceof Error ? e.message : String(e)}`;
       }
     }
+
+    // RAG 最適化パラメータをログに出力（Phase 2 性能検証用）
+    console.log(
+      `[notebook-status] RAG config: topK=${NOTEBOOK_RAG_TOP_K} batchSize=50 embeddingVersion=004`,
+      `notebookId=${id} indexExists=${indexExists} chunkCount=${chunkCount}`,
+    );
 
     res.status(200).json({
       notebookId: id,
@@ -518,7 +525,7 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
   const searchElapsed = ((Date.now() - searchStart) / 1000).toFixed(2);
   const ragPath = ragChunks.length > 0 ? 'RAG' : 'fallback';
   console.log(
-    `[notebook-ask] RAG search: path=${ragPath} chunkCount=${ragChunks.length} vectorDim=${ragChunks[0]?.vector.length ?? 'N/A'} elapsed=${searchElapsed}s`,
+    `[notebook-ask] RAG search: path=${ragPath} topK=${NOTEBOOK_RAG_TOP_K} chunkCount=${ragChunks.length} vectorDim=${ragChunks[0]?.vector.length ?? 'N/A'} elapsed=${searchElapsed}s`,
   );
 
   const prompt = ragChunks.length > 0
@@ -721,7 +728,7 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
   const searchElapsed = ((Date.now() - searchStart) / 1000).toFixed(2);
   const ragPath = ragChunks.length > 0 ? 'RAG' : 'fallback';
   console.log(
-    `[notebook-generate] RAG search: path=${ragPath} chunkCount=${ragChunks.length} vectorDim=${ragChunks[0]?.vector.length ?? 'N/A'} elapsed=${searchElapsed}s`,
+    `[notebook-generate] RAG search: path=${ragPath} topK=${NOTEBOOK_RAG_TOP_K} chunkCount=${ragChunks.length} vectorDim=${ragChunks[0]?.vector.length ?? 'N/A'} elapsed=${searchElapsed}s`,
   );
 
   const prompt = ragChunks.length > 0

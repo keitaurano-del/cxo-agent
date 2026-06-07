@@ -109,8 +109,8 @@ export const NOTEBOOK_ARTIFACT_MAX_TOTAL_BYTES = envNum(
 /** Gemini embedding API キー（text-embedding-004 用）。未設定なら RAG 索引なしの従来動作にフォールバック。 */
 export const GEMINI_API_KEY = env('GEMINI_API_KEY', '');
 
-/** RAG 検索で返す上位チャンク数。 */
-export const NOTEBOOK_RAG_TOP_K = envNum('NOTEBOOK_RAG_TOP_K', 8);
+/** RAG 検索で返す上位チャンク数。デフォルト 5（TOP_K=8 から削減・性能最適化）。 */
+export const NOTEBOOK_RAG_TOP_K = envNum('NOTEBOOK_RAG_TOP_K', 5);
 
 /** チャンク分割のターゲット文字数。 */
 export const NOTEBOOK_RAG_CHUNK_SIZE = envNum('NOTEBOOK_RAG_CHUNK_SIZE', 800);

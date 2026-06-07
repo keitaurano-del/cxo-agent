@@ -93,8 +93,9 @@ export async function embedText(text: string): Promise<number[]> {
  * 複数テキストをバッチで Gemini text-embedding-004 でベクトル化する。
  * batchSize 件ずつ Promise.all で並列発行し、バッチ間に 1s sleep を挟む（rate limit 対策）。
  * 1 件でも失敗した場合は Error を throw する。
+ * デフォルト batchSize は 50（Gemini max_batch_size に合わせ、rate limit 回避）。
  */
-export async function embedTexts(texts: string[], batchSize = 20): Promise<number[][]> {
+export async function embedTexts(texts: string[], batchSize = 50): Promise<number[][]> {
   const results: number[][] = [];
 
   for (let i = 0; i < texts.length; i += batchSize) {
