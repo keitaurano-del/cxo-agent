@@ -2060,7 +2060,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-168 | server/src/lib/types.ts Task 型拡張: blockedBy / dependsOn フィールド追加 | P1 | DONE（2026-06-07 林 cxo ティック。Task インターフェースに blockedBy/dependsOn フィールド追加。commit 93404d5） | dev-apollo（ソラ） | MC-167 |
 | MC-169 | server/src/collectors/tasks.ts 拡張: TASK_TRACKER「依存」列をパース→Task オブジェクトに割り当て | P1 | DONE（2026-06-07 林 cxo ティック。extractDepIds() 関数追加、parseTrackerString() を拡張し表行・カード・セクション本文から依存 ID をパース。commit 93404d5。server tsc green） | dev-apollo（ソラ） | MC-168 |
 | MC-170 | web/src/components/TaskDetail.tsx ブロッカー/依存セクション実装: スケルトンをアンコメント＋表示確認 | P1 | DONE（2026-06-07 林 cxo ティック。Task.blockedBy/dependsOn フィールドを TaskDetail に表示。ID バッジをクリック可能に。web build green。commit 7f56d51） | 林 | MC-169 |
-| MC-171 | tasks.ts パーサ修正: 「着手順\|ID\|内容」等 ID 列が先頭でない/ステータス列を持たないプランニング表を非タスク表として除外し、幽霊カード（id=1〜5＝T-J/T-W/T-I/T-K/T-L、T-U の壊れ行）をボードから消す | P1 | TODO | dev-apollo（ソラ） | なし |
+| MC-171 | tasks.ts パーサ修正: 「着手順\|ID\|内容」等 ID 列が先頭でない/ステータス列を持たないプランニング表を非タスク表として除外し、幽霊カード（id=1〜5＝T-J/T-W/T-I/T-K/T-L、T-U の壊れ行）をボードから消す | P1 | IN_PROGRESS（2026-06-07 22:15 JST 林 cxo ティック。tasks.ts パーサに ID列位置チェック＋ステータス列チェック追加。id 列が先頭でない or ステータス列なしの表は除外。server tsc green。commit sha pending） | dev-apollo（ソラ） | なし |
 | MC-172 | Claude 使用量カードの C1/C2 取り違え修正（ラベルと中身が逆） | P1 | DONE（2026-06-07 18:13 JST Masayoshi 対応。原因: ~/.claude=keita.urano2 / ~/.claude-urano2=keita.urano とファイルとアカウントが交差配線、collector が file-source 固定ラベルだったため C1 カードに urano2 のデータが出ていた。修正: claudeUsage.ts でラベル/並び順を取得 email 基準に（EMAIL_IDENTITY）。fallback も実配置に整合。tsc green・restart・/api/claude-usage で C1=keita.urano(429待ち) / C2=keita.urano2(87%) と正しく分離。commit 07c8511） | Masayoshi | なし |
 | MC-173 | Apollo ターミナル: agent busy 時にメッセージをキューに積み、ターミナルが空いたら自動送信する | P1 | TODO | dev-apollo（ソラ） | なし |
 

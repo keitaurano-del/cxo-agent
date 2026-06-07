@@ -424,9 +424,26 @@ export function parseTrackerString(
       continue;
     }
 
-    // ヘッダ行を検出して列マッピングを確定（最初の `| ID |` 行）。
-    // ID 列見出しが `ID`（=タスクの正準サマリ表）のときだけタスク表として扱う。
-    if (id === 'ID') {
+    // ヘッダ行を検出して列マッピングを確定。
+    // ID 列見出しが存在し、かつステータス列を持つときだけタスク表として扱う。
+    // ID 列が先頭でない（別表）、またはステータス列がない表は除外する。
+    const idColumnIndex = cells.findIndex((h) => /^ID$/i.test(h));
+    if (idColumnIndex >= 0) {
+      // ID 列が見つかった
+      // 1. ID 列が先頭（インデックス0）でなければ別表と判定
+      if (idColumnIndex !== 0) {
+        inNonTaskTable = true;
+        col = null;
+        continue;
+      }
+      // 2. ステータス列の有無を確認
+      const hasStatusColumn = cells.some((h) => /ステータス|status|区分/i.test(h));
+      if (!hasStatusColumn) {
+        // ステータス列がない別表は non-task 判定
+        inNonTaskTable = true;
+        col = null;
+        continue;
+      }
       inNonTaskTable = false;
       col = {};
       cells.forEach((h, i) => {
