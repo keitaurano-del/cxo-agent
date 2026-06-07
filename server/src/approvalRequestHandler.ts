@@ -96,20 +96,17 @@ export function approvalRequestHandler(req: Request, res: Response): void {
     });
 
     // オートモード（MC-186）: ON のとき自動承認する。
-    // 安全ゲート: deploy カテゴリは絶対に自動承認しない（push/deploy は人間検証必須方針）。
+    // オートモード ON のときは全カテゴリ（deploy 含む）を自動承認する（2026-06-07 Keita 判断「全部自動でいい」）。
+    // 注: エージェント自身の push は autonomous-loop の NO_PUSH で別レイヤー抑止が継続。
     let status = rec.status;
     if (readAutoMode().enabled) {
-      if (rec.category !== 'deploy') {
-        const updated = updateRequest(rec.id, {
-          status: 'approved',
-          decidedAt: new Date().toISOString(),
-          comment: 'オートモードにより自動承認',
-        });
-        status = updated?.status ?? status;
-        console.log(`[automode] auto-approved request ${rec.id} (category=${rec.category})`);
-      } else {
-        console.log(`[automode] deploy request ${rec.id} held for manual approval`);
-      }
+      const updated = updateRequest(rec.id, {
+        status: 'approved',
+        decidedAt: new Date().toISOString(),
+        comment: 'オートモードにより自動承認',
+      });
+      status = updated?.status ?? status;
+      console.log(`[automode] auto-approved request ${rec.id} (category=${rec.category})`);
     }
 
     res.status(201).json({ id: rec.id, status, requestedAt: rec.requestedAt });

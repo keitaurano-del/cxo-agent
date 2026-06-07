@@ -530,7 +530,7 @@ function AutoModeToggle() {
       </div>
       {enabled && (
         <p className="mt-1 break-words text-[11px] leading-relaxed text-text-muted">
-          エージェントの承認リクエストを自動承認中（デプロイ可否は除く）。
+          エージェントの承認リクエストを全カテゴリ自動承認中（デプロイ可否を含む）。
         </p>
       )}
       {error && (
@@ -633,7 +633,7 @@ export default function Approvals() {
         fetchedAt={fetchedAt}
       />
 
-      {/* オートモードのトグル（MC-186。deploy は自動承認の対象外）。 */}
+      {/* オートモードのトグル（MC-190。ON で全カテゴリ自動承認＝deploy 含む。2026-06-07 Keita 判断）。 */}
       <AutoModeToggle />
 
       {/* カテゴリタブ（件数バッジ付き）。横スクロールで 390px に収める。 */}
