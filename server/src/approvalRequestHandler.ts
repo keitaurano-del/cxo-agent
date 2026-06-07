@@ -7,7 +7,8 @@
 
 import { type Request, type Response } from 'express';
 import { AGENT_TOKEN } from './config.js';
-import { createRequest, type ApprovalRequest } from './lib/approvalRequestStore.js';
+import { createRequest, updateRequest, type ApprovalRequest } from './lib/approvalRequestStore.js';
+import { readAutoMode } from './lib/autoModeStore.js';
 
 const VALID_CATEGORIES = new Set<ApprovalRequest['category']>([
   'deploy',
@@ -93,7 +94,25 @@ export function approvalRequestHandler(req: Request, res: Response): void {
       description: (body.description as string).trim(),
       category: body.category as ApprovalRequest['category'],
     });
-    res.status(201).json({ id: rec.id, status: rec.status, requestedAt: rec.requestedAt });
+
+    // オートモード（MC-186）: ON のとき自動承認する。
+    // 安全ゲート: deploy カテゴリは絶対に自動承認しない（push/deploy は人間検証必須方針）。
+    let status = rec.status;
+    if (readAutoMode().enabled) {
+      if (rec.category !== 'deploy') {
+        const updated = updateRequest(rec.id, {
+          status: 'approved',
+          decidedAt: new Date().toISOString(),
+          comment: 'オートモードにより自動承認',
+        });
+        status = updated?.status ?? status;
+        console.log(`[automode] auto-approved request ${rec.id} (category=${rec.category})`);
+      } else {
+        console.log(`[automode] deploy request ${rec.id} held for manual approval`);
+      }
+    }
+
+    res.status(201).json({ id: rec.id, status, requestedAt: rec.requestedAt });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
   }

@@ -160,6 +160,14 @@ export const APPROVAL_DECISIONS_FILE = join(INBOX_DATA_DIR, 'approval-decisions.
 export const APPROVAL_REQUESTS_FILE = join(INBOX_DATA_DIR, 'approval-requests.jsonl');
 
 /**
+ * 承認オートモードの永続フラグ（MC-186。data/ 配下なので .gitignore 済み）。
+ * ON のとき、エージェント承認リクエスト（POST /api/approvals/request）を自動承認する。
+ * 安全ゲート: deploy カテゴリは自動承認せず pending のまま（push/deploy は人間検証必須方針）。
+ * 形: { "enabled": boolean, "updatedAt": string|null }。
+ */
+export const APPROVAL_AUTOMODE_FILE = join(INBOX_DATA_DIR, 'approval-automode.json');
+
+/**
  * ナビ並び順の永続化ファイル（MC-158。data/ 配下なので .gitignore 済み）。
  * 形: { "sidebar": ["/","/tasks",...], "dashboard": ["/plan-usage","/activity",...] }。
  * フロント（サイドメニュー / ダッシュサブタブ）がドラッグ確定で保存し、マウント時に

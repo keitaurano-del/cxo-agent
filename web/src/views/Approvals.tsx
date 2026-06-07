@@ -13,10 +13,10 @@
 // デザイン制約: ハードコード hex 禁止（var(--mc-*) のみ）、UI chrome は SVG アイコンのみ、
 //   中立的な丁寧体、モバイル 390px で横溢れ 0。
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLiveResource } from '../lib/useLiveData';
 import { useLiveTick } from '../lib/liveContext';
-import type { ApprovalItem, ApprovalKind, ApprovalRequest, ApprovalsResponse, Task } from '../lib/types';
+import type { ApprovalItem, ApprovalKind, ApprovalRequest, ApprovalsResponse, AutoModeResponse, Task } from '../lib/types';
 import { projectColor, projectLabel, taskStatusMeta } from '../lib/meta';
 import { absoluteTime, relativeTime } from '../lib/time';
 import { PageHeader } from '../components/PageHeader';
@@ -443,6 +443,109 @@ function ApprovalCard({
   );
 }
 
+// ── 承認オートモード（MC-186）────────────────────────────────────────────
+//
+// ON のとき、エージェントからの承認リクエストをサーバ側で自動承認する。
+// 安全ゲート: deploy（デプロイ可否）カテゴリは自動承認の対象外（pending のまま手動承認）。
+
+/** オートモードのトグルスイッチ。初期状態を GET し、変更は楽観更新＋失敗ロールバック。 */
+function AutoModeToggle() {
+  const [enabled, setEnabled] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const res = await fetch('/api/approvals/automode');
+        if (!res.ok) throw new Error();
+        const body = (await res.json()) as AutoModeResponse;
+        if (alive) {
+          setEnabled(body.enabled === true);
+          setLoaded(true);
+        }
+      } catch {
+        if (alive) setLoaded(true); // 取得失敗時は OFF 表示のまま操作可能にする。
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const handleToggle = async () => {
+    if (busy) return;
+    const next = !enabled;
+    setEnabled(next); // 楽観更新。
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/approvals/automode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: next }),
+      });
+      if (!res.ok) throw new Error();
+      const body = (await res.json()) as AutoModeResponse;
+      setEnabled(body.enabled === true);
+    } catch {
+      setEnabled(!next); // ロールバック。
+      setError('オートモードの切り替えに失敗しました。時間をおいて再度お試しください。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="border-b border-border px-4 py-3 md:px-6">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label="オートモード"
+          onClick={() => void handleToggle()}
+          disabled={busy || !loaded}
+          className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50"
+          style={{ background: enabled ? 'var(--mc-active)' : 'var(--mc-surface-3)' }}
+        >
+          <span
+            className="inline-block h-4 w-4 rounded-full transition-transform"
+            style={{
+              background: 'var(--mc-bg)',
+              transform: enabled ? 'translateX(18px)' : 'translateX(2px)',
+            }}
+            aria-hidden
+          />
+        </button>
+        <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-text">
+          <ApprovalIcon width={14} height={14} />
+          オートモード
+        </span>
+        <span className="text-[11px]" style={{ color: enabled ? 'var(--mc-active)' : 'var(--mc-idle)' }}>
+          {enabled ? 'ON' : 'OFF'}
+        </span>
+      </div>
+      {enabled && (
+        <p className="mt-1 break-words text-[11px] leading-relaxed text-text-muted">
+          エージェントの承認リクエストを自動承認中（デプロイ可否は除く）。
+        </p>
+      )}
+      {error && (
+        <p
+          role="alert"
+          className="mt-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[11px]"
+          style={{ color: 'var(--mc-stalled)' }}
+        >
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function Approvals() {
   const tick = useLiveTick('tasks');
   const { data, error, loading, fetchedAt, refetch } = useLiveResource<ApprovalsResponse>(
@@ -529,6 +632,9 @@ export default function Approvals() {
         subtitle={`Keita の承認が必要な項目 ${liveItems.length} 件`}
         fetchedAt={fetchedAt}
       />
+
+      {/* オートモードのトグル（MC-186。deploy は自動承認の対象外）。 */}
+      <AutoModeToggle />
 
       {/* カテゴリタブ（件数バッジ付き）。横スクロールで 390px に収める。 */}
       <div className="border-b border-border px-4 py-2 md:px-6">

@@ -23,6 +23,7 @@ import {
   getRequest,
   updateRequest,
 } from './lib/approvalRequestStore.js';
+import { readAutoMode, setAutoMode } from './lib/autoModeStore.js';
 import type { ApprovalKind } from './config.js';
 
 const VALID_CATEGORIES = new Set<ApprovalKind>([
@@ -218,10 +219,30 @@ function handleRejectRequest(req: Request, res: Response): void {
   res.json(updated);
 }
 
+// ── 承認オートモード（MC-186。auth ミドルウェア配下）─────────────────────
+
+/** GET /api/approvals/automode — オートモードの現在状態を返す。 */
+function handleGetAutoMode(_req: Request, res: Response): void {
+  res.json(readAutoMode());
+}
+
+/** POST /api/approvals/automode — body { enabled:boolean } でオートモードを切り替える。 */
+function handleSetAutoMode(req: Request, res: Response): void {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (typeof body.enabled !== 'boolean') {
+    res.status(400).json({ error: 'enabled must be a boolean' });
+    return;
+  }
+  res.json(setAutoMode(body.enabled));
+}
+
 /** /api/approvals 配下にマウントする承認ルータ。 */
 export function approvalRouter(): Router {
   const router = Router();
   router.get('/', handleList);
+  // オートモード（':taskId' ルートより前に登録して 'automode' が taskId に食われないようにする）。
+  router.get('/automode', (req, res) => handleGetAutoMode(req, res));
+  router.post('/automode', (req, res) => handleSetAutoMode(req, res));
   router.post('/:taskId/approve', (req, res) => handleApprove(req, res));
   router.post('/:taskId/reject', (req, res) => handleReject(req, res));
   // エージェント承認リクエスト（auth 配下）。

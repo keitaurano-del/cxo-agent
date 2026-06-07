@@ -117,6 +117,12 @@ export interface ApprovalRequest {
   comment?: string;
 }
 
+/** 承認オートモードの状態（MC-186 / GET・POST /api/approvals/automode）。 */
+export interface AutoModeResponse {
+  enabled: boolean;
+  updatedAt: string | null;
+}
+
 export interface ApprovalsResponse {
   generatedAt: string;
   byCategory: Record<ApprovalKind, number>;
