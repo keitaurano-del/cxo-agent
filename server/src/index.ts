@@ -236,8 +236,16 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-app.get('/api/agents', (_req, res) => {
-  safeJson(res, () => ({ agents: collectAgents() }));
+app.get('/api/agents', (req, res) => {
+  // ?status=active で稼働中インスタンスのみ返す（AgentsLive 等の軽量化。245件→数件）。
+  // 未指定は全件（後方互換。Feed 等が利用）。
+  safeJson(res, () => {
+    const agents = collectAgents();
+    const filtered = req.query.status === 'active'
+      ? agents.filter((a) => a.status === 'active')
+      : agents;
+    return { agents: filtered };
+  });
 });
 
 // 人格別に集約したエージェント一覧（MC-88）。「エージェント」ビューはこちらを使い、

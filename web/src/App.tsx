@@ -46,7 +46,6 @@ import { useNavOrder } from './lib/useNavOrder';
 import AddTaskFab from './components/AddTaskFab';
 import { UploadProvider } from './lib/UploadContext';
 import { UploadToast } from './components/UploadToast';
-import { UpdateToast, fireUpdateToast } from './components/UpdateToast';
 import Settings from './components/Settings';
 import { useFontSize } from './lib/useFontSize';
 
@@ -343,12 +342,6 @@ export default function App() {
     deliverables: '/deliverables',
     agents: '/',
   };
-  const UPDATE_TOAST_META: Record<string, { emoji: string; label: string }> = {
-    vault:        { emoji: '📚', label: 'Vault が更新されました' },
-    deliverables: { emoji: '📁', label: 'フォルダが更新されました' },
-    agents:       { emoji: '🤖', label: 'エージェント更新' },
-    narrative:    { emoji: '📰', label: 'ブリーフィングが更新されました' },
-  };
   const loadBadge = (path: string) => parseInt(localStorage.getItem(`badge.${path}`) ?? '0', 10) || 0;
   const [navBadges, setNavBadges] = useState<Record<string, number>>(() => ({
     '/vault': loadBadge('/vault'),
@@ -387,11 +380,6 @@ export default function App() {
             });
           }
 
-          // トースト（ページ表示中でも表示 — 何が変わったか一瞬分かるように）
-          const meta = UPDATE_TOAST_META[type];
-          if (meta) {
-            fireUpdateToast({ id: `update-${type}`, emoji: meta.emoji, label: meta.label, navTo: navPath });
-          }
         }
       } catch { /* ignore */ }
     });
@@ -507,7 +495,6 @@ export default function App() {
           <BottomNav items={navItems} badges={badges} onReorder={reorderNav} />
           {pathname === '/tasks' && <AddTaskFab />}
           <UploadToast />
-          <UpdateToast />
           <Settings open={showSettings} onClose={() => setShowSettings(false)} />
         </div>
       </UploadProvider>
