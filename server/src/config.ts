@@ -294,29 +294,15 @@ export const TERMINALS: TerminalDef[] = [
     id: 1,
     port: envNum('TERMINAL_1_PORT', 7681),
     service: env('TERMINAL_1_SERVICE', 'apollo-terminal.service'),
-    label: env('TERMINAL_1_LABEL', 'ターミナル1'),
+    label: env('TERMINAL_1_LABEL', 'Main'),
     // この箱（local）の tmux main = 林 CLI 常駐セッション。
     tmuxSession: env('TERMINAL_1_TMUX', 'main'),
-  },
-  {
-    id: 2,
-    port: envNum('TERMINAL_2_PORT', 7682),
-    service: env('TERMINAL_2_SERVICE', 'apollo-terminal-2.service'),
-    label: env('TERMINAL_2_LABEL', 'ターミナル2'),
-    // 旧箱（remote）の tmux apollo2。tmux 操作は ssh 経由、画像は scp してから注入。
-    tmuxSession: env('TERMINAL_2_TMUX', 'apollo2'),
-    remote: {
-      sshHost: env('TERMINAL_2_SSH_HOST', '139.180.202.62'),
-      sshUser: env('TERMINAL_2_SSH_USER', 'dev'),
-      sshKey: env('TERMINAL_2_SSH_KEY', join(DATA_HOME, '.ssh', 'id_ed25519')),
-      uploadDir: env('TERMINAL_2_UPLOAD_DIR', '/home/dev/terminal-uploads'),
-    },
   },
   {
     id: 3,
     port: envNum('TERMINAL_3_PORT', 7683),
     service: env('TERMINAL_3_SERVICE', 'apollo-terminal-3.service'),
-    label: env('TERMINAL_3_LABEL', 'ターミナル3'),
+    label: env('TERMINAL_3_LABEL', 'Aux'),
     // この箱（local）の予備セッション spare。
     tmuxSession: env('TERMINAL_3_TMUX', 'spare'),
   },
@@ -324,7 +310,7 @@ export const TERMINALS: TerminalDef[] = [
     id: 4,
     port: envNum('TERMINAL_4_PORT', 7684),
     service: env('TERMINAL_4_SERVICE', 'apollo-terminal-4.service'),
-    label: env('TERMINAL_4_LABEL', 'ターミナル4'),
+    label: env('TERMINAL_4_LABEL', 'Ops'),
     // この箱（local）の OpenClaw 秘書 Masayoshi（tmux セッション 'openclaw'、openclaw chat）。
     tmuxSession: env('TERMINAL_4_TMUX', 'openclaw'),
   },

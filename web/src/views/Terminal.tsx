@@ -39,15 +39,21 @@ import { Spinner } from '../components/ui';
 interface TerminalTab {
   id: number;
   label: string;
-  path: string; // iframe src（例: '/terminal/', '/terminal/2/'）
+  path: string; // iframe src（例: '/terminal/', '/terminal/3/'）
   account: string; // 'Claude1' (keita.urano) | 'Claude2' (keita.urano2)
 }
 
+// Default terminal labels from server config (can be overridden via API)
+const DEFAULT_TERMINAL_LABELS: Record<number, string> = {
+  1: 'Main',
+  3: 'Aux',
+  4: 'Ops',
+};
+
 const TERMINAL_TABS: TerminalTab[] = [
-  { id: 1, label: 'ターミナル1', path: '/terminal/',  account: 'Claude1' },
-  { id: 2, label: 'ターミナル2', path: '/terminal/2/', account: 'Claude2' },
-  { id: 3, label: 'ターミナル3', path: '/terminal/3/', account: 'Claude1' },
-  { id: 4, label: 'ターミナル4', path: '/terminal/4/', account: 'Claude1' },
+  { id: 1, label: DEFAULT_TERMINAL_LABELS[1], path: '/terminal/',  account: 'Claude1' },
+  { id: 3, label: DEFAULT_TERMINAL_LABELS[3], path: '/terminal/3/', account: 'Claude1' },
+  { id: 4, label: DEFAULT_TERMINAL_LABELS[4], path: '/terminal/4/', account: 'Claude1' },
 ];
 
 const ACTIVE_TAB_STORAGE_KEY = 'apollo.terminal.activeTab';
@@ -470,10 +476,21 @@ export default function Terminal() {
   // 使用量ベース自動切替の実行中フラグ（ボタンにスピナーを出す）。
   const [autoSwitching, setAutoSwitching] = useState(false);
 
+  // ── ターミナルラベル状態（API から返却される動的ラベル）────
+  const [terminalLabels, setTerminalLabels] = useState<Record<number, string>>(() => {
+    const init: Record<number, string> = {};
+    for (const t of TERMINAL_TABS) init[t.id] = t.label;
+    return init;
+  });
+
   const [, setAgentInfoMap] = useState<Record<number, { name: string; emoji: string } | null>>({});
 
   const setAccountLabel = useCallback((id: number, account: string) => {
     setAccountLabels((prev) => ({ ...prev, [id]: account }));
+  }, []);
+
+  const setTerminalLabel = useCallback((id: number, label: string) => {
+    setTerminalLabels((prev) => ({ ...prev, [id]: label }));
   }, []);
 
   const markSwitching = useCallback((id: number, on: boolean) => {
@@ -526,9 +543,9 @@ export default function Terminal() {
         const r2 = typeof body.claude2?.remaining === 'number' ? body.claude2.remaining : 100;
         // remaining が多い方を選ぶ。同点なら Claude1 を既定にする。
         const best = r2 > r1 ? 'Claude2' : 'Claude1';
-        // T2/T4 は OpenClaw 独自認証のため自動切替対象外。
+        // T4 は OpenClaw 独自認証のため自動切替対象外。
         await Promise.all(
-          TERMINAL_TABS.filter((t) => t.id !== 2 && t.id !== 4).map((t) =>
+          TERMINAL_TABS.filter((t) => t.id !== 4).map((t) =>
             (accountLabels[t.id] ?? 'Claude1') === best
               ? Promise.resolve()
               : switchAccount(t.id, best, true),
@@ -636,6 +653,7 @@ export default function Terminal() {
               const ready = Boolean(item.status?.ready);
               setBackend(item.id, ready ? { kind: 'ready' } : { kind: 'down' });
               if (item.account) setAccountLabel(item.id, item.account);
+              if (item.label) setTerminalLabel(item.id, item.label);
               newAgentMap[item.id] = item.agentName ? { name: item.agentName, emoji: item.agentEmoji ?? '' } : null;
             }
             setAgentInfoMap(newAgentMap);
@@ -883,11 +901,11 @@ export default function Terminal() {
               }`}
             >
               <TerminalIcon width={13} height={13} className="pointer-events-none" />
-              <span>{t.label}</span>
+              <span>{terminalLabels[t.id] ?? t.label}</span>
               {/* アカウントプルダウン（T4=OpenClawは切替不可のためバッジのみ） */}
               {switching ? (
                 <span className="flex h-5 w-10 items-center justify-center"><Spinner /></span>
-              ) : t.id === 2 || t.id === 4 ? (
+              ) : t.id === 4 ? (
                 <span
                   title="OpenClaw（独自認証）のため切替不可"
                   className={`flex h-5 min-w-[1.75rem] items-center justify-center rounded px-1 text-[10px] font-semibold leading-none opacity-50 ${
@@ -904,7 +922,7 @@ export default function Terminal() {
                     e.stopPropagation();
                     void switchAccount(t.id, e.target.value);
                   }}
-                  aria-label={`${t.label} のアカウント`}
+                  aria-label={`${terminalLabels[t.id] ?? t.label} のアカウント`}
                   className={`h-5 rounded border-0 px-0.5 text-[10px] font-semibold leading-none outline-none cursor-pointer ${
                     isC2
                       ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
@@ -1188,7 +1206,7 @@ export default function Terminal() {
                   >
                     {TERMINAL_TABS.map((opt) => (
                       <option key={opt.id} value={opt.id}>
-                        {opt.label}
+                        {terminalLabels[opt.id] ?? opt.label}
                       </option>
                     ))}
                   </select>
@@ -1206,7 +1224,7 @@ export default function Terminal() {
                       }
                     }}
                     src={t.path}
-                    title={`Apollo ${t.label}`}
+                    title={`Apollo ${terminalLabels[t.id] ?? t.label}`}
                     className="h-full w-full border-0"
                     allow="clipboard-read; clipboard-write"
                     style={{ overscrollBehavior: 'none' }}
@@ -1252,7 +1270,7 @@ export default function Terminal() {
                       </div>
                       <div className="max-w-sm space-y-1">
                         <p className="text-sm font-medium text-text">
-                          {t.label} が切断されています
+                          {terminalLabels[t.id] ?? t.label} が切断されています
                         </p>
                         <p className="text-xs text-text-muted">
                           端末サーバ（ttyd）が停止しています。「ターミナルを開始」で復旧できます。
