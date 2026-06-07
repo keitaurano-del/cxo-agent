@@ -40,7 +40,6 @@ interface TerminalTab {
   id: number;
   label: string;
   path: string; // iframe src（例: '/terminal/', '/terminal/3/'）
-  account: string; // 'Claude1' (keita.urano) | 'Claude2' (keita.urano2)
 }
 
 // Default terminal labels from server config (can be overridden via API)
@@ -51,9 +50,9 @@ const DEFAULT_TERMINAL_LABELS: Record<number, string> = {
 };
 
 const TERMINAL_TABS: TerminalTab[] = [
-  { id: 1, label: DEFAULT_TERMINAL_LABELS[1], path: '/terminal/',  account: 'Claude1' },
-  { id: 3, label: DEFAULT_TERMINAL_LABELS[3], path: '/terminal/3/', account: 'Claude1' },
-  { id: 4, label: DEFAULT_TERMINAL_LABELS[4], path: '/terminal/4/', account: 'Claude1' },
+  { id: 1, label: DEFAULT_TERMINAL_LABELS[1], path: '/terminal/' },
+  { id: 3, label: DEFAULT_TERMINAL_LABELS[3], path: '/terminal/3/' },
+  { id: 4, label: DEFAULT_TERMINAL_LABELS[4], path: '/terminal/4/' },
 ];
 
 const ACTIVE_TAB_STORAGE_KEY = 'apollo.terminal.activeTab';
@@ -465,13 +464,6 @@ export default function Terminal() {
     };
   }, []);
 
-  // ── アカウントラベル状態（各ターミナルの Claude1/Claude2）────
-  const [accountLabels, setAccountLabels] = useState<Record<number, string>>(() => {
-    const init: Record<number, string> = {};
-    for (const t of TERMINAL_TABS) init[t.id] = t.account;
-    return init;
-  });
-
   // ── ターミナルラベル状態（API から返却される動的ラベル）────
   const [terminalLabels, setTerminalLabels] = useState<Record<number, string>>(() => {
     const init: Record<number, string> = {};
@@ -480,10 +472,6 @@ export default function Terminal() {
   });
 
   const [, setAgentInfoMap] = useState<Record<number, { name: string; emoji: string } | null>>({});
-
-  const setAccountLabel = useCallback((id: number, account: string) => {
-    setAccountLabels((prev) => ({ ...prev, [id]: account }));
-  }, []);
 
   const setTerminalLabel = useCallback((id: number, label: string) => {
     setTerminalLabels((prev) => ({ ...prev, [id]: label }));
@@ -589,7 +577,6 @@ export default function Terminal() {
             for (const item of body.terminals) {
               const ready = Boolean(item.status?.ready);
               setBackend(item.id, ready ? { kind: 'ready' } : { kind: 'down' });
-              if (item.account) setAccountLabel(item.id, item.account);
               if (item.label) setTerminalLabel(item.id, item.label);
               newAgentMap[item.id] = item.agentName ? { name: item.agentName, emoji: item.agentEmoji ?? '' } : null;
             }
@@ -810,8 +797,6 @@ export default function Terminal() {
         {TERMINAL_TABS.map((t) => {
           const isActive = t.id === activeId;
           const st = backends[t.id]?.kind ?? 'checking';
-          const account = accountLabels[t.id] ?? 'Claude1';
-          const isC2 = account === 'Claude2';
           return (
             <button
               key={t.id}
@@ -827,14 +812,6 @@ export default function Terminal() {
             >
               <TerminalIcon width={13} height={13} className="pointer-events-none" />
               <span>{terminalLabels[t.id] ?? t.label}</span>
-              {/* アカウントバッジ（固定表示、ドロップダウン削除 MC-179） */}
-              <span
-                className={`flex h-5 min-w-[1.75rem] items-center justify-center rounded px-1 text-[10px] font-semibold leading-none ${
-                  isC2 ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-sky-500/20 text-sky-600 dark:text-sky-400'
-                }`}
-              >
-                {isC2 ? 'C2' : 'C1'}
-              </span>
               {/* 稼働状態ドット */}
               <span
                 aria-hidden
