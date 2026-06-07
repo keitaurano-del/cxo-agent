@@ -5,7 +5,7 @@
 // 横断検索からの遷移に影響を出さない。
 import { NavLink, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
 import { useLiveStream, useLiveResource } from './lib/useLiveData';
 import { LiveContext } from './lib/liveContext';
 import type { ApprovalsResponse } from './lib/types';
@@ -25,20 +25,22 @@ import {
 } from './components/icons';
 import DashboardLayout from './components/DashboardLayout';
 import { isDashboardPath } from './lib/nav';
-import Agents from './views/Agents';
+// 着地ビュー（/ の最初に出る画面）は eager のまま first paint を遅らせない。
 import AgentsLive from './views/AgentsLive';
-import Activity from './views/Activity';
-import Feed from './views/Feed';
-import Tasks from './views/Tasks';
-import Narrative from './views/Narrative';
-import News from './views/News';
-import Vault from './views/Vault';
-import Deliverables from './views/Deliverables';
-import Notebooks from './views/Notebooks';
-import PlanUsage from './views/PlanUsage';
-import Approvals from './views/Approvals';
-import Terminal from './views/Terminal';
-import Chat from './views/Chat';
+// それ以外の二次的なビューは route 単位で遅延ロードし、初回エントリJSから切り離す（MC-194）。
+const Agents = lazy(() => import('./views/Agents'));
+const Activity = lazy(() => import('./views/Activity'));
+const Feed = lazy(() => import('./views/Feed'));
+const Tasks = lazy(() => import('./views/Tasks'));
+const Narrative = lazy(() => import('./views/Narrative'));
+const News = lazy(() => import('./views/News'));
+const Vault = lazy(() => import('./views/Vault'));
+const Deliverables = lazy(() => import('./views/Deliverables'));
+const Notebooks = lazy(() => import('./views/Notebooks'));
+const PlanUsage = lazy(() => import('./views/PlanUsage'));
+const Approvals = lazy(() => import('./views/Approvals'));
+const Terminal = lazy(() => import('./views/Terminal'));
+const Chat = lazy(() => import('./views/Chat'));
 import BottomNav from './components/BottomNav';
 import { SortableNav, DragHandle } from './components/SortableNav';
 import type { DragHandleProps } from './components/SortableNav';
@@ -49,6 +51,18 @@ import { UploadToast } from './components/UploadToast';
 import { UpdateToast, fireUpdateToast } from './components/UpdateToast';
 import Settings from './components/Settings';
 import { useFontSize } from './lib/useFontSize';
+
+// 遅延ロード中の軽量フォールバック（チャンク取得待ちの一瞬だけ表示）。
+function ViewFallback() {
+  return (
+    <div className="flex h-full w-full items-center justify-center" role="status" aria-label="読み込み中">
+      <span
+        className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-border border-t-accent"
+        aria-hidden
+      />
+    </div>
+  );
+}
 
 // ---- テーマ管理 ----
 type ThemeMode = 'auto' | 'dark' | 'light';
@@ -518,7 +532,9 @@ export default function App() {
   if (pathname === '/terminal-standalone') {
     return (
       <div className="h-dvh overflow-hidden bg-bg text-text" style={{ overscrollBehavior: 'none' }}>
-        <Terminal />
+        <Suspense fallback={<ViewFallback />}>
+          <Terminal />
+        </Suspense>
       </div>
     );
   }
@@ -540,6 +556,7 @@ export default function App() {
             onSettingsClick={() => setShowSettings(true)}
           />
           <main className="dashboard-container flex-1 overflow-hidden">
+            <Suspense fallback={<ViewFallback />}>
             <Routes>
               {/* ダッシュボード（/）配下に各タブを入れ子。各子ビューの URL は従来どおり。 */}
               {/* エージェントタブは / に統合。ティック+消費量は /activity に統合。 */}
@@ -572,6 +589,7 @@ export default function App() {
               <Route path="/terminal-standalone" element={<Terminal />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            </Suspense>
           </main>
           <BottomNav items={navItems} badges={badges} onReorder={reorderNav} />
           {pathname === '/tasks' && <AddTaskFab />}
