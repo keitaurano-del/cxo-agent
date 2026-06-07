@@ -20,6 +20,7 @@
 
 import { readFileSync, writeFileSync, renameSync, appendFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { execSync } from 'node:child_process';
 
 import { TASK_SOURCES, TASK_EDITS_FILE } from '../config.js';
 import {
@@ -662,4 +663,66 @@ function normalizeStatusWord(raw?: string): TaskStatus {
     if (u.includes(s)) return s;
   }
   return 'UNKNOWN';
+}
+
+// ─── Keita 手動ロック（MC-166） ───────────────────────
+
+/**
+ * Keita がボード UI で status を手動変更した場合、🔒[Keita] マークを付与し即座に git commit する。
+ * これにより autonomous-worker / apollo-keeper / guard が当該行の status を差し戻さない。
+ *
+ * 実装:
+ *  - status セルを「<新status> 🔒[Keita]」に置換（🔒[Keita] は guard の project_board_keita_lock ルール認識対象）
+ *  - editTask で全表現に適用
+ *  - git add + commit で即座に HEAD 反映
+ *  - 呼び出し側は commit success を web へ返す（UI に 🔒 マークを表示可能に）
+ */
+export interface UpdateTaskStatusWithLockArgs {
+  source: string;
+  id: string;
+  newStatus: TaskStatus;
+  baseHash?: string;
+}
+
+export interface UpdateTaskStatusWithLockResult {
+  task: Task;
+  hash: string;
+  commitSha: string;
+}
+
+/**
+ * Keita 手動変更の status を🔒[Keita]マークと共に書き込み、git commit。
+ * editTask をラップし、成功後に git commit を実行する。
+ */
+export function updateTaskStatusWithLock({
+  source,
+  id,
+  newStatus,
+  baseHash,
+}: UpdateTaskStatusWithLockArgs): UpdateTaskStatusWithLockResult {
+  const { path } = resolveSource(source);
+
+  // editTask でベース status を書き込む。状態セルに 🔒[Keita] を付与。
+  // 台帳に書かれるのは「DONE 🔒[Keita]」という形。normStatus により返却される Task.status は「DONE」に正規化される。
+  const patch: TaskPatch = { status: `${newStatus} 🔒[Keita]` as any };
+  const editResult = editTask({ source, id, patch, baseHash });
+
+  // git add + commit。パスは各 source に対応する TASK_TRACKER。
+  try {
+    const cwd = path.split('/').slice(0, -1).join('/'); // TASK_TRACKER.md の親ディレクトリ
+    execSync(`git add ${path}`, { cwd });
+    const commitMsg = `[MC-166] Keita が手動で status 変更→🔒 付与`;
+    const commitOut = execSync(`git commit -m "${commitMsg}"`, { cwd, encoding: 'utf-8' });
+    // commit 出力から SHA を取得（"[branch XXXXXXX] ..." の形から抽出）。
+    const shaMatch = commitOut.match(/\[[\w/]+ ([a-f0-9]{7})\]/);
+    const commitSha = shaMatch ? shaMatch[1] : 'unknown';
+    return { task: editResult.task, hash: editResult.hash, commitSha };
+  } catch (e) {
+    // git commit 失敗時も、editTask は成功しているため上層に伝播してデグレ対応させる。
+    // TODO: 本来は editTask の巻き戻し（TOCTOU 検知後リトライ等）が必要だが、MC-166 初期実装では上層対応に委ねる。
+    throw new TaskEditError(
+      'VALIDATION_FAILED',
+      `git commit に失敗しました: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 }

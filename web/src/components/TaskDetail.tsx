@@ -749,6 +749,7 @@ function OverviewEditForm({
   const [priority, setPriority] = useState(task.priority ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   // 変更があったフィールドだけを patch に含める。
   const buildPatch = (): Record<string, string> => {
@@ -781,10 +782,18 @@ function OverviewEditForm({
       }
       const { hash: baseHash } = (await hashRes.json()) as { hash: string };
 
-      const res = await fetch('/api/tasks/edit', {
+      // MC-166: status だけが変更され、他フィールドは変わっていない場合は status-lock endpoint を使う。
+      // これで 🔒[Keita] が付与され、git commit される。
+      const statusOnly = Object.keys(patch).length === 1 && patch.status !== undefined;
+      const endpoint = statusOnly ? '/api/tasks/status-lock' : '/api/tasks/edit';
+      const body = statusOnly
+        ? JSON.stringify({ source, id: task.id, status: patch.status, baseHash })
+        : JSON.stringify({ source, id: task.id, patch, baseHash });
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source, id: task.id, patch, baseHash }),
+        body,
       });
       if (res.status === 409) {
         setError('他の更新と競合しました。画面を再読み込みしてください。');
@@ -799,8 +808,15 @@ function OverviewEditForm({
         return;
       }
       const data = (await res.json()) as EditApiResponse;
-      if (data.task) onSaved(data.task);
-      else onSaved({ ...task, ...patch } as Task);
+      // MC-166: status-lock endpoint 成功時は commitSha が返る＝commit されたので成功メッセージを表示。
+      if ('commitSha' in data && data.commitSha) {
+        setSuccess(`状態を保存しました 🔒（commit: ${data.commitSha}）`);
+        // 3秒後に自動クローズ。
+        setTimeout(() => onSaved(data.task ?? ({ ...task, ...patch } as Task)), 3000);
+      } else {
+        if (data.task) onSaved(data.task);
+        else onSaved({ ...task, ...patch } as Task);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : '保存に失敗しました。');
     } finally {
@@ -877,6 +893,16 @@ function OverviewEditForm({
           style={{ color: 'var(--mc-stalled)' }}
         >
           {error}
+        </p>
+      )}
+
+      {success && (
+        <p
+          role="status"
+          className="rounded-lg border border-border px-3 py-2 text-[12px]"
+          style={{ color: 'var(--mc-done)' }}
+        >
+          {success}
         </p>
       )}
 

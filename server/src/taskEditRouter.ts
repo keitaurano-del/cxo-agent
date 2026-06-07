@@ -16,6 +16,7 @@ import {
   TaskEditError,
   EDITABLE_STATUS,
   type TaskPatch,
+  updateTaskStatusWithLock,
 } from './lib/taskTrackerWrite.js';
 import type { TaskStatus } from './collectors/tasks.js';
 
@@ -138,10 +139,52 @@ function handleEdit(req: Request, res: Response): void {
   }
 }
 
+function handleStatusLock(req: Request, res: Response): void {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+
+  const source = body.source;
+  if (typeof source !== 'string' || source.trim() === '') {
+    res.status(400).json({ error: 'source is required' });
+    return;
+  }
+  const id = body.id;
+  if (typeof id !== 'string' || id.trim() === '') {
+    res.status(400).json({ error: 'id is required' });
+    return;
+  }
+  const status = body.status;
+  if (typeof status !== 'string' || !STATUS_SET.has(status)) {
+    res.status(400).json({ error: `status must be one of: ${[...STATUS_SET].join(', ')}` });
+    return;
+  }
+  const baseHash =
+    typeof body.baseHash === 'string' && body.baseHash.trim() !== ''
+      ? body.baseHash.trim()
+      : undefined;
+
+  try {
+    const { task, hash, commitSha } = updateTaskStatusWithLock({
+      source: source.trim(),
+      id: id.trim(),
+      newStatus: status as typeof EDITABLE_STATUS[number],
+      baseHash,
+    });
+    res.json({ ok: true, task, hash, commitSha });
+  } catch (e) {
+    if (e instanceof TaskEditError) {
+      res.status(statusForCode(e.code)).json({ error: e.message, code: e.code });
+      return;
+    }
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
 /** /api/tasks 配下にマウントする編集ルータ（既存 GET /api/tasks 系の後に mount）。 */
 export function taskEditRouter(): Router {
   const router = Router();
   router.get('/hash', handleHash);
   router.post('/edit', (req, res) => handleEdit(req, res));
+  // MC-166: Keita 手動 status 変更→🔒 付与＋git commit
+  router.post('/status-lock', (req, res) => handleStatusLock(req, res));
   return router;
 }
