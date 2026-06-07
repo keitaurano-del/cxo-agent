@@ -23,6 +23,7 @@ import type {
   ApprovalRequest,
   ApprovalsResponse,
   AutoModeResponse,
+  DecisionsResponse,
   HistoryEntry,
   Task,
 } from '../lib/types';
@@ -39,6 +40,7 @@ import {
 } from '../components/ui';
 import { TaskDetail } from '../components/TaskDetail';
 import { ApprovalIcon, ChevronRightIcon, CloseIcon } from '../components/icons';
+import DecisionsPanel from './DecisionsPanel';
 
 // 「確認・指示待ち」枠に入れるカテゴリ（要望3）。それ以外は「承認待ち（要対応）」枠。
 const CONFIRM_KINDS = new Set<ApprovalKind>(['confirm', 'blocked']);
@@ -665,6 +667,11 @@ export default function Approvals() {
     '/api/approvals',
     tick,
   );
+  // 決裁（MC-203）は別系統。件数バッジ用に pending 数だけ購読する（中身は DecisionsPanel が表示）。
+  const { data: decisionsData } = useLiveResource<DecisionsResponse>('/api/decisions', tick);
+  const decisionCount = decisionsData?.decisions.length ?? 0;
+  // 上位タブ: 承認フロー / 決裁（専用タブ＝MC-203 機能②）。
+  const [mode, setMode] = useState<'approval' | 'decision'>('approval');
   const [activeCat, setActiveCat] = useState<ApprovalKind | 'all'>('all');
   const [selected, setSelected] = useState<Task | null>(null);
   // 楽観的に消した項目（承認/却下直後、refetch が届くまでリストから隠す）。
@@ -776,6 +783,110 @@ export default function Approvals() {
         fetchedAt={fetchedAt}
       />
 
+      {/* 上位タブ: 承認フロー / 決裁（専用タブ＝MC-203 機能②。決裁は別系統・別オートモード）。 */}
+      <div className="border-b border-border px-4 py-2 md:px-6">
+        <div className="flex items-center gap-1" role="tablist" aria-label="承認 / 決裁の切り替え">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'approval'}
+            onClick={() => setMode('approval')}
+            className={tabClass(mode === 'approval')}
+          >
+            <ApprovalIcon width={13} height={13} />
+            承認
+            <span className="rounded bg-surface px-1 text-[10px] tabular-nums text-text-muted">
+              {liveItems.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'decision'}
+            onClick={() => setMode('decision')}
+            className={tabClass(mode === 'decision')}
+          >
+            <ApprovalIcon width={13} height={13} />
+            決裁
+            <span className="rounded bg-surface px-1 text-[10px] tabular-nums text-text-muted">
+              {decisionCount}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {mode === 'decision' ? (
+        <DecisionsPanel />
+      ) : (
+        <ApprovalFlowBody
+          data={data}
+          error={error}
+          loading={loading}
+          activeCat={activeCat}
+          setActiveCat={setActiveCat}
+          presentCats={presentCats}
+          counts={counts}
+          liveItems={liveItems}
+          liveRequests={liveRequests}
+          approvalItems={approvalItems}
+          confirmItems={confirmItems}
+          approvalRequests={approvalRequests}
+          confirmRequests={confirmRequests}
+          setSelected={setSelected}
+          handleResolved={handleResolved}
+          handleRequestResolved={handleRequestResolved}
+          tick={tick}
+          tabClass={tabClass}
+        />
+      )}
+
+      <TaskDetail task={selected} onClose={() => setSelected(null)} onChanged={refetch} />
+    </div>
+  );
+}
+
+/** 承認フロー本体（カテゴリタブ＋オートモード＋セクション＋履歴）。決裁タブ追加に伴い分離。 */
+function ApprovalFlowBody({
+  data,
+  error,
+  loading,
+  activeCat,
+  setActiveCat,
+  presentCats,
+  counts,
+  liveItems,
+  liveRequests,
+  approvalItems,
+  confirmItems,
+  approvalRequests,
+  confirmRequests,
+  setSelected,
+  handleResolved,
+  handleRequestResolved,
+  tick,
+  tabClass,
+}: {
+  data: ApprovalsResponse | null;
+  error: string | null;
+  loading: boolean;
+  activeCat: ApprovalKind | 'all';
+  setActiveCat: (c: ApprovalKind | 'all') => void;
+  presentCats: ApprovalKind[];
+  counts: Record<ApprovalKind, number>;
+  liveItems: ApprovalItem[];
+  liveRequests: ApprovalRequest[];
+  approvalItems: ApprovalItem[];
+  confirmItems: ApprovalItem[];
+  approvalRequests: ApprovalRequest[];
+  confirmRequests: ApprovalRequest[];
+  setSelected: (t: Task) => void;
+  handleResolved: (id: string, source: string) => void;
+  handleRequestResolved: (id: string) => void;
+  tick: number;
+  tabClass: (selected: boolean) => string;
+}) {
+  return (
+    <>
       {/* オートモードのトグル（MC-190。ON で全カテゴリ自動承認＝deploy 含む。2026-06-07 Keita 判断）。 */}
       <AutoModeToggle />
 
@@ -917,9 +1028,7 @@ export default function Approvals() {
           </>
         </ResourceState>
       </div>
-
-      <TaskDetail task={selected} onClose={() => setSelected(null)} onChanged={refetch} />
-    </div>
+    </>
   );
 }
 

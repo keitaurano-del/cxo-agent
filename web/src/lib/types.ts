@@ -179,6 +179,59 @@ export interface ApprovalsResponse {
   requests: ApprovalRequest[];
 }
 
+// ─── Keita 決裁フロー（MC-203 / /api/decisions）──────────────────────
+// server/src/lib/decisionRequestStore.ts のレスポンス形と一致させる。
+
+/** 決裁の選択肢 1 件。 */
+export interface DecisionOption {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+/** Keita 決裁リクエスト（選択肢付き）。 */
+export interface DecisionRequest {
+  id: string;
+  type: 'decision';
+  from: string;
+  fromName: string;
+  title: string;
+  detail: string;
+  options: DecisionOption[];
+  /** 結果を流す要求元エージェント名（notify-agent.sh の宛先キー）。 */
+  requesterAgent: string;
+  requestedAt: string;
+  status: 'pending' | 'decided';
+  decidedOptionId?: string;
+  decidedOptionLabel?: string;
+  decidedAt?: string;
+  comment?: string;
+  /** オートモードによる自動決裁のとき true。 */
+  autoDecided?: boolean;
+}
+
+/** GET /api/decisions のレスポンス（pending のみ）。 */
+export interface DecisionsResponse {
+  generatedAt: string;
+  total: number;
+  decisions: DecisionRequest[];
+}
+
+/** GET /api/decisions/history のレスポンス（decided のみ・新しい順）。 */
+export interface DecisionHistoryResponse {
+  generatedAt: string;
+  total: number;
+  entries: DecisionRequest[];
+}
+
+/** 決裁オートモードの状態（GET・POST /api/decisions/automode）。 */
+export interface DecisionAutoModeResponse {
+  enabled: boolean;
+  /** 'default'=既定 option を自動選択 / 'off'=自動しない。 */
+  mode: 'default' | 'off';
+  updatedAt: string | null;
+}
+
 export interface NarrativeDoc {
   date: string | null;
   file: string | null;
@@ -546,10 +599,14 @@ export interface NotebookDetail {
   chat: NotebookChatMessage[];
 }
 
+/** エンジン（claude -p）失敗の種別。model_limit=利用上限、engine_error=その他失敗（MC-202）。 */
+export type NotebookEngineErrorKind = 'model_limit' | 'engine_error';
+
 /** POST /api/notebooks/:id/ask のレスポンス。 */
 export interface NotebookAskResponse {
   answer: string;
   error?: string; // 部分劣化（タイムアウト等）時のみ
+  errorKind?: NotebookEngineErrorKind; // エンジン失敗時（生エラー文字列は answer に載せない）
 }
 
 /** 生成物 kind。custom は instruction 必須。 */
@@ -562,6 +619,7 @@ export interface NotebookGenerateResponse {
   artifacts: NotebookFileRef[]; // 現在の全成果物
   report: string; // claude の最終報告（作成ファイル名等）
   error?: string;
+  errorKind?: NotebookEngineErrorKind; // エンジン失敗時（生エラー文字列は report に載せない）
 }
 
 // ─── 議事録（Minutes）──────────────────────────────────────
