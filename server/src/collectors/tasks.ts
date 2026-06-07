@@ -14,6 +14,7 @@ import {
   type ApprovalKind,
 } from '../config.js';
 import { projectFromPath, type ProjectName } from '../lib/projectMap.js';
+import { collectAgents, type AgentSummary } from './agents.js';
 
 export type TaskStatus =
   | 'TODO'
@@ -23,6 +24,11 @@ export type TaskStatus =
   | 'DONE'
   | 'CANCELLED'
   | 'UNKNOWN';
+
+export interface TaskExecutor {
+  id: string; // agentId
+  name: string; // subagentType
+}
 
 export interface Task {
   id: string;
@@ -51,6 +57,11 @@ export interface Task {
    * TaskDetail の「詳細メモ」表示にのみ使う追加フィールド（既存 UI 非影響）。取れなければ未設定。
    */
   detail?: string;
+  /**
+   * 現在このタスクで作業中のエージェント（MC-164）。collectAgents から推定された executor。
+   * 取れなければ undefined。
+   */
+  executor?: TaskExecutor;
 }
 
 /**
@@ -551,8 +562,19 @@ function projectFromTags(line: string, fallback: ProjectName): ProjectName {
 
 // ─── 統合 ──────────────────────────────────────────────
 
+/** エージェント群から指定 taskId を処理中のエージェントを探す（MC-164）。 */
+function findExecutor(taskId: string, agents: AgentSummary[]): TaskExecutor | undefined {
+  const agent = agents.find((a) => a.currentTaskId === taskId);
+  if (agent) {
+    return { id: agent.agentId, name: agent.subagentType };
+  }
+  return undefined;
+}
+
 export function collectTasks(): Task[] {
   const tasks: Task[] = [];
+  const agents = collectAgents(); // MC-164: 各タスクの executor をマッチングするため事前取得
+
   tasks.push(...parseTrackerTable(TASK_SOURCES.logicTracker, 'logic', 'logic/TASK_TRACKER'));
   tasks.push(
     ...parseTrackerTable(TASK_SOURCES.nishimaruTracker, 'nishimaru', 'nishimaru/TASK_TRACKER'),
@@ -561,5 +583,11 @@ export function collectTasks(): Task[] {
   tasks.push(...parseTrackerTable(TASK_SOURCES.cxoTracker, 'cxo', 'cxo/TASK_TRACKER'));
   tasks.push(...parseCheckboxBoard(TASK_SOURCES.kanban, 'kanban', 'private'));
   tasks.push(...parseCheckboxBoard(TASK_SOURCES.today, 'today', 'private'));
+
+  // executor をマッチング（MC-164）
+  for (const task of tasks) {
+    task.executor = findExecutor(task.id, agents);
+  }
+
   return tasks;
 }

@@ -27,6 +27,7 @@ export interface AgentSummary {
   cwd?: string;
   gitBranch?: string;
   messageCount: number;
+  currentTaskId?: string; // MC-164: 現在作業中のタスク ID
 }
 
 // 人格別に集約したエージェントグループ（MC-88 / GET /api/agents/grouped）。
@@ -65,6 +66,11 @@ export type TaskStatus =
   | 'CANCELLED'
   | 'UNKNOWN';
 
+export interface TaskExecutor {
+  id: string;
+  name: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -80,6 +86,8 @@ export interface Task {
   approvalTags?: ApprovalKind[];
   // ─── タスク詳細（MC-83）。台帳の「詳細」等を整形した read-only テキスト。取れなければ未設定。──
   detail?: string;
+  // ─── エージェント活動（MC-164）。現在このタスクで作業中のエージェント。──
+  executor?: TaskExecutor;
 }
 
 // ─── 承認フロー（MC-79 / GET /api/approvals）──────────────────────

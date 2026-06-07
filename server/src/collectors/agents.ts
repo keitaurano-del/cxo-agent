@@ -32,6 +32,7 @@ export interface AgentSummary {
   cwd?: string;
   gitBranch?: string;
   messageCount: number;
+  currentTaskId?: string; // 現在作業中のタスク ID（example: MC-100、推定）
 }
 
 export interface FeedItem {
@@ -114,6 +115,14 @@ function latestActionSnippet(lines: JsonlLine[]): string {
   return '';
 }
 
+/** テキストから タスク ID を抽出（例: "working on MC-100" から "MC-100"）。 */
+function extractTaskId(text: string): string | undefined {
+  // パターン: 大文字プレフィックス（1〜3文字）+ "-" + 数字（1〜4文字）
+  // 例: MC-100, FB-5, UI-28, NF-1（4字プレフィックスは拾わない）
+  const match = text.match(/\b([A-Z]{1,3}-\d{1,4})\b/);
+  return match ? match[1] : undefined;
+}
+
 /** subagent ファイルの先頭 user メッセージテキスト。 */
 function firstUserText(lines: JsonlLine[]): string | null {
   for (const l of lines) {
@@ -175,6 +184,8 @@ function analyzeSubagent(filePath: string, index: AgentTypeIndex): AgentSummary 
     hasResult: hasResultLine(lines),
     hadAnyActivity,
   });
+  const actionSnippet = latestActionSnippet(lines);
+  const currentTaskId = extractTaskId(actionSnippet);
 
   return {
     agentId,
@@ -185,13 +196,14 @@ function analyzeSubagent(filePath: string, index: AgentTypeIndex): AgentSummary 
     projectLabel: projectLabel(project),
     status,
     lastActivity: last,
-    lastAction: redactText(latestActionSnippet(lines)),
+    lastAction: redactText(actionSnippet),
     sessionId,
     isWorkflow,
     filePath,
     cwd,
     gitBranch,
     messageCount: lines.length,
+    currentTaskId,
   };
 }
 
