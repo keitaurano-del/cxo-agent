@@ -208,23 +208,24 @@ export async function collectMoods(inputs: MoodInput[]): Promise<AgentMood[]> {
   if (cachedAt > 0 && now - cachedAt < AGENT_MOOD_THROTTLE_MS) {
     return cachedMoods.length > 0 ? cachedMoods : fallbackAll(inputs);
   }
-  // 既に生成中なら相乗り（二重 claude 起動を避ける）。
-  if (inflight) return inflight;
-
-  inflight = (async () => {
-    try {
-      const result = await runBatch(inputs);
-      if (result && result.length > 0) {
-        cachedMoods = result;
-        cachedHash = hash;
-        cachedAt = Date.now();
-        return result;
+  // 再生成が必要。ただしリクエストはブロックしない（haiku 呼び出しは数十秒かかるため）。
+  // 生成はバックグラウンドで起動し、結果は次回ポーリングで反映する。今は現在値（前回値 or
+  // フォールバック）を即返す。これで /api/agent-moods は常に即応答になる（重さの根因対策）。
+  if (!inflight) {
+    inflight = (async () => {
+      try {
+        const result = await runBatch(inputs);
+        if (result && result.length > 0) {
+          cachedMoods = result;
+          cachedHash = hash;
+          cachedAt = Date.now();
+        }
+        // 失敗時はキャッシュ（hash/at）を更新せず次回再試行する。
+      } finally {
+        inflight = null;
       }
-      // 生成失敗: フォールバックを返すが、キャッシュ（hash/at）は更新しない＝次回再試行する。
-      return fallbackAll(inputs);
-    } finally {
-      inflight = null;
-    }
-  })();
-  return inflight;
+    })();
+    // 意図的に await しない（fire-and-forget）。
+  }
+  return cachedMoods.length > 0 ? cachedMoods : fallbackAll(inputs);
 }
