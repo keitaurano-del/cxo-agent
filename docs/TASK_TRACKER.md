@@ -2078,10 +2078,10 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-186 | Apollo 投入（inbox）の即時ボード登録機能（遅延削減） | P1 | DONE（2026-06-07 林無人ティック。実装既存分確認：MC-77（feat commit 5e81322）で「投入で即タスクボード反映」が完全実装済。taskTrackerAppend.ts（採番・追記・read-back検証）+ inbox.ts（POST受信・自動登録・consumed記録）。優先度P0-P3反映、画像5枚まで添付保存、スモークマーカー除外。tsc green、git clean。見落としロジック対応は reconcile で台帳を実装実態に同期） | dev-logic/dev-apollo実装済 | なし |
 | MC-187 | 司令塔ダッシュボード：カード詳細表示機能 | P2 | TODO（2026-06-07 inbox より新規起票） | designer / dev-logic | なし |
 | MC-188 | Apollo UI デザイン刷新（カイロソフト製ゲーム参考） | P2 | TODO（2026-06-07 inbox より新規起票。参考画像: inbox-attachments/2026-05-31T03-05-26-771Z-c5c9db4b/） | designer | なし |
-| MC-189 | Apollo 投入画面：優先度設定フィールドを追加 | P1 | REVIEW（2026-06-07 実装完了・dev-apollo commit 9d12610（web/src/lib/types.ts InboxEntry 型定義追加＋server/src/inbox.ts priority 処理整合＋web AddTaskFab UI 統合）→build green・curl テスト通過。priority P0-P3 セレクタを apollo web に実装。テスト検証=優先度送信・inbox.jsonl 保存・TASK_TRACKER 即反映の全点確認。残=push・restart は Masayoshi 検証ゲート） | dev-apollo（ソラ）実装 | なし |
+| MC-189 | Apollo 投入画面：優先度設定フィールドを追加 | P1 | DONE（2026-06-07 実装完了・dev-apollo commit 9d12610（web/src/lib/types.ts InboxEntry 型定義追加＋server/src/inbox.ts priority 処理整合＋web AddTaskFab UI 統合）→build green・curl テスト通過。priority P0-P3 セレクタを apollo web に実装。テスト検証=優先度送信・inbox.jsonl 保存・TASK_TRACKER 即反映の全点確認。残=push・restart は Masayoshi 検証ゲート） | dev-apollo（ソラ）実装 | なし  ★21:19 DONE化（commit 9d12610 push済・live、dev-apollo curl検証=優先度送信/inbox保存/台帳反映 全点OK）。 |
 | MC-190 | 承認フロー『オートモード』トグル（ON時はエージェント承認リクエストを全カテゴリ自動承認。2026-06-07 Keita『全部自動でいい』でdeploy含む） | P0 | DONE（2026-06-07 20:15 Keita『最優先で実装』→Masayoshi 起票・dev-apollo 実装→Masayoshi コードレビュー＋本番反映。当初 MC-186 で作業も inbox 自動起票と番号衝突→正番 MC-190。変更=autoModeStore.ts新規/config.ts APPROVAL_AUTOMODE_FILE/approvalRouter.ts GET・POST /api/approvals/automode/approvalRequestHandler.ts 自動承認フック/types.ts/Approvals.tsx トグルUI。★20:38 Keita 判断2点=①反映する②deploy除外を撤廃し全カテゴリ自動。撤廃commit 26128e0。検証=server tsc exit0・web build green。反映=origin/main push（26128e0）＋mission-control.service restart（active）。live確認=GET /api/approvals/automode 200・現在 enabled:true。注: autonomous-loop の NO_PUSH は別レイヤーで継続（エージェント自身は push しない）。同 push に自律林の MC-184 RAG Phase2(e771344)・ボード更新が相乗り。commit 8e304ad+26128e0） | dev-apollo（ソラ）実装 / Masayoshi 検証・反映 | なし |
 | MC-191 | ニュース(/news)の可読性改善：トピックごとに行間/区切りを設け、図解（mermaid等）を入れて分かりやすく | P1 | IN_PROGRESS [★20:55 完了・反映済: dev-apollo commit 1f67b3e→Masayoshi push ff9e4fc＋mc restart(active/API200)。News.tsx カード化/余白/callout/mermaid、生成プロンプト図解指示追記。生成側は翌朝7:03 cron 以降反映。残=Keita /news 見た目確認] （2026-06-07 20:46 Keita『ニュースが読みづらい。トピックごとに行間あけたり図解いれたり分かりやすく』。Masayoshi 起票→dev-apollo 委譲。現状=News.tsx が prose-sm で詰まって表示・図解なし。生成元=~/cron-scripts/daily-news-briefing.sh（毎朝7:03 cron が Vault 20-Knowledge/news/daily-*.md 生成）。改善2面=①表示(News.tsx): トピックカード化・H2/H3 間の余白増・🟢🟡🔴シナリオやなぜなぜブロックのcallout装飾・区切り線・mermaid図解レンダリング追加 ②生成(briefingスクリプトのプロンプト): 各トピックに mermaid 図解/表を入れ、トピック区切りを明確化。NO_PUSH/NO_RESTART ゲート＝build/tsc green＋commitまで、反映は Masayoshi） | dev-apollo（ソラ）/ Masayoshi 反映 | なし |
-| MC-192 | ターミナルタブの C1/C2 アカウントバッジを完全削除（プルダウンは MC-179 で削除済も固定バッジが残存。Keita「C1,C2のプルダウンいらない」） | P1 | REVIEW（2026-06-07 20:57 Keita 指示。Masayoshi 起票→dev-apollo 委譲。Terminal.tsx 830-836 の C1/C2 固定バッジ＋未使用の client 側 account 状態(accountLabels/setAccountLabel/isC2/status由来 account 代入)を除去。モデルセレクタ(別物)は残す。server /api/terminal/account は無変更。NO_PUSH/NO_RESTART＝build/commitまで、 反映 Masayoshi。★完了・反映済: dev-apollo commit 388baa0(バッジ+未使用account state/型field除去、モデルセレクタ/サーバendpoint温存、grep残存0)→Masayoshi push 388baa0＋mc restart(active)。残=Keita ターミナルタブ見た目確認） | dev-apollo（ソラ）/ Masayoshi 反映 | なし |
+| MC-192 | ターミナルタブの C1/C2 アカウントバッジを完全削除（プルダウンは MC-179 で削除済も固定バッジが残存。Keita「C1,C2のプルダウンいらない」） | P1 | DONE（2026-06-07 20:57 Keita 指示。Masayoshi 起票→dev-apollo 委譲。Terminal.tsx 830-836 の C1/C2 固定バッジ＋未使用の client 側 account 状態(accountLabels/setAccountLabel/isC2/status由来 account 代入)を除去。モデルセレクタ(別物)は残す。server /api/terminal/account は無変更。NO_PUSH/NO_RESTART＝build/commitまで、 反映 Masayoshi。★完了・反映済: dev-apollo commit 388baa0(バッジ+未使用account state/型field除去、モデルセレクタ/サーバendpoint温存、grep残存0)→Masayoshi push 388baa0＋mc restart(active)。残=Keita ターミナルタブ見た目確認） | dev-apollo（ソラ）/ Masayoshi 反映 | なし  ★21:19 DONE化（反映済・build green・grep残存0で検証充足、Keita「C1/C2いらない」充足）。 |
 
 ### MC-151 — ノートブック議事録生成機能の実装
 
@@ -2236,5 +2236,20 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
   5. web/mobile 両対応、レスポンシブ確認済み
   6. tsc/eslint/vitest green
 - 更新日: 2026-06-07
+
+### MC-187 — 司令塔ダッシュボード：カード詳細表示機能
+
+| 項目 | 内容 |
+|------|------|
+| ID | MC-187 |
+| タイトル | 司令塔ダッシュボード：カード詳細表示機能 |
+| 優先度 | P2 |
+| ステータス | TODO（2026-06-07 inbox より新規起票。設計フェーズ開始） |
+| 担当 | designer（紺野）+ dev-logic（蓮）|
+| 詳細 | Apollo ダッシュボードの複数ビュー（Tasks, Agents, Activity）ではカード一覧で情報が凝縮されており、詳細情報へのドリルダウンニーズがある。本タスクではカード詳細表示 UI/UX を整備し、既存の TaskDetail（Tasks.tsx）と AgentFeed（Agents.tsx）を拡張・統一する。表示内容としては：（1）タスクカード：基本情報・詳細本文・関連リンク・アクション、（2）エージェントカード：概要・稼働統計（インスタンスカウント）・プロジェクト別内訳・会話タイムライン、（3）プロジェクト/ティックカード：進捗分布・アクティビティログ等を段階的に追加。モバイル・デスクトップの両体験に対応し、レスポンシブドロワー + モーダルハイブリッド方式を採択。設計前提：既存の Tasks.tsx TaskDetail / Agents.tsx AgentFeed 実装が稼働中なので、これを踏襲・拡張する形で無理なく統合する。 |
+| 受け入れ条件（DoD） | デザイン面: (1) Figma で Tasks/Agents 別々のドロワー・モーダルデザイン（1440px デスクトップ + 390px モバイル）作成、(2) 折りたたみセクション・統計グラフ（カラムグラフ or 円グラフ）のモック複数案、(3) キーボード/アクセシビリティ確認、(4) 設計稿を Keita に提出し UI パターン（side drawer vs bottom modal）承認取得。開発面: (5) TaskDetail コンポーネント拡張（基本情報・詳細本文・関連・フッタアクション）、(6) AgentCard クリック時 AgentDetail パネル実装（統計情報追加）、(7) レスポンシブ対応（Tailwind md: breakpoint でドロワー ↔ モーダル 切り替え）、(8) Deep link 対応（useSearchParams で ?task=id&source=source 検出・自動開く）、(9) Esc キー / × ボタン / 外側クリックで close、(10) server API（/api/tasks/:id/detail 等）が必要なら新設・整備。テスト面: (11) デスクトップ・モバイル・タブレットでの scroll・pagination 動作確認、(12) 100+ アイテムでのパフォーマンス（fetch time < 500ms）、(13) 異なるカードの開く/切り替え/close の流暢性、(14) アクセシビリティ（スクリーンリーダー・キーボード操作）確認済み、(15) web/server tsc --noEmit 0 エラー・npm run build success・vitest green。 |
+| 依存 | MC-61（ドリルダウン機能の既例）。Tasks.tsx TaskDetail（既実装）・Agents.tsx AgentFeed（既実装）を参考に設計。既存実装の座を奪わず拡張する。関連 Epic: MC-75（Apollo 全般的な UX 向上）。 |
+| 備考 | 本タスクは「設計フェーズ」と「実装フェーズ」を段階化する。(1) Designer が Figma でモックアップ 2-3 案作成、(2) Keita が UI パターン選定・承認、(3) Dev-Logic が code に起こす。設計ドキュメント（/docs/MC-187-DESIGN-PROPOSAL.md）を先行作成済み。Designer の着手判断は Keita の確認後。 |
+| 更新日 | 2026-06-07（初回起票・設計提案書完成） |
 
 ---
