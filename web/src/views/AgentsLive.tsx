@@ -393,7 +393,9 @@ export default function AgentsLive() {
   const navigate = useNavigate();
 
   const agentsRes = useLiveResource<{ agents: AgentSummary[] }>('/api/agents', tick);
-  const tasksRes = useLiveResource<{ tasks: Task[] }>('/api/tasks', tick);
+  // currentTask は基本稼働中なので open のみで足りる（689KB 全件取得を回避）。
+  // open に無い currentTaskId はタイトル解決できず ID 表示にフォールバックする（クラッシュしない）。
+  const tasksRes = useLiveResource<{ tasks: Task[] }>('/api/tasks?scope=open', tick);
   const rosterRes = useLiveResource<{ roster: RosterEntry[] }>('/api/roster', tick);
   const secretariesRes = useLiveResource<{ secretaries: SecretarySummary[] }>(
     '/api/secretaries',

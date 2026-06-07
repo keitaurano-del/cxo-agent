@@ -1,6 +1,6 @@
 // Tasks（Kanban）— TODO/IN_PROGRESS/BLOCKED/REVIEW/DONE/CANCELLED の列。
 // カードはプロジェクト色分け、stalled は赤バッジ。プロジェクトでフィルタ。
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useLiveResource } from '../lib/useLiveData';
 import { useLiveTick } from '../lib/liveContext';
@@ -17,7 +17,10 @@ import { PageHeader } from '../components/PageHeader';
 import { ResourceState, StalledBadge, Badge } from '../components/ui';
 import { TaskDetail } from '../components/TaskDetail';
 import { TaskAgentStatus } from '../components/TaskAgentStatus';
-import { ChevronRightIcon, NoteIcon } from '../components/icons';
+import { ChevronRightIcon, NoteIcon, EyeIcon, LoopIcon } from '../components/icons';
+
+// 完了/キャンセル列（遅延読込対象）。これらは既定では読み込まない。
+const CLOSED_COLUMNS: ReadonlySet<TaskStatus> = new Set<TaskStatus>(['DONE', 'CANCELLED']);
 
 function TaskCard({ t, onOpen }: { t: Task; onOpen: (t: Task) => void }) {
   // 台帳に詳細本文（受け入れ条件・サブタスク等）がある場合は、カード上で「詳細あり」を明示する。
@@ -86,12 +89,23 @@ function Column({
   status,
   tasks,
   onOpen,
+  // 遅延読込（DONE/CANCELLED）用。lazy=true の列は未読込時に中身を出さず読込ボタンを表示する。
+  lazy = false,
+  loaded = true,
+  loading = false,
+  onLoad,
 }: {
   status: TaskStatus;
   tasks: Task[];
   onOpen: (t: Task) => void;
+  lazy?: boolean;
+  loaded?: boolean;
+  loading?: boolean;
+  onLoad?: () => void;
 }) {
   const meta = taskStatusMeta(status);
+  // 未読込の遅延列は件数を確定できないため「—」を表示する（実数は読込後に出す）。
+  const badge = lazy && !loaded ? '—' : String(tasks.length);
 
   return (
     <div className="flex w-full shrink-0 flex-col rounded-xl border border-border bg-surface/40 transition-colors md:w-72">
@@ -104,16 +118,51 @@ function Column({
           />
           <span className="text-xs font-bold text-text">{meta.label}</span>
         </div>
-        <span className="rounded bg-surface-3 px-1.5 py-0.5 text-[11px] tabular-nums text-text-muted">
-          {tasks.length}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {/* 読込済みの遅延列には再読込ボタンを置く（ライブ tick では自動再取得しない＝重さ回避）。 */}
+          {lazy && loaded && (
+            <button
+              type="button"
+              onClick={onLoad}
+              disabled={loading}
+              className="inline-flex items-center rounded p-0.5 text-text-faint transition-colors hover:text-accent disabled:opacity-50"
+              title="完了・キャンセルを再読込"
+              aria-label="完了・キャンセルを再読込"
+            >
+              <LoopIcon width={12} height={12} aria-hidden />
+            </button>
+          )}
+          <span className="rounded bg-surface-3 px-1.5 py-0.5 text-[11px] tabular-nums text-text-muted">
+            {badge}
+          </span>
+        </div>
       </div>
       <div className="flex flex-col gap-2 overflow-y-auto p-2 md:max-h-[calc(100dvh-12rem)]">
-        {tasks.map((t) => (
-          <TaskCard key={`${t.source}:${t.id}`} t={t} onOpen={onOpen} />
-        ))}
-        {tasks.length === 0 && (
-          <p className="px-2 py-4 text-center text-[11px] text-text-faint">なし</p>
+        {/* 未読込の遅延列: 中身は取得せず、押したときだけ closed を取りに行く。 */}
+        {lazy && !loaded ? (
+          <div className="flex flex-col items-center gap-2 px-2 py-6">
+            <p className="text-center text-[11px] text-text-faint">
+              既定では読み込みません（{meta.label} は件数が多く重いため）。
+            </p>
+            <button
+              type="button"
+              onClick={onLoad}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-xs text-text-muted transition-colors hover:border-accent/60 hover:text-text disabled:opacity-50"
+            >
+              <EyeIcon width={13} height={13} aria-hidden />
+              {loading ? '読込中…' : '完了・キャンセルを表示'}
+            </button>
+          </div>
+        ) : (
+          <>
+            {tasks.map((t) => (
+              <TaskCard key={`${t.source}:${t.id}`} t={t} onOpen={onOpen} />
+            ))}
+            {tasks.length === 0 && (
+              <p className="px-2 py-4 text-center text-[11px] text-text-faint">なし</p>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -122,10 +171,31 @@ function Column({
 
 export default function Tasks() {
   const tick = useLiveTick('tasks');
+  // 既定の読込は稼働中（open）のみ＝軽い。ライブ tick で再取得されるのもこの open だけ。
+  // DONE/CANCELLED（全体の 99%・689KB の主因）は遅延読込（下記 closed* state）に分離する。
   const { data, error, loading, fetchedAt, refetch } = useLiveResource<{ tasks: Task[] }>(
-    '/api/tasks',
+    '/api/tasks?scope=open',
     tick,
   );
+  // 完了/キャンセルの遅延読込。ボタン押下で一度だけ /api/tasks?scope=closed を fetch する
+  // （ライブ tick での自動再取得はしない＝重さ回避）。
+  const [closedTasks, setClosedTasks] = useState<Task[] | null>(null);
+  const [closedLoading, setClosedLoading] = useState(false);
+  const loadClosed = useCallback(async () => {
+    setClosedLoading(true);
+    try {
+      const res = await fetch('/api/tasks?scope=closed');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = (await res.json()) as { tasks?: Task[] };
+      setClosedTasks(json.tasks ?? []);
+    } catch {
+      // 失敗時はクラッシュさせず空で確定（バッジは 0、再読込ボタンで再試行可能）。
+      setClosedTasks([]);
+    } finally {
+      setClosedLoading(false);
+    }
+  }, []);
+
   const [project, setProject] = useState<ProjectName | 'all'>('all');
   // モバイルでは横スクロールカンバンの代わりに、選択した 1 列のみ全幅縦積みで表示する。
   const [activeColumn, setActiveColumn] = useState<TaskStatus>('IN_PROGRESS');
@@ -134,7 +204,11 @@ export default function Tasks() {
   // 横断検索（MC-73）からの deep link: ?task=<id>&source=<source> で該当タスクを自動で開く。
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const tasks = data?.tasks ?? [];
+  // フィルタ・列振り分けの母集団: open（常時）＋ closed（読込済みのみ）。
+  const tasks = useMemo(
+    () => [...(data?.tasks ?? []), ...(closedTasks ?? [])],
+    [data, closedTasks],
+  );
 
   // deep link パラメータが付いていて、対象タスクが読み込めたら TaskDetail を自動で開く。
   // 一度開いたら URL から消費パラメータを除去し、再フェッチで再オープンしないようにする。
@@ -200,7 +274,9 @@ export default function Tasks() {
     <div className="flex h-full flex-col">
         <PageHeader
           title="タスクボード"
-          subtitle={`全 ${filtered.length} 件 / 滞留 ${filtered.filter((t) => t.stalled).length} 件`}
+          subtitle={`稼働中 ${filtered.filter((t) => !CLOSED_COLUMNS.has(t.status)).length} 件 / 滞留 ${filtered.filter((t) => t.stalled).length} 件${
+            closedTasks === null ? '（完了・キャンセルは未読込）' : ` / 完了・キャンセル ${filtered.filter((t) => CLOSED_COLUMNS.has(t.status)).length} 件`
+          }`}
           fetchedAt={fetchedAt}
           right={
             <div
@@ -248,7 +324,9 @@ export default function Tasks() {
           >
             {TASK_COLUMNS.map((status) => {
               const meta = taskStatusMeta(status);
-              const count = byColumn[status].length;
+              const isLazy = CLOSED_COLUMNS.has(status);
+              // 未読込の遅延列は件数を確定できないため「—」を表示。
+              const count = isLazy && closedTasks === null ? '—' : String(byColumn[status].length);
               const selected = activeColumn === status;
               return (
                 <button
@@ -279,12 +357,29 @@ export default function Tasks() {
           <ResourceState loading={loading} error={error} hasData={!!data}>
             {/* モバイル: 選択列のみ全幅縦積み */}
             <div className="md:hidden">
-              <Column status={activeColumn} tasks={byColumn[activeColumn]} onOpen={setSelected} />
+              <Column
+                status={activeColumn}
+                tasks={byColumn[activeColumn]}
+                onOpen={setSelected}
+                lazy={CLOSED_COLUMNS.has(activeColumn)}
+                loaded={closedTasks !== null}
+                loading={closedLoading}
+                onLoad={() => void loadClosed()}
+              />
             </div>
             {/* md 以上: 横並びカンバン */}
             <div className="hidden gap-3 md:flex">
               {TASK_COLUMNS.map((status) => (
-                <Column key={status} status={status} tasks={byColumn[status]} onOpen={setSelected} />
+                <Column
+                  key={status}
+                  status={status}
+                  tasks={byColumn[status]}
+                  onOpen={setSelected}
+                  lazy={CLOSED_COLUMNS.has(status)}
+                  loaded={closedTasks !== null}
+                  loading={closedLoading}
+                  onLoad={() => void loadClosed()}
+                />
               ))}
             </div>
           </ResourceState>

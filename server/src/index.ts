@@ -286,8 +286,21 @@ app.get('/api/agents/:agentId/feed', (req, res) => {
   });
 });
 
-app.get('/api/tasks', (_req, res) => {
-  safeJson(res, () => ({ tasks: collectTasks() }));
+// ?scope で返却タスクを絞る（後方互換: 未指定 or all は全件）。
+//   open   = 稼働中（TODO/IN_PROGRESS/BLOCKED/REVIEW）のみ。DONE/CANCELLED を除外。
+//   closed = DONE/CANCELLED のみ。
+// 実データでは DONE+CANCELLED が 99%（689KB の主因）。ライブ tick で毎回パースするのは
+// 稼働中だけにし、完了/キャンセルはフロントが必要時のみ closed を遅延読込する設計（MC perf）。
+const CLOSED_STATUSES = new Set(['DONE', 'CANCELLED']);
+app.get('/api/tasks', (req, res) => {
+  safeJson(res, () => {
+    const scope = String(req.query.scope ?? 'all');
+    const all = collectTasks();
+    let tasks = all;
+    if (scope === 'open') tasks = all.filter((t) => !CLOSED_STATUSES.has(t.status));
+    else if (scope === 'closed') tasks = all.filter((t) => CLOSED_STATUSES.has(t.status));
+    return { tasks };
+  });
 });
 
 // ─── タスク↔workflow/agent 明示リンク（MC-62）────────────────────
