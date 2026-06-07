@@ -72,6 +72,14 @@ CHARS = {
         'deep blue tie, polished shoes. Composed, professional, attentive expression. '
         'Refined navy/charcoal palette. Holds a clipboard and a small notebook. '
     ),
+    "son": (
+        'Character "Son": a fresh young assistant secretary, the deputy to Masayoshi, male, '
+        'slim youthful build, slightly tousled neat dark hair, bright attentive eyes, wearing '
+        'a smart navy-blue business suit (a touch more casual than his senior, top button '
+        'open, no tie or a loose lighter tie), polished shoes. Eager, friendly, reliable, '
+        'helpful expression. Clean blue/navy palette with a fresh light-cyan accent. '
+        'Holds a tablet and a small stack of papers. '
+    ),
     "task-manager": (
         'Character "Yui": a meticulous task-coordinator, female, petite tidy build, dark hair '
         'in a practical low ponytail, wearing a tidy teal blazer over a white blouse, pencil '

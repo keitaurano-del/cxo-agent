@@ -46,5 +46,21 @@
     "idle": "avatar-hayashi-rin-idle-v2.gif",
     "workingStill": "avatar-hayashi-rin-working-v2.png",
     "idleStill": "avatar-hayashi-rin-idle-v2.png"
+  },
+  {
+    "key": "masayoshi",
+    "name": "マサヨシ",
+    "working": "avatar-masayoshi-working-v2.gif",
+    "idle": "avatar-masayoshi-idle-v2.gif",
+    "workingStill": "avatar-masayoshi-working-v2.png",
+    "idleStill": "avatar-masayoshi-idle-v2.png"
+  },
+  {
+    "key": "son",
+    "name": "ソン",
+    "working": "avatar-son-working-v2.gif",
+    "idle": "avatar-son-idle-v2.gif",
+    "workingStill": "avatar-son-working-v2.png",
+    "idleStill": "avatar-son-idle-v2.png"
   }
 ]
