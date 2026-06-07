@@ -16,7 +16,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveResource } from '../lib/useLiveData';
 import { useLiveTick } from '../lib/liveContext';
-import type { ApprovalItem, ApprovalKind, ApprovalRequest, ApprovalsResponse, AutoModeResponse, Task } from '../lib/types';
+import type {
+  ApprovalHistoryResponse,
+  ApprovalItem,
+  ApprovalKind,
+  ApprovalRequest,
+  ApprovalsResponse,
+  AutoModeResponse,
+  HistoryEntry,
+  Task,
+} from '../lib/types';
 import { projectColor, projectLabel, taskStatusMeta } from '../lib/meta';
 import { absoluteTime, relativeTime } from '../lib/time';
 import { PageHeader } from '../components/PageHeader';
@@ -29,7 +38,10 @@ import {
   Spinner,
 } from '../components/ui';
 import { TaskDetail } from '../components/TaskDetail';
-import { ApprovalIcon, CloseIcon } from '../components/icons';
+import { ApprovalIcon, ChevronRightIcon, CloseIcon } from '../components/icons';
+
+// 「確認・指示待ち」枠に入れるカテゴリ（要望3）。それ以外は「承認待ち（要対応）」枠。
+const CONFIRM_KINDS = new Set<ApprovalKind>(['confirm', 'blocked']);
 
 // ── カテゴリのラベル/配色（CSS 変数のみ・語ラベル併記で色のみ依存にしない）──
 const CATEGORY_META: Record<ApprovalKind, { label: string; color: string; bg: string }> = {
@@ -81,19 +93,26 @@ async function postRequestDecision(
   }
 }
 
-/** エージェント承認リクエストの 1 件カード。 */
+/**
+ * エージェント承認リクエストの 1 件カード。
+ * variant='confirm' のときは「確認・指示待ち」枠向けにラベルを「確認した」「却下/保留」に変える（要望3）。
+ */
 function RequestCard({
   req,
   onResolved,
+  variant = 'approve',
 }: {
   req: ApprovalRequest;
   onResolved: (id: string) => void;
+  variant?: 'approve' | 'confirm';
 }) {
   const [rejecting, setRejecting] = useState(false);
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState<null | 'approve' | 'reject'>(null);
   const [error, setError] = useState<string | null>(null);
   const catMeta = CATEGORY_META[req.category as ApprovalKind] ?? CATEGORY_META['confirm'];
+  const approveLabel = variant === 'confirm' ? '確認した' : '承認する';
+  const rejectLabel = variant === 'confirm' ? '却下/保留' : '却下する';
 
   const handleApprove = async () => {
     if (busy) return;
@@ -179,7 +198,7 @@ function RequestCard({
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[12px] text-text-muted hover:bg-surface-2 disabled:opacity-50"
               >
                 <CloseIcon width={13} height={13} />
-                却下する
+                {rejectLabel}
               </button>
               <button
                 type="button"
@@ -193,7 +212,7 @@ function RequestCard({
                 ) : (
                   <ApprovalIcon width={14} height={14} />
                 )}
-                承認する
+                {approveLabel}
               </button>
             </>
           ) : (
@@ -268,21 +287,28 @@ async function postDecision(
   }
 }
 
-/** 1 件の承認カード。 */
+/**
+ * 1 件の承認カード。
+ * variant='confirm' のとき「確認・指示待ち」枠向けにラベルを「確認した」「却下/保留」に変える（要望3）。
+ */
 function ApprovalCard({
   item,
   onOpen,
   onResolved,
+  variant = 'approve',
 }: {
   item: ApprovalItem;
   onOpen: (t: Task) => void;
   onResolved: (id: string, source: string) => void;
+  variant?: 'approve' | 'confirm';
 }) {
   const [rejecting, setRejecting] = useState(false);
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState<null | 'approve' | 'reject'>(null);
   const [error, setError] = useState<string | null>(null);
   const statusMeta = taskStatusMeta(item.status);
+  const approveLabel = variant === 'confirm' ? '確認した' : '承認する';
+  const rejectLabel = variant === 'confirm' ? '却下/保留' : '却下する';
 
   const handleApprove = async () => {
     if (busy) return;
@@ -395,7 +421,7 @@ function ApprovalCard({
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[12px] text-text-muted hover:bg-surface-2 disabled:opacity-50"
               >
                 <CloseIcon width={13} height={13} />
-                却下する
+                {rejectLabel}
               </button>
               <button
                 type="button"
@@ -409,7 +435,7 @@ function ApprovalCard({
                 ) : (
                   <ApprovalIcon width={14} height={14} />
                 )}
-                承認する
+                {approveLabel}
               </button>
             </>
           ) : (
@@ -440,6 +466,93 @@ function ApprovalCard({
         </div>
       </div>
     </li>
+  );
+}
+
+// ── 承認済・履歴（要望1・2）──────────────────────────────────────────────
+//
+// /api/approvals/history を購読し、決定済み（承認/却下）を新しい順で読み取り専用一覧表示する。
+// autoApproved のとき「オート」バッジを出して自動承認と判別できるようにする（要望2）。
+
+/** 履歴 1 行（読み取り専用）。 */
+function HistoryRow({ entry }: { entry: HistoryEntry }) {
+  const approved = entry.decision === 'approve';
+  const decColor = approved ? 'var(--mc-active)' : 'var(--mc-stalled)';
+  const decBg = approved ? 'var(--mc-active-bg)' : 'var(--mc-stalled-bg)';
+  const decLabel = approved ? '承認' : '却下';
+  const title = entry.title ?? entry.id;
+  return (
+    <li className="rounded-lg border border-border bg-surface px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge color={decColor} bg={decBg}>{decLabel}</Badge>
+        {entry.autoApproved && (
+          <Badge color="var(--mc-accent)" bg="var(--mc-surface-3)" title="オートモードによる自動承認">
+            オート
+          </Badge>
+        )}
+        {entry.categories.map((c) => (
+          <CategoryBadge key={c} kind={c} />
+        ))}
+        {entry.decidedAt && (
+          <span
+            className="ml-auto text-[10px] text-text-faint"
+            title={absoluteTime(entry.decidedAt)}
+          >
+            {relativeTime(entry.decidedAt)}
+          </span>
+        )}
+      </div>
+      <p className="mt-1 break-words text-[12px] leading-snug text-text">{title}</p>
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-text-faint">
+        {entry.fromName && <span>{entry.fromName}</span>}
+        {entry.kind === 'task' && <span className="font-mono">{entry.id}</span>}
+        {entry.comment && <span className="break-words text-text-muted">「{entry.comment}」</span>}
+      </div>
+    </li>
+  );
+}
+
+/** 承認済・履歴セクション（折りたたみ）。独立購読で /api/approvals/history を読む。 */
+function HistorySection({ tick }: { tick: number }) {
+  const [open, setOpen] = useState(false);
+  const { data } = useLiveResource<ApprovalHistoryResponse>('/api/approvals/history', tick);
+  const entries = data?.entries ?? [];
+  return (
+    <div className="mt-8 border-t border-border pt-4">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 text-left"
+      >
+        <span
+          className="inline-flex transition-transform"
+          style={{ transform: open ? 'rotate(90deg)' : 'none' }}
+          aria-hidden
+        >
+          <ChevronRightIcon width={14} height={14} />
+        </span>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+          承認済・履歴
+        </span>
+        <span className="rounded bg-surface px-1 text-[10px] tabular-nums text-text-muted">
+          {entries.length}
+        </span>
+      </button>
+      {open && (
+        <div className="mt-3">
+          {entries.length === 0 ? (
+            <EmptyState>まだ決定の履歴はありません。</EmptyState>
+          ) : (
+            <ul className="space-y-2">
+              {entries.map((e) => (
+                <HistoryRow key={`${e.kind}:${e.id}:${e.decidedAt}`} entry={e} />
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -610,6 +723,36 @@ export default function Approvals() {
     [liveItems, activeCat],
   );
 
+  // セクション1「承認待ち（要対応）」: confirm/blocked 以外のカテゴリを持つ項目（deploy/design/approval）。
+  const approvalItems = useMemo(
+    () => filtered.filter((it) => it.categories.some((c) => !CONFIRM_KINDS.has(c))),
+    [filtered],
+  );
+  // セクション2「確認・指示待ち」: confirm または blocked カテゴリの項目（別枠・要望3）。
+  const confirmItems = useMemo(
+    () => filtered.filter((it) => it.categories.some((c) => CONFIRM_KINDS.has(c))),
+    [filtered],
+  );
+
+  // リクエストも activeCat で絞り込む（リクエストの category は単一）。
+  const filteredRequests = useMemo(
+    () =>
+      activeCat === 'all'
+        ? liveRequests
+        : liveRequests.filter((r) => (r.category as ApprovalKind) === activeCat),
+    [liveRequests, activeCat],
+  );
+  // セクション1 のリクエスト（confirm 以外）。
+  const approvalRequests = useMemo(
+    () => filteredRequests.filter((r) => !CONFIRM_KINDS.has(r.category as ApprovalKind)),
+    [filteredRequests],
+  );
+  // セクション2 のリクエスト（confirm。リクエストに blocked は無い）。
+  const confirmRequests = useMemo(
+    () => filteredRequests.filter((r) => CONFIRM_KINDS.has(r.category as ApprovalKind)),
+    [filteredRequests],
+  );
+
   const handleResolved = (id: string, source: string) => {
     setResolved((prev) => {
       const next = new Set(prev);
@@ -685,43 +828,92 @@ export default function Approvals() {
       <div className="p-4 md:p-6">
         <ResourceState loading={loading} error={error} hasData={!!data}>
           <>
-            {/* エージェント承認リクエストセクション（pending が 1 件以上のときだけ表示） */}
-            {liveRequests.length > 0 && (
-              <div className="mb-6">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
-                  エージェントからのリクエスト
-                </p>
-                <ul className="space-y-2">
-                  {liveRequests.map((req) => (
-                    <RequestCard
-                      key={req.id}
-                      req={req}
-                      onResolved={handleRequestResolved}
-                    />
-                  ))}
-                </ul>
-              </div>
-            )}
+            {(() => {
+              const approvalCount = approvalItems.length + approvalRequests.length;
+              const confirmCount = confirmItems.length + confirmRequests.length;
+              const nothing = approvalCount === 0 && confirmCount === 0;
+              return (
+                <>
+                  {/* セクション1: 承認待ち（要対応）＝ deploy/design/approval のリクエスト＋タスク */}
+                  {approvalCount > 0 && (
+                    <section className="mb-8">
+                      <p className="mb-2 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                        <ApprovalIcon width={13} height={13} />
+                        承認待ち（要対応）
+                        <span className="rounded bg-surface px-1 text-[10px] tabular-nums text-text-muted">
+                          {approvalCount}
+                        </span>
+                      </p>
+                      <ul className="space-y-2">
+                        {approvalRequests.map((req) => (
+                          <RequestCard key={req.id} req={req} onResolved={handleRequestResolved} />
+                        ))}
+                        {approvalItems.map((item) => (
+                          <ApprovalCard
+                            key={`${item.source}:${item.id}`}
+                            item={item}
+                            onOpen={setSelected}
+                            onResolved={handleResolved}
+                          />
+                        ))}
+                      </ul>
+                    </section>
+                  )}
 
-            {/* 既存のタスクタグ由来の承認フロー */}
-            {filtered.length === 0 ? (
-              <EmptyState>
-                {liveItems.length === 0
-                  ? (liveRequests.length === 0 ? '承認が必要な項目はありません。' : '')
-                  : 'このカテゴリに該当する項目はありません。'}
-              </EmptyState>
-            ) : (
-              <ul className="space-y-2">
-                {filtered.map((item) => (
-                  <ApprovalCard
-                    key={`${item.source}:${item.id}`}
-                    item={item}
-                    onOpen={setSelected}
-                    onResolved={handleResolved}
-                  />
-                ))}
-              </ul>
-            )}
+                  {/* セクション2: 確認・指示待ち（別枠。背景色で承認待ちと視覚的に区別＝要望3） */}
+                  {confirmCount > 0 && (
+                    <section
+                      className="mb-8 rounded-xl border border-border p-3"
+                      style={{ background: 'var(--mc-idle-bg)' }}
+                    >
+                      <p
+                        className="mb-1 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide"
+                        style={{ color: 'var(--mc-idle)' }}
+                      >
+                        <ApprovalIcon width={13} height={13} />
+                        確認・指示待ち
+                        <span className="rounded bg-surface px-1 text-[10px] tabular-nums text-text-muted">
+                          {confirmCount}
+                        </span>
+                      </p>
+                      <p className="mb-2 break-words text-[11px] leading-relaxed text-text-muted">
+                        Keita の確認・指示をお待ちしています。確認できたら「確認した」で解消できます。
+                      </p>
+                      <ul className="space-y-2">
+                        {confirmRequests.map((req) => (
+                          <RequestCard
+                            key={req.id}
+                            req={req}
+                            onResolved={handleRequestResolved}
+                            variant="confirm"
+                          />
+                        ))}
+                        {confirmItems.map((item) => (
+                          <ApprovalCard
+                            key={`${item.source}:${item.id}`}
+                            item={item}
+                            onOpen={setSelected}
+                            onResolved={handleResolved}
+                            variant="confirm"
+                          />
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+
+                  {nothing && (
+                    <EmptyState>
+                      {liveItems.length === 0 && liveRequests.length === 0
+                        ? '承認が必要な項目はありません。'
+                        : 'このカテゴリに該当する項目はありません。'}
+                    </EmptyState>
+                  )}
+                </>
+              );
+            })()}
+
+            {/* セクション3: 承認済・履歴（読み取り専用・折りたたみ＝要望1・2） */}
+            <HistorySection tick={tick} />
           </>
         </ResourceState>
       </div>

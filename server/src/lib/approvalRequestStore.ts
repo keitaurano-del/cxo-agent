@@ -33,6 +33,8 @@ export interface ApprovalRequest {
   decidedAt?: string;
   /** Keita のコメント（却下時等）。 */
   comment?: string;
+  /** オートモードによる自動承認のとき true（手動承認では付かない）。履歴で「オート」表示に使う。 */
+  autoApproved?: boolean;
 }
 
 /** JSONL ファイルを全走査して id ごとの最新レコードを返す（last-wins）。 */
@@ -127,4 +129,21 @@ export function listPendingRequests(): ApprovalRequest[] {
   // requestedAt 昇順（古いものから）。
   pending.sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
   return pending;
+}
+
+/**
+ * status が approved または rejected の決定済みリクエストを返す（last-wins 適用後の最新状態ベース）。
+ * 履歴 API（/api/approvals/history）で使う。decidedAt 降順（新しいものから）に並べる。
+ */
+export function listDecidedRequests(): ApprovalRequest[] {
+  const map = readAll();
+  const decided: ApprovalRequest[] = [];
+  for (const rec of map.values()) {
+    if (rec.status === 'approved' || rec.status === 'rejected') decided.push(rec);
+  }
+  // decidedAt 降順（新しいものから）。未設定は requestedAt にフォールバック。
+  decided.sort((a, b) =>
+    (b.decidedAt ?? b.requestedAt).localeCompare(a.decidedAt ?? a.requestedAt),
+  );
+  return decided;
 }

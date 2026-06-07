@@ -96,7 +96,12 @@ export function approvalRequestHandler(req: Request, res: Response): void {
     });
 
     // オートモード（MC-186）: ON のとき自動承認する。
-    // オートモード ON のときは全カテゴリ（deploy 含む）を自動承認する（2026-06-07 Keita 判断「全部自動でいい」）。
+    // オートモード ON のときは全カテゴリ（deploy / confirm 含む）を自動承認する（2026-06-07 Keita 判断「全部自動でいい」）。
+    // confirm（確認/指示待ち）カテゴリのエージェント発リクエストもここで自動承認される（Keita 要望4）。
+    // ただしタスク台帳由来の BLOCKED タスクはオートモードで status 変更しない（安全のため。要望4 の
+    // 対象はエージェント発の確認/指示リクエストに限る）。これは collectApprovals 側で BLOCKED を
+    // 自動承認しないことで担保される（このハンドラはエージェント発リクエストのみを扱う）。
+    // 自動承認のとき autoApproved:true を立て、履歴 UI で「オート」と判別できるようにする（要望2）。
     // 注: エージェント自身の push は autonomous-loop の NO_PUSH で別レイヤー抑止が継続。
     let status = rec.status;
     if (readAutoMode().enabled) {
@@ -104,6 +109,7 @@ export function approvalRequestHandler(req: Request, res: Response): void {
         status: 'approved',
         decidedAt: new Date().toISOString(),
         comment: 'オートモードにより自動承認',
+        autoApproved: true,
       });
       status = updated?.status ?? status;
       console.log(`[automode] auto-approved request ${rec.id} (category=${rec.category})`);

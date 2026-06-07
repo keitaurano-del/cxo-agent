@@ -139,6 +139,29 @@ export interface ApprovalRequest {
   status: 'pending' | 'approved' | 'rejected';
   decidedAt?: string;
   comment?: string;
+  /** オートモードによる自動承認のとき true（手動承認では付かない）。 */
+  autoApproved?: boolean;
+}
+
+/** 承認済・履歴の 1 件（GET /api/approvals/history）。server/src/approvalRouter.ts と一致させる。 */
+export interface HistoryEntry {
+  kind: 'request' | 'task';
+  id: string;
+  decidedAt: string;
+  decision: 'approve' | 'reject';
+  title?: string;
+  fromName?: string;
+  categories: ApprovalKind[];
+  comment?: string;
+  autoApproved?: boolean;
+  source?: string;
+}
+
+/** GET /api/approvals/history のレスポンス。 */
+export interface ApprovalHistoryResponse {
+  generatedAt: string;
+  total: number;
+  entries: HistoryEntry[];
 }
 
 /** 承認オートモードの状態（MC-186 / GET・POST /api/approvals/automode）。 */

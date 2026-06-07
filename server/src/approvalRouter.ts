@@ -15,6 +15,8 @@
 //  POST /api/approvals/request/:id/approve  : { comment? } で承認。
 //  POST /api/approvals/request/:id/reject   : { comment? } で却下。
 
+import { readFileSync } from 'node:fs';
+
 import { Router, type Request, type Response } from 'express';
 
 import { collectApprovals } from './collectors/approvals.js';
@@ -22,9 +24,11 @@ import { approveTask, rejectTask, TaskEditError } from './lib/approvalWrite.js';
 import {
   getRequest,
   updateRequest,
+  listDecidedRequests,
+  type ApprovalRequest,
 } from './lib/approvalRequestStore.js';
 import { readAutoMode, setAutoMode } from './lib/autoModeStore.js';
-import type { ApprovalKind } from './config.js';
+import { APPROVAL_DECISIONS_FILE, type ApprovalKind } from './config.js';
 
 const VALID_CATEGORIES = new Set<ApprovalKind>([
   'blocked',
@@ -219,6 +223,113 @@ function handleRejectRequest(req: Request, res: Response): void {
   res.json(updated);
 }
 
+// ── 承認済・履歴（auth ミドルウェア配下）──────────────────────────────────
+//
+// 承認/却下した決定の履歴を返す（Keita 要望1・2）。これまでは承認すると一覧から消えるだけで
+// 記録が残らなかった。2 系統の決定をマージして新しい順で返す:
+//   1. エージェント承認リクエストの決定済み（status=approved/rejected）。autoApproved を含む。
+//   2. タスク台帳由来の決定（approval-decisions.jsonl）。approve/reject の監査ログ。
+
+/** 履歴に出す決定 1 件（エージェントリクエスト or タスク決定の正規化形）。 */
+interface HistoryEntry {
+  /** 'request'=エージェントリクエスト由来 / 'task'=タスク台帳由来。 */
+  kind: 'request' | 'task';
+  /** 決定対象の ID（req-... または タスク ID）。 */
+  id: string;
+  /** 並び/表示用の決定日時（ISO8601）。 */
+  decidedAt: string;
+  /** 'approve' | 'reject'。リクエスト側は status を approve/reject に正規化。 */
+  decision: 'approve' | 'reject';
+  /** 件名（リクエストのみ。タスクは持たない）。 */
+  title?: string;
+  /** 依頼元の表示名（リクエストのみ）。 */
+  fromName?: string;
+  /** カテゴリ（リクエストは単一→配列化、タスクは categories[]）。 */
+  categories: ApprovalKind[];
+  /** Keita のコメント（任意）。 */
+  comment?: string;
+  /** オートモードによる自動承認のとき true（リクエストのみ）。 */
+  autoApproved?: boolean;
+  /** タスク決定の source（タスクのみ）。 */
+  source?: string;
+}
+
+const HISTORY_LIMIT = 50;
+/** decisions.jsonl の末尾から読むバイト上限（巨大ファイル全読みを避ける概算）。 */
+const DECISIONS_TAIL_BYTES = 256 * 1024;
+
+/** approval-decisions.jsonl の末尾 N 件をパースして HistoryEntry に正規化する。 */
+function readTaskDecisions(): HistoryEntry[] {
+  let raw: string;
+  try {
+    raw = readFileSync(APPROVAL_DECISIONS_FILE, 'utf-8');
+  } catch {
+    return []; // 決定ログ未作成。
+  }
+  // 末尾だけ見れば直近 N 件には十分。途中で切れた先頭行は JSON.parse 失敗で無視される。
+  if (raw.length > DECISIONS_TAIL_BYTES) raw = raw.slice(raw.length - DECISIONS_TAIL_BYTES);
+  const out: HistoryEntry[] = [];
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    let rec: Record<string, unknown>;
+    try {
+      rec = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      continue; // 壊れ行（末尾切り出しの先頭含む）は無視。
+    }
+    const ts = typeof rec.ts === 'string' ? rec.ts : undefined;
+    const id = typeof rec.id === 'string' ? rec.id : undefined;
+    const decision = rec.decision === 'approve' || rec.decision === 'reject' ? rec.decision : undefined;
+    if (!ts || !id || !decision) continue;
+    const categories = Array.isArray(rec.categories)
+      ? (rec.categories.filter((c) => typeof c === 'string') as ApprovalKind[])
+      : [];
+    out.push({
+      kind: 'task',
+      id,
+      decidedAt: ts,
+      decision,
+      categories,
+      source: typeof rec.source === 'string' ? rec.source : undefined,
+      comment: typeof rec.comment === 'string' ? rec.comment : undefined,
+    });
+  }
+  return out;
+}
+
+/** 決定済みエージェントリクエストを HistoryEntry に正規化する。 */
+function requestToHistory(r: ApprovalRequest): HistoryEntry {
+  return {
+    kind: 'request',
+    id: r.id,
+    decidedAt: r.decidedAt ?? r.requestedAt,
+    decision: r.status === 'rejected' ? 'reject' : 'approve',
+    title: r.title,
+    fromName: r.fromName,
+    categories: [r.category as ApprovalKind],
+    comment: r.comment,
+    autoApproved: r.autoApproved === true,
+  };
+}
+
+/** GET /api/approvals/history — 決定済みを 2 系統マージして新しい順・直近 50 件返す。 */
+function handleHistory(_req: Request, res: Response): void {
+  try {
+    const fromRequests = listDecidedRequests().map(requestToHistory);
+    const fromTasks = readTaskDecisions();
+    const merged = [...fromRequests, ...fromTasks].sort((a, b) =>
+      b.decidedAt.localeCompare(a.decidedAt),
+    );
+    res.json({
+      generatedAt: new Date().toISOString(),
+      total: merged.length,
+      entries: merged.slice(0, HISTORY_LIMIT),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
 // ── 承認オートモード（MC-186。auth ミドルウェア配下）─────────────────────
 
 /** GET /api/approvals/automode — オートモードの現在状態を返す。 */
@@ -240,7 +351,8 @@ function handleSetAutoMode(req: Request, res: Response): void {
 export function approvalRouter(): Router {
   const router = Router();
   router.get('/', handleList);
-  // オートモード（':taskId' ルートより前に登録して 'automode' が taskId に食われないようにする）。
+  // 履歴・オートモード（':taskId' ルートより前に登録して 'history'/'automode' が taskId に食われないようにする）。
+  router.get('/history', (req, res) => handleHistory(req, res));
   router.get('/automode', (req, res) => handleGetAutoMode(req, res));
   router.post('/automode', (req, res) => handleSetAutoMode(req, res));
   router.post('/:taskId/approve', (req, res) => handleApprove(req, res));
