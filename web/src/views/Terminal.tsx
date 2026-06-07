@@ -47,12 +47,14 @@ const DEFAULT_TERMINAL_LABELS: Record<number, string> = {
   1: 'Main',
   3: 'Aux',
   4: 'Ops',
+  5: 'Sub',
 };
 
 const TERMINAL_TABS: TerminalTab[] = [
   { id: 1, label: DEFAULT_TERMINAL_LABELS[1], path: '/terminal/' },
   { id: 3, label: DEFAULT_TERMINAL_LABELS[3], path: '/terminal/3/' },
   { id: 4, label: DEFAULT_TERMINAL_LABELS[4], path: '/terminal/4/' },
+  { id: 5, label: DEFAULT_TERMINAL_LABELS[5], path: '/terminal/5/' },
 ];
 
 const ACTIVE_TAB_STORAGE_KEY = 'apollo.terminal.activeTab';

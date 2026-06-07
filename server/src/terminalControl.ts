@@ -64,7 +64,7 @@ const ALLOWED_MODELS = new Set<string>([
 /** 許可するアカウントラベルのセット。 */
 const ALLOWED_ACCOUNTS = new Set<string>(['Claude1', 'Claude2']);
 /** デフォルトのアカウントラベル（ターミナル id → label）。 */
-const DEFAULT_ACCOUNT_LABELS: Record<number, string> = { 1: 'Claude1', 2: 'Claude2', 3: 'Claude1', 4: 'Claude1' };
+const DEFAULT_ACCOUNT_LABELS: Record<number, string> = { 1: 'Claude1', 2: 'Claude2', 3: 'Claude1', 4: 'Claude1', 5: 'Claude1' };
 
 // ─── 子プロセス実行ヘルパ（execFile を Promise 化）────────────────
 
@@ -667,7 +667,7 @@ function writeAccountLabel(terminalId: number, account: string): void {
 
 /** 指定ターミナルのモデル名を取得する（失敗時は null）。 */
 async function getModelForTerminal(t: TerminalDef): Promise<string | null> {
-  if (t.id === 4) return readOpenclawModel();
+  if (t.id === 4 || t.id === 5) return readOpenclawModel();
   if (t.remote) return readRemoteModel(t.remote);
   return readLocalModel();
 }
@@ -695,8 +695,8 @@ async function handleSetModel(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    if (t.id === 4) {
-      // ターミナル4（openclaw/Masayoshi）: openclaw.json を更新する
+    if (t.id === 4 || t.id === 5) {
+      // ターミナル4/5（openclaw: Masayoshi / 補佐 Son）: openclaw.json を更新する（モデルは共有）。
       writeOpenclawModel(model);
     } else if (t.remote) {
       await writeRemoteModel(t.remote, model);
@@ -755,7 +755,7 @@ async function handleSetAccountLabel(req: Request, res: Response): Promise<void>
     const dirMap = t.remote ? ACCOUNT_CONFIG_DIR_REMOTE : ACCOUNT_CONFIG_DIR_LOCAL;
     // T1/T3 は Claude Code TUI が動いているため send-keys 注入不可（入力欄に流れ込む）。
     // T2/T4 は OpenClaw 独自 auth のため CLAUDE_CONFIG_DIR 切替不可。
-    const configDir = (t.id !== 1 && t.id !== 2 && t.id !== 3 && t.id !== 4) ? dirMap[account] : null;
+    const configDir = (t.id !== 1 && t.id !== 2 && t.id !== 3 && t.id !== 4 && t.id !== 5) ? dirMap[account] : null;
     if (configDir) {
       const target = t.tmuxSession;
       // C-c で現在のプロセスを停止

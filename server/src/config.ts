@@ -322,6 +322,14 @@ export const TERMINALS: TerminalDef[] = [
     // この箱（local）の OpenClaw 秘書 Masayoshi（tmux セッション 'openclaw'、openclaw chat）。
     tmuxSession: env('TERMINAL_4_TMUX', 'openclaw'),
   },
+  {
+    id: 5,
+    port: envNum('TERMINAL_5_PORT', 7685),
+    service: env('TERMINAL_5_SERVICE', 'apollo-terminal-5.service'),
+    label: env('TERMINAL_5_LABEL', 'Sub'),
+    // この箱（local）の OpenClaw 秘書補佐 Son（tmux 'openclaw-son'、openclaw chat --session agent:son:main）。MC-181。
+    tmuxSession: env('TERMINAL_5_TMUX', 'openclaw-son'),
+  },
 ];
 
 /** ターミナル定義から ttyd の origin（http://host:port）を作る。host 既定は TERMINAL_TTYD_HOST。 */
