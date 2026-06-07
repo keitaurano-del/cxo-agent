@@ -185,38 +185,163 @@ function NoteMarkdownPanel({
   path: string;
   onNavigate: (path: string) => void;
 }) {
-  const { data, error, loading } = useLiveResource<VaultNote>(
+  const { data, error, loading, refetch } = useLiveResource<VaultNote>(
     `/api/vault/note?path=${encodeURIComponent(path)}`,
   );
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedBody, setEditedBody] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [conflictMessage, setConflictMessage] = useState<string | null>(null);
+
   const resolveLink = useMemo(
     () => makeLinkResolver(data?.outgoingLinks ?? []),
     [data?.outgoingLinks],
   );
 
+  // ノート本文の編集を開始
+  const handleEditStart = useCallback(() => {
+    if (data) {
+      setEditedBody(data.body);
+      setIsEditing(true);
+      setSaveError(null);
+      setConflictMessage(null);
+    }
+  }, [data]);
+
+  // 編集をキャンセル
+  const handleEditCancel = useCallback(() => {
+    setIsEditing(false);
+    setEditedBody('');
+    setSaveError(null);
+    setConflictMessage(null);
+  }, []);
+
+  // ノート本文を保存
+  const handleSave = useCallback(async () => {
+    if (!data) return;
+
+    setIsSaving(true);
+    setSaveError(null);
+    setConflictMessage(null);
+
+    try {
+      const response = await fetch(`/api/vault/notes/${encodeURIComponent(data.path)}/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          body: editedBody,
+        }),
+      });
+
+      if (response.status === 409) {
+        // Conflict detected
+        const conflictData = await response.json();
+        setConflictMessage(
+          conflictData.message ||
+            '競合を検出しました。同期競合があります。退避ファイルを作成しました。' +
+            (conflictData.conflictPath ? `\n保存場所: ${conflictData.conflictPath}` : ''),
+        );
+        return;
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        setSaveError(errorData.error || '保存に失敗しました');
+        return;
+      }
+
+      // Success - close edit mode and refresh data
+      setIsEditing(false);
+      setEditedBody('');
+      refetch();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : '保存中にエラーが発生しました');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [data, editedBody, refetch]);
+
   return (
-    <div className="flex h-full">
+    <div className="flex h-full flex-col">
       <article className="min-w-0 flex-1 overflow-y-auto px-4 py-4 md:px-6 lg:px-10">
         <ResourceState loading={loading} error={error} hasData={!!data}>
           {data && (
             <div className="mx-auto max-w-3xl">
-              <div className="mb-1 text-xs text-text-faint">{data.path}</div>
-              <h1 className="mb-1 text-2xl font-bold text-text">{data.title}</h1>
-              {data.mtime && (
-                <div className="mb-4 text-xs text-text-faint">
-                  更新: {relativeTime(data.mtime)}
+              {/* Header with edit button */}
+              <div className="mb-4 flex items-start justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 text-xs text-text-faint">{data.path}</div>
+                  <h1 className="mb-1 text-2xl font-bold text-text">{data.title}</h1>
+                  {data.mtime && (
+                    <div className="text-xs text-text-faint">
+                      更新: {relativeTime(data.mtime)}
+                    </div>
+                  )}
                 </div>
-              )}
+                {!isEditing && (
+                  <button
+                    onClick={handleEditStart}
+                    className="ml-4 shrink-0 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-bg hover:bg-accent-strong"
+                  >
+                    編集
+                  </button>
+                )}
+              </div>
+
               <NoteMeta note={data} />
-              <ObsidianMarkdown
-                body={data.body}
-                resolveLink={resolveLink}
-                onNavigate={onNavigate}
-              />
+
+              {/* Edit mode UI */}
+              {isEditing ? (
+                <div className="space-y-3">
+                  <textarea
+                    value={editedBody}
+                    onChange={(e) => setEditedBody(e.target.value)}
+                    className="w-full rounded-md border border-border bg-surface px-3 py-2 font-mono text-sm text-text outline-none focus:border-accent"
+                    rows={15}
+                    placeholder="ノート本文を編集..."
+                  />
+                  {saveError && (
+                    <div className="rounded-md border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-600">
+                      エラー: {saveError}
+                    </div>
+                  )}
+                  {conflictMessage && (
+                    <div className="rounded-md border border-yellow-500/50 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-600 whitespace-pre-wrap">
+                      ⚠ {conflictMessage}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSave}
+                      disabled={isSaving}
+                      className="rounded-md bg-accent px-3 py-2 text-xs font-semibold text-bg hover:bg-accent-strong disabled:opacity-50"
+                    >
+                      {isSaving ? '保存中...' : '保存'}
+                    </button>
+                    <button
+                      onClick={handleEditCancel}
+                      disabled={isSaving}
+                      className="rounded-md border border-border px-3 py-2 text-xs font-semibold text-text hover:bg-surface-2 disabled:opacity-50"
+                    >
+                      キャンセル
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <ObsidianMarkdown
+                  body={data.body}
+                  resolveLink={resolveLink}
+                  onNavigate={onNavigate}
+                />
+              )}
             </div>
           )}
         </ResourceState>
       </article>
-      {data && (data.outgoingLinks.some((l) => l.path) || data.backlinks.length > 0) && (
+      {!isEditing && data && (data.outgoingLinks.some((l) => l.path) || data.backlinks.length > 0) && (
         <aside className="hidden w-64 shrink-0 overflow-y-auto border-l border-border bg-surface px-3 py-5 xl:block">
           <LinkPanel note={data} onNavigate={onNavigate} />
         </aside>

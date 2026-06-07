@@ -1,12 +1,14 @@
 // vaultWriteRouter — Apollo から Vault へ書き込む API（auth ミドルウェア配下）。
 //
-//  POST /api/vault/note    (JSON)       : ノート(.md)作成 → 20-Knowledge 等
-//  POST /api/vault/upload  (multipart)  : ファイル保存 → 99-Attachments
+//  POST /api/vault/note           (JSON)       : ノート(.md)作成 → 20-Knowledge 等
+//  POST /api/vault/upload         (multipart)  : ファイル保存 → 99-Attachments
+//  POST /api/vault/notes/:id/save (JSON)       : 既存ノート編集・保存（obsidian-git 同期競合対策込み）
 //
 // いずれも書き込み後に VAULT_DIR で自動 git add/commit/pull --rebase/push する。
 // push 失敗時もファイル作成は成功（201）。レスポンスに pushed:true/false と path を含める。
+// 編集保存時は競合検知で 409 を返し、退避ファイルを作成する。
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, extname } from 'node:path';
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
@@ -18,6 +20,7 @@ import {
   VAULT_UPLOAD_MAX_FILES,
 } from './config.js';
 import { SafePathError } from './lib/vaultPath.js';
+import { resolveVaultPath } from './lib/vaultPath.js';
 import {
   resolveVaultFolder,
   slugifyTitle,
@@ -25,6 +28,7 @@ import {
   resolveNonConflictingPath,
   commitAndPush,
   vaultIsGitRepo,
+  gitPullWithConflictDetection,
 } from './lib/vaultWrite.js';
 
 // ─── multer（メモリ保存。id 採番後に書き出す inbox と同様）──────────
@@ -162,11 +166,88 @@ async function handleUpload(req: Request, res: Response): Promise<void> {
 
 // ─── Router 組み立て ─────────────────────────────────────
 
+/** POST /api/vault/notes/:id/save — 既存ノート本文を編集・保存（obsidian-git 同期競合対策）。 */
+async function handleNoteSave(req: Request, res: Response): Promise<void> {
+  const noteId = (req.params.id ?? '') as string;
+  if (!noteId) {
+    res.status(400).json({ error: 'noteId is required' });
+    return;
+  }
+
+  // noteId は vault 相対パス（URL encoded）。decode して安全化。
+  let relPath: string;
+  let absPath: string;
+  try {
+    relPath = decodeURIComponent(noteId);
+    // resolveVaultPath で VAULT_DIR 配下を保証（traversal/symlink 拒否）。
+    absPath = resolveVaultPath(relPath);
+  } catch (e) {
+    if (e instanceof SafePathError) {
+      res.status(400).json({ error: e.message });
+      return;
+    }
+    throw e;
+  }
+
+  // ノートが存在するか確認。
+  if (!existsSync(absPath)) {
+    res.status(404).json({ error: 'note not found' });
+    return;
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const newBody = typeof body.body === 'string' ? body.body : '';
+
+  try {
+    if (!vaultIsGitRepo()) {
+      res.status(400).json({ error: 'vault is not a git repository' });
+      return;
+    }
+
+    // (1) 競合対策: pull --rebase --autostash で最新版を取得。
+    //     失敗＝コンフリクト中 → 409 で返す（abort は関数内でやる）。
+    const pullResult = gitPullWithConflictDetection(relPath);
+    if (pullResult.hasConflict) {
+      // コンフリクト状態を検知。新本文を退避ファイルに保存。
+      const conflictPath = `${absPath}.conflict`;
+      writeFileSync(conflictPath, newBody, 'utf-8');
+      console.warn(`[vault/notes/save] git conflict detected for ${relPath}. Content saved to ${conflictPath}`);
+      res.status(409).json({
+        error: 'git conflict detected',
+        message: '競合を検知しました。競合ファイルが存在するため上書きは避けました。',
+        conflictPath,
+      });
+      return;
+    }
+
+    // (2) 競合がなければファイルを書き込む。
+    writeFileSync(absPath, newBody, 'utf-8');
+
+    // (3) git add → commit → pull --rebase → push。
+    const git = commitAndPush(relPath, `apollo: edit ${relPath}`);
+    if (!git.pushed && git.reason) {
+      console.warn(`[vault/notes/save] git not pushed: ${git.reason}`);
+    }
+
+    res.status(200).json({
+      ok: true,
+      path: relPath,
+      pushed: git.pushed,
+    });
+  } catch (e) {
+    console.error(`[vault/notes/save] error: ${e instanceof Error ? e.message : String(e)}`);
+    res.status(500).json({
+      error: e instanceof Error ? e.message : 'internal server error',
+    });
+  }
+}
+
 /** /api/vault 配下の書き込みルータ。index.ts で auth ミドルウェア配下に mount する。 */
 export function vaultWriteRouter(): Router {
   const router = Router();
   // express.json はグローバルで適用済みなので note は body が入る。
   router.post('/note', (req, res) => handleNote(req, res));
   router.post('/upload', (req, res) => void handleUpload(req, res));
+  router.post('/notes/:id/save', (req, res) => void handleNoteSave(req, res));
   return router;
 }
