@@ -42,6 +42,12 @@ export const AGENT_AVATARS: Record<string, AgentAvatar> = {
     working: '/avatars/avatar-apollo-working-v2.gif',
     idle: '/avatars/avatar-apollo-idle-v2.gif',
   },
+  // 実際の subagentType は 'dev-apollo'（ソラ🛰）。apollo アバターを割り当てる。
+  'dev-apollo': {
+    name: 'ソラ',
+    working: '/avatars/avatar-apollo-working-v2.gif',
+    idle: '/avatars/avatar-apollo-idle-v2.gif',
+  },
   'content-creator': {
     name: 'ナオ',
     working: '/avatars/avatar-content-creator-working-v2.gif',
