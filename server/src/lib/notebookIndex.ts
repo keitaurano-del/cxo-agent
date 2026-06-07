@@ -6,6 +6,7 @@
 // GEMINI_API_KEY 未設定 or API 失敗 → 索引なし従来動作（後方互換フォールバック）。
 // 参考: docs/NOTEBOOK_RAG_DESIGN.md
 
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { NOTEBOOK_RAG_CHUNK_SIZE, NOTEBOOK_RAG_CHUNK_OVERLAP, NOTEBOOK_RAG_TOP_K } from '../config.js';
@@ -133,6 +134,7 @@ function splitLongText(text: string, chunkSize: number, overlap: number): string
  * ノートブックの索引を構築する。
  * - extracted/*.txt を走査し、header コメント行（# 抽出元:）を除去してからチャンク分割する。
  * - sources 配下の .txt/.md/.csv/.tsv/.json/.yaml/.yml で、extracted に対応 txt がないものも対象。
+ * - sources 配下の .pdf を pdftotext で extracted に変換（未変換のみ）して対象に加える。
  * - Gemini でバッチ embed して chunks.json / meta.json に保存する。
  */
 export async function buildIndex(notebookDir: string): Promise<IndexBuildResult> {
@@ -197,6 +199,43 @@ export async function buildIndex(notebookDir: string): Promise<IndexBuildResult>
       const text = raw.trim();
       if (text.length === 0) continue;
       textSources.push({ sourceFile: f, text });
+    }
+  }
+
+  // sources 配下の PDF を pdftotext で extracted に変換（未変換のものだけ）
+  const PDFTOTEXT_BIN = process.env.PDFTOTEXT_BIN || '/usr/bin/pdftotext';
+  if (existsSync(sourcesDir)) {
+    const files = readdirSync(sourcesDir);
+    for (const f of files) {
+      if (extname(f).toLowerCase() !== '.pdf') continue;
+      // extractedTxtBasenames には "foo.pdf" が入る（extracted/foo.pdf.txt → base="foo.pdf"）
+      if (extractedTxtBasenames.has(f)) continue;
+      if (!existsSync(extractedDir)) mkdirSync(extractedDir, { recursive: true });
+      const txtName = f + '.txt';
+      const txtPath = join(extractedDir, txtName);
+      if (existsSync(txtPath)) {
+        // 変換済み txt を読み込んで追加
+        try {
+          const text = readFileSync(txtPath, 'utf-8').trim();
+          if (text.length > 0) textSources.push({ sourceFile: txtName, text });
+        } catch {
+          // skip
+        }
+        continue;
+      }
+      // pdftotext で変換
+      try {
+        execFileSync(PDFTOTEXT_BIN, ['-layout', '-enc', 'UTF-8', join(sourcesDir, f), txtPath], {
+          timeout: 120_000,
+        });
+        const text = readFileSync(txtPath, 'utf-8').trim();
+        if (text.length > 0) textSources.push({ sourceFile: txtName, text });
+      } catch (e) {
+        console.warn(
+          `[notebook] pdftotext failed for ${f}:`,
+          e instanceof Error ? e.message : String(e),
+        );
+      }
     }
   }
 

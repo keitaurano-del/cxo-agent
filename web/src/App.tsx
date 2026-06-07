@@ -39,6 +39,7 @@ import Terminal from './views/Terminal';
 import Chat from './views/Chat';
 import BottomNav from './components/BottomNav';
 import { SortableNav, DragHandle } from './components/SortableNav';
+import type { DragHandleProps } from './components/SortableNav';
 import { useNavOrder } from './lib/useNavOrder';
 import AddTaskFab from './components/AddTaskFab';
 import { UploadProvider } from './lib/UploadContext';
@@ -238,33 +239,27 @@ function Sidebar({
       </div>
       <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
         <SortableNav items={navItems} onReorder={onReorder} direction="vertical">
-          {(item, handle) => {
+          {(item: NavItem, handle: DragHandleProps) => {
             const forceActive = item.to === '/' && dashActive;
             const badge = badges[item.to] ?? 0;
             return (
-              // group: hover でハンドルを表示する（デスクトップ）。
-              <div className="group flex items-center">
-                <NavLink
-                  to={item.to}
-                  end={item.to === '/'}
-                  className={({ isActive }) =>
-                    `flex flex-1 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-                      isActive || forceActive
-                        ? 'bg-surface-3 font-semibold text-text'
-                        : 'text-text-muted hover:bg-surface-2 hover:text-text'
-                    }`
-                  }
-                >
-                  <span aria-hidden>{item.icon}</span>
-                  {item.label}
-                  <NavBadge count={badge} dot={item.to === '/chat'} />
-                </NavLink>
-                {/* ドラッグハンドル: デスクトップは hover で表示、掴んだ時だけドラッグ発火。 */}
-                <DragHandle
-                  handleProps={handle.handleProps}
-                  className="ml-1 shrink-0 p-1 opacity-0 transition-opacity group-hover:opacity-100"
-                />
-              </div>
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                    isActive || forceActive
+                      ? 'bg-surface-3 font-semibold text-text'
+                      : 'text-text-muted hover:bg-surface-2 hover:text-text'
+                  }`
+                }
+              >
+                <span aria-hidden>{item.icon}</span>
+                {item.label}
+                <NavBadge count={badge} dot={item.to === '/chat'} />
+                <DragHandle handleProps={handle.handleProps} className="ml-auto opacity-0 group-hover:opacity-100" />
+              </NavLink>
             );
           }}
         </SortableNav>
