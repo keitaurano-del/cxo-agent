@@ -197,8 +197,29 @@ const tblBorder = (color: string = D.border) => ({
   style: BorderStyle.SINGLE, size: 4, color,
 });
 
+// 標準スタイルの TODO 表（No./タスク/内容/担当者/期限）を判定する
+function isStandardTodoHeader(headers: string[]): boolean {
+  if (headers.length !== 5) return false;
+  const norm = headers.map((h) => h.trim().replace(/\.$/, ''));
+  return (
+    /^No$/i.test(norm[0]) &&
+    norm[1] === 'タスク' &&
+    norm[2] === '内容' &&
+    (norm[3] === '担当者' || norm[3] === '担当') &&
+    norm[4] === '期限'
+  );
+}
+
 // ヘッダー名から最適な列幅（DXA単位）を計算する
 function calcColWidths(headers: string[], totalDxa: number): number[] {
+  // 標準スタイルの TODO 表は指定比率（No8% / タスク22% / 内容40% / 担当者15% / 期限15%）で割り付ける
+  if (isStandardTodoHeader(headers)) {
+    const pct = [8, 22, 40, 15, 15];
+    const widths = pct.map((p) => Math.floor((p / 100) * totalDxa));
+    const diff = totalDxa - widths.reduce((a, b) => a + b, 0);
+    widths[widths.length - 1] += diff;
+    return widths;
+  }
   const WEIGHT: Record<string, number> = {
     'No': 1, '#': 1, '番号': 1, 'NO': 1,
     'タスク': 5, '内容': 5, 'アクション': 5, '説明': 4, '詳細': 4, '項目': 4, '議題': 4, '発言': 4,
@@ -293,7 +314,8 @@ function buildDocx(blocks: MdBlock[]): Promise<Buffer> {
       case 'list': {
         for (let li = 0; li < (block.items ?? []).length; li++) {
           const item = (block.items ?? [])[li];
-          const leftIndent = 400 + item.indent * 320;
+          // 中点（・）を左端起点にするため、最上位アイテムは左インデント0とする
+          const leftIndent = item.indent * 320;
           children.push(new Paragraph({
             children: [
               new TextRun({ text: '・ ', font: D.FONT, size: D.BODY - 2, color: D.textMuted }),
@@ -533,16 +555,48 @@ async function buildXlsx(blocks: MdBlock[], title: string): Promise<Buffer> {
     }
   }
 
-  // 列幅（アクションリストに最適化）
-  ws.getColumn('A').width = 6;   // No
-  ws.getColumn('B').width = 36;  // アクション
-  ws.getColumn('C').width = 14;  // 担当者
-  ws.getColumn('D').width = 12;  // 期限
-  ws.getColumn('E').width = 12;  // ステータス
+  // 列幅（標準スタイルの TODO 表 No./タスク/内容/担当者/期限 に最適化）
+  ws.getColumn('A').width = 6;   // No（狭）
+  ws.getColumn('B').width = 18;  // タスク（中）
+  ws.getColumn('C').width = 44;  // 内容（広）
+  ws.getColumn('D').width = 14;  // 担当者（狭）
+  ws.getColumn('E').width = 12;  // 期限（狭）
   ws.getColumn('F').width = 12;  // 予備
 
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
+}
+
+// marked が生成した HTML から、標準スタイルの TODO 表（No./タスク/内容/担当者/期限）を
+// 検出し、列幅指定用の <colgroup> と固定レイアウト用クラスを注入する。
+// 他スタイルの2列表などは <thead> のヘッダー構成が一致しないため影響を受けない。
+function injectTodoColgroup(html: string): string {
+  const COLGROUP =
+    '<colgroup>' +
+    '<col style="width:8%">' +
+    '<col style="width:22%">' +
+    '<col style="width:40%">' +
+    '<col style="width:15%">' +
+    '<col style="width:15%">' +
+    '</colgroup>';
+
+  return html.replace(/<table>([\s\S]*?)<\/table>/g, (full, inner) => {
+    // ヘッダーセルを抽出（marked は <thead><tr><th>...</th>...）
+    const theadMatch = /<thead>([\s\S]*?)<\/thead>/.exec(inner);
+    if (!theadMatch) return full;
+    const headers = Array.from(theadMatch[1].matchAll(/<th[^>]*>([\s\S]*?)<\/th>/g)).map((m) =>
+      m[1].replace(/<[^>]+>/g, '').trim().replace(/\.$/, ''),
+    );
+    const isTodo =
+      headers.length === 5 &&
+      /^No$/i.test(headers[0]) &&
+      headers[1] === 'タスク' &&
+      headers[2] === '内容' &&
+      (headers[3] === '担当者' || headers[3] === '担当') &&
+      headers[4] === '期限';
+    if (!isTodo) return full;
+    return `<table class="todo-table">${COLGROUP}${inner}</table>`;
+  });
 }
 
 // ── PDF（playwright + marked でプレビューと同じ描画）──────────────
@@ -553,7 +607,8 @@ async function buildPdf(markdownContent: string): Promise<Buffer> {
     /<!--\s*pagebreak\s*-->/gi,
     '\n<div class="pagebreak"></div>\n',
   );
-  const htmlBody = await marked(preprocessed, { gfm: true, breaks: false });
+  let htmlBody = await marked(preprocessed, { gfm: true, breaks: false });
+  htmlBody = injectTodoColgroup(htmlBody);
 
   const html = `<!DOCTYPE html>
 <html lang="ja">
@@ -567,7 +622,7 @@ async function buildPdf(markdownContent: string): Promise<Buffer> {
        サーバ未インストールのため、generic sans-serif に落ちると中国語フォント(WenQuanYi)やビットマップ(Unifont)に
        フォールバックして字形・行間が崩れる。実在の日本語フォント(IPAexGothic→IPAPGothic→IPAGothic)を
        sans-serif の前に明示し、崩れを防ぐ（MC-195）。Noto/Hiragino 系は将来インストール時に優先される。 */
-    font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", "Noto Sans JP", "Noto Sans CJK JP", "IPAexGothic", "IPAPGothic", "IPAGothic", sans-serif;
+    font-family: "Meiryo", "Hiragino Sans", "Yu Gothic", "Noto Sans JP", "Noto Sans CJK JP", "IPAexGothic", "IPAPGothic", "IPAGothic", sans-serif;
     font-size: 11pt;
     line-height: 1.7;
     color: #1e2a3a;
@@ -580,7 +635,7 @@ async function buildPdf(markdownContent: string): Promise<Buffer> {
   h3 { font-size: 1.1em; }
   h4 { font-size: 1em; }
   p { margin: 0.6em 0; }
-  ul, ol { margin: 0.5em 0; padding-left: 1.6em; }
+  ul, ol { margin: 0.5em 0; padding-left: 1.2em; list-style-position: outside; }
   li { margin: 0.25em 0; }
   code {
     background: #edf0f5;
@@ -611,6 +666,9 @@ async function buildPdf(markdownContent: string): Promise<Buffer> {
     font-size: 0.92em;
   }
   th, td { border: 1px solid #d0d8e4; padding: 0.4em 0.7em; text-align: left; }
+  /* 標準スタイルの TODO 表は colgroup の列幅を固定レイアウトで反映する（MC-207） */
+  table.todo-table { table-layout: fixed; }
+  table.todo-table td, table.todo-table th { word-break: break-word; overflow-wrap: anywhere; }
   th { background: #edf0f5; font-weight: 700; }
   tr:nth-child(even) td { background: #f8f9fc; }
   hr { border: none; border-top: 1px solid #d0d8e4; margin: 1.2em 0; }
