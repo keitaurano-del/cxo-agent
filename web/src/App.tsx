@@ -24,7 +24,6 @@ import {
 } from './components/icons';
 import DashboardLayout from './components/DashboardLayout';
 import { isDashboardPath } from './lib/nav';
-import Overview from './views/Overview';
 import Agents from './views/Agents';
 import Activity from './views/Activity';
 import Feed from './views/Feed';
@@ -473,7 +472,7 @@ export default function App() {
               {/* ダッシュボード（/）配下に各タブを入れ子。各子ビューの URL は従来どおり。 */}
               {/* エージェントタブは / に統合。ティック+消費量は /activity に統合。 */}
               <Route element={<DashboardLayout />}>
-                <Route path="/" element={<Overview />} />
+                <Route path="/" element={<Navigate to="/today" replace />} />
                 <Route path="/feed" element={<Feed />} />
                 <Route path="/today" element={<Narrative />} />
                 <Route path="/news" element={<News />} />

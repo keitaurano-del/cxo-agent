@@ -1,11 +1,10 @@
 // ダッシュボード（/）配下のタブを束ねるレイアウト（MC-76）。
-// タブバー（俯瞰 / 今日 / ニュース / 活動 / Claude）+ <Outlet/> で
+// タブバー（今日 / ニュース / 活動 / Claude）+ <Outlet/> で
 // 各ビュー本体を差し込む。子ビューの URL は deep link・SSE・横断検索からの遷移に影響しない。
-// エージェントタブは俯瞰（/）に統合済み。ティック+消費量は活動（/activity）に統合済み。
 // PC は横並び tablist、モバイルは横スクロール（Tasks のステータスタブと同じパターン）。
 import { NavLink, Outlet } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { GridIcon, NoteIcon, ActivityIcon, GaugeIcon, NewsIcon } from './icons';
+import { NoteIcon, ActivityIcon, GaugeIcon, NewsIcon } from './icons';
 
 interface DashTab {
   to: string;
@@ -13,9 +12,7 @@ interface DashTab {
   icon: ReactNode;
 }
 
-// 俯瞰だけ index ルート（/）なので end で完全一致にする。
 const DASH_TABS: DashTab[] = [
-  { to: '/', label: '俯瞰', icon: <GridIcon width={16} height={16} /> },
   { to: '/today', label: '今日', icon: <NoteIcon width={16} height={16} /> },
   { to: '/news', label: 'ニュース', icon: <NewsIcon width={16} height={16} /> },
   { to: '/activity', label: '活動', icon: <ActivityIcon width={16} height={16} /> },
@@ -37,7 +34,7 @@ export default function DashboardLayout() {
             <NavLink
               key={tab.to}
               to={tab.to}
-              end={tab.to === '/'}
+              end={tab.to === '/today'}
               role="tab"
               className={({ isActive }) =>
                 `inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 text-xs transition-colors md:py-1.5 ${
