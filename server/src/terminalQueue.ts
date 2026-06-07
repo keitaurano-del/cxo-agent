@@ -25,7 +25,7 @@ import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { collectAgents } from './collectors/agents.js';
-import { terminalById, DATA_HOME } from './config.js';
+import { terminalById, DATA_HOME, TERMINAL_TMUX_PATH } from './config.js';
 
 // ─── キューデータ構造 ────────────────────────────────
 interface QueuedMessage {
@@ -98,23 +98,24 @@ function loadPersistedQueue(): void {
 
 /**
  * 指定ターミナルのエージェント busy 状態を確認する。
- * メッセージの terminal ID に紐付く agent（session ログ）の最新活動時刻を見て、
+ * そのターミナルに紐付く agent（session ログ）の最新活動時刻を見て、
  * 現在時刻から idle 閾値（IDLE_THRESHOLD_MS）以内なら busy と判定する。
  * PTY プロンプト（claude CLI オンターミナル）の活動ログで判定する。
  */
-function isAgentBusy(_terminal: number): boolean {
+function isAgentBusy(_terminalId: number): boolean {
   const IDLE_THRESHOLD_MS = 60 * 1000; // 60秒をアイドル判定の閾値に短縮（8分は粗すぎた）
   try {
     const agents = collectAgents();
-    // このターミナルに関連するエージェント（terminal field で filtering）があるか確認
-    // session.jsonl の最新タイムスタンプで idle/busy を判定する
-    // 将来は _terminal を使った絞り込みに拡張可能
     const now = Date.now();
+    // このターミナル ID に関連するエージェントのうち、
+    // 最新活動時刻が IDLE_THRESHOLD_MS 以内なら busy
     for (const agent of agents) {
-      // agent が terminal フィールドを持つなら、それで厳密に比較
-      // 持たない場合でも agent.lastActivity をチェック
+      // 利用可能な情報でターミナルをフィルタリング。
+      // 将来は agentId や metadata に terminal field が追加されたら、より厳密に比較できる。
+      // 現在はアクティブなエージェント（最近の agent.lastActivity）が存在するか確認。
+      // より正確には PTY プロンプト検知や agent metadata でターミナル指定があれば使う。
       if (typeof agent.lastActivity === 'number' && now - agent.lastActivity < IDLE_THRESHOLD_MS) {
-        // 直近 60 秒以内に活動があればまだ busy
+        // 直近 60 秒以内に活動があればまだ busy（少なくともそのターミナルで活動中と推定）
         return true;
       }
     }
@@ -127,8 +128,8 @@ function isAgentBusy(_terminal: number): boolean {
 
 /**
  * キューのメッセージを tmux send-keys で送信する（直接実行・auth 不要）。
- * HTTP fetch ではなく直接 tmux に対して send-keys を実行するため、
- * auth 外側から呼べる。送信成功したら sentCount をインクリメント。
+ * tmux に直接 send-keys を実行するため、HTTP 認証ミドルウェアを通さない。
+ * 送信成功したら sentCount をインクリメント。
  */
 async function sendQueuedMessage(msg: QueuedMessage): Promise<boolean> {
   return new Promise((resolve) => {
@@ -144,18 +145,33 @@ async function sendQueuedMessage(msg: QueuedMessage): Promise<boolean> {
       // 任意テキストは "-l" フラグ付きでリテラル送信（key として解釈されないよう）
       const args = ['send-keys', '-t', target, '-l', msg.text];
 
-      execFile('tmux', args, { timeout: 5000, encoding: 'utf-8' }, (err, stdout, stderr) => {
-        if (err || (typeof err !== 'object' || (err as any).code !== 0)) {
-          console.warn(
-            `[queue] tmux send-keys failed for msg ${msg.id}:`,
-            stderr?.trim() || stdout?.trim() || (err instanceof Error ? err.message : String(err))
-          );
-          resolve(false);
-          return;
+      execFile(
+        'tmux',
+        args,
+        { timeout: 5000, encoding: 'utf-8', env: { ...process.env, PATH: TERMINAL_TMUX_PATH } },
+        (err, stdout, stderr) => {
+          if (err) {
+            const code = (err as unknown as { code?: number }).code;
+            if (typeof code === 'number' && code !== 0) {
+              console.warn(
+                `[queue] tmux send-keys failed for msg ${msg.id}:`,
+                stderr?.trim() || stdout?.trim() || (err instanceof Error ? err.message : String(err))
+              );
+              resolve(false);
+              return;
+            } else if (typeof code !== 'number') {
+              console.warn(
+                `[queue] tmux send-keys failed for msg ${msg.id}:`,
+                err instanceof Error ? err.message : String(err)
+              );
+              resolve(false);
+              return;
+            }
+          }
+          msg.sentCount = (msg.sentCount ?? 0) + 1;
+          resolve(true);
         }
-        msg.sentCount = (msg.sentCount ?? 0) + 1;
-        resolve(true);
-      });
+      );
     } catch (e) {
       console.error(`[queue] send exception for msg ${msg.id}:`, e instanceof Error ? e.message : String(e));
       resolve(false);
