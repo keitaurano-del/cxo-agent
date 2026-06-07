@@ -3288,7 +3288,7 @@ function NotebookDetailView({
     </div>
   ) : (
     <div className="flex items-center gap-1.5">
-      <span className="text-lg font-bold text-text">{detail?.meta.name ?? 'ノートブック'}</span>
+      <span className="text-lg font-bold text-text">{detail?.meta.name ?? 'RAG'}</span>
       {detail && (
         <button
           type="button"
@@ -3421,7 +3421,7 @@ function CreateNotebook({ onCreated }: { onCreated: (id: string) => void }) {
             }
           }}
           disabled={creating}
-          placeholder="新しいノートブックの名前（任意）…"
+          placeholder="新しいRAGの名前（任意）…"
           className="flex-1 rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none disabled:opacity-60"
         />
         <button
@@ -3431,7 +3431,7 @@ function CreateNotebook({ onCreated }: { onCreated: (id: string) => void }) {
           className="inline-flex items-center justify-center gap-1.5 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-bg transition-opacity disabled:opacity-50"
         >
           {creating ? <Spinner /> : <PlusIcon width={15} height={15} />}
-          ノートブックを作成
+          RAGを作成
         </button>
       </div>
       {error && (
@@ -3618,7 +3618,7 @@ export default function Notebooks() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="ノートブック"
+        title="RAG"
         subtitle="資料をアップロードし、その内容を根拠に質問・要約・生成ができます"
         fetchedAt={fetchedAt}
       />
@@ -3633,7 +3633,7 @@ export default function Notebooks() {
           {data && (
             <>
               {notebooks.length === 0 ? (
-                <EmptyState>まだノートブックがありません。上の入力欄から作成できます。</EmptyState>
+                <EmptyState>まだRAGがありません。上の入力欄から作成できます。</EmptyState>
               ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {notebooks.map((nb) => (

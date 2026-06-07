@@ -16,7 +16,7 @@ import {
   DotIcon,
   VaultIcon,
   DocumentsIcon,
-  NotebookIcon,
+  SparkIcon,
   TerminalIcon,
   SunIcon,
   MoonIcon,
@@ -142,7 +142,7 @@ const NAV: NavItem[] = [
   { to: '/approvals', label: '承認フロー', shortLabel: '承認', icon: <ApprovalIcon /> },
   { to: '/vault', label: 'Vault', shortLabel: 'Vault', icon: <VaultIcon /> },
   { to: '/deliverables', label: 'ドキュメント', shortLabel: 'ドキュ', icon: <DocumentsIcon /> },
-  { to: '/notebooks', label: 'RAG', shortLabel: 'RAG', icon: <NotebookIcon /> },
+  { to: '/notebooks', label: 'RAG', shortLabel: 'RAG', icon: <SparkIcon /> },
   { to: '/chat', label: 'チャット', shortLabel: 'チャット', icon: <ChatIcon /> },
   // ターミナル: iframe ホスト用 React ルートは /terminal-view。
   // サーバ proxy ルート /terminal（→ ttyd）と衝突させないため別パスにする。
