@@ -516,14 +516,24 @@ function ChatPane({
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [viewer, setViewer] = useState<FileViewerState | null>(null);
+  // このマウント中に asking が true になったことを記録。
+  // 正常 ask フロー後に refetch 完了前のわずかな間で pendingAnswer が立つのを防ぐ。
+  const hasBeenAskingRef = useRef(false);
 
   const handleCite = useCallback((filename: string, page?: string) => {
     setViewer({ notebookId: id, filename, page });
   }, [id]);
 
   useEffect(() => {
+    if (asking) {
+      hasBeenAskingRef.current = true;
+      setPendingAnswer(false);
+      return;
+    }
     const last = chat.at(-1);
-    if (last && last.role === 'user' && !asking) {
+    // hasBeenAskingRef が true の場合は正常 ask フロー後なので pendingAnswer を立てない。
+    // false の場合（画面遷移復帰など）のみ resume 用の pendingAnswer をセット。
+    if (last && last.role === 'user' && !hasBeenAskingRef.current) {
       setPendingAnswer(true);
     } else {
       setPendingAnswer(false);
