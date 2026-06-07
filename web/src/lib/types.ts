@@ -592,3 +592,23 @@ export interface NotebookFolderTree {
   folders: NotebookFolderEntry[];
   rootFiles: NotebookFileRef[];
 }
+
+// ─── 受信箱（Inbox / MC-189）──────────────────────────────────────
+// server/src/inbox.ts の InboxEntry と一致させる。
+
+export type InboxProject = 'logic' | 'cxo' | 'en-chakai' | null;
+export type InboxPriority = 'P0' | 'P1' | 'P2' | 'P3';
+
+export interface InboxEntry {
+  id: string;
+  ts: string;
+  kind: 'task';
+  project: InboxProject;
+  text: string;
+  status: 'pending';
+  attachments: string[];
+  priority: InboxPriority;
+  taskId?: string;
+  trackerSource?: string;
+  agent?: string;
+}
