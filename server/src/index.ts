@@ -12,6 +12,8 @@ import { randomUUID } from 'node:crypto';
 
 import { PORT, CLAUDE_PROJECTS_DIR, VAULT_DIR, STALL_MINUTES, AGENT_LOG_TTL_MS, DELIVERABLES_DIR } from './config.js';
 import { collectAgents, collectAgentGroups, collectAgentFeed } from './collectors/agents.js';
+import { collectSecretaries } from './collectors/secretaries.js';
+import { collectMoods, type MoodInput } from './collectors/moods.js';
 import { collectTasks } from './collectors/tasks.js';
 import { collectTimeline } from './collectors/timeline.js';
 import { collectNarrative } from './collectors/narrative.js';
@@ -165,6 +167,48 @@ async function safeJsonAsync(res: Response, build: () => Promise<unknown>): Prom
   }
 }
 
+/**
+ * mood 生成の入力集合を組み立てる（MC-165 拡張）。
+ * AgentsLive の表示集合に揃える:
+ *   - subagent: subagentType 別に「最も稼働中＝active」な代表 1 件を選び、active なものだけ対象にする。
+ *   - 秘書: collectSecretaries の active なものを 'secretary:<key>' キーで加える。
+ * コスト厳守のため active 以外は含めない（active 0 なら moods collector が claude を呼ばない）。
+ */
+function buildMoodInputs(): MoodInput[] {
+  const inputs: MoodInput[] = [];
+
+  // subagent: subagentType ごとに active な代表を 1 件選ぶ。
+  const repByType = new Map<string, { lastAction: string; currentTaskId?: string }>();
+  for (const a of collectAgents()) {
+    if (a.status !== 'active') continue;
+    if (!repByType.has(a.subagentType)) {
+      repByType.set(a.subagentType, { lastAction: a.lastAction, currentTaskId: a.currentTaskId });
+    }
+  }
+  for (const [subagentType, rep] of repByType) {
+    inputs.push({
+      key: subagentType,
+      name: subagentType,
+      status: 'active',
+      lastAction: rep.lastAction,
+      currentTask: rep.currentTaskId,
+    });
+  }
+
+  // 秘書: active なものだけ（OpenClaw セッションが直近で動いている）。
+  for (const s of collectSecretaries()) {
+    if (s.status !== 'active') continue;
+    inputs.push({
+      key: `secretary:${s.key}`,
+      name: s.name,
+      status: 'active',
+      lastAction: s.lastAction,
+    });
+  }
+
+  return inputs;
+}
+
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
@@ -183,6 +227,26 @@ app.get('/api/agents', (_req, res) => {
 // /api/agents（生インスタンス）は roster/feed が引き続き使うため非破壊で温存。
 app.get('/api/agents/grouped', (_req, res) => {
   safeJson(res, () => ({ groups: collectAgentGroups() }));
+});
+
+// ─── 秘書レイヤー（Masayoshi / Son、MC-165 拡張）──────────────────────
+// OpenClaw 秘書（subagent ログに出ない）を AgentsLive に常時ピン留め表示するための
+// ライブ状態。~/.openclaw のセッションログと tmux セッションから read-only で集める（fail-soft）。
+app.get('/api/secretaries', (_req, res) => {
+  safeJson(res, () => ({ secretaries: collectSecretaries() }));
+});
+
+// ─── エージェントの気持ち/思考（mood、MC-165 拡張）────────────────────
+// 各 active エージェント/秘書の「今の気持ち＋考えてること」を一人称で返す。
+// 全 active ぶんを 1 回のバッチ claude（haiku）で生成し、活動ハッシュでキャッシュ＋最短 5 分スロットル。
+// active が 0 なら claude を呼ばず空配列。失敗時は status ベースのフォールバック（claude を呼ばない）。
+// 入力は AgentsLive の表示集合（subagentType 別の代表 + 秘書）に揃える。
+app.get('/api/agent-moods', (_req, res) => {
+  void safeJsonAsync(res, async () => {
+    const inputs = buildMoodInputs();
+    const moods = await collectMoods(inputs);
+    return { moods, generatedAt: new Date().toISOString() };
+  });
 });
 
 // ─── エージェント spawn（MC-86）──────────────────────────────────

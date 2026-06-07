@@ -30,6 +30,28 @@ export interface AgentSummary {
   currentTaskId?: string; // MC-164: 現在作業中のタスク ID
 }
 
+// 秘書レイヤー（MC-165 拡張 / GET /api/secretaries）。
+// server/src/collectors/secretaries.ts の SecretarySummary と一致させる。
+export interface SecretarySummary {
+  key: string;
+  name: string;
+  emoji: string;
+  role: string;
+  layer: 'secretary';
+  status: AgentStatus;
+  lastAction: string;
+  lastActivity: string;
+}
+
+// エージェント/秘書の気持ち・思考（MC-165 拡張 / GET /api/agent-moods）。
+// server/src/collectors/moods.ts の AgentMood と一致させる。
+export interface AgentMood {
+  key: string;
+  emoji: string;
+  mood: string;
+  thought: string;
+}
+
 // 人格別に集約したエージェントグループ（MC-88 / GET /api/agents/grouped）。
 // server/src/collectors/agents.ts の AgentGroup と一致させる。
 export interface AgentGroup {

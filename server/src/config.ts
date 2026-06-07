@@ -97,6 +97,26 @@ export const NOTEBOOK_CLAUDE_CONCURRENCY = envNum('NOTEBOOK_CLAUDE_CONCURRENCY',
 /** claude -p に渡すモデル名（明示指定で環境デフォルト依存を避ける）。 */
 export const NOTEBOOK_CLAUDE_MODEL = env('NOTEBOOK_CLAUDE_MODEL', 'claude-sonnet-4-6');
 
+// ─── エージェント気持ち/思考（mood コレクタ MC-165 拡張）──────────────────
+//
+// AgentsLive の各カードに「一人称の今の気持ち＋考えてること」を 1 行＋感情絵文字で表示する。
+// 全 active エージェントぶんを 1 回のバッチ claude 呼び出し（haiku）で生成し、活動（lastAction）の
+// ハッシュでキャッシュ・最短スロットルで連打を防ぐ（トークン節約）。失敗時は status ベースの簡易ムードに
+// フォールバックする（claude を呼ばない）。active が 0 なら呼ばない。
+
+/** mood 生成に使うモデル（haiku で安く。env で差し替え可）。 */
+export const AGENT_MOOD_MODEL = env('AGENT_MOOD_MODEL', 'claude-haiku-4-5-20251001');
+
+/** mood 生成 claude のタイムアウト（ミリ秒、既定 60s）。バッチ 1 回ぶん。 */
+export const AGENT_MOOD_TIMEOUT_MS = envNum('AGENT_MOOD_TIMEOUT_MS', 60_000);
+
+/**
+ * mood バッチ生成の最短スロットル（ミリ秒、既定 5 分）。
+ * 直前の生成からこの時間が経つまでは、活動に変化があっても再生成しない（コスト厳守）。
+ * 範囲は memory「mood はバッチ＋キャッシュ＋3〜5分スロットル」に準拠。
+ */
+export const AGENT_MOOD_THROTTLE_MS = envNum('AGENT_MOOD_THROTTLE_MS', 5 * 60 * 1000);
+
 /** chat.jsonl に保持する最大メッセージ数（超えたら古いものから削除）。 */
 export const NOTEBOOK_CHAT_MAX_MESSAGES = envNum('NOTEBOOK_CHAT_MAX_MESSAGES', 500);
 

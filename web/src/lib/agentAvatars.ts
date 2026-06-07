@@ -68,6 +68,19 @@ export const AGENT_AVATARS: Record<string, AgentAvatar> = {
     working: '/avatars/avatar-hayashi-rin-working-v2.gif',
     idle: '/avatars/avatar-hayashi-rin-idle-v2.gif',
   },
+  // 秘書レイヤー（MC-165 拡張）。OpenClaw 秘書 Masayoshi(📋)/Son(🤝) の V2 アバターは
+  // 別担当が生成中。ファイル不在の間は UI 側で絵文字フォールバックする（getAvatarSrc が
+  // <img> の onError で絵文字へ落とす）。命名は v2 系の規約に合わせて固定。
+  masayoshi: {
+    name: 'Masayoshi',
+    working: '/avatars/avatar-masayoshi-working-v2.gif',
+    idle: '/avatars/avatar-masayoshi-idle-v2.gif',
+  },
+  son: {
+    name: 'Son',
+    working: '/avatars/avatar-son-working-v2.gif',
+    idle: '/avatars/avatar-son-idle-v2.gif',
+  },
 };
 
 /** subagentType からアバターを引く。未登録なら undefined（フォールバック）。 */
