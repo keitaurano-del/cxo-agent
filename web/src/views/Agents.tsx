@@ -15,6 +15,7 @@ import { PageHeader } from '../components/PageHeader';
 import { ResourceState, StatusDot, Badge } from '../components/ui';
 import { AgentFeed } from '../components/AgentFeed';
 import { CloseIcon, PlusIcon } from '../components/icons';
+import { getAgentAvatar } from '../lib/agentAvatars';
 
 const STATUS_FILTERS: { value: AgentStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'すべて' },
@@ -100,6 +101,29 @@ function buildCards(groups: AgentGroup[], roster: RosterEntry[]): DisplayCard[] 
   return cards;
 }
 
+// MC-165: エージェントの V2 ドット絵アバター。稼働中は working（工具を動かす）、
+// それ以外は idle（呼吸・まばたき）の GIF を表示する。アバター未生成の subagentType は
+// null を返し、カードは従来どおり状態ドットのみで表示する（既存レイアウト非破壊）。
+function AgentAvatarImg({ card }: { card: DisplayCard }) {
+  const avatar = getAgentAvatar(card.name);
+  if (!avatar) return null;
+  const working = card.status === 'active';
+  const src = working ? avatar.working : avatar.idle;
+  return (
+    <img
+      src={src}
+      alt={`${avatar.name}（${working ? '稼働中' : '待機'}）`}
+      title={`${avatar.name}（${working ? '稼働中' : '待機'}）`}
+      width={56}
+      height={56}
+      loading="lazy"
+      decoding="async"
+      className="h-14 w-14 shrink-0 rounded-xl border border-border bg-surface-2 object-cover"
+      style={{ imageRendering: 'pixelated' }}
+    />
+  );
+}
+
 function AgentCard({
   card,
   onOpen,
@@ -126,7 +150,9 @@ function AgentCard({
         }`}
         aria-label={`${card.persona || card.name}（${meta.label}）${clickable ? ' — 会話を表示' : ''}`}
       >
-        <div className="min-w-0">
+        {/* MC-165: V2 ドット絵アバター（未生成のエージェントは非表示） */}
+        <AgentAvatarImg card={card} />
+        <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-bold text-text">{card.persona || card.name}</div>
           {card.persona && (
             <div className="truncate text-[10px] text-text-faint">{card.name}</div>
@@ -194,20 +220,108 @@ function AgentCard({
   );
 }
 
-function Drawer({ agentId, name, onClose }: { agentId: string; name: string; onClose: () => void }) {
+/** MC-187: AgentDetail 統計パネル。稼働インスタンス数・プロジェクト別内訳を表示。 */
+function AgentStats({ card }: { card: DisplayCard }) {
+  // 稼働パイ： 稼働中 / 待機 / 完了 / 未稼働（0件なら表示しない）
+  const hasStats = card.instanceCount > 0;
+
+  return (
+    <div className="space-y-4 rounded-lg border border-border bg-surface-2 p-4">
+      {/* 概要：エージェント名・役割 */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <div className="text-sm font-bold text-text">{card.persona || card.name}</div>
+          {card.personality && (
+            <span className="text-[10px] text-text-faint px-1.5 py-0.5 bg-surface rounded">
+              {card.personality}
+            </span>
+          )}
+        </div>
+        {card.role && (
+          <p className="text-[11px] text-text-muted">{card.role}</p>
+        )}
+      </div>
+
+      {/* 稼働統計（MC-187） */}
+      {hasStats && (
+        <div className="border-t border-border pt-3">
+          <p className="text-[11px] font-semibold text-text-faint mb-2">稼働統計</p>
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <div className="rounded-md bg-surface px-2 py-1.5">
+              <div className="font-semibold" style={{ color: 'var(--mc-active)' }}>
+                {card.activeCount}
+              </div>
+              <div className="text-text-faint">稼働中</div>
+            </div>
+            <div className="rounded-md bg-surface px-2 py-1.5">
+              <div className="font-semibold" style={{ color: 'var(--mc-idle)' }}>
+                {card.idleCount}
+              </div>
+              <div className="text-text-faint">待機</div>
+            </div>
+            <div className="rounded-md bg-surface px-2 py-1.5">
+              <div className="font-semibold" style={{ color: 'var(--mc-done)' }}>
+                {card.doneCount}
+              </div>
+              <div className="text-text-faint">完了</div>
+            </div>
+            <div className="rounded-md bg-surface px-2 py-1.5">
+              <div className="font-semibold text-text-muted">{card.instanceCount}</div>
+              <div className="text-text-faint">合計</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* プロジェクト別内訳 */}
+      {card.projects.length > 0 && (
+        <div className="border-t border-border pt-3">
+          <p className="text-[11px] font-semibold text-text-faint mb-2">プロジェクト</p>
+          <div className="flex flex-wrap gap-1.5">
+            {card.projects.map((p) => (
+              <Badge key={p}>{p}</Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 最終活動 */}
+      {card.lastActivity && (
+        <div className="border-t border-border pt-3">
+          <p className="text-[11px] text-text-faint">
+            最終活動: {relativeTime(card.lastActivity)}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Drawer({
+  agentId,
+  name,
+  card,
+  onClose,
+}: {
+  agentId: string;
+  name: string;
+  card: DisplayCard;
+  onClose: () => void;
+}) {
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col md:flex-row"
       role="dialog"
       aria-modal="true"
-      aria-label={`${name} の会話`}
+      aria-label={`${name} の詳細`}
     >
       <div className="flex-1 bg-bg/70" onClick={onClose} aria-hidden />
-      <div className="flex h-[85vh] w-full max-w-xl flex-col rounded-t-2xl border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] shadow-xl md:h-full md:rounded-none md:border-l md:border-t-0 md:pb-0">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+      {/* MC-187: レスポンシブドロワー。md未満は下から、md以上は右スライド。 */}
+      <div className="flex h-[85vh] w-full max-w-xl flex-col rounded-t-2xl border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] shadow-xl md:h-full md:max-w-[384px] md:rounded-none md:border-l md:border-t-0 md:pb-0">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-surface/95 backdrop-blur px-5 py-4">
           <div className="min-w-0">
             <div className="truncate text-sm font-bold text-text">{name}</div>
-            <div className="text-[11px] text-text-faint">会話タイムライン（最新の稼働）</div>
+            <div className="text-[11px] text-text-faint">詳細情報</div>
           </div>
           <button
             type="button"
@@ -218,8 +332,18 @@ function Drawer({ agentId, name, onClose }: { agentId: string; name: string; onC
             <CloseIcon />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-5">
-          <AgentFeed agentId={agentId} />
+        {/* コンテンツ：スクロール領域 */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* MC-187: 統計パネル（概要・稼働統計・プロジェクト別） */}
+          <AgentStats card={card} />
+
+          {/* 会話タイムライン */}
+          <section>
+            <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wide text-text-faint">
+              会話タイムライン
+            </h3>
+            <AgentFeed agentId={agentId} />
+          </section>
         </div>
       </div>
     </div>
@@ -600,6 +724,7 @@ export default function Agents() {
         <Drawer
           agentId={openCard.agentId}
           name={openCard.persona || openCard.name}
+          card={openCard}
           onClose={() => navigate('/agents')}
         />
       )}

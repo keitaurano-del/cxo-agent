@@ -161,17 +161,6 @@ export interface RosterEntry {
   currentProject?: string;
 }
 
-// ─── Persona avatar（MC-165 PersonaCard）────────────────────────
-
-export interface PersonaMeta {
-  key: string;
-  name: string;
-  avatar?: {
-    working: string;
-    idle: string;
-  };
-}
-
 export interface OverviewProject {
   project: ProjectName;
   agentsActive: number;
