@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useLiveResource } from '../lib/useLiveData';
 import { useLiveTick } from '../lib/liveContext';
-import type { ProjectName, Task, TaskStatus, AgentSummary } from '../lib/types';
+import type { ProjectName, Task, TaskStatus } from '../lib/types';
 import {
   PROJECT_ORDER,
   TASK_COLUMNS,
@@ -17,7 +17,6 @@ import { PageHeader } from '../components/PageHeader';
 import { ResourceState, StalledBadge, Badge } from '../components/ui';
 import { TaskDetail } from '../components/TaskDetail';
 import { TaskAgentStatus } from '../components/TaskAgentStatus';
-import { AgentActivityStrip } from '../components/AgentActivityStrip';
 import { ChevronRightIcon, NoteIcon } from '../components/icons';
 
 function TaskCard({ t, onOpen }: { t: Task; onOpen: (t: Task) => void }) {
@@ -127,13 +126,6 @@ export default function Tasks() {
     '/api/tasks',
     tick,
   );
-  // MC-164: エージェント活動バーのデータ取得
-  const { data: agentsData } = useLiveResource<{ agents: AgentSummary[] }>(
-    '/api/agents',
-    tick,
-  );
-  const agents = agentsData?.agents ?? [];
-
   const [project, setProject] = useState<ProjectName | 'all'>('all');
   // モバイルでは横スクロールカンバンの代わりに、選択した 1 列のみ全幅縦積みで表示する。
   const [activeColumn, setActiveColumn] = useState<TaskStatus>('IN_PROGRESS');
@@ -247,8 +239,6 @@ export default function Tasks() {
             </div>
           }
         />
-        {/* MC-164: エージェント活動ストリップ */}
-        {agents.length > 0 && <AgentActivityStrip agents={agents} />}
         {/* モバイル: ステータスタブ（件数バッジ付き）で 1 列を選んで縦積み表示 */}
         <div className="border-b border-border px-4 py-2 md:hidden">
           <div
