@@ -1,9 +1,16 @@
 // AgentsLive — エージェント擬人化ライブ画面（MC-165 再々実装＋秘書/気持ち拡張）。
 //
 // ダッシュボード（/）のトップタブとして表示する。各エージェントを V2 ドット絵アバター
-// （getAgentAvatar）＋吹き出しで並べ、「現在のタスク（ID＋タイトル）」と「直近の一言
-// （最新の活動/発言）」をリアルタイム（SSE 由来 useLiveTick → useLiveResource 再フェッチ）
-// で表示する。
+// （getAgentAvatar）＋吹き出しで並べ、「対象タスク（MC バッジ＋タイトル）」と「いま何を
+// しているか（mood 由来の具体的な一人称 1〜2 行）」を主役に、リアルタイム（SSE 由来
+// useLiveTick → useLiveResource 再フェッチ）で表示する。
+//
+// MC-165 改良:
+//   - 稼働中の表示を具体化: 吹き出しは対象タスク（MC バッジ＋タイトル）を目立たせ、いま何を
+//     しているかを mood.doing（感情絵文字付きの具体的な一人称）で出す。doing が無ければ
+//     直近の活動スニペット（lastAction）にフォールバックする。
+//   - サブエージェントは稼働中（status==='active'）のものだけ表示する（idle/done/never は非表示）。
+//     秘書（林/Masayoshi/Son）は従来どおり常時ピン留め表示する。
 //
 // MC-165 拡張:
 //   - 秘書レイヤー: 林（main assistant・/api/agents に出ない）＋ Masayoshi / Son（OpenClaw 秘書）を
@@ -74,11 +81,15 @@ interface LiveAgent {
 
 // /api/agents を subagentType ごとに集約し、人格ごとの代表インスタンスを 1 件選ぶ。
 // 代表は status 順位（active > idle > done）→ lastActivity の新しさ で決める。
+// MC-165 改良: subagent は「稼働中（active）」のものだけ表示する（idle/done/never は非表示）。
+//   秘書（林/Masayoshi/Son）は buildSecretaries 側で常時ピン留めするため、ここの対象外。
 function buildLiveAgents(agents: AgentSummary[], roster: RosterEntry[]): LiveAgent[] {
   const rosterByName = new Map(roster.map((r) => [r.name, r]));
   const best = new Map<string, AgentSummary>();
 
   for (const a of agents) {
+    // 稼働中のサブエージェントのみを表示対象にする。
+    if (a.status !== 'active') continue;
     const prev = best.get(a.subagentType);
     if (!prev) {
       best.set(a.subagentType, a);
@@ -191,17 +202,25 @@ function MoodLine({ mood }: { mood?: AgentMood }) {
   );
 }
 
-// 吹き出し（現在のタスク＋直近の一言）。
+// 吹き出し（現在のタスク＝MC バッジ＋タイトル を主役に、いま何をしているかを具体表示）。
+// MC-165 改良: 「どのタスクの・何を」を前面に出す。
+//   - doing（mood 由来の具体行）があればそれを主役に、感情絵文字付きで 1〜2 行表示する。
+//   - doing が無い場合のみ、直近の活動スニペット（lastAction）にフォールバックする。
 function SpeechBubble({
   taskId,
   taskTitle,
+  doing,
+  doingEmoji,
   lastAction,
 }: {
   taskId?: string;
   taskTitle?: string;
+  doing?: string;
+  doingEmoji?: string;
   lastAction?: string;
 }) {
   const hasTask = !!taskId;
+  const hasDoing = !!(doing && doing.trim());
   const hasAction = !!(lastAction && lastAction.trim());
 
   return (
@@ -213,25 +232,38 @@ function SpeechBubble({
         aria-hidden
       />
       <div className="relative rounded-xl border border-border bg-surface-2 px-3 py-2">
-        {/* 現在のタスク */}
+        {/* 対象タスク（MC バッジ＋タイトル）を目立たせる。 */}
         {hasTask ? (
           <div className="flex items-start gap-1.5">
-            <span className="shrink-0 rounded bg-accent/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-accent">
+            <span className="shrink-0 rounded bg-accent/15 px-1.5 py-0.5 font-mono text-[11px] font-bold text-accent">
               {taskId}
             </span>
             {taskTitle && (
-              <span className="line-clamp-2 text-[11px] leading-snug text-text">{taskTitle}</span>
+              <span className="line-clamp-2 text-[12px] font-semibold leading-snug text-text">
+                {taskTitle}
+              </span>
             )}
           </div>
         ) : (
           <div className="text-[11px] text-text-faint">現在のタスクなし</div>
         )}
 
-        {/* 直近の一言（最新の活動スニペット） */}
-        {hasAction && (
-          <p className="mt-1.5 line-clamp-3 text-[12px] leading-snug text-text-muted">
-            「{lastAction}」
+        {/* いま何をしているか（具体的な一人称 1〜2 行・主役）。 */}
+        {hasDoing ? (
+          <p className="mt-1.5 flex items-start gap-1.5 text-[12px] leading-snug text-text">
+            {doingEmoji && (
+              <span className="shrink-0 text-sm leading-none" aria-hidden>
+                {doingEmoji}
+              </span>
+            )}
+            <span className="min-w-0 line-clamp-3">「{doing}」</span>
           </p>
+        ) : (
+          hasAction && (
+            <p className="mt-1.5 line-clamp-3 text-[12px] leading-snug text-text-muted">
+              「{lastAction}」
+            </p>
+          )
         )}
       </div>
     </div>
@@ -340,13 +372,15 @@ function LiveCard({
         </div>
       </button>
 
-      {/* 一人称の気持ち・思考（mood） */}
+      {/* 一人称の気持ち・思考（mood の短い気持ち＋つぶやき） */}
       <MoodLine mood={mood} />
 
-      {/* 吹き出し（現在のタスク＋直近の一言） */}
+      {/* 吹き出し（対象タスク＝MC バッジ＋タイトルを主役に、いま何をしているかを具体表示） */}
       <SpeechBubble
         taskId={agent.currentTaskId}
         taskTitle={taskTitle}
+        doing={mood?.doing}
+        doingEmoji={mood?.emoji}
         lastAction={agent.lastAction}
       />
     </div>
@@ -396,13 +430,11 @@ export default function AgentsLive() {
     return m;
   }, [moodsRes.data]);
 
-  const activeCount = live.filter((a) => a.status === 'active').length;
-
   return (
     <div>
       <PageHeader
         title="エージェント（擬人化ライブ）"
-        subtitle={`${live.length} 体 — 稼働中 ${activeCount}。秘書（林・Masayoshi・Son）と各エージェントの現在のタスク・直近の活動・今の気持ちをリアルタイム表示します。`}
+        subtitle={`稼働中のサブエージェント ${subagents.length} 体＋秘書（林・Masayoshi・Son）。いまどのタスクの何をしているか・今の気持ちをリアルタイム表示します。`}
         fetchedAt={agentsRes.fetchedAt}
       />
       <div className="p-4 md:p-6">
@@ -422,8 +454,11 @@ export default function AgentsLive() {
               />
             ))}
           </div>
-          {live.length === 0 && (
-            <p className="mt-6 text-sm text-text-faint">表示できるエージェントがありません。</p>
+          {/* 稼働中のサブエージェントが 0 のときの空表示（秘書は上に残る）。 */}
+          {subagents.length === 0 && (
+            <p className="mt-6 text-sm text-text-faint">
+              現在稼働中のエージェントはいません。
+            </p>
           )}
         </ResourceState>
       </div>

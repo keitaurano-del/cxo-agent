@@ -10,11 +10,13 @@
 //   - active が 0 なら claude を一切呼ばない。
 //   - 失敗・タイムアウト・パース不可は status ベースの簡易ムードにフォールバック（claude を呼ばない）。
 //
-// 出力（/api/agent-moods）: { key, emoji, mood, thought }[]。
+// 出力（/api/agent-moods）: { key, emoji, mood, thought, doing }[]。
 //   - key   : subagentType（agents）または 'secretary:<key>'（秘書）。frontend が突合する。
 //   - emoji : 感情絵文字。
 //   - mood  : 一人称の今の気持ち（短句）。
 //   - thought: 考えてること（1 行）。
+//   - doing : いま「どのタスクの何をしているか」を具体的に表す一人称 1〜2 行（主役）。
+//             currentTask のタイトル＋lastAction を根拠に具体化する（active 向け）。
 
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -36,7 +38,7 @@ export interface MoodInput {
   status: AgentStatus;
   /** 直近の一言（生成の根拠）。 */
   lastAction?: string;
-  /** 現在のタスク（ID＋タイトル等、生成の根拠）。 */
+  /** 現在のタスク（ID＋タイトル。例「MC-191 図解 SVG を実装」。生成の根拠）。 */
   currentTask?: string;
 }
 
@@ -48,6 +50,8 @@ export interface AgentMood {
   mood: string;
   /** 考えてること（1 行）。 */
   thought: string;
+  /** いま「どのタスクの何をしているか」を具体的に表す一人称 1〜2 行（主役）。 */
+  doing: string;
 }
 
 // ─── キャッシュ／スロットル状態 ─────────────────────────────────
@@ -69,14 +73,29 @@ function inputsHash(inputs: MoodInput[]): string {
 /** status ベースの簡易ムード（フォールバック・claude を呼ばない）。 */
 function fallbackMood(input: MoodInput): AgentMood {
   switch (input.status) {
-    case 'active':
-      return { key: input.key, emoji: '😀', mood: '集中', thought: '今の作業に集中しています。' };
+    case 'active': {
+      // active のフォールバックは、根拠（currentTask / lastAction）があれば doing に具体化する。
+      const target = input.currentTask?.trim();
+      const action = input.lastAction?.trim();
+      const doing = target
+        ? action
+          ? `${target} を進行中。${action}`
+          : `${target} を進行中。`
+        : action || '今の作業を進めています。';
+      return {
+        key: input.key,
+        emoji: '🔧',
+        mood: '集中',
+        thought: '手を動かしています。',
+        doing: doing.slice(0, 120),
+      };
+    }
     case 'done':
-      return { key: input.key, emoji: '✨', mood: '達成', thought: 'ひと区切りつきました。' };
+      return { key: input.key, emoji: '✨', mood: '達成', thought: 'ひと区切りつきました。', doing: '' };
     case 'idle':
-      return { key: input.key, emoji: '😌', mood: '待機', thought: '次の指示を待っています。' };
+      return { key: input.key, emoji: '😌', mood: '待機', thought: '次の指示を待っています。', doing: '' };
     default:
-      return { key: input.key, emoji: '😴', mood: '休止', thought: '今は動いていません。' };
+      return { key: input.key, emoji: '😴', mood: '休止', thought: '今は動いていません。', doing: '' };
   }
 }
 
@@ -94,21 +113,25 @@ function buildPrompt(inputs: MoodInput[]): string {
     return parts.join(' / ');
   });
   return [
-    'あなたは複数の AI エージェントの「今の気持ち」を、各自の直近の活動に基づいて一人称で言語化する役です。',
-    '以下の各エージェントについて、その直近の活動・現在のタスクから、本人が今まさに思っていそうな一人称の気持ちと考えを作ってください。',
+    'あなたは複数の AI エージェントが「いまどのタスクの何をしているか」を、各自の直近の活動に基づいて一人称で言語化する役です。',
+    '以下の各エージェントについて、現在のタスク（ID とタイトル）と直近の活動を根拠に、本人が今まさに取り組んでいる具体的な作業内容を一人称で作ってください。',
+    '主役は「どのタスクの・何を」しているかです。気持ちは添える程度にします。',
     '',
     '制約:',
-    '- emoji: 気持ちを表す絵文字 1 つ（例 😌 🤔 😀 😮‍💨 ✨ 🔥）。',
+    '- doing（最重要）: いま「どのタスクの何をしているか」を一人称（私/僕など本人視点）で具体的に 1〜2 行・60 文字以内。',
+    '    現在のタスクがあれば必ず先頭に「MC-xxx」のような ID を含め、タイトルと直近の活動から「何を」している段階かを具体的に書く。',
+    '    例「MC-191 の図解 SVG を実装中。あと少しで噛み合いそう」。定型文・抽象語（「作業中」だけ等）は禁止。',
+    '- emoji: 作業や気持ちに合う絵文字 1 つ（例 🔧 🔍 🧪 ✍️ 🤔 😀 ✨ 🔥）。',
     '- mood: 今の気持ちを表す 1〜6 文字の短い日本語（例「集中」「悩み中」「手応えあり」）。',
-    '- thought: 一人称（私/僕など本人視点）の考えてること 1 行・40 文字以内・実際の活動に即した本物の言葉。定型文は禁止。',
-    '- 活動情報が乏しい場合は無理に捏造せず、状況に正直な穏やかな一言にする。',
+    '- thought: 一人称の短い気持ちのつぶやき 1 行・30 文字以内。doing と重複させない。',
+    '- 活動情報が乏しい場合は無理に捏造せず、現在のタスク ID と分かる範囲だけを正直に書く。',
     '- 口調は各自を尊重しつつ自然に。',
     '',
     'エージェント一覧:',
     ...items,
     '',
     '出力は次の JSON 配列のみ（前後に説明や ``` を付けない）:',
-    '[{"key":"...","emoji":"...","mood":"...","thought":"..."}]',
+    '[{"key":"...","emoji":"...","mood":"...","thought":"...","doing":"..."}]',
   ].join('\n');
 }
 
@@ -136,6 +159,7 @@ function parseMoods(stdout: string, inputs: MoodInput[]): AgentMood[] | null {
       emoji: typeof r.emoji === 'string' && r.emoji.trim() ? r.emoji.trim().slice(0, 4) : '🤔',
       mood: typeof r.mood === 'string' ? r.mood.trim().slice(0, 12) : '',
       thought: typeof r.thought === 'string' ? r.thought.trim().slice(0, 80) : '',
+      doing: typeof r.doing === 'string' ? r.doing.trim().slice(0, 120) : '',
     });
   }
   // 入力順に整列し、欠けた key はフォールバックで埋める（全件返す）。

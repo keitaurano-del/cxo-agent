@@ -50,6 +50,8 @@ export interface AgentMood {
   emoji: string;
   mood: string;
   thought: string;
+  /** いま「どのタスクの何をしているか」を具体的に表す一人称 1〜2 行（active 向け・主役）。 */
+  doing: string;
 }
 
 // 人格別に集約したエージェントグループ（MC-88 / GET /api/agents/grouped）。

@@ -177,6 +177,15 @@ async function safeJsonAsync(res: Response, build: () => Promise<unknown>): Prom
 function buildMoodInputs(): MoodInput[] {
   const inputs: MoodInput[] = [];
 
+  // currentTaskId → 「MC-xxx タイトル」を解決するための索引（doing 具体化の根拠）。
+  const taskTitleById = new Map<string, string>();
+  for (const t of collectTasks()) taskTitleById.set(t.id, t.title);
+  const taskLabel = (taskId?: string): string | undefined => {
+    if (!taskId) return undefined;
+    const title = taskTitleById.get(taskId);
+    return title ? `${taskId} ${title}` : taskId;
+  };
+
   // subagent: subagentType ごとに active な代表を 1 件選ぶ。
   const repByType = new Map<string, { lastAction: string; currentTaskId?: string }>();
   for (const a of collectAgents()) {
@@ -191,7 +200,7 @@ function buildMoodInputs(): MoodInput[] {
       name: subagentType,
       status: 'active',
       lastAction: rep.lastAction,
-      currentTask: rep.currentTaskId,
+      currentTask: taskLabel(rep.currentTaskId),
     });
   }
 
