@@ -1126,7 +1126,8 @@ export default function Terminal() {
       {/* 端末本体（MC-156）: 4つの iframe を常時 mount し、CSS grid で N ペインを同時表示する。
           - 単一表示（effectiveSplit=1）はアクティブの 1 枚だけを表示（従来挙動）。
           - 分割表示は各ペインの割当ターミナルだけをそのセルに配置し、それ以外は hidden で保持。
-          iframe を unmount / src 差し替えしないことでセッションを保持する（要件 4）。 */}
+          iframe を unmount / src 差し替えしないことでセッションを保持する（要件 4）。
+          MC-156: 各ペインの iframe タップを検知するため、透過 pointerdown overlay を置き focusedPane を同期。 */}
       <div
         className="relative flex-1 overflow-hidden bg-bg"
         style={{
@@ -1152,6 +1153,10 @@ export default function Terminal() {
             <div
               key={t.id}
               onMouseDown={() => {
+                if (effectiveSplit > 1 && paneIdx >= 0) setFocusedPane(paneIdx);
+              }}
+              onPointerDown={() => {
+                // MC-156: タップ時に focusedPane を同期（iframe タップ検知）
                 if (effectiveSplit > 1 && paneIdx >= 0) setFocusedPane(paneIdx);
               }}
               // 表示中はグリッドセルへ配置、非表示は hidden（iframe は mount 維持＝セッション保持）。
@@ -1190,21 +1195,38 @@ export default function Terminal() {
                 </div>
               )}
               {st.kind === 'ready' ? (
-                <iframe
-                  key={iframeKeys[t.id]}
-                  ref={(el) => {
-                    if (el) {
-                      iframeRefsMap.current.set(t.id, el);
-                    } else {
-                      iframeRefsMap.current.delete(t.id);
-                    }
-                  }}
-                  src={t.path}
-                  title={`Apollo ${t.label}`}
-                  className="h-full w-full border-0"
-                  allow="clipboard-read; clipboard-write"
-                  style={{ overscrollBehavior: 'none' }}
-                />
+                <>
+                  <iframe
+                    key={iframeKeys[t.id]}
+                    ref={(el) => {
+                      if (el) {
+                        iframeRefsMap.current.set(t.id, el);
+                      } else {
+                        iframeRefsMap.current.delete(t.id);
+                      }
+                    }}
+                    src={t.path}
+                    title={`Apollo ${t.label}`}
+                    className="h-full w-full border-0"
+                    allow="clipboard-read; clipboard-write"
+                    style={{ overscrollBehavior: 'none' }}
+                  />
+                  {/* MC-156: iframe タップ検知用の透過オーバーレイ（マウスイベントは通す）。
+                      分割表示の時だけ表示し、pointerdown で focusedPane を同期。 */}
+                  {isVisible && effectiveSplit > 1 && (
+                    <div
+                      className="absolute inset-0 z-0 pointer-events-auto"
+                      style={{
+                        // ポインターイベントだけを捕捉し、視覚的には透過
+                        background: 'transparent',
+                      }}
+                      onPointerDown={() => {
+                        if (paneIdx >= 0) setFocusedPane(paneIdx);
+                      }}
+                      aria-hidden="true"
+                    />
+                  )}
+                </>
               ) : (
                 // バックエンド（ttyd / tmux main）が切断・未起動・確認中の状態パネル。
                 <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
