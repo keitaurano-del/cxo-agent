@@ -86,10 +86,33 @@ export interface ClaudeUsageSummary {
 
 // ─── アカウント定義 ─────────────────────────────────────
 
-const LABELS: Record<AccountKey, string> = {
-  local: 'Claude1 / keita.urano',
-  oldbox: 'Claude2 / keita.urano2',
+// カードの表示名と並び順は「取得した account email」を一次ソースにする。
+// credentials ファイル（~/.claude / ~/.claude-urano2）とアカウントの対応が入れ替わっても
+// 表示がズレないようにするため（2026-06-07 Keita 指摘: C1/C2 のラベルと中身が逆だった）。
+interface AccountIdentity {
+  label: string;
+  rank: number;
+}
+const EMAIL_IDENTITY: Record<string, AccountIdentity> = {
+  'keita.urano@gmail.com': { label: 'Claude1 / keita.urano', rank: 0 },
+  'keita.urano2@gmail.com': { label: 'Claude2 / keita.urano2', rank: 1 },
 };
+// email がまだ取れていない（429 や初回失敗）ときの暫定。現状の実配置に合わせる:
+//   ~/.claude（local）= keita.urano2 / ~/.claude-urano2（oldbox）= keita.urano。
+// email が取れたら EMAIL_IDENTITY が優先されるので、配置が直ればこの fallback に依存しない。
+const KEY_FALLBACK: Record<AccountKey, AccountIdentity> = {
+  local: { label: 'Claude2 / keita.urano2', rank: 1 },
+  oldbox: { label: 'Claude1 / keita.urano', rank: 0 },
+};
+/** email（あれば一次）→ なければ key 実配置 fallback でアカウント識別を決める。 */
+function identityFor(email: string | undefined, key: AccountKey): AccountIdentity {
+  if (email && EMAIL_IDENTITY[email]) return EMAIL_IDENTITY[email];
+  return KEY_FALLBACK[key];
+}
+/** アカウントの表示順位（Claude1=0 → Claude2=1 → 不明）。lastGood/前回 email も加味される。 */
+function accountRank(acc: ClaudeAccountUsage): number {
+  return identityFor(acc.email, acc.key).rank;
+}
 
 // ─── OAuth API レスポンス（必要フィールドのみ）───────────────────
 
@@ -221,7 +244,7 @@ async function fetchAccount(key: AccountKey, token: string): Promise<ClaudeAccou
 
   const account: ClaudeAccountUsage = {
     key,
-    label: LABELS[key],
+    label: identityFor(email, key).label,
     email,
     tier,
     session: toBar(usage.five_hour),
@@ -246,7 +269,7 @@ function degraded(key: AccountKey, message: string): ClaudeAccountUsage {
   }
   return {
     key,
-    label: LABELS[key],
+    label: identityFor(undefined, key).label,
     session: { pct: null, resetsAt: null },
     weekAll: { pct: null, resetsAt: null },
     weekSonnet: null,
@@ -287,11 +310,13 @@ async function compute(): Promise<ClaudeUsageSummary> {
     collectAccount('local', readLocalToken),
     collectAccount('oldbox', readUrano2Token),
   ]);
+  // 表示順は email 由来の rank で安定ソート（Claude1=keita.urano → Claude2=keita.urano2）。
+  const accounts = [local, oldbox].sort((a, b) => accountRank(a) - accountRank(b));
   return {
     generatedAt: new Date().toISOString(),
     cached: false,
     ttlMs: CLAUDE_USAGE_TTL_MS,
-    accounts: [local, oldbox],
+    accounts,
   };
 }
 
