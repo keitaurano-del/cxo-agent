@@ -37,6 +37,7 @@ import { useLiveResource } from '../lib/useLiveData';
 import { useLiveTick } from '../lib/liveContext';
 import { Badge, Spinner, StalledBadge, TaskStatusBadge } from './ui';
 import { AgentFeed } from './AgentFeed';
+import { TaskTimeline } from './TaskTimeline';
 import { CloseIcon, EditIcon } from './icons';
 
 // ── workflow API の型（server/src/collectors/workflows.ts の WorkflowSummary と一致させる）──
@@ -1112,9 +1113,15 @@ function TaskDetailBody({
           </section>
 
           {/* (c) 紐づくエージェント会話 */}
-          <section>
+          <section className="mb-5">
             <SectionHeading>紐づくエージェント会話</SectionHeading>
             <LinkedConversation task={task} links={links} />
+          </section>
+
+          {/* (d) 活動タイムライン（MC-163） */}
+          <section>
+            <SectionHeading>アクティビティ</SectionHeading>
+            <TaskTimeline taskId={task.id} />
           </section>
         </div>
       </div>

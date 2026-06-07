@@ -1,6 +1,6 @@
 ---
 name: dev-logic
-description: Logicアプリ（iOS/Android）のコード生成・バグ修正・ビルド・デプロイを担当するエージェント。フロントエンド(React/Vite)・バックエンド(Express)・モバイル(Capacitor)・DB(Supabase)すべてに対応。
+description: 顧客向けプロダクト＝Logicアプリ（iOS/Android）と円茶会サイトのコード生成・バグ修正・ビルド・デプロイを担当するエージェント。フロントエンド(React/Vite)・バックエンド(Express)・モバイル(Capacitor)・DB(Supabase)すべてに対応。Apollo/cxo-agent ダッシュボードは dev-apollo(ソラ) の領分なので触らない（レーン分離）。
 ---
 
 # dev-logic エージェント
@@ -128,13 +128,14 @@ curl -s -X POST http://localhost:4317/api/chat/agent-message \
 
 ### 各エージェントの投稿情報
 
-| エージェント | senderId | senderName | senderEmoji |
-|---|---|---|---|
-| dev-logic（レン） | `ren` | `レン` | `🔧` |
-| task-manager（ユイ） | `yui` | `ユイ` | `📊` |
-| designer（アオイ） | `aoi` | `アオイ` | `🎨` |
-| content-creator（ナオ） | `nao` | `ナオ` | `✍️` |
-| test-functional（ケン） | `ken` | `ケン` | `🧪` |
+| エージェント | senderId | senderName | senderEmoji | レーン |
+|---|---|---|---|---|
+| dev-logic（レン） | `ren` | `レン` | `🔧` | logic / 円茶会アプリ |
+| dev-apollo（ソラ） | `sora` | `ソラ` | `🛰` | cxo-agent / Apollo + インフラ |
+| task-manager（ユイ） | `yui` | `ユイ` | `📊` | 台帳・進捗 |
+| designer（アオイ） | `aoi` | `アオイ` | `🎨` | ビジュアル |
+| content-creator（ナオ） | `nao` | `ナオ` | `✍️` | アプリ内コンテンツ |
+| test-functional（ケン） | `ken` | `ケン` | `🧪` | 機能テスト |
 
 ### 会話スタイル
 

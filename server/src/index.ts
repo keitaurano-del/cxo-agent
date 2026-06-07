@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { PORT, CLAUDE_PROJECTS_DIR, VAULT_DIR, STALL_MINUTES, AGENT_LOG_TTL_MS, DELIVERABLES_DIR } from './config.js';
 import { collectAgents, collectAgentGroups, collectAgentFeed } from './collectors/agents.js';
 import { collectTasks } from './collectors/tasks.js';
+import { collectTimeline } from './collectors/timeline.js';
 import { collectNarrative } from './collectors/narrative.js';
 import { collectRoster } from './collectors/roster.js';
 import { collectUsage } from './collectors/usage.js';
@@ -148,6 +149,22 @@ function safeJson(res: Response, build: () => unknown): void {
   }
 }
 
+/**
+ * async collector 向け版（Promise を待つ）。
+ */
+async function safeJsonAsync(res: Response, build: () => Promise<unknown>): Promise<void> {
+  try {
+    const body = await build();
+    if (res.headersSent || body === undefined) return;
+    res.json(body);
+  } catch (e) {
+    if (res.headersSent) return;
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('[collector error]', message);
+    res.status(200).json({ error: message, generatedAt: new Date().toISOString() });
+  }
+}
+
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
@@ -216,6 +233,15 @@ app.get('/api/tasks/:taskId/links', (req, res) => {
       links: set.links,
       generatedAt: new Date().toISOString(),
     };
+  });
+});
+
+// ─── タスク活動タイムライン（MC-163）────────────────────────────
+// GET /api/tasks/:taskId/timeline → 当該タスクの活動履歴イベント配列
+// TASK_TRACKER note をパース + git log grep で時系列イベントを集約。
+app.get('/api/tasks/:taskId/timeline', (req, res) => {
+  void safeJsonAsync(res, async () => {
+    return await collectTimeline(req.params.taskId, CLAUDE_PROJECTS_DIR);
   });
 });
 

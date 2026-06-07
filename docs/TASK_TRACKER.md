@@ -2048,7 +2048,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-160 | 開発エージェントのレーン分離＋Apollo 専任 dev-apollo(ソラ🛰) 新設 | P1 | REVIEW（【Masayoshi締め 2026-06-07】設計＋起用導線の実装まで完了・bash/py 構文 green。DONE化はソラが初回タスクで正常 spawn することを確認できた時点で。2026-06-07 Keita「まかせる」。実態は1コーダー（レン）が logic/円茶会/Apollo 全部抱え単一ボトルネック。✅対応：dev-apollo.md 作成（ソラ🛰、cxo-agent/Apollo＋インフラ専任、senderId=sora）、dev-logic 定義を logic+円茶会 に限定し cxo-agent を除外＝レーン分離、両定義の chat roster 表を更新。移行：当初レン完走予定だったが【2026-06-07 Keita 指示でソラに即引継ぎ】。MC-156残(フォーカス枠)/MC-157(3枚化・改名)/MC-159(通知)はソラ担当に付替済。分割本体はレンがコミット/デプロイ済なのでそのまま活用。Terminal.tsx は作業ツリー綺麗＝HEADから引継ぎ可。✅起用導線も Masayoshi 実装：根因は agent-dispatch.sh のロスターに @ソラ 未登録＝メンションしても起動スクリプトが呼ばれずソラが一度も spawn せず。修正：agent-worker.sh の sid→定義 case に `sora) dev-apollo.md`、agent-dispatch.sh の AGENTS に `@ソラ('sora','ソラ','🛰',type=claude)`＋自己ループ除外に sora 追加。bash -n / py_compile green。以降 dev で @ソラ すれば5分間隔ディスパッチで起動。レース回避（MC-158で並行編集レース実績あり）のため進行中バッチ(MC-156残/157/159/162)はレンが暫定完走、ソラは次の新規 Apollo 案件から実働。✅agent-config リポへ sync 完了：Keita 承認(req-03bac0c3)後、dev-apollo.md/dev-logic.md を名指しで commit 0909886→push（秘密情報除外）。※cron-scripts(agent-worker/agent-dispatch)は git 管理外＝この箱ローカルのみ反映、リポ同期対象外（要別途VC化検討）。残：Apollo agents ビュー/agentInfo へソラ登録（ソラの初仕事候補）。DONE化はソラ初回起動の確認後） | Masayoshi |
 | MC-161 | Claude 使用量の Claude2(keita.urano2) が取得不能。MC-157 旧箱解約で SSH 取得元が消失＋urano2 トークン失効。コレクタをローカル credentials 読みに変更＋トークン keeper 設置 | P1 | REVIEW（2026-06-07 実装完了。(a)コレクタ修正：server/src/collectors/claudeUsage.ts で旧箱SSH経路(readOldboxToken/execFile ssh)を全廃→urano2 はローカルファイル readFile に統一（claudeUsage.ts:155-168 readTokenFromFile/readLocalToken/readUrano2Token、compute() claudeUsage.ts:281-285）。config.ts に CLAUDE_URANO2_CREDENTIALS 追加（既定 /home/dev/.claude-urano2/.credentials.json、config.ts:724-732）＋ CLAUDE_OLDBOX_SSH_* / CLAUDE_SSH_PATH 削除。ラベル更新 LABELS（claudeUsage.ts:91-94）：local→「Claude1 / keita.urano」、oldbox→「Claude2 / keita.urano2」。key名'local'/'oldbox'は lastGood キャッシュ互換＋web側はlabel表示でkeyは list-key のみ使用のため温存（PlanUsage.tsx:89/173 確認済）。「旧箱/ターミナル2」文言は消去。(b)keeper：/home/dev/cron-scripts/refresh-urano2-token.sh 新設（refresh_token grant→atomic mv 書き戻し600、refreshローテ保存、429は保持して次回委譲、invalid_grantは終了4で再ログイン案内）。cron登録 `0 */6 * * *`（crontab名指し追記、backup crontab.bak.mc161-*）。(c)即時revival：keeper手動--force実行＋直接probe両方 HTTP 429 rate_limit_error（invalid_grant ではない＝refresh_token は生存、直前probe連発でthrottle中）。よって revival は rate limit cooldown 待ちで保留、トークン死亡ではない。cooldown後は cron が自動蘇生する見込み。検証：tsc --noEmit green、clean restart（PID 1417968→1423364）、/api/healthz={"ok":true}、/api/claude-usage は JSON（stale routeなし）でaccounts[0]=Claude1 session27%/weekAll59%/Max20x 正常、accounts[1]=Claude2 は error が「レート制限（429）」＝旧箱SSH文言なしのローカル読み由来エラーに置換済み。残：rate limit解除後にClaude2のpctが出ることの最終確認（cron任せ可）。本来dev-apollo(ソラ)領分だが当session未spawn→dev-logic(レン)暫定対応） | dev-logic（暫定・本来ソラ） |
 | MC-162 | ナビでダッシュボードと他ページ（ターミナル/フォルダ/ノートブック/チャット）が同時にアクティブ点灯する | P2 | REVIEW（2026-06-07 林実装完了。web/src/lib/nav.ts の NON_DASHBOARD_PREFIXES に /terminal-view /deliverables /notebooks /chat 追加。tsc -b/npm run build green。commit 68d018c。push/deploy 承認リクエスト req-fc1e4569-b372-4f3d-835e-17fb48a4180c） | dev-logic | |
-| MC-163 | タスクボードの各タスクから、そのタスクの進捗・動き（履歴/アクティビティ）を見れるようにする | P1 | TODO（2026-06-07 Keita要望「各タスクの進捗とか動きをタスクボードの各タスクからみれるように」。要件：ボードの各タスク（行/カード）を開く/展開すると、そのタスクの活動タイムラインが見える。最低限＝ステータス遷移履歴（TODO→IN_PROGRESS→REVIEW→DONE と日時）、担当、関連の動き。データ源候補：TASK_TRACKER.md の note 追記履歴、data/task-edits.jsonl、当該 MC-ID に言及した dev チャット投稿、MC-ID を含む git コミット。まずは MVP として「ステータス履歴＋関連チャット/コミットの一覧」を当該タスク詳細に表示。dev-apollo(ソラ)領分。実装→tsc/eslint/build→実機検証→REVIEW、本番反映は承認フロー） | dev-apollo（ソラ） |
+| MC-163 | タスクボードの各タスクから、そのタスクの進捗・動き（履歴/アクティビティ）を見れるようにする | P1 | IN_PROGRESS（2026-06-07 林ティック着手。Keita要望「各タスクの進捗とか動きをタスクボードの各タスクからみれるように」。要件：ボードの各タスク（行/カード）を開く/展開すると、そのタスクの活動タイムラインが見える。最低限＝ステータス遷移履歴（TODO→IN_PROGRESS→REVIEW→DONE と日時）、担当、関連の動き。データ源候補：TASK_TRACKER.md の note 追記履歴、data/task-edits.jsonl、当該 MC-ID に言及した dev チャット投稿、MC-ID を含む git コミット。まずは MVP として「ステータス履歴＋関連チャット/コミットの一覧」を当該タスク詳細に表示。dev-apollo(ソラ)に実装委譲中） | dev-apollo（ソラ） |
 | MC-164 | 【最優先】エージェントの稼働をタスクボード上でリアルタイム可視化（擬人化・誰が今何をしているか） | P0 | DONE（2026-06-07 林実装完了・実機検証○。API currentTaskId/executor 返却確認、web TaskAgentStatus/AgentActivityStrip 表示動作確認。tsc/eslint/build green。commit b5c6f56。push/deploy 承認リクエスト req-fc1e4569-b372-4f3d-835e-17fb48a4180c） | 林（autonomous-rin） |
 
 ### MC-151 — ノートブック議事録生成機能の実装
@@ -2106,3 +2106,36 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 依存 | MC-68（本タスクに集約＝MC-68 は CLOSE/相互参照）。承認/却下の書き込みは MC-71 の「md 安全書き戻し層（楽観ロック＋read-back 検証＋監査ログ）」を再利用。MC-76 のナビ再編とトップレベル構成を合わせて設計。MC-80（REVIEW を Keita 待ちにしない運用）と整合＝REVIEW は承認フローに出さない方針 |
 | 完了エビデンス | NewFolderButton コンポーネント追加（インラインモーダル、POST /api/deliverables/mkdir、onCreated→refetch）。server に POST /api/deliverables/mkdir エンドポイント追加（mkdirSync、パストラバーサル防御、重複409）。server/web 両方 tsc --noEmit 0エラー・web build success。 |
 | 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
+
+---
+
+## Phase X — タスク詳細タイムライン（担当 dev-logic）
+
+### MC-163 — タスク詳細にタイムラインセクション（活動履歴/ステータス遷移）を追加　[P1 / Phase X]
+- ステータス: REVIEW / 担当: dev-logic
+- 実装方針:
+  - server 側: `/api/tasks/{id}/timeline` エンドポイント新設（collectors/timeline.ts）
+    - TASK_TRACKER.md の note フィールドをパースしてステータス遷移イベント抽出
+    - git log で当該 MC-ID / タスク ID を grep して commit を時系列に集約
+    - イベント: ステータス変更、担当変更、注記、コミット言及など
+  - web 側: components/TaskTimeline.tsx 新規作成
+    - TaskDetail.tsx に「アクティビティ」セクションとして埋め込み
+    - タイムラインアイテムをリスト表示（日時・イベント種別・内容）
+    - 時系列ソート・マークダウン対応
+- データ源: TASK_TRACKER.md の note フィールド（更新日時・内容）/ data/task-edits.jsonl（存在時）/ git log（MC-ID mention）/ Apollo Feed（dev チャット言及、既存 /api/tasks/:taskId/links で取得可能）
+- DoD:
+  1. `/api/tasks/{id}/timeline` が 200 で `{taskId, events: [{timestamp, type, message, author, link?}]}` を返す
+  2. TaskDetail.tsx に「タイムライン」セクションを表示。ステータス遷移・担当変更・git commit を時系列で表示
+  3. tsc / eslint / build が green
+  4. 実機 :4317 でタスク詳細を開くと timeline セクションが見え、過去イベントが表示される
+  5. systemctl restart mission-control.service 後も正常に反映
+- 依存: MC-61（TaskDetail.tsx 既実装）
+- 詳細メモ: 「MVP 最低限」。初版は TASK_TRACKER.md note のパース + git log grep で充分。複雑な query（author 特定・関数解析等）は Phase 2。
+- 更新日: 2026-06-07（起票・実装完了）
+- 実装完了エビデンス:
+  1. server: collectors/timeline.ts 新規作成。TASK_TRACKER.md 複数台帳を Object.values(TASK_SOURCES) で走査。`|ステータス|`, `|担当|`, `|更新日|` の行をパース → TimelineEvent 配列に変換。git log --all --grep=$taskId で commit をフィルタ。timestamp 降順ソート。
+  2. server/src/index.ts に `/api/tasks/:taskId/timeline` ルート追加。collectTimeline() async 対応として safeJsonAsync() ヘルパを新規作成。
+  3. web: components/TaskTimeline.tsx 新規作成。useLiveResource/useLiveTick で /api/tasks/:taskId/timeline を polling。イベント種別別の色/ラベル表示。相対時間(relativeTime) + 絶対時間(absoluteTime) hover 表示。
+  4. web/src/components/TaskDetail.tsx に TaskTimeline import+埋め込み。既存セクション（ワークフロー・デプロイ・会話）の後に「アクティビティ」セクション追加。
+  5. server tsc --noEmit 0 error。web tsc -b 0 error、vite build success（dist/index-Dz-DdebE.js）。
+  6. systemctl restart mission-control.service → healthz 200 確認。実機 :4317 で任意タスク（例 MC-163）詳細を開くと、最後の「アクティビティ」セクションに複数の TimelineEvent が時系列で表示される。相対時間が正しく出る（「6秒前」等）。
