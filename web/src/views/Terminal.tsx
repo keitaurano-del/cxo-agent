@@ -1211,19 +1211,27 @@ export default function Terminal() {
                     allow="clipboard-read; clipboard-write"
                     style={{ overscrollBehavior: 'none' }}
                   />
-                  {/* MC-156: iframe タップ検知用の透過オーバーレイ（マウスイベントは通す）。
+                  {/* MC-156: iframe タップ検知用の透過オーバーレイ。
                       分割表示の時だけ表示し、pointerdown で focusedPane を同期。
-                      ただし、フォーカス中のペインには表示しない（!isFocusedPane）ため、
-                      そのペインの iframe へのポインターイベントを遮断しない。 */}
+                      ただし、フォーカス中のペインには表示しない（!isFocusedPane）。
+                      z-index は -10（iframe より手前・親 container より後ろ）にしてスクロール遮断を防ぐ。
+                      wheel イベントは preventDefault しない（親 container へ伝搬させてスクロール効かせる）。 */}
                   {isVisible && effectiveSplit > 1 && !isFocusedPane && (
                     <div
-                      className="absolute inset-0 z-0 pointer-events-auto"
+                      className="absolute inset-0 -z-10 pointer-events-auto"
                       style={{
                         // ポインターイベントだけを捕捉し、視覚的には透過
                         background: 'transparent',
                       }}
                       onPointerDown={() => {
-                        if (paneIdx >= 0) setFocusedPane(paneIdx);
+                        if (paneIdx >= 0) {
+                          setFocusedPane(paneIdx);
+                          // pointerdown は捉えるが、bubble で iframe にも伝搬させてアクティベートさせる
+                        }
+                      }}
+                      onWheel={() => {
+                        // wheel イベントは overlay で preventDefault しない。
+                        // 親の grid container へ伝搬させてスクロール操作を有効にする
                       }}
                       aria-hidden="true"
                     />
