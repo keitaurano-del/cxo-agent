@@ -856,7 +856,7 @@ export default function Deliverables() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="フォルダ"
+        title="ドキュメント"
         subtitle="Excel / PowerPoint / PDF などの成果物"
         fetchedAt={fetchedAt}
       />
