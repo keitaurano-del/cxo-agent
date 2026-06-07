@@ -2089,7 +2089,8 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-198 | 擬人化ライブ改良: 稼働カードの具体作業表示＋active のみ表示（秘書ピン留め） | P1 | DONE（★2026-06-08 00:14 Masayoshi 反映完了・検証済: ①稼働中カードを doing で具体表示（MC-xxx＋タイトル＋具体作業＋感情、moods.ts を doing 主役に再設計、5分スロットル等コスト設計は維持）②サブエージェントは active のみ表示・idle 非表示、秘書はピン留め維持。実機検証=/api/agent-moods に doing 具体値・active1体のみ・秘書2体維持を確認。commit 054f181 push＋restart。残=Keita 朝の `/` 目視は事後確認。 ／2026-06-08 00:06 Keita 要望2点を Masayoshi/dev-apollo 実装・Son 起票【採番=MC-197 は Vault整理で使用済のため MC-198】。①稼働中カードを『どのタスクの何をしているか』具体表示= MC-xxx バッジ＋タイトル＋具体的な一人称1行、mood 生成を感情だけでなく具体作業内容ベースに。②サブエージェントは status==='active' のみ表示・idle 等は非表示（秘書 Masayoshi/Son は常時ピン留め維持）。完成後 Masayoshi 実機検証→反映。NO_PUSH/NO_RESTART＝build/commitまで、反映 Masayoshi。board は Son 管理（dev-apollo は触らない指示済）。 | dev-apollo（ソラ）/ Masayoshi 検証 | MC-165, MC-196 |
 | MC-199 | Apollo ダッシュボードの『チャット』機能(UI)を削除 | P2 | DONE（★2026-06-08 06:45 Masayoshi 検証→push(7d44879 origin/main)→restart 反映完了。Son 締め。 ／★2026-06-08 06:29 Son 実装完了→Masayoshi push 待ち。チャットUI削除: App.tsx から /chat ナビ・ChatIcon・lazy Chat・chatUnread state・SSE chat リスナー・/chat ルート・NavBadge の chat 専用 dot を除去、web/src/views/Chat.tsx を git rm。残骸 grep=0、web build green、commit 7d44879(main, NO_PUSH)。backend(chatRouter/api/チャンネル)・cron は温存（news/承認/kpi が使用）。【既知の軽微な残置(無害)】icons.tsx の ChatIcon export 未使用・BottomNav.tsx の /chat 分岐 dead(到達不能)＝scope外で未変更、必要なら別途掃除。残=Masayoshi push。 ／★2026-06-08 06:26 Keita「チャットの機能は削除しちゃっていい・代わりに Son→Masayoshi 直接通知(tmux)を使う」→ Son 起票・駆動。【調査】UI=web/src/views/Chat.tsx＋App.tsx(/chat ナビ・ChatIcon・lazy import・chatUnread 未読バッジ state/localStorage)。backend=chatRouter.ts(/api/chat)は news/承認/kpi/event-router 等 多数の cron が投稿先に使用＝**消すと壊れるため温存**。【削除範囲(安全)】ダッシュボードの UI のみ＝/chat ナビ項目・Chat.tsx ビュー・未読バッジ関連ロジックを除去、backend API・チャンネルは温存。NO_PUSH・build green・main上commit→Masayoshi 検証/push。 | Son 駆動（自前サブエージェント） | なし |
 | MC-200 | エージェント連絡体制: 役割明確化＋ターミナル直送への一本化＋エラー耐性 | P1 | DONE（★2026-06-08 06:35 Son 構築・検証完了。Keita 指示「Masayoshi/Son/林の役割明確化・タスクを止めない・連絡は全てターミナル直送・各自の負荷考慮・送信エラーでも対応可」。【成果】①役割: Masayoshi=秘書本体/検証・push・反映ゲート執行(tmux openclaw)・Son=タスク管理(board)/起票/調整/調査の補佐(tmux openclaw-son)・林=実装主担当(tmux main, cxoはソラ/logicは林)。②連絡=ヘルパ ~/cron-scripts/notify-agent.sh <masayoshi|son|rin> "msg" で tmux 直送に一本化(Apolloチャット廃止=MC-199)。相手の入力欄に積まれ非同期処理＝負荷を妨げない。③エラー耐性=送信失敗時 ~/agent-inbox/<agent>.md に退避＋~/logs/agent-notify.log に記録(終了コード0/1/2)、Son が各サイクルで agent-inbox を確認し再送/エスカレ＝止まらない。【検証】has-session 3セッション在/bogus→fallback、usage&unknown→exit2、Masayoshi/林 へ実配送 exit0・ログ記録。記憶=agent-coordination-terminal-direct。 ★訂正(06:46): 宛先は masayoshi→`openclaw agent --agent main`(gateway・端末不要)／林→tmux main／son=自分。旧記載「tmux openclaw=Masayoshi」は誤り(openclaw/openclaw-son 端末は両方 son 接続でループした)＝notify-agent.sh・記憶とも修正済。 | Son | なし |
-| MC-201 | 承認フロー強化: 履歴＋オート判別＋確認/指示待ち別枠＋オート対応 | P1 | IN_PROGRESS（★2026-06-08 06:47 Keita 要望4点を Masayoshi/dev-apollo 実装中・Son 起票。①承認したものを『承認済』履歴として残す(/api/approvals/history 新設) ②オートモードで承認したものに『オート』バッジ(autoApproved 記録) ③確認待ち・指示待ち(confirm/blocked カテゴリ)を承認フロー内に別枠セクション ④それもオートモード対応(confirm リクエストの自動承認＝既存の全カテゴリauto を活かしオート記録)。【安全線引き】台帳由来の BLOCKED タスクはオートで勝手に解消しない。実装の一部 commit a0bcef2(approvalRequestHandler/approvalRouter/approvalRequestStore)。完成後 Masayoshi 実機検証→反映。NO_PUSH/NO_RESTART＝build/commitまで、反映 Masayoshi。 | dev-apollo（ソラ）/ Masayoshi 検証 | なし |
+| MC-201 | 承認フロー強化: 履歴＋オート判別＋確認/指示待ち別枠＋オート対応 | P1 | DONE（★2026-06-08 06:49 Masayoshi 4要望すべて実装・反映・検証済: ①承認済の履歴(/api/approvals/history・UI『承認済・履歴』セクション・直近50件) ②オート判別(autoApproved 記録＋『オート』バッジ、end-to-end=オートモードで confirm 投入→履歴に auto=True 確認) ③確認・指示待ち(confirm/blocked)を別枠セクション化 ④confirm リクエストもオートモード対応。安全線引き=台帳由来 BLOCKED タスクはオートで勝手に変更しない。commit a0bcef2 push＋restart。Masayoshi 実機検証=history 200/オートバッジ実動作/3セクション実在。Son 締め。 ／★2026-06-08 06:47 Keita 要望4点を Masayoshi/dev-apollo 実装・Son 起票。 | dev-apollo（ソラ）/ Masayoshi 検証 | なし |
+| MC-202 | RAG機能の改善: 回答品質＋議事録を外す＋生成物の用途明確化/不要削除（フロント＋バック） | P1 | TODO（★2026-06-08 06:50 Son 整理・起票: 2026-06-07 21:31 Apollo投入。inbox自動採番が MC-200(連絡体制)と衝突→MC-202 へ振替（詳細セクション同番に修正）。Keita 要望=①RAGの回答がちゃんと返ってこない→回答品質改善 ②RAGに議事録はいらない→議事録を外す ③生成物が各々何用途か不明→用途明確化 or 不要なら削除。フロント・バック両方。MC-182系(RAG実装)後の品質改善フェーズ。『Masayoshi・Son・林で議論しながら進めて』＝方針は3者討議で確定→分割実装。次アクション=Son が現状(回答不達の再現・議事録/生成物の扱い)を調査し叩き台を出す。 | 未定（Masayoshi/Son/林 討議）/ Son 駆動 | なし |
 
 ### MC-151 — ノートブック議事録生成機能の実装
 
@@ -2276,11 +2277,12 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 更新日 | 2026-06-07 |
 
 
-### MC-200 — RAG機能を改善してほしい。RAGからの回答もちゃんと返ってこないし。RAGに議事録はいらない。あと生成物がそれぞれ何ができるのか不明なので消していいと思う。…
+### MC-202 — RAG機能を改善してほしい。RAGからの回答もちゃんと返ってこないし。RAGに議事録はいらない。あと生成物がそれぞれ何ができるのか不明なので消していいと思う。…
+（※inbox自動採番が MC-200=連絡体制 と衝突したため Son が MC-202 へ振替）
 
 | フィールド | 値 |
 |---|---|
-| ID | MC-200 |
+| ID | MC-202 |
 | タイトル | RAG機能を改善してほしい。RAGからの回答もちゃんと返ってこないし。RAGに議事録はいらない。あと生成物がそれぞれ何ができるのか不明なので消していいと思う。… |
 | 優先度 | P1 |
 | ステータス | TODO |
