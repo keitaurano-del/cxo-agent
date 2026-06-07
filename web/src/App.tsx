@@ -137,8 +137,8 @@ const NAV: NavItem[] = [
   { to: '/tasks', label: 'タスクボード', shortLabel: 'ボード', icon: <BoardIcon /> },
   { to: '/approvals', label: '承認フロー', shortLabel: '承認', icon: <ApprovalIcon /> },
   { to: '/vault', label: 'Vault', shortLabel: 'Vault', icon: <VaultIcon /> },
-  { to: '/deliverables', label: 'フォルダ', shortLabel: 'フォルダ', icon: <DocumentsIcon /> },
-  { to: '/notebooks', label: 'ノートブック', shortLabel: 'ノート', icon: <NotebookIcon /> },
+  { to: '/deliverables', label: 'ドキュメント', shortLabel: 'ドキュ', icon: <DocumentsIcon /> },
+  { to: '/notebooks', label: 'RAG', shortLabel: 'RAG', icon: <NotebookIcon /> },
   { to: '/chat', label: 'チャット', shortLabel: 'チャット', icon: <ChatIcon /> },
   // ターミナル: iframe ホスト用 React ルートは /terminal-view。
   // サーバ proxy ルート /terminal（→ ttyd）と衝突させないため別パスにする。
@@ -460,6 +460,17 @@ export default function App() {
   // 同じ NAV を描くので、並び順を1つ持てば desktop/mobile 両方に効く。
   const { items: navItems, reorder: reorderNav } = useNavOrder('sidebar', NAV);
 
+  // ダッシュボード配下のタブ順序（MC-174）。初期表示の遷移先を決める。
+  // NOTE: これは画面表示には使わず、初期リダイレクト判定だけに使う。
+  const dashboardTabDefaults = [
+    { to: '/feed' },
+    { to: '/today' },
+    { to: '/news' },
+    { to: '/activity' },
+    { to: '/plan-usage' },
+  ];
+  const { items: dashboardTabs } = useNavOrder('dashboard', dashboardTabDefaults);
+
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     return localStorage.getItem('apollo-sidebar-open') !== 'false';
   });
@@ -500,7 +511,15 @@ export default function App() {
               {/* ダッシュボード（/）配下に各タブを入れ子。各子ビューの URL は従来どおり。 */}
               {/* エージェントタブは / に統合。ティック+消費量は /activity に統合。 */}
               <Route element={<DashboardLayout />}>
-                <Route path="/" element={<Navigate to="/today" replace />} />
+                <Route
+                  path="/"
+                  element={
+                    <Navigate
+                      to={dashboardTabs.length > 0 ? dashboardTabs[0].to : '/plan-usage'}
+                      replace
+                    />
+                  }
+                />
                 <Route path="/feed" element={<Feed />} />
                 <Route path="/today" element={<Narrative />} />
                 <Route path="/news" element={<News />} />
