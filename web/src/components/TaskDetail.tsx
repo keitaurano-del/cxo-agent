@@ -14,682 +14,42 @@
 // デザイン制約: ハードコード hex 禁止（既存トークン/CSS 変数のみ）、UI chrome は SVG アイコンのみ、
 //   文言は中立的な丁寧体、モバイル 390px で横溢れ 0。
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type {
-  AgentStatus,
-  DeployRepo,
-  DeployRun,
-  DeploysResponse,
-  ProjectName,
   Task,
   TaskStatus,
 } from '../lib/types';
 import {
-  agentStatusMeta,
   projectColor,
   projectLabel,
   taskStatusMeta,
   TASK_COLUMNS,
 } from '../lib/meta';
 import { absoluteTime, relativeTime } from '../lib/time';
-import { useLiveResource } from '../lib/useLiveData';
-import { useLiveTick } from '../lib/liveContext';
-import { Badge, Spinner, StalledBadge, TaskStatusBadge } from './ui';
-import { AgentFeed } from './AgentFeed';
+import { Badge, StalledBadge, TaskStatusBadge } from './ui';
 import { TaskTimeline } from './TaskTimeline';
 import { CloseIcon, EditIcon } from './icons';
 
-// ── workflow API の型（server/src/collectors/workflows.ts の WorkflowSummary と一致させる）──
-interface WorkflowNode {
-  agentId: string;
-  label: string;
-  agentType: string | null;
-  status: AgentStatus | 'error';
-  lastActivity: string;
-  stalledMinutes: number;
-  tokensIn: number;
-  tokensOut: number;
-  messageCount: number;
-}
+// (MC-167) 削除: Workflow 型定義は使用されなくなったため削除
+// interface WorkflowNode / WorkflowPhase / WorkflowSummary / WorkflowDetail
 
-interface WorkflowPhase {
-  id: string;
-  name: string;
-  status: AgentStatus | 'error';
-  nodes: WorkflowNode[];
-}
+// (MC-167) 削除: TaskLink 型定義は使用されなくなったため削除
+// interface TaskLink / TaskLinkRun / TaskLinksResponse
 
-interface WorkflowSummary {
-  runId: string;
-  label: string;
-  project: ProjectName;
-  projectLabel: string;
-  status: AgentStatus | 'error';
-  createdAt: string;
-  lastActivity: string;
-  stalledMinutes: number;
-  phaseCount: number;
-  phasesDone: number;
-  nodeCount: number;
-  nodesDone: number;
-  tokensIn: number;
-  tokensOut: number;
-}
+// (MC-167) 削除: ワークフロー・デプロイ・会話関連の関数は使用されなくなったため削除
+// function wfStatusMeta / tokensLabel / normalizeId / runMatchesTask
 
-interface WorkflowDetail extends WorkflowSummary {
-  phases: WorkflowPhase[];
-}
+// (MC-167) 削除: StatusDotInline は ワークフロー表示用で使用されなくなったため削除
 
-// ── 明示リンク API（server /api/tasks/:taskId/links と一致させる）──
-interface TaskLink {
-  taskId: string;
-  runId?: string;
-  agentId?: string;
-  label?: string;
-  ts?: string;
-}
+// (MC-167) 削除: WorkflowRunRow は ワークフロー一覧表示用で使用されなくなったため削除
 
-interface TaskLinkRun {
-  runId: string;
-  summary: WorkflowSummary | null;
-}
+// (MC-167) 削除: LinkedWorkflows は ワークフロー紐づけセクション用で使用されなくなったため削除
 
-interface TaskLinksResponse {
-  taskId: string;
-  hasExplicitLinks: boolean;
-  runs: TaskLinkRun[];
-  agentIds: string[];
-  links: TaskLink[];
-  generatedAt: string;
-}
+// (MC-167) 削除: LinkedConversation は エージェント会話セクション用で使用されなくなったため削除
 
-// AgentStatus に 'error' を足したワークフロー固有の状態色（既存 CSS 変数のみ使用）。
-function wfStatusMeta(status: AgentStatus | 'error'): { label: string; color: string } {
-  if (status === 'error') return { label: 'エラー', color: 'var(--mc-stalled)' };
-  const m = agentStatusMeta(status as AgentStatus);
-  return { label: m.label, color: m.color };
-}
-
-function tokensLabel(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
-}
-
-/** タスク ID 表記ゆれを正規化して比較する（フォールバックの素朴一致でのみ使用）。 */
-function normalizeId(s: string): string {
-  return s.toLowerCase().replace(/[\s_-]/g, '');
-}
-
-/**
- * runId/label にタスク ID を素朴に含むかどうか（フォールバック専用）。
- * 明示リンク（task-links.jsonl）が無いタスクのときだけ使う。
- */
-function runMatchesTask(run: WorkflowSummary, taskId: string): boolean {
-  const id = normalizeId(taskId);
-  if (!id) return false;
-  return normalizeId(run.runId).includes(id) || normalizeId(run.label).includes(id);
-}
-
-function StatusDotInline({
-  color,
-  label,
-}: {
-  color: string;
-  label: string;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1.5" role="status" aria-label={`状態: ${label}`}>
-      <span
-        className="inline-block h-2 w-2 shrink-0 rounded-full"
-        style={{ background: color }}
-        aria-hidden
-      />
-      <span className="text-[11px]" style={{ color }}>
-        {label}
-      </span>
-    </span>
-  );
-}
-
-/** 1 件の workflow run（フェーズ進捗 + 孫エージェント）を表示。クリックで詳細を展開。 */
-function WorkflowRunRow({ run }: { run: WorkflowSummary }) {
-  const [open, setOpen] = useState(false);
-  const [detail, setDetail] = useState<WorkflowDetail | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const meta = wfStatusMeta(run.status);
-
-  useEffect(() => {
-    if (!open || detail) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    fetch(`/api/workflows/${encodeURIComponent(run.runId)}`)
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return (await r.json()) as { workflow: WorkflowDetail } | WorkflowDetail;
-      })
-      .then((d) => {
-        if (cancelled) return;
-        // server は { workflow } で包む可能性／生で返す可能性の両対応。
-        const wf = (d as { workflow?: WorkflowDetail }).workflow ?? (d as WorkflowDetail);
-        setDetail(wf);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, detail, run.runId]);
-
-  return (
-    <li className="rounded-lg border border-border bg-surface">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-start gap-2 px-3 py-2.5 text-left hover:bg-surface-2"
-        aria-expanded={open}
-      >
-        <span
-          className="mt-1 inline-block h-2 w-2 shrink-0 rounded-full"
-          style={{ background: meta.color }}
-          aria-hidden
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="break-all font-mono text-[11px] text-text">{run.label}</span>
-            <Badge title={`プロジェクト: ${run.projectLabel}`}>{run.projectLabel}</Badge>
-            <span className="text-[11px]" style={{ color: meta.color }}>
-              {meta.label}
-            </span>
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-text-faint">
-            <span>
-              ノード {run.nodesDone}/{run.nodeCount}
-            </span>
-            <span title={absoluteTime(run.lastActivity)}>更新 {relativeTime(run.lastActivity)}</span>
-            <span>
-              トークン {tokensLabel(run.tokensIn)} / {tokensLabel(run.tokensOut)}
-            </span>
-          </div>
-        </div>
-        <span className="mt-0.5 shrink-0 text-[11px] text-accent">{open ? '閉じる' : '開く'}</span>
-      </button>
-      {open && (
-        <div className="border-t border-border px-3 py-2.5">
-          {loading && (
-            <div className="flex items-center gap-2 text-[12px] text-text-muted">
-              <Spinner />
-              フェーズを取得しています…
-            </div>
-          )}
-          {error && (
-            <p className="text-[12px]" style={{ color: 'var(--mc-stalled)' }} role="alert">
-              詳細の取得に失敗しました（{error}）。
-            </p>
-          )}
-          {detail && (
-            <div className="space-y-3">
-              {detail.phases.map((phase) => {
-                const pmeta = wfStatusMeta(phase.status);
-                return (
-                  <div key={phase.id}>
-                    <div className="mb-1.5 flex items-center justify-between gap-2">
-                      <StatusDotInline color={pmeta.color} label={`${phase.name}（${pmeta.label}）`} />
-                      <span className="text-[10px] text-text-faint">
-                        {phase.nodes.length} ノード
-                      </span>
-                    </div>
-                    <ul className="space-y-1.5">
-                      {phase.nodes.map((node) => {
-                        const nmeta = wfStatusMeta(node.status);
-                        return (
-                          <li
-                            key={node.agentId}
-                            className="flex items-start gap-2 rounded border border-border bg-surface-2 px-2.5 py-1.5"
-                          >
-                            <span
-                              className="mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-                              style={{ background: nmeta.color }}
-                              aria-hidden
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                                <span className="text-[12px] font-medium text-text">
-                                  {node.label}
-                                </span>
-                                <span className="text-[10px]" style={{ color: nmeta.color }}>
-                                  {nmeta.label}
-                                </span>
-                              </div>
-                              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[10px] text-text-faint">
-                                <span title={absoluteTime(node.lastActivity)}>
-                                  {relativeTime(node.lastActivity)}
-                                </span>
-                                <span>
-                                  トークン {tokensLabel(node.tokensIn)} / {tokensLabel(node.tokensOut)}
-                                </span>
-                              </div>
-                            </div>
-                          </li>
-                        );
-                      })}
-                      {phase.nodes.length === 0 && (
-                        <li className="px-1 py-1 text-[11px] text-text-faint">
-                          このフェーズにノードはありません。
-                        </li>
-                      )}
-                    </ul>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-    </li>
-  );
-}
-
-/**
- * 紐づく workflow run の一覧セクション。
- * - 明示リンク（task-links.jsonl）がある場合: そのリンク先 run のみを表示（誤マッチ排除）。
- *   突合できなかった runId（run が消えた / 別環境）はその旨を添えて runId だけ示す。
- * - 明示リンクが無い場合: 従来の素朴フィルタ（無ければ全 run 候補）にフォールバック。
- */
-function LinkedWorkflows({ task, links }: { task: Task; links: TaskLinksResponse | null }) {
-  const tick = useLiveTick();
-  const { data, error, loading } = useLiveResource<{ workflows: WorkflowSummary[] }>(
-    '/api/workflows',
-    tick,
-  );
-
-  const all = useMemo(() => data?.workflows ?? [], [data]);
-
-  // 明示リンクの有無で表示集合を切り替える。
-  const explicit = links?.hasExplicitLinks ?? false;
-  const explicitRuns = useMemo(
-    () => (links?.runs ?? []).filter((r) => r.summary !== null).map((r) => r.summary as WorkflowSummary),
-    [links],
-  );
-  const unresolvedRunIds = useMemo(
-    () => (links?.runs ?? []).filter((r) => r.summary === null).map((r) => r.runId),
-    [links],
-  );
-
-  const fallbackMatched = useMemo(
-    () => all.filter((w) => runMatchesTask(w, task.id)),
-    [all, task.id],
-  );
-  const fallbackHasMatch = fallbackMatched.length > 0;
-  const shown = explicit ? explicitRuns : fallbackHasMatch ? fallbackMatched : all;
-
-  if (loading && !data) {
-    return (
-      <div className="flex items-center gap-2 text-[12px] text-text-muted">
-        <Spinner />
-        ワークフローを取得しています…
-      </div>
-    );
-  }
-  if (error && !data) {
-    return (
-      <p className="text-[12px]" style={{ color: 'var(--mc-stalled)' }} role="alert">
-        ワークフローの取得に失敗しました（{error}）。
-      </p>
-    );
-  }
-
-  if (shown.length === 0 && unresolvedRunIds.length === 0) {
-    return (
-      <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px] text-text-faint">
-        紐づくワークフローはありません。
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {!explicit && fallbackHasMatch === false && shown.length > 0 && (
-        <p className="text-[11px] text-text-faint">
-          このタスクに紐づくワークフローは特定できませんでした。直近のワークフロー一覧を表示しています。
-        </p>
-      )}
-      <ul className="space-y-2">
-        {shown.map((run) => (
-          <WorkflowRunRow key={run.runId} run={run} />
-        ))}
-      </ul>
-      {unresolvedRunIds.length > 0 && (
-        <ul className="space-y-1.5">
-          {unresolvedRunIds.map((runId) => (
-            <li
-              key={runId}
-              className="rounded-lg border border-dashed border-border bg-surface px-3 py-2 text-[11px] text-text-faint"
-            >
-              <span className="break-all font-mono text-text-muted">{runId}</span>
-              <span className="ml-2">（このワークフローは現在の環境では見つかりませんでした）</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-/**
- * 紐づくエージェント会話セクション。
- * - 明示リンクに agentId があれば、その会話を最優先候補にする（誤マッチ排除）。
- * - 明示リンクに runId があれば、その run の孫エージェントも候補に加える。
- * - 明示リンクが無い場合: 従来どおり「素朴一致 run（無ければ最新 run）」の孫を候補にする。
- */
-function LinkedConversation({ task, links }: { task: Task; links: TaskLinksResponse | null }) {
-  const tick = useLiveTick();
-  const { data } = useLiveResource<{ workflows: WorkflowSummary[] }>('/api/workflows', tick);
-  const [agentId, setAgentId] = useState<string | null>(null);
-  const [nodes, setNodes] = useState<WorkflowNode[] | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const all = useMemo(() => data?.workflows ?? [], [data]);
-  const explicit = links?.hasExplicitLinks ?? false;
-  const explicitAgentIds = useMemo(() => links?.agentIds ?? [], [links]);
-
-  // 会話の元になる run を決める:
-  //   明示リンクあり → リンク先 run の先頭（突合できたもの）。
-  //   明示リンクなし → 素朴一致 run の先頭、無ければ最新 run。
-  const fallbackMatched = useMemo(
-    () => all.filter((w) => runMatchesTask(w, task.id)),
-    [all, task.id],
-  );
-  const explicitFirstRun = useMemo(
-    () => (links?.runs ?? []).find((r) => r.summary !== null)?.summary ?? null,
-    [links],
-  );
-  const targetRun = explicit ? explicitFirstRun : (fallbackMatched[0] ?? all[0] ?? null);
-
-  // run の孫エージェント nodes を取得（run がある場合）。
-  useEffect(() => {
-    if (!targetRun) {
-      setNodes([]);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    fetch(`/api/workflows/${encodeURIComponent(targetRun.runId)}`)
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return (await r.json()) as { workflow?: WorkflowDetail } | WorkflowDetail;
-      })
-      .then((d) => {
-        if (cancelled) return;
-        const wf = (d as { workflow?: WorkflowDetail }).workflow ?? (d as WorkflowDetail);
-        setNodes(wf.phases.flatMap((p) => p.nodes));
-      })
-      .catch(() => {
-        if (!cancelled) setNodes([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [targetRun]);
-
-  // 会話タブの候補 = 明示 agentId（run に無くても出す）+ run の孫エージェント。
-  // 明示リンクがあり agentId も run も無いケースはここで空になる。
-  const candidates = useMemo<{ agentId: string; label: string }[]>(() => {
-    const map = new Map<string, string>();
-    if (explicit) {
-      for (const aid of explicitAgentIds) {
-        map.set(aid, links?.links.find((l) => l.agentId === aid)?.label ?? aid.slice(0, 8));
-      }
-    }
-    for (const n of nodes ?? []) {
-      if (!map.has(n.agentId)) map.set(n.agentId, n.label);
-    }
-    return [...map.entries()].map(([aid, label]) => ({ agentId: aid, label }));
-  }, [explicit, explicitAgentIds, links, nodes]);
-
-  // 候補が決まったら選択中 agentId を初期化/補正する。
-  useEffect(() => {
-    if (candidates.length === 0) {
-      setAgentId(null);
-      return;
-    }
-    setAgentId((cur) => (cur && candidates.some((c) => c.agentId === cur) ? cur : candidates[0].agentId));
-  }, [candidates]);
-
-  if (loading && (nodes === null)) {
-    return (
-      <div className="flex items-center gap-2 text-[12px] text-text-muted">
-        <Spinner />
-        会話の候補を取得しています…
-      </div>
-    );
-  }
-
-  if (candidates.length === 0) {
-    return (
-      <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px] text-text-faint">
-        紐づくエージェント会話はありません。
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {!explicit && fallbackMatched.length === 0 && (
-        <p className="text-[11px] text-text-faint">
-          このタスクに紐づく会話は特定できませんでした。直近のワークフローの会話を表示しています。
-        </p>
-      )}
-      {candidates.length > 1 && (
-        <div
-          className="no-scrollbar -mx-1 flex items-center gap-1 overflow-x-auto px-1"
-          role="group"
-          aria-label="会話するエージェントを選択"
-        >
-          {candidates.map((c) => {
-            const selected = c.agentId === agentId;
-            return (
-              <button
-                key={c.agentId}
-                type="button"
-                onClick={() => setAgentId(c.agentId)}
-                className={`shrink-0 rounded-md px-2.5 py-1.5 text-[11px] ${
-                  selected
-                    ? 'bg-surface-3 font-semibold text-text'
-                    : 'text-text-muted hover:bg-surface-2'
-                }`}
-                aria-pressed={selected}
-              >
-                {c.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
-      {agentId && (
-        <div className="rounded-lg border border-border bg-surface px-3 py-3">
-          <AgentFeed agentId={agentId} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── デプロイ状況（MC-64）─────────────────────────────────────
-// /api/deploys（GitHub Actions deploy 系 workflow の直近 run）を取得し、
-// このタスクの project に対応する repo の run 状態を表示する。
-// 状態の色には必ず語ラベルを併記（a11y）。エラー・空はそれぞれ中立的な空状態を出し、
-// TaskDetail 全体を壊さない。logic / en-chakai 以外の project は対象外として中立表示。
-
-/** deploy run の状態（status + conclusion）を語ラベル + 既存 CSS 変数色に写像。 */
-function deployRunMeta(run: DeployRun): { label: string; color: string } {
-  if (run.status === 'completed') {
-    switch (run.conclusion) {
-      case 'success':
-        return { label: '成功', color: 'var(--mc-done)' };
-      case 'failure':
-        return { label: '失敗', color: 'var(--mc-stalled)' };
-      case 'cancelled':
-        return { label: '中止', color: 'var(--mc-text-faint)' };
-      case 'timed_out':
-        return { label: 'タイムアウト', color: 'var(--mc-stalled)' };
-      case 'skipped':
-        return { label: 'スキップ', color: 'var(--mc-text-faint)' };
-      default:
-        return { label: run.conclusion ?? '完了', color: 'var(--mc-text-muted)' };
-    }
-  }
-  if (run.status === 'in_progress') return { label: '実行中', color: 'var(--mc-active)' };
-  if (run.status === 'queued') return { label: '待機中', color: 'var(--mc-idle)' };
-  return { label: run.status || '不明', color: 'var(--mc-text-muted)' };
-}
-
-/** workflow ファイル名を読みやすい短縮ラベルにする。 */
-function workflowLabel(workflow: string): string {
-  if (workflow === 'deploy-production.yml') return '本番デプロイ';
-  if (workflow === 'android-deploy.yml') return 'Android 配信';
-  return workflow.replace(/\.ya?ml$/i, '');
-}
-
-/** 1 件の deploy run の表示行。 */
-function DeployRunRow({ run }: { run: DeployRun }) {
-  const meta = deployRunMeta(run);
-  return (
-    <li className="rounded-lg border border-border bg-surface px-3 py-2.5">
-      <div className="flex items-start gap-2">
-        <span
-          className="mt-1 inline-block h-2 w-2 shrink-0 rounded-full"
-          style={{ background: meta.color }}
-          aria-hidden
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <Badge title={`ワークフロー: ${run.workflow}`}>{workflowLabel(run.workflow)}</Badge>
-            <span
-              className="text-[11px]"
-              style={{ color: meta.color }}
-              role="status"
-              aria-label={`デプロイ状態: ${meta.label}`}
-            >
-              {meta.label}
-            </span>
-          </div>
-          {run.title && (
-            <p className="mt-1 break-words text-[12px] text-text-muted">{run.title}</p>
-          )}
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-text-faint">
-            {run.branch && <span className="break-all font-mono">{run.branch}</span>}
-            {run.event && <span>{run.event}</span>}
-            {run.updatedAt && (
-              <span title={absoluteTime(run.updatedAt)}>更新 {relativeTime(run.updatedAt)}</span>
-            )}
-          </div>
-        </div>
-        {run.url && (
-          <a
-            href={run.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-0.5 shrink-0 text-[11px] text-accent hover:underline"
-          >
-            開く
-          </a>
-        )}
-      </div>
-    </li>
-  );
-}
-
-/**
- * タスクの project に対応する repo の直近 deploy run を表示するセクション。
- * - project が deploy 連動対象（logic / en-chakai）でない → 中立の空状態。
- * - 対象だが run が無い → 中立の空状態。
- * - GitHub API エラー（repo.error） → エラー空状態（TaskDetail は壊さない）。
- */
-function LinkedDeploys({ task }: { task: Task }) {
-  const tick = useLiveTick();
-  const { data, error, loading } = useLiveResource<DeploysResponse>('/api/deploys', tick);
-
-  const repo = useMemo<DeployRepo | null>(() => {
-    if (!data) return null;
-    return data.repos.find((r) => r.project === task.project) ?? null;
-  }, [data, task.project]);
-
-  if (loading && !data) {
-    return (
-      <div className="flex items-center gap-2 text-[12px] text-text-muted">
-        <Spinner />
-        デプロイ状況を取得しています…
-      </div>
-    );
-  }
-
-  // /api/deploys 自体の取得失敗（ネットワーク等）。前回値が無いときのみエラー表示。
-  if (error && !data) {
-    return (
-      <p
-        className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px]"
-        style={{ color: 'var(--mc-stalled)' }}
-        role="alert"
-      >
-        デプロイ状況の取得に失敗しました（{error}）。
-      </p>
-    );
-  }
-
-  // このタスクの project が deploy 連動対象でない（cxo / private 等）。
-  if (!repo) {
-    return (
-      <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px] text-text-faint">
-        このプロジェクトはデプロイ連動の対象ではありません。
-      </p>
-    );
-  }
-
-  // repo 単位の GitHub API エラー（gh 不在・未認証・レート・タイムアウト等）。
-  if (repo.error) {
-    return (
-      <p
-        className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px]"
-        style={{ color: 'var(--mc-stalled)' }}
-        role="alert"
-      >
-        デプロイ状況を取得できませんでした（{repo.error}）。
-      </p>
-    );
-  }
-
-  if (repo.runs.length === 0) {
-    return (
-      <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px] text-text-faint">
-        デプロイ実行はありません。
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <p className="text-[11px] text-text-faint">
-        <span className="break-all font-mono">{repo.repo}</span> の直近のデプロイ実行です。
-      </p>
-      <ul className="space-y-2">
-        {repo.runs.map((run) => (
-          <DeployRunRow key={`${run.workflow}-${run.id}`} run={run} />
-        ))}
-      </ul>
-    </div>
-  );
-}
+// (MC-167) 削除: デプロイ状況関連関数は CI実行履歴でタスク単位でないため削除
+// function deployRunMeta / workflowLabel / DeployRunRow / LinkedDeploys
 
 function SectionHeading({ children }: { children: string }) {
   return (
@@ -971,11 +331,12 @@ function TaskDetailBody({
   onClose: () => void;
   onChanged?: () => void;
 }) {
-  const tick = useLiveTick();
-  const { data: links } = useLiveResource<TaskLinksResponse>(
-    `/api/tasks/${encodeURIComponent(task.id)}/links`,
-    tick,
-  );
+  // (MC-167) 削除: links を取得していた useLiveResource を削除
+  // const { data: links } = useLiveResource<TaskLinksResponse>(
+  //   `/api/tasks/${encodeURIComponent(task.id)}/links`,
+  //   tick,
+  // );
+
   // ローカル上書き表示（保存成功で即時反映。親 refetch が届くまでのギャップを埋める）。
   const [localTask, setLocalTask] = useState<Task>(task);
   const [editing, setEditing] = useState(false);
@@ -1114,6 +475,40 @@ function TaskDetailBody({
             )}
           </section>
 
+          {/* (MC-167) 新規（検討段階）: ブロッカー/依存セクション
+           * ブロッカーまたは依存があればここに表示。上部に目立たせる。
+           * Task 型拡張（blockedBy / dependsOn フィールド）待ち。
+           */}
+          {/*
+          {(view.blockedBy?.length || view.dependsOn?.length) && (
+            <section className="mb-5">
+              <SectionHeading>ブロッカー・依存</SectionHeading>
+              <div className="space-y-2">
+                {view.blockedBy?.length ? (
+                  <div>
+                    <p className="mb-1 text-[11px] text-text-muted">ブロックされている:</p>
+                    <ul className="space-y-1">
+                      {view.blockedBy.map((id) => (
+                        <li key={id} className="text-[12px] text-text-faint">{id}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {view.dependsOn?.length ? (
+                  <div>
+                    <p className="mb-1 text-[11px] text-text-muted">依存:</p>
+                    <ul className="space-y-1">
+                      {view.dependsOn.map((id) => (
+                        <li key={id} className="text-[12px] text-text-faint">{id}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          )}
+          */}
+
           {/* (a-2) 詳細メモ（MC-83）— 台帳の「詳細」/受け入れ条件/サブタスク等。取れた時のみ表示。 */}
           {view.detail && (
             <section className="mb-5">
@@ -1126,23 +521,14 @@ function TaskDetailBody({
             </section>
           )}
 
-          {/* (b) 紐づくワークフロー */}
-          <section className="mb-5">
-            <SectionHeading>紐づくワークフロー</SectionHeading>
-            <LinkedWorkflows task={task} links={links} />
-          </section>
+          {/* (MC-167) 削除: 紐づくワークフロー（タスクに紐づけられず無関係 wf_xxx をトークン数つき羅列＝ノイズ） */}
+          {/* REMOVED: LinkedWorkflows セクション */}
 
-          {/* (b-2) デプロイ状況（MC-64） */}
-          <section className="mb-5">
-            <SectionHeading>デプロイ状況</SectionHeading>
-            <LinkedDeploys task={task} />
-          </section>
+          {/* (MC-167) 削除: デプロイ状況（CI実行履歴でタスク単位でない） */}
+          {/* REMOVED: LinkedDeploys セクション */}
 
-          {/* (c) 紐づくエージェント会話 */}
-          <section className="mb-5">
-            <SectionHeading>紐づくエージェント会話</SectionHeading>
-            <LinkedConversation task={task} links={links} />
-          </section>
+          {/* (MC-167) 削除: 紐づくエージェント会話（特定不可で直近会話を表示＝無関係） */}
+          {/* REMOVED: LinkedConversation セクション */}
 
           {/* (d) 活動タイムライン（MC-163） */}
           <section>
