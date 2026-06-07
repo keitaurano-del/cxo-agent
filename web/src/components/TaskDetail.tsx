@@ -475,39 +475,47 @@ function TaskDetailBody({
             )}
           </section>
 
-          {/* (MC-167) 新規（検討段階）: ブロッカー/依存セクション
-           * ブロッカーまたは依存があればここに表示。上部に目立たせる。
-           * Task 型拡張（blockedBy / dependsOn フィールド）待ち。
+          {/* (MC-170) ブロッカー・依存セクション。
+           * 台帳の「依存」由来（MC-169 collector がパース）。データが取れた場合のみ表示し、
+           * 無ければ「依存なし」を中立表示する。概要の直後に置いて状況を一目で把握できるようにする。
            */}
-          {/*
-          {(view.blockedBy?.length || view.dependsOn?.length) && (
-            <section className="mb-5">
-              <SectionHeading>ブロッカー・依存</SectionHeading>
-              <div className="space-y-2">
+          <section className="mb-5">
+            <SectionHeading>ブロッカー・依存</SectionHeading>
+            {view.blockedBy?.length || view.dependsOn?.length ? (
+              <div className="space-y-3">
                 {view.blockedBy?.length ? (
                   <div>
-                    <p className="mb-1 text-[11px] text-text-muted">ブロックされている:</p>
-                    <ul className="space-y-1">
+                    <p className="mb-1 text-[11px] text-text-muted">ブロックしているタスク</p>
+                    <ul className="flex flex-wrap gap-1.5">
                       {view.blockedBy.map((id) => (
-                        <li key={id} className="text-[12px] text-text-faint">{id}</li>
+                        <li key={id}>
+                          <span className="inline-block rounded-md border border-border bg-surface px-2 py-0.5 font-mono text-[11px] text-text-muted">
+                            {id}
+                          </span>
+                        </li>
                       ))}
                     </ul>
                   </div>
                 ) : null}
                 {view.dependsOn?.length ? (
                   <div>
-                    <p className="mb-1 text-[11px] text-text-muted">依存:</p>
-                    <ul className="space-y-1">
+                    <p className="mb-1 text-[11px] text-text-muted">依存しているタスク</p>
+                    <ul className="flex flex-wrap gap-1.5">
                       {view.dependsOn.map((id) => (
-                        <li key={id} className="text-[12px] text-text-faint">{id}</li>
+                        <li key={id}>
+                          <span className="inline-block rounded-md border border-border bg-surface px-2 py-0.5 font-mono text-[11px] text-text-muted">
+                            {id}
+                          </span>
+                        </li>
                       ))}
                     </ul>
                   </div>
                 ) : null}
               </div>
-            </section>
-          )}
-          */}
+            ) : (
+              <p className="text-[12px] text-text-faint">依存はありません。</p>
+            )}
+          </section>
 
           {/* (a-2) 詳細メモ（MC-83）— 台帳の「詳細」/受け入れ条件/サブタスク等。取れた時のみ表示。 */}
           {view.detail && (

@@ -88,6 +88,9 @@ export interface Task {
   detail?: string;
   // ─── エージェント活動（MC-164）。現在このタスクで作業中のエージェント。──
   executor?: TaskExecutor;
+  // ─── ブロッカー・依存（MC-168）。台帳の「依存」由来。空/「なし」なら未設定。──
+  blockedBy?: string[];
+  dependsOn?: string[];
 }
 
 // ─── 承認フロー（MC-79 / GET /api/approvals）──────────────────────

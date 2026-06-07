@@ -62,6 +62,19 @@ export interface Task {
    * 取れなければ undefined。
    */
   executor?: TaskExecutor;
+  /**
+   * このタスクをブロックしているタスク ID（MC-168）。
+   * 現状の台帳にはブロッカー専用列が無いため collector では当面埋めない（将来の拡張用）。
+   * 例: ['MC-167']。取れなければ未設定。
+   */
+  blockedBy?: string[];
+  /**
+   * このタスクが依存しているタスク ID（MC-168）。
+   * 台帳の「依存」列／縦型カードの「依存」フィールド／セクション本文の `- 依存:` 行から
+   * ID トークン（MC-xx 等）を抽出して割り当てる（MC-169）。「なし」や空は未設定。
+   * 例: ['MC-145', 'MC-146']。
+   */
+  dependsOn?: string[];
 }
 
 /**
@@ -139,6 +152,37 @@ function extractApprovalTags(texts: (string | undefined)[]): ApprovalKind[] {
     if (words.some((w) => hay.includes(w))) tags.push(kind);
   });
   return tags;
+}
+
+/**
+ * 依存テキストから依存タスク ID トークンを抽出する（MC-169）。
+ * 台帳の「依存」表現は3系統あり、いずれも自由文に ID が混ざるためトークン抽出方式で統一する。
+ *   - テーブル行の依存列:   `MC-167` / `MC-145/MC-146/MC-147`（注記カッコ付きあり）
+ *   - 縦型カードの依存:     `MC-68（本タスクに集約…）。…MC-71 の…MC-76 の…MC-80…`
+ *   - セクション本文の依存: `- 依存: MC-01` / `- 依存: なし` / `- 依存: MC-11〜16`
+ * ID トークンは `<英字>-<英数字>`（例 MC-167 / MC-G1 / FB-11）。範囲表記 `MC-11〜16` は
+ * 先頭の完全 ID（MC-11）だけ拾う（末尾は ID 形式でないため自然に無視される）。
+ * 「なし」や空文字は空配列。重複は除去し、出現順を維持する。
+ */
+function extractDepIds(text?: string): string[] {
+  if (!text) return [];
+  if (/^\s*(なし|none|n\/a|-)\s*$/i.test(text)) return [];
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  // タスク ID トークン: 大文字1〜4字のプレフィックス + ハイフン + （任意の英字1字）+ 数字1+。
+  //   OK : MC-167 / FB-11 / DF-F19 / MC-G1（プレフィックス略号 + 数字を必ず含む ID）
+  //   除外: read-back / dev-logic / sengoku-chakai（小文字を含む英単語の連結）、DF-F（数字なし範囲端）
+  // これで自由文中の英単語ハイフン連結や範囲表記の不完全断片を ID と誤認しない。
+  const re = /\b[A-Z]{1,4}-[A-Za-z]?[0-9]+\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const id = m[0];
+    if (!seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
 }
 
 const STATUS_WORDS: TaskStatus[] = [
@@ -291,7 +335,7 @@ export function parseTrackerString(
   //   cxo:   | ID | タイトル | 優先度 | フェーズ | ステータス | 担当 | 依存 |
   // ヘッダ行から列名→index を引いて layout 非依存に拾う（無ければ位置フォールバック）。
   const lines = md.split('\n');
-  let col: { priority?: number; owner?: number; status?: number } | null = null;
+  let col: { priority?: number; owner?: number; status?: number; dep?: number } | null = null;
   // 直前に確定した表が「タスクの正準サマリ表」か「非タスク表（別表）」か。
   // ID 列見出しが `ID` の表だけをタスク表とみなす。`| タスク | 旧状態 | 新状態 | 反映内容 |`
   // のような「判断反映サマリ」等の別表（ID 見出しが `ID` でない／status 列を持たない）は
@@ -330,6 +374,8 @@ export function parseTrackerString(
       c['提言・抜けもれ（重要）'],
       c['関連'],
     ]);
+    // 依存（MC-169）: 縦型カードの「依存」フィールドから ID トークンを抽出。
+    const dependsOn = extractDepIds(c['依存'] || c['depends'] || c['dependsOn']);
     out.push(
       markStalled({
         id,
@@ -343,6 +389,7 @@ export function parseTrackerString(
         needsKeita: ownerHasKeita(owner),
         approvalTags,
         detail: buildCardDetail(c),
+        ...(dependsOn.length ? { dependsOn } : {}),
       }),
     );
   };
@@ -386,6 +433,7 @@ export function parseTrackerString(
         if (/優先度|priority/i.test(h)) col!.priority = i;
         else if (/担当|owner|assignee/i.test(h)) col!.owner = i;
         else if (/ステータス|status|区分/i.test(h)) col!.status = i;
+        else if (/依存|depends?|blocked/i.test(h)) col!.dep = i;
       });
       continue;
     }
@@ -427,8 +475,9 @@ export function parseTrackerString(
     if (status === 'UNKNOWN') {
       status = normStatus(cells[4]) !== 'UNKNOWN' ? normStatus(cells[4]) : normStatus(cells[3]);
     }
-    // 2) 詳細セクションの `- ステータス:` / 担当: を見る。ステータスは確定方向のみ反映。
+    // 2) 詳細セクションの `- ステータス:` / 担当: / 依存: を見る。ステータスは確定方向のみ反映。
     let sectionOwner: string | undefined;
+    let sectionDepText: string | undefined;
     const secRe = new RegExp(
       `###?[^\\n]*${escapeReg(id)}[\\s\\S]*?(?=\\n###?\\s|$)`,
     );
@@ -438,8 +487,28 @@ export function parseTrackerString(
       if (sm) status = mergeStatus(status, normStatus(sm[1]));
       const om = sec[0].match(/担当[:：]\s*([^\n/]+)/);
       if (om) sectionOwner = om[1].replace(/\*/g, '').trim() || undefined;
+      // `- 依存: MC-01` 行（行末まで＝1行分）を拾う。
+      const dm = sec[0].match(/依存[:：]\s*([^\n]+)/);
+      if (dm) sectionDepText = dm[1];
     }
     if (sectionOwner) owner = sectionOwner;
+
+    // 依存（MC-169）: 表行の依存列とセクション本文の `- 依存:` を両方抽出してマージ（出現順・重複除去）。
+    // 依存列インデックス: ヘッダで特定できればそれを使う。ヘッダ無しブロック（MC-151〜170 のように
+    // `| ID | タイトル | ... |` ヘッダが直前に無いベタ表）では col.dep が取れないため、
+    // 「owner 列より後ろにある末尾セル」をフォールバックの依存列候補とする。owner 等の通常セルは
+    // ID トークンを含まないため、extractDepIds が空を返して誤検出しない（ID らしき値のときだけ拾う）。
+    let depCell: string | undefined;
+    if (col?.dep !== undefined) {
+      depCell = cells[col.dep];
+    } else {
+      const ownerIdx = col?.owner ?? cells.length - 1;
+      if (cells.length - 1 > ownerIdx) depCell = cells[cells.length - 1];
+    }
+    const depText = [depCell, sectionDepText]
+      .filter((t): t is string => !!t)
+      .join(' / ');
+    const dependsOn = extractDepIds(depText).filter((d) => d !== id); // 自己参照は除外
 
     const key = `${source}:${id}`;
     if (seen.has(key)) continue;
@@ -465,6 +534,7 @@ export function parseTrackerString(
         needsKeita: ownerHasKeita(owner),
         approvalTags,
         detail: buildSectionDetail(sec?.[0]),
+        ...(dependsOn.length ? { dependsOn } : {}),
       }),
     );
   }
