@@ -471,10 +471,6 @@ export default function Terminal() {
     for (const t of TERMINAL_TABS) init[t.id] = t.account;
     return init;
   });
-  // 切替処理中のターミナル番号集合（バッジにスピナーを出す）。
-  const [accountSwitching, setAccountSwitching] = useState<Set<number>>(new Set());
-  // 使用量ベース自動切替の実行中フラグ（ボタンにスピナーを出す）。
-  const [autoSwitching, setAutoSwitching] = useState(false);
 
   // ── ターミナルラベル状態（API から返却される動的ラベル）────
   const [terminalLabels, setTerminalLabels] = useState<Record<number, string>>(() => {
@@ -571,72 +567,13 @@ export default function Terminal() {
     setTerminalLabels((prev) => ({ ...prev, [id]: label }));
   }, []);
 
-  const markSwitching = useCallback((id: number, on: boolean) => {
-    setAccountSwitching((prev) => {
-      const next = new Set(prev);
-      if (on) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }, []);
 
-  // POST /api/terminal/account でアカウントラベルを切り替える。
-  // silent=true のときは切替中スピナー表示を抑制する（自動切替・初回ロード用）。
-  const switchAccount = useCallback(
-    async (terminalId: number, account: string, silent = false) => {
-      if (!silent) markSwitching(terminalId, true);
-      try {
-        const res = await fetch('/api/terminal/account', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ terminal: terminalId, account }),
-        });
-        const body = (await res.json()) as { ok: boolean; account?: string; error?: string };
-        if (body.ok && body.account) {
-          setAccountLabel(terminalId, body.account);
-        }
-      } catch {
-        // 失敗しても UI をブロックしない
-      } finally {
-        if (!silent) markSwitching(terminalId, false);
-      }
-    },
-    [setAccountLabel, markSwitching],
-  );
+  // アカウント切替は削除（MC-180）。ドロップダウン UI と自動切替ロジックを廃止。
+  // サーバ側エンドポイント /api/terminal/account は残っているので、
+  // 将来 UI を復活させたい場合はここに関数を戻す。
 
-  // ── 使用量ベース自動切替 ────────────────────────────────────
-  // /api/terminal/usage-summary を取得し、remaining が多い方（=使用率が低い方）の
-  // アカウントへ全ターミナルを切り替える。silent=true は初回ロード時の静かな切替用。
-  const autoSwitchByUsage = useCallback(
-    async (silent = false) => {
-      if (!silent) setAutoSwitching(true);
-      try {
-        const res = await fetch('/api/terminal/usage-summary');
-        if (!res.ok) return;
-        const body = (await res.json()) as {
-          claude1?: { remaining?: number };
-          claude2?: { remaining?: number };
-        };
-        const r1 = typeof body.claude1?.remaining === 'number' ? body.claude1.remaining : 100;
-        const r2 = typeof body.claude2?.remaining === 'number' ? body.claude2.remaining : 100;
-        // remaining が多い方を選ぶ。同点なら Claude1 を既定にする。
-        const best = r2 > r1 ? 'Claude2' : 'Claude1';
-        // T4 は OpenClaw 独自認証のため自動切替対象外。
-        await Promise.all(
-          TERMINAL_TABS.filter((t) => t.id !== 4).map((t) =>
-            (accountLabels[t.id] ?? 'Claude1') === best
-              ? Promise.resolve()
-              : switchAccount(t.id, best, true),
-          ),
-        );
-      } catch {
-        // 失敗してもサイレント（手動バッジ操作は引き続き可能）。
-      } finally {
-        if (!silent) setAutoSwitching(false);
-      }
-    },
-    [accountLabels, switchAccount],
-  );
+  // ── 使用量ベース自動切替（削除済 MC-180）────────────────────────
+  // 自動切替は不要に。429時のフェイルオーバーも廃止。手動 switchAccount のみ対応。
 
 
   // ── バックエンド復旧（MC-100 / MC-119）────────────────────────
@@ -942,18 +879,7 @@ export default function Terminal() {
 
   const activeBackend = backends[activeId] ?? { kind: 'checking' };
 
-  // ページロード時に一度だけ、使用量ベースの自動切替を静かに実行する。
-  // status-all によるラベル初期化と競合しないよう、少し遅らせて 1 回だけ走らせる。
-  const didAutoSwitchRef = useRef(false);
-  useEffect(() => {
-    if (didAutoSwitchRef.current) return;
-    didAutoSwitchRef.current = true;
-    const id = window.setTimeout(() => {
-      void autoSwitchByUsage(true);
-    }, 1200);
-    return () => window.clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // ページロード時の自動切替は廃止（MC-180）。手動 switchAccount のみ対応。
 
   return (
     <div className="flex h-full flex-col" style={{ overscrollBehavior: 'none' }}>
@@ -964,7 +890,6 @@ export default function Terminal() {
           const st = backends[t.id]?.kind ?? 'checking';
           const account = accountLabels[t.id] ?? 'Claude1';
           const isC2 = account === 'Claude2';
-          const switching = accountSwitching.has(t.id);
           return (
             <button
               key={t.id}
@@ -980,37 +905,14 @@ export default function Terminal() {
             >
               <TerminalIcon width={13} height={13} className="pointer-events-none" />
               <span>{terminalLabels[t.id] ?? t.label}</span>
-              {/* アカウントプルダウン（T4=OpenClawは切替不可のためバッジのみ） */}
-              {switching ? (
-                <span className="flex h-5 w-10 items-center justify-center"><Spinner /></span>
-              ) : t.id === 4 ? (
-                <span
-                  title="OpenClaw（独自認証）のため切替不可"
-                  className={`flex h-5 min-w-[1.75rem] items-center justify-center rounded px-1 text-[10px] font-semibold leading-none opacity-50 ${
-                    isC2 ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-sky-500/20 text-sky-600 dark:text-sky-400'
-                  }`}
-                >
-                  {isC2 ? 'C2' : 'C1'}
-                </span>
-              ) : (
-                <select
-                  value={account}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => {
-                    e.stopPropagation();
-                    void switchAccount(t.id, e.target.value);
-                  }}
-                  aria-label={`${terminalLabels[t.id] ?? t.label} のアカウント`}
-                  className={`h-5 rounded border-0 px-0.5 text-[10px] font-semibold leading-none outline-none cursor-pointer ${
-                    isC2
-                      ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
-                      : 'bg-sky-500/20 text-sky-600 dark:text-sky-400'
-                  }`}
-                >
-                  <option value="Claude1">C1</option>
-                  <option value="Claude2">C2</option>
-                </select>
-              )}
+              {/* アカウントバッジ（固定表示、ドロップダウン削除 MC-179） */}
+              <span
+                className={`flex h-5 min-w-[1.75rem] items-center justify-center rounded px-1 text-[10px] font-semibold leading-none ${
+                  isC2 ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-sky-500/20 text-sky-600 dark:text-sky-400'
+                }`}
+              >
+                {isC2 ? 'C2' : 'C1'}
+              </span>
               {/* 稼働状態ドット */}
               <span
                 aria-hidden
@@ -1048,18 +950,6 @@ export default function Terminal() {
           })}
         </div>
 
-        {/* 使用量ベース自動切替（全ターミナル共通）。残量が多い側へ寄せる。 */}
-        <button
-          type="button"
-          onClick={() => void autoSwitchByUsage(false)}
-          disabled={autoSwitching}
-          title="使用量を見て、残量が多いアカウントへ全ターミナルを自動切替"
-          style={{ touchAction: 'manipulation' }}
-          className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-text-muted transition-colors hover:bg-surface-3 hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {autoSwitching ? <Spinner /> : null}
-          自動切替
-        </button>
       </div>
 
       {/* ツールバー: 画像添付・出力・新しいタブで開く。補助機能はターミナル1のみ有効。 */}
