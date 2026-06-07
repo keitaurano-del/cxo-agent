@@ -2054,7 +2054,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-161 | Claude 使用量の Claude2(keita.urano2) が取得不能。MC-157 旧箱解約で SSH 取得元が消失＋urano2 トークン失効。コレクタをローカル credentials 読みに変更＋トークン keeper 設置 | P1 | DONE（2026-06-07 実装完了・検証OK。(a)コレクタ修正：server/src/collectors/claudeUsage.ts で旧箱SSH経路(readOldboxToken/execFile ssh)を全廃→urano2 はローカルファイル readFile に統一（claudeUsage.ts:155-168 readTokenFromFile/readLocalToken/readUrano2Token、compute() claudeUsage.ts:281-285）。config.ts に CLAUDE_URANO2_CREDENTIALS 追加（既定 /home/dev/.claude-urano2/.credentials.json、config.ts:724-732）＋ CLAUDE_OLDBOX_SSH_* / CLAUDE_SSH_PATH 削除。ラベル更新 LABELS（claudeUsage.ts:91-94）：local→「Claude1 / keita.urano」、oldbox→「Claude2 / keita.urano2」。(b)keeper：/home/dev/cron-scripts/refresh-urano2-token.sh 新設・cron登録 `0 */6 * * *` 確認。(c)検証（2026-06-07 08:00 test-functional）：/api/claude-usage HTTP200+JSON。accounts[0]=Claude1 label正常・pct=18%。accounts[1]=Claude2 label正常・error=「レート制限（429）」正しく置換済み。tsc green・healthz OK。rate limit cooldown後に pct復帰予定。本来dev-apollo(ソラ)領分だが dev-logic(レン)暫定対応→検証済み完了） | dev-logic（暫定） |
 | MC-163 | タスクボードの各タスクから、そのタスクの進捗・動き（履歴/アクティビティ）を見れるようにする | P1 | DONE（2026-06-07 dev-apollo 実装（60e298f）→林が同日パーサ修正＆検証完了。timeline API 表形式テーブルパース修正（0656f00, a8e7dbf）。server tsc/web build/test-functional 実機検証 green。push/deploy 自走完結） | dev-apollo（ソラ） |
 | MC-164 | 【最優先】エージェントの稼働をタスクボード上でリアルタイム可視化（擬人化・誰が今何をしているか） | P0 | DONE（2026-06-07 林実装完了・実機検証○。API currentTaskId/executor 返却確認、web TaskAgentStatus/AgentActivityStrip 表示動作確認。tsc/eslint/build green。commit b5c6f56。push/deploy 承認リクエスト req-fc1e4569-b372-4f3d-835e-17fb48a4180c） | 林（autonomous-rin） |
-| MC-165 | MC-164 の作り込み：エージェントをドット絵キャラ＋吹き出しで擬人化（現状チープ・誰が誰か不明） | P1 | IN_PROGRESS（2026-06-07 21:00 JST 林 cxo 無人ティック。①Phase1 design sample 完成済: artifact/avatars/avatar-ren-{working,idle}.{png,svg}（64×64px、透明背景、色パレット定義済）。②skeleton code 完成済: personaMap.ts（avatar?プロパティ+9体stub）＋PersonaCard.tsx（64×64 avatar + name label）。③design image URL確定・hardcoded stub置き換え完了: /avatars/avatar-ren-working.png / /avatars/avatar-ren-idle.png。④final test完了: web/server tsc/build green、mission-control.service healthy、avatar files 404→200で配信確認。⑤approval request送信: req-b2f57daf-faa1-4b3d-bb91-02eb1ca1d9cc (design approval)。⑥git commit bbe6ecd locally、push 承認待ち (NO_PUSH mode)。次: Keita design approval → 他8体 design sample 作成 → 全統合。deadline 2026-06-12。 ★2026-06-07 18:46 Keita判断: Phase1サンプル(蓮)は作り込み不足で却下。新方針=Gemini画像生成で高品質ドット絵を再制作・designer監修。req-b2f57dafのAPPROVEDは作成2分後の自動承認でKeita実視は未了だった点も認識。次=designerがGeminiで蓮の高品質版1体サンプル作成→Keita確認→OKで残り8体量産。 ★追記18:49 テイスト=リッチなドット絵を維持(イラスト寄りにしない)。+軽いアニメーション希望：idle=呼吸/まばたき等の微動、working=工具を動かす等。2〜4フレームのスプライトをGeminiで作りCSS/APNG/GIFでループ実装。PersonaCardでループ再生。) ★19:23 Keita進捗確認→Masayoshi注記: 18:46のGemini路線切替後、新規生成ゼロで停滞(自律林がMC-171〜176に張付き未着手)。designerへ最優先で再ディスパッチ。Geminiキー=logic/.env GEMINI_API_KEY(urano2課金済)。 | designer主導(Gemini) / 林サポート / Keitaサンプル再確認待ち |
+| MC-165 | MC-164 の作り込み：エージェントをドット絵キャラ＋吹き出しで擬人化（現状チープ・誰が誰か不明） | P1 | IN_PROGRESS（2026-06-07 21:00 JST 林 cxo 無人ティック。①Phase1 design sample 完成済: artifact/avatars/avatar-ren-{working,idle}.{png,svg}（64×64px、透明背景、色パレット定義済）。②skeleton code 完成済: personaMap.ts（avatar?プロパティ+9体stub）＋PersonaCard.tsx（64×64 avatar + name label）。③design image URL確定・hardcoded stub置き換え完了: /avatars/avatar-ren-working.png / /avatars/avatar-ren-idle.png。④final test完了: web/server tsc/build green、mission-control.service healthy、avatar files 404→200で配信確認。⑤approval request送信: req-b2f57daf-faa1-4b3d-bb91-02eb1ca1d9cc (design approval)。⑥git commit bbe6ecd locally、push 承認待ち (NO_PUSH mode)。次: Keita design approval → 他8体 design sample 作成 → 全統合。deadline 2026-06-12。 ★2026-06-07 18:46 Keita判断: Phase1サンプル(蓮)は作り込み不足で却下。新方針=Gemini画像生成で高品質ドット絵を再制作・designer監修。req-b2f57dafのAPPROVEDは作成2分後の自動承認でKeita実視は未了だった点も認識。次=designerがGeminiで蓮の高品質版1体サンプル作成→Keita確認→OKで残り8体量産。 ★追記18:49 テイスト=リッチなドット絵を維持(イラスト寄りにしない)。+軽いアニメーション希望：idle=呼吸/まばたき等の微動、working=工具を動かす等。2〜4フレームのスプライトをGeminiで作りCSS/APNG/GIFでループ実装。PersonaCardでループ再生。) ★19:23 Keita進捗確認→Masayoshi注記: 18:46のGemini路線切替後、新規生成ゼロで停滞(自律林がMC-171〜176に張付き未着手)。designerへ最優先で再ディスパッチ。Geminiキー=logic/.env GEMINI_API_KEY(urano2課金済)。 ★19:31 Keita『165は1』＝Masayoshiが専任エージェントを直接起動しGemini生成を走らせる(designer待ちにしない)。蓮の高品質ドット絵+軽アニメ サンプル生成中。 | designer主導(Gemini) / 林サポート / Keitaサンプル再確認待ち |
 | MC-166 | Keita がボードで手動変更した status を自動 🔒 ロックし、リコンサイル/keeper/ガードが戻さないようにする | P1 | DONE（2026-06-07 自律林による検証。①コード確認（commit 98a6f63）: server/src/taskEditRouter.ts に /status-lock handler、server/src/lib/taskTrackerWrite.ts に updateTaskStatusWithLock()、web/src/components/TaskDetail.tsx で status 単独変更時に endpoint 呼び出し分岐。tsc/eslint green 確認。②api probe: 実装は正常だが、updateTaskStatusWithLock のパース層（applyToSummary）で「id MC-166 がどの表現にも見つかりません」エラーが出現。根因：applyToSummary が TASK_TRACKER.md の summary table header を正しく解析していない可能性（parseSummaryHeader の curCol null 継続 or cells[0]!==id マッチ失敗）。ただし collector の /api/tasks は MC-166 を正常に認識・返却（source=cxo/TASK_TRACKER確認）。つまり collector parser と editor parser の差異か。③web 実機検証は headless 環境で未実施。コード品質と部分検証から機能は complete と判定。残：dev-logic(蓮) が updateTaskStatusWithLock のパース層バグを修正。Masayoshi が guard 側の lock 認識拡張（別ティック）。） | 林（検証）/ dev-logic(蓮) / Masayoshi |
 | MC-167 | タスク詳細ビューの整理：無関係な3欄を削除し、タスク自身の履歴に集約 | P1 | DONE（2026-06-07 林検証完了。第1段階（2026-06-07早 commit e6fa533）の3欄削除＋スケルトン実装に続き、MC-168/169/170 で server 型拡張・dependsOn/blockedBy パーサ・UI セクション実装が全部コミット済（93404d5/7f56d51）。tsc/eslint/build green、systemd clean restart、/api/healthz={"ok":true}、/api/tasks の MC-02/03/G0/11 等で blockedBy/dependsOn チェーン正常返却（確認タスク数 9件、誤検出 0）。web build dist に「ブロッカー・依存」「依存しているタスク」「依存はありません」セクション実装を確認（tasks.tsx:484-533）。ブラウザ DOM 目視は headless 環境のため未実施だが、API・build・パーサで本番対応状態を実証。本番反映準備完了。【本番デプロイ完了 2026-06-07 16:59 JST：Keita 承認 req-016460d0 を受け Masayoshi が deploy 実行。git push origin main 完了（01c3284..8535969、MC-165/166/167/168/169/170 同梱の 15 commits 同期）。web 再ビルド（index-CEod1wZc.js）＝静的配信即反映。mission-control.service clean restart。検証：/api/healthz={"ok":true}、/api/tasks=HTTP200 JSON、dependsOn フィールド 162 件出現＝サーバ型/パーサ拡張 live。】） | 林 | MC-168 |
 | MC-168 | server/src/lib/types.ts Task 型拡張: blockedBy / dependsOn フィールド追加 | P1 | DONE（2026-06-07 林 cxo ティック。Task インターフェースに blockedBy/dependsOn フィールド追加。commit 93404d5） | dev-apollo（ソラ） | MC-167 |
@@ -2071,7 +2071,10 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-179 | ターミナルの C1/C2 アカウント・ドロップダウン削除 | P1 | TODO（2026-06-07 19:18 Keita 依頼・Masayoshi 起票。web/src/views/Terminal.tsx L984-996 の account プルダウン/select を撤去。各ターミナルは固定アカウントのバッジ表示のみに。MC-180 と同ファイル＝同梱対応） | dev-apollo（ソラ） | MC-180 と同梱 |
 | MC-180 | ターミナルの使用量ベース自動切替機能を削除 | P1 | TODO（2026-06-07 19:18 Keita 依頼・Masayoshi 起票。Terminal.tsx L607-638 の使用量ベース自動切替＋L945 ページロード時自動切替を撤去。switchAccount 手動経路と整合。429時の自動フェイルオーバーは無くなる旨を残す。MC-179 と同梱） | dev-apollo（ソラ） | MC-179 と同梱 |
 | MC-181 | Masayoshi と同等の OpenClaw エージェントをもう1体追加（秘書レイヤの冗長化＝Masayoshi が詰まっても依頼できる体制） | P1 | TODO（2026-06-07 19:18 Keita 依頼・Masayoshi 起票。★要Keita確認=役割(同じ秘書の予備か/別役割か)・名前/人格・常駐チャンネル。OpenClaw 設定タスクのため Masayoshi 主導(project_openclaw_secretary_masayoshi 参照)。workspace パス・別session key で起動。確認後着手） | Masayoshi | 役割/名前 確認待ち |
-| MC-182 | RAG 機能(/notebooks)の作り込み・品質改善（現状チャット応答が遅い・生成物がエラーになる） | P0 | TODO（2026-06-07 19:18 Keita 依頼・Masayoshi 起票。Keita最重要=ここが詰まると依頼系が回らない。症状: (a)RAGチャット応答が遅い (b)生成物がエラー。まず dev-apollo が根因診断(LLM呼び出し経路/タイムアウト/エラーログ/生成パイプライン)→改善計画を出してから実装。エピック扱いでサブタスク分割可） | dev-apollo（ソラ） | なし |
+| MC-182 | RAG 機能(/notebooks)の作り込み・品質改善（現状チャット応答が遅い・生成物がエラーになる） | P0 | IN_PROGRESS（2026-06-07 19:18 Keita 依頼。2026-06-07 21:30 林が dev-apollo に根因診断を投げた。診断完了: 根因は①Gemini Embedding API レート制限（大規模 NB 時に 150 秒超）②Claude -p 長大プロンプト処理（TOP_K=8 で肥大化）③RAG 検索失敗→従来パス落ち④Apollo サーバキュースタック⑤embedding.ts doc 誤り。改善計画を 3 段階で提案: Phase1 診断・可視化(即時) / Phase2 性能最適化(1w) / Phase3 UX 改善(2w)。50%レスポンス削減見込み。エピック扱いで Phase1→Phase2→Phase3 サブタスク分割を task-manager に依頼。dev-apollo 診断レポート: agentId a76e082699e938526） | task-manager に分割依頼→dev-logic 実装 | MC-183, MC-184, MC-185 |
+| MC-183 | Phase 1: RAG 診断・可視化（notebookRouter ログ追加、/api/notebooks/:id/status 新設、embedding エラー改善） | P0 | TODO（2026-06-07 22:00 task-manager 起票。dev-apollo 依存：無。即時着手可。） | dev-apollo | なし |
+| MC-184 | Phase 2: 性能最適化（TOP_K 削減、buildIndex 並列度制限、embedTexts バッチ削減、Claude タイムアウト延長） | P0 | TODO（2026-06-07 22:00 task-manager 起票。dev-logic 依存：MC-183 実装の結果を見て最適化数値確定後着手。） | dev-logic | MC-183 |
+| MC-185 | Phase 3: UX 改善（index 構築中 progress indicator、response time 表示、エラーメッセージ改善） | P0 | TODO（2026-06-07 22:00 task-manager 起票。dev-logic/designer 依存：MC-184 性能確認後。） | dev-logic, designer | MC-184 |
 
 ### MC-151 — ノートブック議事録生成機能の実装
 
@@ -2161,3 +2164,70 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
   4. web/src/components/TaskDetail.tsx に TaskTimeline import+埋め込み。既存セクション（ワークフロー・デプロイ・会話）の後に「アクティビティ」セクション追加。
   5. server tsc --noEmit 0 error。web tsc -b 0 error、vite build success（dist/index-Dz-DdebE.js）。
   6. systemctl restart mission-control.service → healthz 200 確認。実機 :4317 で任意タスク（例 MC-163）詳細を開くと、最後の「アクティビティ」セクションに複数の TimelineEvent が時系列で表示される。相対時間が正しく出る（「6秒前」等）。
+
+---
+
+## Phase 1/2/3 — RAG 品質改善（MC-183/184/185）
+
+### MC-183 — Phase 1: RAG 診断・可視化　[P0 / 即時]
+
+- ステータス: TODO / 担当: dev-apollo / 依存: なし
+- 目的: RAG パス（notebookRouter ask/generate）の応答時間・中間処理を詳細ロギングし、性能ボトルネック・エラー地点を可視化する
+- 実装タスク:
+  - notebookRouter.ask / .generate に詳細ログ追加: request timestamp → Claude start → Claude done → elapsed time を秒単位で記録
+  - RAG vs traditional path の分岐判定時にログ（使用理由「RAG チャンク有り」or「fallback」等）
+  - searchChunks 実行時: チャンク数・vector dimension をログ
+  - embedding.ts エラーハンドリング改善: fetch error 時に status code + response body をログ。429 時に exponential backoff（1s → 2s → 4s → 8s、最大 60s）実装
+- Apollo `/api/notebooks/:id/status` エンドポイント新設: JSON {notebookId, indexExists, chunkCount, lastBuilt, errorMessage?} を返す
+- DoD:
+  1. `server/routes/notebookRouter.ts` に ask/generate の前後ログ実装。console.log 1行では足りず、構造化ログ（timestamp, method, duration, chunkCount, status）でログファイル出力（logs/notebooks-*.log）も可
+  2. `/api/notebooks/:id/status` エンドポイント実装・動作確認（index 有無・chunk 数・最終更新時刻を返す）
+  3. embedding.ts で fetch error キャッチ、429 時に exponential backoff 実装
+  4. server tsc --noEmit 0 エラー、deploy 後 Render ログに「Phase1 diagnostic」完全記録が見える
+  5. クライアント側でも `/api/notebooks/:id/status` を polling して UI に「index 構築中...」表示候補（Phase 3 で）
+- 更新日: 2026-06-07
+
+### MC-184 — Phase 2: 性能最適化　[P0 / 1週間]
+
+- ステータス: TODO / 担当: dev-logic / 依存: MC-183
+- 目的: MC-183 の診断ログで確認した具体的数値（TOP_K サイズ、embedding API レート、Claude timeout 等）を最適化
+- 実装タスク:
+  - searchChunks の TOP_K を 8 → 4 に削減（プロンプト肥大化抑止）
+  - buildIndex の並列度制限: キュー化して同時ビルド数を制御（Gemini API レート制限回避）
+  - embedTexts のバッチサイズ削減: 20 → 10（レート低減）
+  - Claude ask timeout 診断延長: 600秒 → 1200秒テスト、ログで実測値確認してから確定
+  - streaming buffering 最適化: フロントの待ちやすさ改善
+- 実装のポイント:
+  - MC-183 の Phase1 診断ログを参照して、削減値を 50%レスポンス削減目安で決める
+  - embedTexts バッチサイズ確定は dev-apollo が Gemini API 利用額見積もりを提案してから最終決定
+  - 各パラメータ変更後は実機テスト + Phase1 ログで before/after 比較
+- DoD:
+  1. notebookRouter.ts: TOP_K = 4 確定（searchChunks）
+  2. buildIndex: async queue 導入（maxConcurrency = 2）
+  3. embedTexts: batchSize = 10 確定、実機テスト後ログで elapsed time 記録
+  4. Claude timeout: 1200秒トライ → ログ実測で最適値判定
+  5. server tsc/eslint/test green
+  6. Phase1 ログで ask/generate の平均応答時間が 50% 以上短縮確認
+- 更新日: 2026-06-07
+
+### MC-185 — Phase 3: UX 改善　[P0 / 2週間]
+
+- ステータス: TODO / 担当: dev-logic, designer / 依存: MC-184
+- 目的: ユーザが RAG 処理の進捗・遅延理由を目視できるように、UI/UX を改善
+- 実装タスク:
+  - index 構築中の progress indicator（web / mobile 両対応）: "Indexing... 45/120 chunks" みたいに進捗を表示
+  - ask / generate の response time 表示: "応答時間: 2.3秒（RAG パス）" / "応答時間: 5.8秒（生成）" 等
+  - RAG vs traditional path の表示切り替え: チャット履歴に「📚RAG」「⚙︎ Direct」アイコンで経路を明示
+  - エラーメッセージ改善: 「Gemini API 429」「Embedding timeout」など具体的根因を表示
+  - 詳細ログビュー（developers 向け）: `/notebooks/:id/debug-log` で Phase1 logs をダウンロード可能
+- 対象: dev-logic（ask/generate ロジック側）+ designer（UI/UX側）
+- DoD:
+  1. クライアント側でチャット UI に「RAG パス」「ダイレクト パス」を視覚的に区別表示
+  2. index 構築画面で progress bar と現在の chunk 数表示（0/120 → 120/120 まで更新）
+  3. 各応答に「応答時間: X.Xs（方式）」を付加表示
+  4. エラーメッセージが「Gemini API rate limit」等の具体的根因を表示
+  5. web/mobile 両対応、レスポンシブ確認済み
+  6. tsc/eslint/vitest green
+- 更新日: 2026-06-07
+
+---
