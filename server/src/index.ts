@@ -53,6 +53,8 @@ import { exportMinutes } from './lib/minutesExport.js';
 import { taskEditRouter } from './taskEditRouter.js';
 import { approvalRouter } from './approvalRouter.js';
 import { approvalRequestHandler } from './approvalRequestHandler.js';
+import { decisionRouter } from './decisionRouter.js';
+import { decisionRequestHandler } from './decisionRequestHandler.js';
 import { spawnRouter } from './spawnRouter.js';
 import { terminalHttpHandler, attachUpgrade } from './terminalProxy.js';
 import { startWatch } from './watch.js';
@@ -118,6 +120,13 @@ app.post('/api/chat/autonomous-tick', (req, res) => {
 // エージェントが Cookie なしで curl から呼べるようにする（agent-message と同じパターン）。
 app.post('/api/approvals/request', (req, res) => {
   approvalRequestHandler(req, res);
+});
+
+// ─── エージェント決裁リクエスト（認証外・MC-203）──────────────────────────
+// POST /api/decisions/request は AGENT_TOKEN で独立認証するため auth ミドルウェアの外に置く。
+// エージェントが選択肢付きの「Keita 決裁依頼」を Cookie なしで curl から投入できる。
+app.post('/api/decisions/request', (req, res) => {
+  decisionRequestHandler(req, res, broadcast);
 });
 
 // ─── token 認証（healthz より後、他ルートより前に適用）──────────
@@ -348,6 +357,10 @@ app.get('/api/alerts', (_req, res) => {
 // 正本 .md へ status 遷移（approve→TODO / reject→CANCELLED）＋承認決定を監査 JSONL に記録。
 // 認証ミドルウェア配下。alerts(blocked-stalled) とは別軸の独立集計（二重集計しない）。
 app.use('/api/approvals', approvalRouter());
+
+// GET /api/decisions で Keita 決裁（選択肢付き）を集約。POST /api/decisions/:id/decide で
+// 1 つ選んで決裁し、結果を要求元エージェントへ notify 配送する（MC-203。承認とは別系統・別タブ）。
+app.use('/api/decisions', decisionRouter(broadcast));
 
 app.get('/api/usage', (_req, res) => {
   safeJson(res, () => collectUsage());

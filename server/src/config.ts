@@ -206,6 +206,40 @@ export const APPROVAL_AUTOMODE_FILE = join(INBOX_DATA_DIR, 'approval-automode.js
  */
 export const NAV_ORDER_FILE = join(INBOX_DATA_DIR, 'nav-order.json');
 
+/**
+ * Keita 決裁リクエスト台帳（MC-203。追記専用 JSONL・last-wins で ID ごとに最新状態を決定）。
+ * エージェントが「Keita に判断してほしい」内容を選択肢付き（options[]）で直接 POST する台帳。
+ * 既存の承認リクエスト（approval-requests.jsonl）とは別系統・別タブで扱う。
+ * 1 行 = DecisionRequest 型（id, from, fromName, title, detail, options[], requestedAt, status, ...）。
+ */
+export const DECISION_REQUESTS_FILE = join(INBOX_DATA_DIR, 'decision-requests.jsonl');
+
+/**
+ * 決裁オートモードの永続フラグ（MC-203。承認オートモードとは別キー・別ファイル）。
+ * 形: { enabled, mode, updatedAt }。mode='default'=既定 option を自動選択 / mode='off'=自動しない。
+ * 安全側既定: enabled=false（手動決裁）。台帳由来 BLOCKED 等は対象外（MC-201 方針踏襲）。
+ */
+export const DECISION_AUTOMODE_FILE = join(INBOX_DATA_DIR, 'decision-automode.json');
+
+/**
+ * エージェント連絡ヘルパ notify-agent.sh の絶対パス（MC-200）。
+ * 決裁結果を要求元エージェント（requesterAgent）のターミナルへ流すのに使う（MC-203）。
+ * env NOTIFY_AGENT_SCRIPT で差し替え可。
+ */
+export const NOTIFY_AGENT_SCRIPT = env(
+  'NOTIFY_AGENT_SCRIPT',
+  join(DATA_HOME, 'cron-scripts', 'notify-agent.sh'),
+);
+
+/**
+ * notify-agent.sh 実行時の PATH（systemd の env が痩せていても tmux/openclaw を解決させる）。
+ * TERMINAL_TMUX_PATH と同方式。
+ */
+export const NOTIFY_AGENT_PATH = env(
+  'NOTIFY_AGENT_PATH',
+  '/usr/local/bin:/usr/bin:/bin:' + (process.env.PATH ?? ''),
+);
+
 /** 添付画像の 1 枚あたり最大バイト数（10MB）。 */
 export const INBOX_MAX_FILE_BYTES = envNum('INBOX_MAX_FILE_BYTES', 10 * 1024 * 1024);
 
