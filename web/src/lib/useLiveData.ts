@@ -6,7 +6,7 @@
 //   （Phase 3 で watch 接続されるまでは ping のみ届く。受け皿として繋いでおく）
 //
 // 使い方:
-//   const { data, error, loading, refetch } = useLiveResource<Overview>('/api/overview');
+//   const { data, error, loading, refetch } = useLiveResource<TasksResp>('/api/tasks');
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -31,7 +31,7 @@ export interface LiveResource<T> {
 
 /**
  * 単一エンドポイントを購読する。
- * @param path  例 '/api/overview'
+ * @param path  例 '/api/tasks'
  * @param liveTick  SSE 由来の再フェッチトリガー（useLiveStream の値を渡す）
  */
 export function useLiveResource<T>(path: string, liveTick = 0): LiveResource<T> {

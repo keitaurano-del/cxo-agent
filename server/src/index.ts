@@ -37,7 +37,6 @@ import {
   isConvertibleToPdf,
   deleteOfficePdfCache,
 } from './lib/officeToPdf.js';
-import { ALL_PROJECTS, type ProjectName } from './lib/projectMap.js';
 import { makeAuthMiddleware, authEnabled } from './lib/auth.js';
 import { inboxRouter } from './inbox.js';
 import { terminalUploadRouter } from './terminalUpload.js';
@@ -163,7 +162,7 @@ app.get('/api/agents', (_req, res) => {
 
 // 人格別に集約したエージェント一覧（MC-88）。「エージェント」ビューはこちらを使い、
 // 231 件の稼働インスタンスを人格（subagentType）単位の数件に畳んで表示する。
-// /api/agents（生インスタンス）は overview/roster/feed が引き続き使うため非破壊で温存。
+// /api/agents（生インスタンス）は roster/feed が引き続き使うため非破壊で温存。
 app.get('/api/agents/grouped', (_req, res) => {
   safeJson(res, () => ({ groups: collectAgentGroups() }));
 });
@@ -232,10 +231,6 @@ app.get('/api/narrative', (_req, res) => {
 
 app.get('/api/roster', (_req, res) => {
   safeJson(res, () => ({ roster: collectRoster() }));
-});
-
-app.get('/api/overview', (_req, res) => {
-  safeJson(res, () => buildOverview());
 });
 
 // ─── Alerts（通知/アラート バッジ MC-63）──────────────────────────
@@ -716,80 +711,6 @@ app.use('/api/minutes', minutesRouter());
 // SSE broadcast で chat イベントを全クライアントへ配信する（既存 /api/stream を流用）。
 // /api/chat/agent-message（認証外）は auth ミドルウェアより前に登録済み。
 app.use('/api/chat', chatRouter(broadcast));
-
-// ─── overview（KPI 集計）──────────────────────────────
-
-function buildOverview() {
-  const agents = collectAgents();
-  const tasks = collectTasks();
-
-  const active = agents.filter((a) => a.status === 'active').length;
-  const idle = agents.filter((a) => a.status === 'idle').length;
-  const done = agents.filter((a) => a.status === 'done').length;
-  const never = agents.filter((a) => a.status === 'never').length;
-
-  const inProgress = tasks.filter((t) => t.status === 'IN_PROGRESS').length;
-  const stalled = tasks.filter((t) => t.stalled).length;
-  const blocked = tasks.filter((t) => t.status === 'BLOCKED').length;
-  const review = tasks.filter((t) => t.status === 'REVIEW').length;
-
-  // プロジェクト別サマリ
-  const byProject: Record<string, {
-    project: ProjectName;
-    agentsActive: number;
-    agentsIdle: number;
-    agentsTotal: number;
-    tasksTotal: number;
-    tasksInProgress: number;
-    tasksStalled: number;
-    lastActivity: string | null;
-  }> = {};
-  for (const p of ALL_PROJECTS) {
-    byProject[p] = {
-      project: p,
-      agentsActive: 0,
-      agentsIdle: 0,
-      agentsTotal: 0,
-      tasksTotal: 0,
-      tasksInProgress: 0,
-      tasksStalled: 0,
-      lastActivity: null,
-    };
-  }
-  for (const a of agents) {
-    const b = byProject[a.project];
-    b.agentsTotal += 1;
-    if (a.status === 'active') b.agentsActive += 1;
-    if (a.status === 'idle') b.agentsIdle += 1;
-    if (!b.lastActivity || Date.parse(a.lastActivity) > Date.parse(b.lastActivity)) {
-      b.lastActivity = a.lastActivity;
-    }
-  }
-  for (const t of tasks) {
-    const b = byProject[t.project];
-    if (!b) continue;
-    b.tasksTotal += 1;
-    if (t.status === 'IN_PROGRESS') b.tasksInProgress += 1;
-    if (t.stalled) b.tasksStalled += 1;
-  }
-
-  return {
-    generatedAt: new Date().toISOString(),
-    kpi: {
-      agentsActive: active,
-      agentsIdle: idle,
-      agentsDone: done,
-      agentsNever: never,
-      agentsTotal: agents.length,
-      tasksInProgress: inProgress,
-      tasksStalled: stalled,
-      tasksBlocked: blocked,
-      tasksReview: review,
-      tasksTotal: tasks.length,
-    },
-    projects: Object.values(byProject),
-  };
-}
 
 // ─── SSE（chokidar watch → broadcast に接続）──────────────────────
 
