@@ -14,7 +14,7 @@
 //   POST   /:id/ask           資料根拠 Q&A { question }
 //   POST   /:id/generate      生成物作成 { kind, instruction? }
 
-import { mkdirSync, statSync, existsSync, unlinkSync } from 'node:fs';
+import { mkdirSync, statSync, existsSync, unlinkSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
@@ -233,6 +233,50 @@ function handleGet(req: Request, res: Response): void {
     }
     return detail;
   });
+}
+
+// GET /:id/status — ノートブック RAG 診断・可視化ステータス
+function handleStatus(req: Request, res: Response): void {
+  const id = idParam(req);
+  try {
+    const dir = resolveNotebookDir(id, true);
+    const indexPath = join(dir, 'index', 'meta.json');
+
+    let indexExists = false;
+    let chunkCount = 0;
+    let lastBuilt: string | null = null;
+    let errorMessage: string | undefined;
+
+    // meta.json を読んで status を取得
+    if (existsSync(indexPath)) {
+      try {
+        const metaRaw = readFileSync(indexPath, 'utf-8');
+        const meta = JSON.parse(metaRaw) as { builtAt: string; chunkCount: number };
+        indexExists = true;
+        chunkCount = meta.chunkCount;
+        lastBuilt = meta.builtAt;
+      } catch (e) {
+        errorMessage = `meta.json 読み込み失敗: ${e instanceof Error ? e.message : String(e)}`;
+      }
+    }
+
+    res.status(200).json({
+      notebookId: id,
+      indexExists,
+      chunkCount,
+      lastBuilt,
+      ...(errorMessage ? { errorMessage } : {}),
+    });
+  } catch (e) {
+    if (e instanceof SafePathError) {
+      const code = /not found/i.test(e.message) ? 404 : 400;
+      res.status(code).json({ error: e.message });
+      return;
+    }
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('[notebook status]', message);
+    res.status(500).json({ error: message });
+  }
 }
 
 // DELETE /:id — 削除
@@ -457,13 +501,26 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
     throw e;
   }
 
+  // Phase 1 診断ログ
+  const requestTs = new Date().toISOString();
+  const requestTime = Date.now();
+  console.log(`[notebook-ask] request start ts=${requestTs} notebookId=${id}`);
+
   // 直近 10 件の会話履歴をコンテキストに含める。
   const history = readChatHistory(id, 10);
 
   // user メッセージを先に記録。
-  appendChat(id, { ts: new Date().toISOString(), role: 'user', text: question });
+  appendChat(id, { ts: requestTs, role: 'user', text: question });
 
+  // RAG チャンク検索
+  const searchStart = Date.now();
   const ragChunks = await searchChunks(dir, question).catch(() => [] as Chunk[]);
+  const searchElapsed = ((Date.now() - searchStart) / 1000).toFixed(2);
+  const ragPath = ragChunks.length > 0 ? 'RAG' : 'fallback';
+  console.log(
+    `[notebook-ask] RAG search: path=${ragPath} chunkCount=${ragChunks.length} vectorDim=${ragChunks[0]?.vector.length ?? 'N/A'} elapsed=${searchElapsed}s`,
+  );
+
   const prompt = ragChunks.length > 0
     ? buildRagAskPrompt(question, ragChunks, history)
     : buildAskPrompt(question, history);
@@ -475,28 +532,55 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
+    const claudeStart = Date.now();
+    console.log(`[notebook-ask] Claude start ts=${new Date().toISOString()}`);
     const result = await runClaudeStream(dir, prompt, (chunk) => {
       sseWrite(res, { type: 'chunk', text: chunk });
     });
+    const claudeElapsed = ((Date.now() - claudeStart) / 1000).toFixed(2);
+    console.log(`[notebook-ask] Claude done ts=${new Date().toISOString()} elapsed=${claudeElapsed}s`);
 
     const answer = (result.stdout || '').trim();
-    appendChat(id, { ts: new Date().toISOString(), role: 'assistant', text: answer });
+    const answerTs = new Date().toISOString();
+    appendChat(id, { ts: answerTs, role: 'assistant', text: answer });
     touchNotebook(id);
-    sseWrite(res, { type: 'done', answer, ...(result.error ? { error: result.error } : {}) });
+    const totalElapsed = ((Date.now() - requestTime) / 1000).toFixed(2);
+    console.log(
+      `[notebook-ask] request complete ts=${answerTs} totalElapsed=${totalElapsed}s ok=${result.ok}`,
+    );
+    sseWrite(res, {
+      type: 'done',
+      answer,
+      ...(result.error ? { error: result.error } : {}),
+    });
     res.end();
     return;
   }
 
+  const claudeStart = Date.now();
+  console.log(`[notebook-ask] Claude start ts=${new Date().toISOString()}`);
   const result = await runClaude(dir, prompt);
+  const claudeElapsed = ((Date.now() - claudeStart) / 1000).toFixed(2);
+  console.log(`[notebook-ask] Claude done ts=${new Date().toISOString()} elapsed=${claudeElapsed}s`);
+
   const answer = (result.stdout || '').trim();
 
   if (!result.ok && !answer) {
+    const totalElapsed = ((Date.now() - requestTime) / 1000).toFixed(2);
+    console.log(
+      `[notebook-ask] request failed ts=${new Date().toISOString()} totalElapsed=${totalElapsed}s`,
+    );
     res.status(200).json({ answer: '', error: result.error });
     return;
   }
 
-  appendChat(id, { ts: new Date().toISOString(), role: 'assistant', text: answer });
+  const answerTs = new Date().toISOString();
+  appendChat(id, { ts: answerTs, role: 'assistant', text: answer });
   touchNotebook(id);
+  const totalElapsed = ((Date.now() - requestTime) / 1000).toFixed(2);
+  console.log(
+    `[notebook-ask] request complete ts=${answerTs} totalElapsed=${totalElapsed}s ok=${result.ok}`,
+  );
   res.status(200).json({ answer, ...(result.error ? { error: result.error } : {}) });
 }
 
@@ -609,6 +693,13 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
     throw e;
   }
 
+  // Phase 1 診断ログ
+  const requestTs = new Date().toISOString();
+  const requestTime = Date.now();
+  console.log(
+    `[notebook-generate] request start ts=${requestTs} notebookId=${id} kind=${kind}`,
+  );
+
   // artifacts/ の合計サイズが上限を超えていたら 413 で弾く。
   const maxArtifacts = NOTEBOOK_ARTIFACT_MAX_TOTAL_BYTES;
   if (maxArtifacts > 0) {
@@ -623,7 +714,16 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
   }
 
   const before = artifactNames(id);
+
+  // RAG チャンク検索
+  const searchStart = Date.now();
   const ragChunks = await searchChunks(dir, instruction || kind).catch(() => [] as Chunk[]);
+  const searchElapsed = ((Date.now() - searchStart) / 1000).toFixed(2);
+  const ragPath = ragChunks.length > 0 ? 'RAG' : 'fallback';
+  console.log(
+    `[notebook-generate] RAG search: path=${ragPath} chunkCount=${ragChunks.length} vectorDim=${ragChunks[0]?.vector.length ?? 'N/A'} elapsed=${searchElapsed}s`,
+  );
+
   const prompt = ragChunks.length > 0
     ? buildRagGeneratePrompt(kind, instruction, ragChunks)
     : buildGeneratePrompt(kind, instruction);
@@ -641,18 +741,29 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
     // Claude の生成物は長いと数千〜数万文字になるため EXPECTED_CHARS を大きくして
     // 進捗が早期に 99% に張り付かないようにする。
     const EXPECTED_CHARS = 8000;
+
+    const claudeStart = Date.now();
+    console.log(`[notebook-generate] Claude start ts=${new Date().toISOString()}`);
     const result = await runClaudeStream(dir, prompt, (chunk) => {
       sseWrite(res, { type: 'chunk', text: chunk });
       totalChars += chunk.length;
       const pct = Math.min(99, Math.round((totalChars / EXPECTED_CHARS) * 100));
       sseWrite(res, { type: 'progress', pct });
     });
+    const claudeElapsed = ((Date.now() - claudeStart) / 1000).toFixed(2);
+    console.log(`[notebook-generate] Claude done ts=${new Date().toISOString()} elapsed=${claudeElapsed}s`);
+
     sseWrite(res, { type: 'progress', pct: 100 });
 
     const detail = getNotebookDetail(id);
     const allArtifacts = detail?.artifacts ?? [];
     const created = allArtifacts.filter((a) => !before.has(a.name));
     touchNotebook(id);
+
+    const totalElapsed = ((Date.now() - requestTime) / 1000).toFixed(2);
+    console.log(
+      `[notebook-generate] request complete ts=${new Date().toISOString()} totalElapsed=${totalElapsed}s createdCount=${created.length} ok=${result.ok}`,
+    );
 
     sseWrite(res, {
       type: 'done',
@@ -666,13 +777,22 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  const claudeStart = Date.now();
+  console.log(`[notebook-generate] Claude start ts=${new Date().toISOString()}`);
   const result = await runClaude(dir, prompt);
+  const claudeElapsed = ((Date.now() - claudeStart) / 1000).toFixed(2);
+  console.log(`[notebook-generate] Claude done ts=${new Date().toISOString()} elapsed=${claudeElapsed}s`);
 
   const detail = getNotebookDetail(id);
   const allArtifacts = detail?.artifacts ?? [];
   const created = allArtifacts.filter((a) => !before.has(a.name));
 
   touchNotebook(id);
+  const totalElapsed = ((Date.now() - requestTime) / 1000).toFixed(2);
+  console.log(
+    `[notebook-generate] request complete ts=${new Date().toISOString()} totalElapsed=${totalElapsed}s createdCount=${created.length} ok=${result.ok}`,
+  );
+
   res.status(200).json({
     ok: result.ok && created.length > 0,
     created,
@@ -1162,6 +1282,7 @@ export function notebookRouter(): Router {
   router.get('/', handleList);
   router.post('/', handleCreate);
   router.get('/:id', handleGet);
+  router.get('/:id/status', handleStatus);
   router.patch('/:id', (req, res) => void handleRename(req, res));
   router.delete('/:id', handleDelete);
   router.get('/:id/file', (req, res) => void handleFile(req, res));

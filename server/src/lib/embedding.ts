@@ -10,9 +10,44 @@ const EMBED_ENDPOINT =
   'https://generativelanguage.googleapis.com/v1/models/gemini-embedding-001:embedContent';
 
 /**
+ * exponential backoff でリトライする（429 Too Many Requests 対策）。
+ * 1s → 2s → 4s → 8s → 60s（最大 60s にクランプ）、最大5回試行。
+ */
+async function retryWithBackoff<T>(
+  fn: (attempt: number) => Promise<T>,
+  maxAttempts = 5,
+): Promise<T> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn(attempt);
+    } catch (err) {
+      const isLastAttempt = attempt === maxAttempts - 1;
+      if (isLastAttempt) throw err;
+
+      // ネットワークエラーは即再試行
+      const isNetworkError = err instanceof TypeError;
+      if (!isNetworkError) {
+        // HTTP ステータス 429 のみリトライ
+        const httpError = (err as any)?.statusCode;
+        if (httpError !== 429) throw err;
+      }
+
+      // backoff: 1s 2^n（n=attempt）、最大 60s
+      const delaySec = Math.min(Math.pow(2, attempt), 60);
+      const delayMs = delaySec * 1000;
+      console.warn(
+        `[embedding] attempt ${attempt + 1}/${maxAttempts} failed, retrying after ${delaySec}s...`,
+      );
+      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw new Error('retryWithBackoff: exhausted all attempts');
+}
+
+/**
  * 単一テキストを Gemini text-embedding-004 でベクトル化する。
  * GEMINI_API_KEY が未設定なら空配列を返す。
- * API エラーは Error を throw する（呼び出し側でキャッチ）。
+ * API エラー（429 含む）はリトライ、それ以外は Error を throw する（呼び出し側でキャッチ）。
  */
 export async function embedText(text: string): Promise<number[]> {
   if (!GEMINI_API_KEY) {
@@ -27,24 +62,31 @@ export async function embedText(text: string): Promise<number[]> {
     },
   };
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+  return retryWithBackoff(async () => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '(no body)');
+      const err = new Error(
+        `Gemini embedText failed: ${res.status} ${res.statusText} — ${errText}`,
+      ) as any;
+      err.statusCode = res.status;
+      err.responseBody = errText;
+      throw err;
+    }
+
+    const json = (await res.json()) as { embedding?: { values?: number[] } };
+    const values = json?.embedding?.values;
+    if (!Array.isArray(values)) {
+      throw new Error(`Gemini embedText: unexpected response shape — ${JSON.stringify(json)}`);
+    }
+
+    return values;
   });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '(no body)');
-    throw new Error(`Gemini embedText failed: ${res.status} ${res.statusText} — ${errText}`);
-  }
-
-  const json = (await res.json()) as { embedding?: { values?: number[] } };
-  const values = json?.embedding?.values;
-  if (!Array.isArray(values)) {
-    throw new Error(`Gemini embedText: unexpected response shape — ${JSON.stringify(json)}`);
-  }
-
-  return values;
 }
 
 /**
