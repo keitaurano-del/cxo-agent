@@ -1212,8 +1212,10 @@ export default function Terminal() {
                     style={{ overscrollBehavior: 'none' }}
                   />
                   {/* MC-156: iframe タップ検知用の透過オーバーレイ（マウスイベントは通す）。
-                      分割表示の時だけ表示し、pointerdown で focusedPane を同期。 */}
-                  {isVisible && effectiveSplit > 1 && (
+                      分割表示の時だけ表示し、pointerdown で focusedPane を同期。
+                      ただし、フォーカス中のペインには表示しない（!isFocusedPane）ため、
+                      そのペインの iframe へのポインターイベントを遮断しない。 */}
+                  {isVisible && effectiveSplit > 1 && !isFocusedPane && (
                     <div
                       className="absolute inset-0 z-0 pointer-events-auto"
                       style={{
