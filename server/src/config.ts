@@ -97,6 +97,17 @@ export const NOTEBOOK_CLAUDE_CONCURRENCY = envNum('NOTEBOOK_CLAUDE_CONCURRENCY',
 /** claude -p に渡すモデル名（明示指定で環境デフォルト依存を避ける）。 */
 export const NOTEBOOK_CLAUDE_MODEL = env('NOTEBOOK_CLAUDE_MODEL', 'claude-sonnet-4-6');
 
+/**
+ * Sonnet 利用上限/失敗時の自動フォールバック先モデル（MC-202①）。
+ * RAG 回答生成は通常 NOTEBOOK_CLAUDE_MODEL（Sonnet）で実行するが、Sonnet 利用上限に達して
+ * claude CLI が失敗（"You've hit your Sonnet limit · resets ..." 等）したとき、このモデル（既定 Opus）で
+ * 1 回だけ自動再実行して回答を返す。env NOTEBOOK_CLAUDE_FALLBACK_MODEL で差し替え可。
+ */
+export const NOTEBOOK_CLAUDE_FALLBACK_MODEL = env(
+  'NOTEBOOK_CLAUDE_FALLBACK_MODEL',
+  'claude-opus-4-8',
+);
+
 // ─── エージェント気持ち/思考（mood コレクタ MC-165 拡張）──────────────────
 //
 // AgentsLive の各カードに「一人称の今の気持ち＋考えてること」を 1 行＋感情絵文字で表示する。
