@@ -19,8 +19,8 @@ export const personaMap: Record<string, PersonaMeta> = {
     key: 'dev-logic',
     name: '蓮',
     avatar: {
-      working: 'https://placeholder.com/64x64?text=dev-logic-work',
-      idle: 'https://placeholder.com/64x64?text=dev-logic-idle',
+      working: '/avatars/avatar-ren-working.png',
+      idle: '/avatars/avatar-ren-idle.png',
     },
   },
   'task-manager': {

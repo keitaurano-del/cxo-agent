@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background: transparent -->
+  <defs>
+    <style>
+      .pixel { shape-rendering: crispEdges; }
+    </style>
+  </defs>
+
+  <!-- Body (Navy Blue #2C3E7F) -->
+  <g class="pixel">
+    <!-- Torso - leaning forward -->
+    <rect x="24" y="24" width="16" height="20" fill="#2C3E7F"/>
+    <!-- Left arm raised (hammer grip) -->
+    <rect x="18" y="18" width="6" height="18" fill="#2C3E7F"/>
+    <!-- Right arm down -->
+    <rect x="40" y="28" width="6" height="14" fill="#2C3E7F"/>
+    <!-- Left leg -->
+    <rect x="26" y="44" width="6" height="14" fill="#2C3E7F"/>
+    <!-- Right leg -->
+    <rect x="32" y="44" width="6" height="14" fill="#2C3E7F"/>
+
+    <!-- Neck -->
+    <rect x="28" y="20" width="8" height="4" fill="#D4A574"/>
+    <!-- Head -->
+    <rect x="26" y="14" width="12" height="12" fill="#D4A574"/>
+
+    <!-- Hammer (Orange #FF8C00) in left hand -->
+    <rect x="12" y="14" width="4" height="6" fill="#FF8C00"/>
+    <!-- Hammer head -->
+    <rect x="10" y="12" width="8" height="4" fill="#FF8C00"/>
+
+    <!-- Eyes - white sclera -->
+    <rect x="28" y="16" width="3" height="3" fill="#FFFFFF"/>
+    <rect x="35" y="16" width="3" height="3" fill="#FFFFFF"/>
+    <!-- Pupils (black) - focused look -->
+    <rect x="29" y="17" width="1" height="1" fill="#1A1A1A"/>
+    <rect x="36" y="17" width="1" height="1" fill="#1A1A1A"/>
+
+    <!-- Eyebrows - V-shaped (serious/concentrated) -->
+    <rect x="27" y="15" width="2" height="1" fill="#1A1A1A"/>
+    <rect x="37" y="15" width="2" height="1" fill="#1A1A1A"/>
+    <rect x="26" y="14" width="1" height="1" fill="#1A1A1A"/>
+    <rect x="38" y="14" width="1" height="1" fill="#1A1A1A"/>
+
+    <!-- Mouth - determined line -->
+    <rect x="29" y="22" width="6" height="1" fill="#1A1A1A"/>
+
+    <!-- Outline/Border (Dark outline) -->
+    <rect x="24" y="24" width="16" height="20" fill="none" stroke="#1A1A1A" stroke-width="0.5"/>
+    <rect x="26" y="14" width="12" height="12" fill="none" stroke="#1A1A1A" stroke-width="0.5"/>
+  </g>
+</svg>
