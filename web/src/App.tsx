@@ -340,11 +340,13 @@ export default function App() {
       // event.data から channelId・送信者・テキストを取得
       let channelId = '';
       let senderName = '';
+      let senderName_key = '';
       let text = '';
       try {
-        const d = JSON.parse((e as MessageEvent).data) as { channelId?: string; message?: { senderName?: string; text?: string } };
+        const d = JSON.parse((e as MessageEvent).data) as { channelId?: string; message?: { senderName?: string; senderId?: string; text?: string } };
         channelId = d.channelId ?? '';
         senderName = d.message?.senderName ?? '';
+        senderName_key = d.message?.senderId ?? '';
         text = d.message?.text ?? '';
       } catch { /* ignore */ }
 
@@ -353,13 +355,23 @@ export default function App() {
       const isOnChatPage = pathnameRef.current === '/chat';
       if (isOnChatPage && channelId && channelId === activeChannel) return;
 
-      setChatUnread((n) => {
-        const next = n + 1;
-        localStorage.setItem('chat.unreadBadge', String(next));
-        return next;
-      });
+      // 自動発信者を除外（router/agent-event 等の自動チャッター）
+      // 加算条件: Keita メンション or 人間発言（senderId が自動発信プレフィックスを持たない）
+      const isAutoSender = senderName_key.startsWith('router') ||
+                           senderName_key.startsWith('agent-event') ||
+                           senderName_key === 'system';
+      const isMentioningKeita = text.includes('@keita') || text.includes('@Keita');
 
-      // チャットトースト
+      // バッジ加算: Keita メンションか人間発言のみ
+      if (!isAutoSender || isMentioningKeita) {
+        setChatUnread((n) => {
+          const next = n + 1;
+          localStorage.setItem('chat.unreadBadge', String(next));
+          return next;
+        });
+      }
+
+      // チャットトースト（全メッセージに表示 — トースト表示は別要件）
       const channelLabel = channelId ? `#${channelId}` : 'チャット';
       const detail = senderName
         ? `${senderName}: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`
@@ -372,14 +384,13 @@ export default function App() {
 
   // ページ別バッジ: SSE update イベントの type → nav path にマッピング
   // ページを訪問したら badge.{path} を 0 にリセットする
+  // tasks バッジは不要（MC-159）
   const NAV_BADGE_MAP: Record<string, string> = {
-    tasks: '/tasks',
     vault: '/vault',
     deliverables: '/deliverables',
     agents: '/',
   };
   const UPDATE_TOAST_META: Record<string, { emoji: string; label: string }> = {
-    tasks:        { emoji: '📋', label: 'タスクボードが更新されました' },
     vault:        { emoji: '📚', label: 'Vault が更新されました' },
     deliverables: { emoji: '📁', label: 'フォルダが更新されました' },
     agents:       { emoji: '🤖', label: 'エージェント更新' },
@@ -387,7 +398,6 @@ export default function App() {
   };
   const loadBadge = (path: string) => parseInt(localStorage.getItem(`badge.${path}`) ?? '0', 10) || 0;
   const [navBadges, setNavBadges] = useState<Record<string, number>>(() => ({
-    '/tasks': loadBadge('/tasks'),
     '/vault': loadBadge('/vault'),
     '/deliverables': loadBadge('/deliverables'),
     '/': loadBadge('/'),
