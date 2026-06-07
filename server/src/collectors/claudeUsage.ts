@@ -1,4 +1,4 @@
-// claudeUsage collector (MC-122)
+// claudeUsage collector (MC-122 / MC-161)
 //
 // 各 Claude アカウントの「現在のセッション(5時間) / 週間(全モデル) / 週間(Sonnet)」の
 // 使用率(%) とリセット時刻を OAuth API から取得して Apollo の「Claude 使用量」表示に渡す。
@@ -12,10 +12,12 @@
 //   GET {BASE}/api/oauth/profile  （同ヘッダ）
 //     account.email / organization.rate_limit_tier
 //
-// トークンの在処（2 アカウント）:
-//   local  : ~/.claude/.credentials.json の claudeAiOauth.accessToken（毎回ファイルから読む。
-//            claude が自動 refresh するのでキャッシュは usage 結果側で持つ）
-//   oldbox : SSH で旧箱 dev の credentials を読む（execFile('ssh', ...) で cat → JSON parse）
+// トークンの在処（2 アカウント、どちらもこの箱のローカルファイルを毎回読む）:
+//   local  : ~/.claude/.credentials.json の claudeAiOauth.accessToken（Claude1 / keita.urano。
+//            常駐 claude が自動 refresh する）
+//   urano2 : /home/dev/.claude-urano2/.credentials.json（Claude2 / keita.urano2）。
+//            MC-161 で旧箱 SSH 経路を廃止しローカル読みに統一。常駐 claude が無いので
+//            cron keeper（refresh-urano2-token.sh）が refresh_token grant で定期更新する。
 //
 // 429 / 強キャッシュ（最重要）:
 //   usage エンドポイントは頻繁に叩くと 429（rate_limit_error）を返す。
@@ -23,20 +25,15 @@
 //   429 を受けたら前回値を保持し、その要素に error 注記を付ける。
 //
 // graceful degradation:
-//   取得失敗・429・SSH 不通でもアカウント単位の error フィールドに畳み、全体は 200 で返す。
+//   取得失敗・429・ファイル不在/失効でもアカウント単位の error フィールドに畳み、全体は 200 で返す。
 
-import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import {
   CLAUDE_USAGE_TTL_MS,
   CLAUDE_OAUTH_API_BASE,
   CLAUDE_OAUTH_TIMEOUT_MS,
   CLAUDE_LOCAL_CREDENTIALS,
-  CLAUDE_OLDBOX_SSH_HOST,
-  CLAUDE_OLDBOX_SSH_KEY,
-  CLAUDE_OLDBOX_CREDENTIALS,
-  CLAUDE_OLDBOX_SSH_TIMEOUT_MS,
-  CLAUDE_SSH_PATH,
+  CLAUDE_URANO2_CREDENTIALS,
 } from '../config.js';
 
 // ─── 型 ───────────────────────────────────────────────
@@ -49,12 +46,15 @@ export interface UsageBar {
   resetsAt: string | null;
 }
 
+// key は内部識別子（web 側は account.label を表示し、key は React の list key にしか使わない）。
+// MC-161 で取得元を旧箱 SSH からローカルファイルに変えたが、lastGood キャッシュ互換のため
+// key 名 'oldbox' はそのまま温存し、表示ラベルだけ実態（Claude2 / keita.urano2）に直す。
 export type AccountKey = 'local' | 'oldbox';
 
 /** 1 アカウント分の使用量。取得に失敗した部分は error に畳む。 */
 export interface ClaudeAccountUsage {
   key: AccountKey;
-  /** 表示見出し（「この箱 / ターミナル1・3」等）。 */
+  /** 表示見出し（「Claude1 / keita.urano」「Claude2 / keita.urano2」）。 */
   label: string;
   /** profile.account.email（取得できれば）。 */
   email?: string;
@@ -87,8 +87,8 @@ export interface ClaudeUsageSummary {
 // ─── アカウント定義 ─────────────────────────────────────
 
 const LABELS: Record<AccountKey, string> = {
-  local: 'この箱 / ターミナル1・3',
-  oldbox: '旧箱 / ターミナル2',
+  local: 'Claude1 / keita.urano',
+  oldbox: 'Claude2 / keita.urano2',
 };
 
 // ─── OAuth API レスポンス（必要フィールドのみ）───────────────────
@@ -152,58 +152,20 @@ function tokenFromCredentialsJson(json: string): string {
   return token;
 }
 
-/** local: 毎回ファイルから読む（claude が自動 refresh するため）。 */
-async function readLocalToken(): Promise<string> {
-  const json = await readFile(CLAUDE_LOCAL_CREDENTIALS, 'utf-8');
+/** 指定パスの credentials ファイルを毎回読んで accessToken を取り出す（MC-161 で統一）。 */
+async function readTokenFromFile(path: string): Promise<string> {
+  const json = await readFile(path, 'utf-8');
   return tokenFromCredentialsJson(json);
 }
 
-/** oldbox: SSH で旧箱の credentials を cat → accessToken を取り出す。 */
-function readOldboxToken(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      'ssh',
-      [
-        '-i',
-        CLAUDE_OLDBOX_SSH_KEY,
-        '-o',
-        'BatchMode=yes',
-        '-o',
-        'ConnectTimeout=10',
-        '-o',
-        'StrictHostKeyChecking=accept-new',
-        CLAUDE_OLDBOX_SSH_HOST,
-        `cat ${CLAUDE_OLDBOX_CREDENTIALS}`,
-      ],
-      {
-        encoding: 'utf-8',
-        timeout: CLAUDE_OLDBOX_SSH_TIMEOUT_MS,
-        env: { ...process.env, PATH: CLAUDE_SSH_PATH },
-        maxBuffer: 1024 * 1024,
-      },
-      (err, stdout, stderr) => {
-        if (err) {
-          const e = err as { code?: string | number; signal?: string };
-          if (e?.code === 'ENOENT') {
-            reject(new Error('ssh コマンドが見つかりません（未インストールまたは PATH 外）'));
-            return;
-          }
-          if (e?.signal === 'SIGTERM') {
-            reject(new Error(`ssh がタイムアウトしました（${CLAUDE_OLDBOX_SSH_TIMEOUT_MS}ms）`));
-            return;
-          }
-          const msg = (stderr || '').trim().split('\n')[0] || (err instanceof Error ? err.message : String(err));
-          reject(new Error(`SSH 失敗: ${msg.slice(0, 200)}`));
-          return;
-        }
-        try {
-          resolve(tokenFromCredentialsJson(stdout));
-        } catch (e) {
-          reject(e instanceof Error ? e : new Error(String(e)));
-        }
-      },
-    );
-  });
+/** local（Claude1 / keita.urano）: ~/.claude/.credentials.json を毎回読む（claude が自動 refresh）。 */
+function readLocalToken(): Promise<string> {
+  return readTokenFromFile(CLAUDE_LOCAL_CREDENTIALS);
+}
+
+/** urano2（Claude2 / keita.urano2）: この箱の .claude-urano2/.credentials.json を毎回読む（cron keeper が refresh）。 */
+function readUrano2Token(): Promise<string> {
+  return readTokenFromFile(CLAUDE_URANO2_CREDENTIALS);
 }
 
 // ─── OAuth API 呼び出し ──────────────────────────────────
@@ -320,10 +282,10 @@ async function collectAccount(
 }
 
 async function compute(): Promise<ClaudeUsageSummary> {
-  // 2 アカウントを並行取得（片方が SSH 待ちでも全体を待たせない）。
+  // 2 アカウントを並行取得（どちらもローカルファイル読み＝MC-161、片方失敗でも全体は返す）。
   const [local, oldbox] = await Promise.all([
     collectAccount('local', readLocalToken),
-    collectAccount('oldbox', readOldboxToken),
+    collectAccount('oldbox', readUrano2Token),
   ]);
   return {
     generatedAt: new Date().toISOString(),

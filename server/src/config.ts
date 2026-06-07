@@ -693,14 +693,17 @@ export const APPROVAL_TAG_WORDS = {
 /** 承認区分（バッジ用カテゴリ）。design/approval/deploy/confirm + blocked(BLOCKED かつ Keita 待ち)。 */
 export type ApprovalKind = 'blocked' | 'design' | 'deploy' | 'approval' | 'confirm';
 
-// ─── Claude プラン使用量（MC-122）──────────────────────────────
+// ─── Claude プラン使用量（MC-122 / MC-161）──────────────────────────
 //
 // 各 Claude アカウントの OAuth usage/profile を取得して % とリセット時刻を表示する。
 // エンドポイント（api.anthropic.com/api/oauth/usage・/profile）は頻繁に叩くと 429 を返すため、
-// モジュール内メモリで強くキャッシュする（既定 180 秒）。トークンは:
-//   local : ~/.claude/.credentials.json を毎回ファイルから読む（claude が自動 refresh する）
-//   oldbox: SSH で旧箱 dev の credentials を読む
-// SSH 失敗・429・取得失敗でもアカウント単位の error にして 200 で部分劣化させる。
+// モジュール内メモリで強くキャッシュする（既定 180 秒）。トークンは 2 アカウントとも
+// この箱のローカルファイルから毎回読む（MC-161 で旧箱 SSH 経路を廃止）:
+//   local（Claude1 / keita.urano） : ~/.claude/.credentials.json（claude が自動 refresh する）
+//   urano2（Claude2 / keita.urano2）: /home/dev/.claude-urano2/.credentials.json
+//     （旧箱 terminal2 廃止で常駐 claude が無いため、cron keeper が refresh_token grant で
+//       定期的にトークンを更新して書き戻す＝refresh-urano2-token.sh）
+// 取得失敗・429 でもアカウント単位の error にして 200 で部分劣化させる。
 
 /**
  * Claude usage/profile 取得のキャッシュ TTL（ミリ秒）。既定 180 秒。
@@ -721,28 +724,15 @@ export const CLAUDE_LOCAL_CREDENTIALS = env(
   join(DATA_HOME, '.claude', '.credentials.json'),
 );
 
-/** oldbox（旧箱）への SSH 接続先（dev@<host>）。 */
-export const CLAUDE_OLDBOX_SSH_HOST = env('CLAUDE_OLDBOX_SSH_HOST', 'dev@139.180.202.62');
-
-/** oldbox SSH に使う秘密鍵パス。 */
-export const CLAUDE_OLDBOX_SSH_KEY = env(
-  'CLAUDE_OLDBOX_SSH_KEY',
-  join(DATA_HOME, '.ssh', 'id_ed25519'),
-);
-
-/** oldbox 上の credentials ファイルパス（SSH 先で cat する）。 */
-export const CLAUDE_OLDBOX_CREDENTIALS = env(
-  'CLAUDE_OLDBOX_CREDENTIALS',
-  '/home/dev/.claude/.credentials.json',
-);
-
-/** ssh コマンドのタイムアウト（ミリ秒）。SSH 接続自体は ConnectTimeout=10 も併用。 */
-export const CLAUDE_OLDBOX_SSH_TIMEOUT_MS = envNum('CLAUDE_OLDBOX_SSH_TIMEOUT_MS', 15000);
-
-/** ssh の PATH（systemd の痩せた env でも ssh を解決させる。DEPLOY_GH_PATH と同方式）。 */
-export const CLAUDE_SSH_PATH = env(
-  'CLAUDE_SSH_PATH',
-  '/usr/local/bin:/usr/bin:/bin:' + (process.env.PATH ?? ''),
+/**
+ * urano2（Claude2 / keita.urano2）の credentials ファイルパス（MC-161）。
+ * 旧箱 terminal2 廃止に伴い、SSH 経路をやめてこの箱のローカルファイルを毎回読む。
+ * このアカウントは常駐 claude が無くトークンが自動 refresh されないため、cron keeper
+ * （refresh-urano2-token.sh）が refresh_token grant で定期更新して書き戻す。
+ */
+export const CLAUDE_URANO2_CREDENTIALS = env(
+  'CLAUDE_URANO2_CREDENTIALS',
+  join(DATA_HOME, '.claude-urano2', '.credentials.json'),
 );
 
 // ─── チャット（MC-141）──────────────────────────────────────
