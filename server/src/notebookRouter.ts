@@ -490,6 +490,44 @@ function sseWrite(res: Response, data: Record<string, unknown>): void {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
+/** エンジン（claude -p）失敗の種別。 */
+type EngineErrorKind = 'model_limit' | 'engine_error';
+
+/**
+ * claude 実行結果が「利用上限（Sonnet/usage/rate limit 等）」による失敗かを判定する（MC-202）。
+ * 上限到達時、CLI は "You've hit your Sonnet limit · resets ..." 等のメッセージを stdout/エラー文に出す。
+ * これを assistant 回答として保存・表示しないため、ここで検出して種別を返す。大文字小文字無視。
+ * notebookClaude.ts の同等判定（非 export）と独立に、router 側で保存ガード用に持つ。
+ */
+function looksLikeLimit(text: string): boolean {
+  const h = text.toLowerCase();
+  if (h.includes('hit your') && h.includes('limit')) return true;
+  return (
+    h.includes('usage limit') ||
+    h.includes('rate limit') ||
+    h.includes('rate_limit') ||
+    h.includes('rate-limited') ||
+    (h.includes('exceeded') && h.includes('limit'))
+  );
+}
+
+/**
+ * エンジン実行結果を分類する。
+ * - ok=false: 失敗。上限なら 'model_limit'、それ以外は 'engine_error'。
+ * - ok=true だが stdout 本文が上限メッセージのみ（本来の回答でない）の場合も 'model_limit' とみなす。
+ * - 正常時は null。
+ */
+function classifyEngineError(result: { ok: boolean; stdout?: string; error?: string }): EngineErrorKind | null {
+  const haystack = `${result.stdout ?? ''}\n${result.error ?? ''}`;
+  if (!result.ok) {
+    return looksLikeLimit(haystack) ? 'model_limit' : 'engine_error';
+  }
+  // ok=true でも、stdout が短い上限メッセージだけの場合は回答ではないので上限扱い。
+  const out = (result.stdout ?? '').trim();
+  if (out.length > 0 && out.length < 400 && looksLikeLimit(out)) return 'model_limit';
+  return null;
+}
+
 async function handleAsk(req: Request, res: Response): Promise<void> {
   const question = typeof req.body?.question === 'string' ? req.body.question.trim() : '';
   if (!question) {
@@ -550,10 +588,33 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
     console.log(`[notebook-ask] Claude done ts=${new Date().toISOString()} elapsed=${claudeElapsed}s status=${result.ok ? 'ok' : 'error'}`);
 
     const answer = (result.stdout || '').trim();
+    const errorKind = classifyEngineError(result);
+    const totalElapsed = parseFloat(((Date.now() - requestTime) / 1000).toFixed(1));
+
+    // エンジン失敗（上限/エラー）時は、生エラー文字列を assistant 回答として保存・返却しない（MC-202）。
+    if (errorKind) {
+      console.log(
+        `[notebook-ask] request failed (stream) ts=${new Date().toISOString()} totalElapsed=${totalElapsed}s errorKind=${errorKind} error="${result.error}"`,
+      );
+      sseWrite(res, {
+        type: 'done',
+        answer: '',
+        errorKind,
+        metadata: {
+          elapsed: totalElapsed,
+          pathType: 'error',
+          chunkCount: ragChunks.length,
+          pathReason: result.error || pathReason,
+        },
+        ...(result.error ? { error: result.error } : {}),
+      });
+      res.end();
+      return;
+    }
+
     const answerTs = new Date().toISOString();
     appendChat(id, { ts: answerTs, role: 'assistant', text: answer });
     touchNotebook(id);
-    const totalElapsed = parseFloat(((Date.now() - requestTime) / 1000).toFixed(1));
     console.log(
       `[notebook-ask] request complete ts=${answerTs} totalElapsed=${totalElapsed}s ok=${result.ok} answerLen=${answer.length}`,
     );
@@ -580,13 +641,16 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
 
   const answer = (result.stdout || '').trim();
   const totalElapsed = parseFloat(((Date.now() - requestTime) / 1000).toFixed(1));
+  const errorKind = classifyEngineError(result);
 
-  if (!result.ok && !answer) {
+  // エンジン失敗（上限/エラー）時は、生エラー文字列を assistant 回答として保存・返却しない（MC-202）。
+  if (errorKind) {
     console.log(
-      `[notebook-ask] request failed ts=${new Date().toISOString()} totalElapsed=${totalElapsed}s error="${result.error}"`,
+      `[notebook-ask] request failed ts=${new Date().toISOString()} totalElapsed=${totalElapsed}s errorKind=${errorKind} error="${result.error}"`,
     );
     res.status(200).json({
       answer: '',
+      errorKind,
       error: result.error,
       metadata: {
         elapsed: totalElapsed,
@@ -799,12 +863,16 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
       `[notebook-generate] request complete ts=${new Date().toISOString()} totalElapsed=${totalElapsed}s createdCount=${created.length} ok=${result.ok}`,
     );
 
+    const genOk = result.ok && created.length > 0;
+    const errorKind = genOk ? null : classifyEngineError(result);
     sseWrite(res, {
       type: 'done',
-      ok: result.ok && created.length > 0,
+      ok: genOk,
       created,
       artifacts: allArtifacts,
-      report: (result.stdout || '').trim(),
+      // エンジン失敗（上限/エラー）時は生エラー文字列を report に出さない（MC-202）。
+      report: errorKind ? '' : (result.stdout || '').trim(),
+      ...(errorKind ? { errorKind } : {}),
       metadata: {
         elapsed: totalElapsed,
         pathType: result.ok ? ragPath : 'error',
@@ -833,11 +901,15 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
     `[notebook-generate] request complete ts=${new Date().toISOString()} totalElapsed=${totalElapsed}s createdCount=${created.length} ok=${result.ok}`,
   );
 
+  const genOk = result.ok && created.length > 0;
+  const errorKind = genOk ? null : classifyEngineError(result);
   res.status(200).json({
-    ok: result.ok && created.length > 0,
+    ok: genOk,
     created,
     artifacts: allArtifacts,
-    report: (result.stdout || '').trim(),
+    // エンジン失敗（上限/エラー）時は生エラー文字列を report に出さない（MC-202）。
+    report: errorKind ? '' : (result.stdout || '').trim(),
+    ...(errorKind ? { errorKind } : {}),
     metadata: {
       elapsed: totalElapsed,
       pathType: ragPath,
