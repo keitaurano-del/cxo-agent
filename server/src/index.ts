@@ -54,6 +54,7 @@ import { spawnRouter } from './spawnRouter.js';
 import { terminalHttpHandler, attachUpgrade } from './terminalProxy.js';
 import { startWatch } from './watch.js';
 import { chatRouter, agentMessageHandler, autonomousTickHandler } from './chatRouter.js';
+import { navOrderRouter } from './navOrderRouter.js';
 
 const HEALTHZ_PATH = '/api/healthz';
 
@@ -711,6 +712,13 @@ app.use('/api/minutes', minutesRouter());
 // SSE broadcast で chat イベントを全クライアントへ配信する（既存 /api/stream を流用）。
 // /api/chat/agent-message（認証外）は auth ミドルウェアより前に登録済み。
 app.use('/api/chat', chatRouter(broadcast));
+
+// ─── ナビ並び順（MC-158）──────────────────────────────────────
+// サイドメニュー（NAV）・ダッシュサブタブ（DASH_TABS）の並び順をサーバ保存して
+// 端末横断同期する。GET で保存順を返し、POST（ドラッグ確定時）で保存する。
+// 保存先 data/nav-order.json（.gitignore 済み）。auth ミドルウェア配下＝Cookie 必須。
+// default 項目集合とのマージ（新項目末尾追加・削除項目ドロップ）はフロント側で行う。
+app.use('/api/nav-order', navOrderRouter());
 
 // ─── SSE（chokidar watch → broadcast に接続）──────────────────────
 

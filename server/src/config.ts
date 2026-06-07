@@ -159,6 +159,14 @@ export const APPROVAL_DECISIONS_FILE = join(INBOX_DATA_DIR, 'approval-decisions.
  */
 export const APPROVAL_REQUESTS_FILE = join(INBOX_DATA_DIR, 'approval-requests.jsonl');
 
+/**
+ * ナビ並び順の永続化ファイル（MC-158。data/ 配下なので .gitignore 済み）。
+ * 形: { "sidebar": ["/","/tasks",...], "dashboard": ["/plan-usage","/activity",...] }。
+ * フロント（サイドメニュー / ダッシュサブタブ）がドラッグ確定で保存し、マウント時に
+ * 読み出して default 項目集合とマージしてから順序を適用する（端末横断同期）。
+ */
+export const NAV_ORDER_FILE = join(INBOX_DATA_DIR, 'nav-order.json');
+
 /** 添付画像の 1 枚あたり最大バイト数（10MB）。 */
 export const INBOX_MAX_FILE_BYTES = envNum('INBOX_MAX_FILE_BYTES', 10 * 1024 * 1024);
 

@@ -4,6 +4,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useState, useEffect } from 'react';
 import { isDashboardPath } from '../lib/nav';
+import { SortableNav, DragHandle } from './SortableNav';
 
 export interface BottomNavItem {
   to: string;
@@ -15,9 +16,12 @@ export interface BottomNavItem {
 export default function BottomNav({
   items,
   badges = {},
+  onReorder,
 }: {
   items: BottomNavItem[];
   badges?: Partial<Record<string, number>>;
+  /** ドラッグ並べ替え確定で呼ぶ（MC-158）。未指定なら並べ替え不可。 */
+  onReorder?: (next: BottomNavItem[]) => void;
 }) {
   const { pathname } = useLocation();
   const dashActive = isDashboardPath(pathname);
@@ -27,6 +31,66 @@ export default function BottomNav({
   useEffect(() => { setOpen(false); }, [pathname]);
 
   const totalBadge = Object.values(badges).reduce((a: number, b) => a + (b ?? 0), 0);
+
+  // 1 行（ナビ項目＋バッジ）。handle が渡れば末尾にドラッグハンドルを出す（モバイルは常時表示）。
+  const renderItem = (item: BottomNavItem, handleProps?: Record<string, unknown>): ReactNode => {
+    const forceActive = item.to === '/' && dashActive;
+    const badge = badges[item.to] ?? 0;
+    return (
+      <div className="flex items-center">
+        <NavLink
+          to={item.to}
+          end={item.to === '/'}
+          className={({ isActive }) =>
+            `flex flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
+              isActive || forceActive
+                ? 'bg-surface-3 font-semibold text-text'
+                : 'text-text-muted hover:bg-surface-2 hover:text-text'
+            }`
+          }
+        >
+          <span className="relative shrink-0" aria-hidden>
+            {item.icon}
+            {badge > 0 && item.to === '/chat' && (
+              // チャット: 青い数字バッジ（アニメーション付き）
+              <span
+                className="absolute -right-1.5 -top-1.5 inline-flex min-w-[1rem] items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none mc-pulse"
+                style={{ color: '#fff', background: '#3b82f6', boxShadow: '0 0 0 2px var(--mc-surface)' }}
+                aria-label={`未読 ${badge} 件`}
+              >
+                {badge > 99 ? '99+' : badge}
+              </span>
+            )}
+            {badge > 0 && item.to !== '/chat' && (
+              // その他: 数字バッジ
+              <span
+                className="absolute -right-1.5 -top-1.5 inline-flex min-w-[1rem] items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none"
+                style={{ color: 'var(--mc-bg)', background: 'var(--mc-blocked)' }}
+              >
+                {badge > 99 ? '99+' : badge}
+              </span>
+            )}
+          </span>
+          <span>{item.label}</span>
+          {badge > 0 && <span className="sr-only">（未読 {badge} 件）</span>}
+        </NavLink>
+        {/* モバイルは常時ハンドル表示（hover が無いため）。掴んだ時だけドラッグ発火。 */}
+        {handleProps && <DragHandle handleProps={handleProps} className="shrink-0 p-1.5" />}
+      </div>
+    );
+  };
+
+  // onReorder があれば SortableNav でドラッグ並べ替え可能に。無ければ素のリスト。
+  const renderRows = (): ReactNode => {
+    if (onReorder) {
+      return (
+        <SortableNav items={items} onReorder={onReorder} direction="vertical">
+          {(item, handle) => renderItem(item, handle.handleProps)}
+        </SortableNav>
+      );
+    }
+    return items.map((item) => <div key={item.to}>{renderItem(item)}</div>);
+  };
 
   return (
     <>
@@ -75,52 +139,9 @@ export default function BottomNav({
           className="fixed right-3 top-14 z-50 min-w-[160px] rounded-xl border border-border bg-surface shadow-lg md:hidden"
           aria-label="主要ナビゲーション"
         >
-          <ul className="flex flex-col gap-0.5 p-2">
-            {items.map((item) => {
-              const forceActive = item.to === '/' && dashActive;
-              const badge = badges[item.to] ?? 0;
-              return (
-                <li key={item.to}>
-                  <NavLink
-                    to={item.to}
-                    end={item.to === '/'}
-                    className={({ isActive }) =>
-                      `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
-                        isActive || forceActive
-                          ? 'bg-surface-3 font-semibold text-text'
-                          : 'text-text-muted hover:bg-surface-2 hover:text-text'
-                      }`
-                    }
-                  >
-                    <span className="relative shrink-0" aria-hidden>
-                      {item.icon}
-                      {badge > 0 && item.to === '/chat' && (
-                        // チャット: 青い数字バッジ（アニメーション付き）
-                        <span
-                          className="absolute -right-1.5 -top-1.5 inline-flex min-w-[1rem] items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none mc-pulse"
-                          style={{ color: '#fff', background: '#3b82f6', boxShadow: '0 0 0 2px var(--mc-surface)' }}
-                          aria-label={`未読 ${badge} 件`}
-                        >
-                          {badge > 99 ? '99+' : badge}
-                        </span>
-                      )}
-                      {badge > 0 && item.to !== '/chat' && (
-                        // その他: 数字バッジ
-                        <span
-                          className="absolute -right-1.5 -top-1.5 inline-flex min-w-[1rem] items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none"
-                          style={{ color: 'var(--mc-bg)', background: 'var(--mc-blocked)' }}
-                        >
-                          {badge > 99 ? '99+' : badge}
-                        </span>
-                      )}
-                    </span>
-                    <span>{item.label}</span>
-                    {badge > 0 && <span className="sr-only">（未読 {badge} 件）</span>}
-                  </NavLink>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="flex flex-col gap-0.5 p-2">
+            {renderRows()}
+          </div>
         </nav>
       )}
     </>

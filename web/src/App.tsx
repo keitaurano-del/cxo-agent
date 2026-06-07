@@ -38,6 +38,8 @@ import Approvals from './views/Approvals';
 import Terminal from './views/Terminal';
 import Chat from './views/Chat';
 import BottomNav from './components/BottomNav';
+import { SortableNav, DragHandle } from './components/SortableNav';
+import { useNavOrder } from './lib/useNavOrder';
 import AddTaskFab from './components/AddTaskFab';
 import { UploadProvider } from './lib/UploadContext';
 import { UploadToast } from './components/UploadToast';
@@ -176,6 +178,8 @@ function Sidebar({
   themeMode,
   isDark,
   onThemeToggle,
+  navItems,
+  onReorder,
 }: {
   connected: boolean;
   badges: Partial<Record<string, number>>;
@@ -184,6 +188,8 @@ function Sidebar({
   themeMode: ThemeMode;
   isDark: boolean;
   onThemeToggle: () => void;
+  navItems: NavItem[];
+  onReorder: (next: NavItem[]) => void;
 }) {
   const { pathname } = useLocation();
   const dashActive = isDashboardPath(pathname);
@@ -231,28 +237,37 @@ function Sidebar({
         </button>
       </div>
       <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
-        {NAV.map((item) => {
-          const forceActive = item.to === '/' && dashActive;
-          const badge = badges[item.to] ?? 0;
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-                  isActive || forceActive
-                    ? 'bg-surface-3 font-semibold text-text'
-                    : 'text-text-muted hover:bg-surface-2 hover:text-text'
-                }`
-              }
-            >
-              <span aria-hidden>{item.icon}</span>
-              {item.label}
-              <NavBadge count={badge} dot={item.to === '/chat'} />
-            </NavLink>
-          );
-        })}
+        <SortableNav items={navItems} onReorder={onReorder} direction="vertical">
+          {(item, handle) => {
+            const forceActive = item.to === '/' && dashActive;
+            const badge = badges[item.to] ?? 0;
+            return (
+              // group: hover でハンドルを表示する（デスクトップ）。
+              <div className="group flex items-center">
+                <NavLink
+                  to={item.to}
+                  end={item.to === '/'}
+                  className={({ isActive }) =>
+                    `flex flex-1 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                      isActive || forceActive
+                        ? 'bg-surface-3 font-semibold text-text'
+                        : 'text-text-muted hover:bg-surface-2 hover:text-text'
+                    }`
+                  }
+                >
+                  <span aria-hidden>{item.icon}</span>
+                  {item.label}
+                  <NavBadge count={badge} dot={item.to === '/chat'} />
+                </NavLink>
+                {/* ドラッグハンドル: デスクトップは hover で表示、掴んだ時だけドラッグ発火。 */}
+                <DragHandle
+                  handleProps={handle.handleProps}
+                  className="ml-1 shrink-0 p-1 opacity-0 transition-opacity group-hover:opacity-100"
+                />
+              </div>
+            );
+          }}
+        </SortableNav>
       </nav>
       <div className="border-t border-border px-5 py-3 flex flex-col gap-2">
         {/* テーマトグル */}
@@ -434,6 +449,10 @@ export default function App() {
 
   const { mode: themeMode, isDark, toggle: toggleTheme } = useTheme();
 
+  // ナビ並び順（サーバ保存・端末横断同期 MC-158）。サイドメニューと下部メニューは
+  // 同じ NAV を描くので、並び順を1つ持てば desktop/mobile 両方に効く。
+  const { items: navItems, reorder: reorderNav } = useNavOrder('sidebar', NAV);
+
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     return localStorage.getItem('apollo-sidebar-open') !== 'false';
   });
@@ -466,6 +485,8 @@ export default function App() {
             themeMode={themeMode}
             isDark={isDark}
             onThemeToggle={toggleTheme}
+            navItems={navItems}
+            onReorder={reorderNav}
           />
           <main className="flex-1 overflow-hidden">
             <Routes>
@@ -496,7 +517,7 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>
-          <BottomNav items={NAV} badges={badges} />
+          <BottomNav items={navItems} badges={badges} onReorder={reorderNav} />
           {pathname === '/tasks' && <AddTaskFab />}
           <UploadToast />
           <UpdateToast />
