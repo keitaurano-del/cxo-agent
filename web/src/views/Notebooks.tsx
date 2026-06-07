@@ -30,6 +30,8 @@ import type {
   NotebookFolderEntry,
   DeliverableFile,
   DeliverablesResponse,
+  NotebookChatMessage,
+  NotebookAskResponse,
 } from '../lib/types';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, EmptyState, Spinner } from '../components/ui';
@@ -52,6 +54,7 @@ import {
   FolderIcon,
   EditIcon,
   NoteIcon,
+  SendIcon,
 } from '../components/icons';
 import { relativeTime } from '../lib/time';
 
@@ -316,6 +319,364 @@ function UploadPanel({ id, onUploaded }: { id: string; onUploaded: () => void })
         <p className="mt-2 text-xs" style={{ color: 'var(--mc-active)' }}>
           {message}
         </p>
+      )}
+    </div>
+  );
+}
+
+// ─── ファイルビューア（引用クリックで開くスライドオーバー）──────────────
+
+interface FileViewerState {
+  notebookId: string;
+  filename: string; // ファイル名のみ（"sources/" なし）
+  page?: string;    // ページ番号またはシート名
+}
+
+/** 認証が必要なファイルを Blob URL 経由で iframe に渡すビューア。 */
+function NotebookFileViewer({
+  notebookId,
+  filename,
+  page,
+  onClose,
+}: FileViewerState & { onClose: () => void }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    setLoading(true);
+    setError(null);
+    setBlobUrl(null);
+
+    const apiPath = `/api/notebooks/${notebookId}/file?path=${encodeURIComponent('sources/' + filename)}&inline=1`;
+    fetch(apiPath)
+      .then(async (res) => {
+        if (!res.ok) {
+          const msg = await res.text().catch(() => `HTTP ${res.status}`);
+          throw new Error(msg);
+        }
+        return res.blob();
+      })
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        const withPage = page ? `${objectUrl}#page=${encodeURIComponent(page)}` : objectUrl;
+        setBlobUrl(withPage);
+        setLoading(false);
+      })
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : String(e));
+        setLoading(false);
+      });
+
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [notebookId, filename, page]);
+
+  const displayName = page ? `${filename}  p.${page}` : filename;
+
+  return (
+    <div
+      className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-bg shadow-2xl md:w-2/3 lg:w-1/2"
+      role="dialog"
+      aria-modal
+      aria-label={`${displayName} ビューア`}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-3">
+        <span className="truncate text-sm font-medium text-text" title={displayName}>
+          {displayName}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="shrink-0 rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
+          aria-label="ビューアを閉じる"
+        >
+          <CloseIcon width={18} height={18} />
+        </button>
+      </div>
+      <div className="relative flex-1 overflow-hidden">
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center text-sm text-text-muted">
+            <Spinner />
+            <span className="ml-2">読み込み中…</span>
+          </div>
+        )}
+        {error && (
+          <div className="absolute inset-0 flex items-center justify-center p-4 text-sm" style={{ color: 'var(--mc-stalled)' }}>
+            ファイルの読み込みに失敗しました: {error}
+          </div>
+        )}
+        {blobUrl && (
+          <iframe
+            src={blobUrl}
+            title={displayName}
+            className="h-full w-full"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── 引用タグパーサ ───────────────────────────────────────
+
+interface CitePart {
+  type: 'text' | 'cite';
+  text: string;
+  filename?: string;
+  page?: string;
+}
+
+function parseCites(text: string): CitePart[] {
+  const parts: CitePart[] = [];
+  const re = /\{\{cite:([^}:]+?)(?::([^}]*))?\}\}/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) {
+      parts.push({ type: 'text', text: text.slice(last, m.index) });
+    }
+    parts.push({
+      type: 'cite',
+      text: m[0],
+      filename: m[1],
+      page: m[2] || undefined,
+    });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) {
+    parts.push({ type: 'text', text: text.slice(last) });
+  }
+  return parts;
+}
+
+// ─── チャットペイン ───────────────────────────────────────
+
+function ChatBubble({
+  msg,
+  onCite,
+}: {
+  msg: NotebookChatMessage;
+  onCite?: (filename: string, page?: string) => void;
+}) {
+  const isUser = msg.role === 'user';
+  const parts = isUser ? null : parseCites(msg.text);
+
+  return (
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={`max-w-[85%] break-words rounded-2xl px-3 py-2 text-sm ${
+          isUser ? 'rounded-br-sm bg-accent text-bg' : 'rounded-bl-sm bg-surface-2 text-text'
+        }`}
+      >
+        {isUser || !parts ? (
+          <span className="whitespace-pre-wrap">{msg.text}</span>
+        ) : (
+          <span className="whitespace-pre-wrap">
+            {parts.map((p, i) => {
+              if (p.type === 'text') return <span key={i}>{p.text}</span>;
+              const label = p.page ? `${p.filename} p.${p.page}` : p.filename!;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => onCite?.(p.filename!, p.page)}
+                  className="mx-0.5 inline-flex items-center rounded-full border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                  title={`${label} を開く`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChatPane({
+  id,
+  chat,
+  hasSources,
+  onAnswered,
+}: {
+  id: string;
+  chat: NotebookChatMessage[];
+  hasSources: boolean;
+  onAnswered: () => void;
+}) {
+  const [question, setQuestion] = useState('');
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
+  const [pendingAnswer, setPendingAnswer] = useState(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [viewer, setViewer] = useState<FileViewerState | null>(null);
+
+  const handleCite = useCallback((filename: string, page?: string) => {
+    setViewer({ notebookId: id, filename, page });
+  }, [id]);
+
+  useEffect(() => {
+    const last = chat.at(-1);
+    if (last && last.role === 'user' && !asking) {
+      setPendingAnswer(true);
+    } else {
+      setPendingAnswer(false);
+    }
+  }, [chat, asking]);
+
+  useEffect(() => {
+    if (!pendingAnswer) {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      return;
+    }
+    pollingRef.current = setInterval(() => {
+      fetch(`/api/notebooks/${id}`)
+        .then((res) => res.json().catch(() => null))
+        .then((data: { chat?: NotebookChatMessage[] } | null) => {
+          if (!data) return;
+          const msgs = data.chat ?? [];
+          const last = msgs.at(-1);
+          if (last && last.role === 'assistant') {
+            onAnswered();
+            setPendingAnswer(false);
+          }
+        })
+        .catch(() => {});
+    }, 3000);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [pendingAnswer, id, onAnswered]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chat.length, asking, pendingQuestion, pendingAnswer]);
+
+  const submit = useCallback(() => {
+    const q = question.trim();
+    if (!q || asking) return;
+    setAsking(true);
+    setError(null);
+    setPendingQuestion(q);
+    setQuestion('');
+    fetch(`/api/notebooks/${id}/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q }),
+    })
+      .then(async (res) => {
+        const body = (await res.json().catch(() => ({}))) as NotebookAskResponse;
+        if (!res.ok) {
+          setError(body.error || `回答の取得に失敗しました（HTTP ${res.status}）。`);
+        } else if (body.error && !body.answer) {
+          setError(body.error);
+        } else if (body.error) {
+          setError('回答が途中で打ち切られた可能性があります。');
+        }
+        onAnswered();
+      })
+      .catch(() => {
+        setError('ネットワークエラーで回答を取得できませんでした。');
+      })
+      .finally(() => {
+        setAsking(false);
+        setPendingQuestion(null);
+      });
+  }, [id, question, asking, onAnswered]);
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-faint">
+        チャット
+      </div>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3">
+        {chat.length === 0 && !pendingQuestion ? (
+          <EmptyState>
+            {hasSources
+              ? '資料について質問できます。回答は資料を根拠に生成されます。'
+              : 'まず資料をアップロードすると、その内容について質問できます。'}
+          </EmptyState>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {chat.map((m, i) => (
+              <ChatBubble key={`${m.ts}-${i}`} msg={m} onCite={handleCite} />
+            ))}
+            {pendingQuestion && (
+              <ChatBubble msg={{ ts: '', role: 'user', text: pendingQuestion }} />
+            )}
+            {asking && (
+              <div className="flex justify-start">
+                <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-sm bg-surface-2 px-3 py-2 text-sm text-text-muted">
+                  <Spinner />
+                  資料を読んでいます…
+                </div>
+              </div>
+            )}
+            {!asking && pendingAnswer && (
+              <div className="flex justify-start">
+                <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-sm bg-surface-2 px-3 py-2 text-sm text-text-muted">
+                  <Spinner />
+                  回答を生成中…
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      {error && (
+        <div role="alert" className="mx-3 mb-2 rounded-lg border border-stalled/40 bg-stalled-bg/60 px-3 py-1.5 text-xs" style={{ color: 'var(--mc-stalled)' }}>
+          {error}
+        </div>
+      )}
+      <div className="border-t border-border p-3">
+        <div className="flex items-end gap-2">
+          <textarea
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            disabled={asking}
+            rows={2}
+            placeholder="資料について質問する…"
+            className="min-h-[2.5rem] flex-1 resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none disabled:opacity-60"
+          />
+          <button
+            type="button"
+            onClick={submit}
+            disabled={asking || question.trim() === ''}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-bg transition-opacity disabled:opacity-40"
+            aria-label="質問を送信"
+          >
+            {asking ? <Spinner /> : <SendIcon width={18} height={18} />}
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-text-faint">回答には時間がかかる場合があります（⌘/Ctrl + Enter で送信）。</p>
+      </div>
+      {viewer && (
+        <NotebookFileViewer
+          notebookId={viewer.notebookId}
+          filename={viewer.filename}
+          page={viewer.page}
+          onClose={() => setViewer(null)}
+        />
       )}
     </div>
   );
@@ -2789,7 +3150,7 @@ function NotebookDetailView({
   initialTab?: DetailTab;
 }) {
   const { data, error, loading, refetch } = useLiveResource<NotebookDetail>(`/api/notebooks/${id}`);
-  const [tab, setTab] = useState<DetailTab>(initialTab === 'chat' ? 'sources' : initialTab);
+  const [tab, setTab] = useState<DetailTab>(initialTab);
   const [preview, setPreview] = useState<NotebookFileRef | null>(null);
 
   // インライン名称編集
@@ -2803,6 +3164,7 @@ function NotebookDetailView({
   const sources = detail?.sources ?? [];
   const artifacts = detail?.artifacts ?? [];
   const hasSources = sources.length > 0;
+  const chat = detail?.chat ?? [];
 
   const startEditing = useCallback(() => {
     setNameInput(detail?.meta.name ?? '');
@@ -2857,6 +3219,9 @@ function NotebookDetailView({
   const sourcesPane = (
     <SourcesPane id={id} sources={sources} onChanged={refetch} onPreview={setPreview} />
   );
+  const chatPane = (
+    <ChatPane id={id} chat={chat} hasSources={hasSources} onAnswered={refetch} />
+  );
   const artifactsPane = (
     <ArtifactsPane
       id={id}
@@ -2881,6 +3246,7 @@ function NotebookDetailView({
 
   const TABS: { key: DetailTab; label: string; count?: number }[] = [
     { key: 'sources', label: '資料', count: sources.length },
+    { key: 'chat', label: 'チャット' },
     { key: 'artifacts', label: 'フォルダ', count: artifacts.length },
     { key: 'minutes', label: '議事録' },
   ];
@@ -2974,18 +3340,20 @@ function NotebookDetailView({
         <ResourceState loading={loading} error={error} hasData={!!detail}>
           {detail && (
             <>
-              {/* デスクトップ: 議事録全画面 or 2ペイン（資料 / フォルダ） */}
+              {/* デスクトップ: 議事録全画面 or 3ペイン（資料 / チャット / フォルダ） */}
               {showMinutesPane ? (
                 <div className="hidden h-full md:block">{minutesPane}</div>
               ) : (
-                <div className="hidden h-full md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                <div className="hidden h-full md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
                   <div className="min-h-0 border-r border-border">{sourcesPane}</div>
+                  <div className="min-h-0 border-r border-border">{chatPane}</div>
                   <div className="min-h-0">{artifactsPane}</div>
                 </div>
               )}
               {/* モバイル: display:none で切り替え（アンマウントしないため生成中 state を保持）*/}
               <div className="h-full md:hidden">
                 <div className="h-full" style={{ display: tab === 'sources' ? undefined : 'none' }}>{sourcesPane}</div>
+                <div className="h-full" style={{ display: tab === 'chat' ? undefined : 'none' }}>{chatPane}</div>
                 <div className="h-full" style={{ display: tab === 'artifacts' ? undefined : 'none' }}>{artifactsPane}</div>
                 <div className="h-full" style={{ display: tab === 'minutes' ? undefined : 'none' }}>{minutesPane}</div>
               </div>

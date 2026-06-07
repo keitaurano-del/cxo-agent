@@ -24,6 +24,7 @@
 //   林はそのパスを Read で画像として読める。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { ImageFileIcon, CloseIcon, TerminalIcon, PlusIcon, KeyboardIcon } from '../components/icons';
 import { Spinner } from '../components/ui';
 
@@ -50,6 +51,48 @@ const TERMINAL_TABS: TerminalTab[] = [
 ];
 
 const ACTIVE_TAB_STORAGE_KEY = 'apollo.terminal.activeTab';
+// MC-156: 分割表示の保存キー。分割数（1〜4）と各ペインの割当ターミナル番号配列。
+const SPLIT_COUNT_STORAGE_KEY = 'apollo.terminal.splitCount';
+const PANE_ASSIGN_STORAGE_KEY = 'apollo.terminal.paneAssign';
+
+// 分割数ごとの初期ペイン割当（素直に T1..Tn）。
+function defaultPaneAssign(count: number): number[] {
+  return Array.from({ length: count }, (_, i) => i + 1);
+}
+
+// 分割数に対応する CSS grid テンプレート（コンテナ側）。
+//   1 = 単一 / 2 = 横2分割 / 3 = 上2・下1 / 4 = 2x2。
+function gridTemplate(count: number): CSSProperties {
+  switch (count) {
+    case 2:
+      return { gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr' };
+    case 3:
+      return { gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr' };
+    case 4:
+      return { gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr' };
+    default:
+      return { gridTemplateColumns: '1fr', gridTemplateRows: '1fr' };
+  }
+}
+
+// 各ペイン（0 始まり index）のグリッドセル位置。3 分割は 3 番目を下段全幅にする。
+function panePlacement(count: number, paneIdx: number): CSSProperties {
+  if (count === 3) {
+    if (paneIdx === 0) return { gridColumn: '1', gridRow: '1' };
+    if (paneIdx === 1) return { gridColumn: '2', gridRow: '1' };
+    return { gridColumn: '1 / span 2', gridRow: '2' };
+  }
+  // 2 / 4 は通常フロー（auto-placement）でよいが、明示しておく。
+  if (count === 4) {
+    const col = (paneIdx % 2) + 1;
+    const row = Math.floor(paneIdx / 2) + 1;
+    return { gridColumn: String(col), gridRow: String(row) };
+  }
+  if (count === 2) {
+    return { gridColumn: String(paneIdx + 1), gridRow: '1' };
+  }
+  return {};
+}
 
 // ─── 仮想キーバー / 補助 API helper ───────────────────────────
 // send-keys / output / start は terminal 番号で対象 tmux セッションを切り替える（MC-123）。
@@ -216,7 +259,111 @@ export default function Terminal() {
     }
   }, []);
   const activeTab = TERMINAL_TABS.find((t) => t.id === activeId) ?? TERMINAL_TABS[0];
+
+  // ── デスクトップ幅判定（MC-156）─────────────────────────────
+  // Tailwind の md ブレークポイント（768px）以上を「デスクトップ」とみなす。
+  // スマホ（md 未満）では分割を無効化し従来のタブ表示にフォールバックする。
+  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return true;
+    return window.matchMedia('(min-width: 768px)').matches;
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mql = window.matchMedia('(min-width: 768px)');
+    const onChange = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mql.addEventListener('change', onChange);
+    setIsDesktop(mql.matches);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
+
+  // ── 分割表示（MC-156）─────────────────────────────────────────
+  // splitCount: 同時表示するペイン数（1〜4）。localStorage に保持。
+  const [splitCount, setSplitCount] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(SPLIT_COUNT_STORAGE_KEY);
+      const n = raw ? parseInt(raw, 10) : NaN;
+      if (n >= 1 && n <= 4) return n;
+    } catch {
+      // localStorage 不可なら既定 1（単一表示）。
+    }
+    return 1;
+  });
+  // paneAssign[i] = ペイン i に映すターミナル番号（1〜4）。
+  const [paneAssign, setPaneAssign] = useState<number[]>(() => {
+    try {
+      const raw = localStorage.getItem(PANE_ASSIGN_STORAGE_KEY);
+      if (raw) {
+        const arr = JSON.parse(raw) as unknown;
+        if (Array.isArray(arr) && arr.every((x) => TERMINAL_TABS.some((t) => t.id === x))) {
+          return arr as number[];
+        }
+      }
+    } catch {
+      // 壊れていれば既定割当にフォールバック。
+    }
+    return defaultPaneAssign(4);
+  });
+  // フォーカス中のペイン（0 始まり）。補助機能の対象ターミナルを決める。
+  const [focusedPane, setFocusedPane] = useState(0);
+
+  // 有効な分割数（デスクトップのみ分割。スマホは常に 1）。
+  const effectiveSplit = isDesktop ? splitCount : 1;
+  // 表示中ペインに割り当てられたターミナル番号（長さ effectiveSplit）。
+  const visiblePaneAssign = Array.from(
+    { length: effectiveSplit },
+    (_, i) => paneAssign[i] ?? defaultPaneAssign(4)[i] ?? 1,
+  );
+
+  // 分割数を変更する。割当が足りなければ既定で埋める。
+  const changeSplitCount = useCallback((count: number) => {
+    const clamped = Math.max(1, Math.min(4, count));
+    setSplitCount(clamped);
+    try {
+      localStorage.setItem(SPLIT_COUNT_STORAGE_KEY, String(clamped));
+    } catch {
+      // 保持できなくても切替自体は機能させる。
+    }
+    setPaneAssign((prev) => {
+      const next = [...prev];
+      const def = defaultPaneAssign(4);
+      for (let i = 0; i < clamped; i++) {
+        if (!TERMINAL_TABS.some((t) => t.id === next[i])) next[i] = def[i];
+      }
+      try {
+        localStorage.setItem(PANE_ASSIGN_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // 保持失敗は無視。
+      }
+      return next;
+    });
+    setFocusedPane((p) => Math.min(p, clamped - 1));
+  }, []);
+
+  // 指定ペインの割当ターミナルを変更する。
+  const changePaneAssign = useCallback((paneIdx: number, terminalId: number) => {
+    setPaneAssign((prev) => {
+      const next = [...prev];
+      next[paneIdx] = terminalId;
+      try {
+        localStorage.setItem(PANE_ASSIGN_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // 保持失敗は無視。
+      }
+      return next;
+    });
+  }, []);
   // MC-123: 補助機能（画像添付・出力・キーバー）は全ターミナルで有効。各操作は activeId を対象にする。
+  // MC-156: 分割表示中はフォーカス中ペインの割当ターミナルを activeId に同期する。
+  //   送信系ロジックは従来どおり activeIdRef を参照するので、ここで同期すれば壊れない。
+  useEffect(() => {
+    if (effectiveSplit > 1) {
+      const target = visiblePaneAssign[focusedPane] ?? visiblePaneAssign[0] ?? 1;
+      setActiveId((prev) => (prev === target ? prev : target));
+    }
+    // visiblePaneAssign は派生値（毎レンダ新規）なので依存はプリミティブで指定。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveSplit, focusedPane, paneAssign]);
+
   // 最新の activeId をコールバック内で参照するための ref（オートリピート等のクロージャ向け）。
   const activeIdRef = useRef(activeId);
   activeIdRef.current = activeId;
@@ -777,6 +924,34 @@ export default function Terminal() {
           );
         })}
 
+        {/* レイアウト切替（MC-156）: 同時表示する分割数 1/2/3/4 を選ぶ。md 以上でのみ表示。
+            スマホ（md 未満）では従来どおりタブ単一表示なので非表示。 */}
+        <div
+          role="group"
+          aria-label="分割表示の切替"
+          className="ml-auto hidden shrink-0 items-center gap-0.5 rounded-md border border-border bg-surface-2 p-0.5 md:flex"
+          title="ターミナルを同時表示する数（1〜4）"
+        >
+          {[1, 2, 3, 4].map((n) => {
+            const sel = splitCount === n;
+            return (
+              <button
+                key={n}
+                type="button"
+                onClick={() => changeSplitCount(n)}
+                aria-pressed={sel}
+                title={`${n}分割`}
+                style={{ touchAction: 'manipulation' }}
+                className={`flex h-6 w-6 items-center justify-center rounded text-xs font-semibold transition-colors ${
+                  sel ? 'bg-active-bg text-active' : 'text-text-muted hover:bg-surface-3 hover:text-text'
+                }`}
+              >
+                {n}
+              </button>
+            );
+          })}
+        </div>
+
         {/* 使用量ベース自動切替（全ターミナル共通）。残量が多い側へ寄せる。 */}
         <button
           type="button"
@@ -948,17 +1123,72 @@ export default function Terminal() {
         )}
       </div>
 
-      {/* 端末本体: 3つの iframe を常時 mount し、アクティブ以外は CSS で非表示にして保持する。 */}
-      <div className="relative flex-1 overflow-hidden bg-bg" style={{ overscrollBehavior: 'none' }}>
+      {/* 端末本体（MC-156）: 4つの iframe を常時 mount し、CSS grid で N ペインを同時表示する。
+          - 単一表示（effectiveSplit=1）はアクティブの 1 枚だけを表示（従来挙動）。
+          - 分割表示は各ペインの割当ターミナルだけをそのセルに配置し、それ以外は hidden で保持。
+          iframe を unmount / src 差し替えしないことでセッションを保持する（要件 4）。 */}
+      <div
+        className="relative flex-1 overflow-hidden bg-bg"
+        style={{
+          overscrollBehavior: 'none',
+          display: 'grid',
+          gap: effectiveSplit > 1 ? '4px' : '0',
+          ...gridTemplate(effectiveSplit),
+        }}
+      >
         {TERMINAL_TABS.map((t) => {
-          const isActive = t.id === activeId;
           const st = backends[t.id] ?? { kind: 'checking' };
+          // このターミナルを表示するペイン（最初に割り当てられたもの）。なければ非表示で mount 保持。
+          const paneIdx =
+            effectiveSplit > 1
+              ? visiblePaneAssign.findIndex((id) => id === t.id)
+              : activeId === t.id
+              ? 0
+              : -1;
+          const isVisible = paneIdx >= 0;
+          const placement = isVisible ? panePlacement(effectiveSplit, paneIdx) : null;
+          const isFocusedPane = effectiveSplit > 1 && paneIdx === focusedPane;
           return (
             <div
               key={t.id}
-              // 非アクティブは hidden で非表示。iframe 自体は mount したまま＝セッション保持。
-              className={`absolute inset-0 ${isActive ? '' : 'hidden'}`}
+              onMouseDown={() => {
+                if (effectiveSplit > 1 && paneIdx >= 0) setFocusedPane(paneIdx);
+              }}
+              // 表示中はグリッドセルへ配置、非表示は hidden（iframe は mount 維持＝セッション保持）。
+              className={`relative ${isVisible ? '' : 'hidden'}`}
+              style={
+                isVisible && effectiveSplit > 1
+                  ? {
+                      ...placement,
+                      outline: isFocusedPane ? '2px solid var(--mc-active, #3b82f6)' : 'none',
+                      outlineOffset: '-2px',
+                    }
+                  : isVisible
+                  ? { position: 'absolute', inset: 0 }
+                  : undefined
+              }
             >
+              {/* 分割時の小さなペインセレクタ（このペインに映すターミナルを選ぶ）。 */}
+              {isVisible && effectiveSplit > 1 && (
+                <div className="absolute left-1 top-1 z-10 flex items-center gap-1">
+                  <select
+                    value={t.id}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      setFocusedPane(paneIdx);
+                      changePaneAssign(paneIdx, parseInt(e.target.value, 10));
+                    }}
+                    aria-label={`ペイン${paneIdx + 1} のターミナル`}
+                    className="h-6 rounded border border-border bg-surface/90 px-1 text-[10px] font-medium text-text backdrop-blur outline-none"
+                  >
+                    {TERMINAL_TABS.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {st.kind === 'ready' ? (
                 <iframe
                   key={iframeKeys[t.id]}
