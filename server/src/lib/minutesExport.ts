@@ -563,7 +563,11 @@ async function buildPdf(markdownContent: string): Promise<Buffer> {
   @page { size: A4; margin: 20mm 18mm; }
   * { box-sizing: border-box; }
   body {
-    font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", "Noto Sans JP", sans-serif;
+    /* PDF は Linux サーバ上の headless Chromium でレンダリングされる。Hiragino/Yu Gothic/Meiryo/Noto Sans JP は
+       サーバ未インストールのため、generic sans-serif に落ちると中国語フォント(WenQuanYi)やビットマップ(Unifont)に
+       フォールバックして字形・行間が崩れる。実在の日本語フォント(IPAexGothic→IPAPGothic→IPAGothic)を
+       sans-serif の前に明示し、崩れを防ぐ（MC-195）。Noto/Hiragino 系は将来インストール時に優先される。 */
+    font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", "Noto Sans JP", "Noto Sans CJK JP", "IPAexGothic", "IPAPGothic", "IPAGothic", sans-serif;
     font-size: 11pt;
     line-height: 1.7;
     color: #1e2a3a;
