@@ -511,10 +511,11 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
   // Phase 1 診断ログ
   const requestTs = new Date().toISOString();
   const requestTime = Date.now();
-  console.log(`[notebook-ask] request start ts=${requestTs} notebookId=${id}`);
+  console.log(`[notebook-ask] request start ts=${requestTs} notebookId=${id} questionLen=${question.length}`);
 
   // 直近 10 件の会話履歴をコンテキストに含める。
   const history = readChatHistory(id, 10);
+  console.log(`[notebook-ask] history loaded historyLen=${history.length}`);
 
   // user メッセージを先に記録。
   appendChat(id, { ts: requestTs, role: 'user', text: question });
@@ -523,9 +524,10 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
   const searchStart = Date.now();
   const ragChunks = await searchChunks(dir, question).catch(() => [] as Chunk[]);
   const searchElapsed = ((Date.now() - searchStart) / 1000).toFixed(2);
-  const ragPath = ragChunks.length > 0 ? 'RAG' : 'fallback';
+  const ragPath = ragChunks.length > 0 ? 'RAG' : 'traditional';
+  const pathReason = ragChunks.length > 0 ? `RAG chunks found (${ragChunks.length})` : 'Fallback no chunks';
   console.log(
-    `[notebook-ask] RAG search: path=${ragPath} topK=${NOTEBOOK_RAG_TOP_K} chunkCount=${ragChunks.length} vectorDim=${ragChunks[0]?.vector.length ?? 'N/A'} elapsed=${searchElapsed}s`,
+    `[notebook-ask] RAG search: path=${ragPath} topK=${NOTEBOOK_RAG_TOP_K} chunkCount=${ragChunks.length} vectorDim=${ragChunks[0]?.vector.length ?? 'N/A'} elapsed=${searchElapsed}s reason=${pathReason}`,
   );
 
   const prompt = ragChunks.length > 0
@@ -540,24 +542,30 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
     res.flushHeaders();
 
     const claudeStart = Date.now();
-    console.log(`[notebook-ask] Claude start ts=${new Date().toISOString()}`);
+    console.log(`[notebook-ask] Claude start ts=${new Date().toISOString()} method=stream`);
     const result = await runClaudeStream(dir, prompt, (chunk) => {
       sseWrite(res, { type: 'chunk', text: chunk });
     });
     const claudeElapsed = ((Date.now() - claudeStart) / 1000).toFixed(2);
-    console.log(`[notebook-ask] Claude done ts=${new Date().toISOString()} elapsed=${claudeElapsed}s`);
+    console.log(`[notebook-ask] Claude done ts=${new Date().toISOString()} elapsed=${claudeElapsed}s status=${result.ok ? 'ok' : 'error'}`);
 
     const answer = (result.stdout || '').trim();
     const answerTs = new Date().toISOString();
     appendChat(id, { ts: answerTs, role: 'assistant', text: answer });
     touchNotebook(id);
-    const totalElapsed = ((Date.now() - requestTime) / 1000).toFixed(2);
+    const totalElapsed = parseFloat(((Date.now() - requestTime) / 1000).toFixed(1));
     console.log(
-      `[notebook-ask] request complete ts=${answerTs} totalElapsed=${totalElapsed}s ok=${result.ok}`,
+      `[notebook-ask] request complete ts=${answerTs} totalElapsed=${totalElapsed}s ok=${result.ok} answerLen=${answer.length}`,
     );
     sseWrite(res, {
       type: 'done',
       answer,
+      metadata: {
+        elapsed: totalElapsed,
+        pathType: result.ok ? ragPath : 'error',
+        chunkCount: ragChunks.length,
+        pathReason,
+      },
       ...(result.error ? { error: result.error } : {}),
     });
     res.end();
@@ -565,30 +573,47 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
   }
 
   const claudeStart = Date.now();
-  console.log(`[notebook-ask] Claude start ts=${new Date().toISOString()}`);
+  console.log(`[notebook-ask] Claude start ts=${new Date().toISOString()} method=json`);
   const result = await runClaude(dir, prompt);
   const claudeElapsed = ((Date.now() - claudeStart) / 1000).toFixed(2);
-  console.log(`[notebook-ask] Claude done ts=${new Date().toISOString()} elapsed=${claudeElapsed}s`);
+  console.log(`[notebook-ask] Claude done ts=${new Date().toISOString()} elapsed=${claudeElapsed}s status=${result.ok ? 'ok' : 'error'}`);
 
   const answer = (result.stdout || '').trim();
+  const totalElapsed = parseFloat(((Date.now() - requestTime) / 1000).toFixed(1));
 
   if (!result.ok && !answer) {
-    const totalElapsed = ((Date.now() - requestTime) / 1000).toFixed(2);
     console.log(
-      `[notebook-ask] request failed ts=${new Date().toISOString()} totalElapsed=${totalElapsed}s`,
+      `[notebook-ask] request failed ts=${new Date().toISOString()} totalElapsed=${totalElapsed}s error="${result.error}"`,
     );
-    res.status(200).json({ answer: '', error: result.error });
+    res.status(200).json({
+      answer: '',
+      error: result.error,
+      metadata: {
+        elapsed: totalElapsed,
+        pathType: 'error',
+        chunkCount: 0,
+        pathReason: result.error || 'Claude error',
+      },
+    });
     return;
   }
 
   const answerTs = new Date().toISOString();
   appendChat(id, { ts: answerTs, role: 'assistant', text: answer });
   touchNotebook(id);
-  const totalElapsed = ((Date.now() - requestTime) / 1000).toFixed(2);
   console.log(
-    `[notebook-ask] request complete ts=${answerTs} totalElapsed=${totalElapsed}s ok=${result.ok}`,
+    `[notebook-ask] request complete ts=${answerTs} totalElapsed=${totalElapsed}s ok=${result.ok} answerLen=${answer.length}`,
   );
-  res.status(200).json({ answer, ...(result.error ? { error: result.error } : {}) });
+  res.status(200).json({
+    answer,
+    metadata: {
+      elapsed: totalElapsed,
+      pathType: ragPath,
+      chunkCount: ragChunks.length,
+      pathReason,
+    },
+    ...(result.error ? { error: result.error } : {}),
+  });
 }
 
 // ─── 生成物作成 ───────────────────────────────────────
@@ -704,7 +729,7 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
   const requestTs = new Date().toISOString();
   const requestTime = Date.now();
   console.log(
-    `[notebook-generate] request start ts=${requestTs} notebookId=${id} kind=${kind}`,
+    `[notebook-generate] request start ts=${requestTs} notebookId=${id} kind=${kind} instructionLen=${instruction.length}`,
   );
 
   // artifacts/ の合計サイズが上限を超えていたら 413 で弾く。
@@ -721,14 +746,16 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
   }
 
   const before = artifactNames(id);
+  console.log(`[notebook-generate] artifact count before=${before.size}`);
 
   // RAG チャンク検索
   const searchStart = Date.now();
   const ragChunks = await searchChunks(dir, instruction || kind).catch(() => [] as Chunk[]);
   const searchElapsed = ((Date.now() - searchStart) / 1000).toFixed(2);
-  const ragPath = ragChunks.length > 0 ? 'RAG' : 'fallback';
+  const ragPath = ragChunks.length > 0 ? 'RAG' : 'traditional';
+  const pathReason = ragChunks.length > 0 ? `RAG chunks found (${ragChunks.length})` : 'Fallback no chunks';
   console.log(
-    `[notebook-generate] RAG search: path=${ragPath} topK=${NOTEBOOK_RAG_TOP_K} chunkCount=${ragChunks.length} vectorDim=${ragChunks[0]?.vector.length ?? 'N/A'} elapsed=${searchElapsed}s`,
+    `[notebook-generate] RAG search: path=${ragPath} topK=${NOTEBOOK_RAG_TOP_K} chunkCount=${ragChunks.length} vectorDim=${ragChunks[0]?.vector.length ?? 'N/A'} elapsed=${searchElapsed}s reason=${pathReason}`,
   );
 
   const prompt = ragChunks.length > 0
@@ -750,7 +777,7 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
     const EXPECTED_CHARS = 8000;
 
     const claudeStart = Date.now();
-    console.log(`[notebook-generate] Claude start ts=${new Date().toISOString()}`);
+    console.log(`[notebook-generate] Claude start ts=${new Date().toISOString()} method=stream kind=${kind}`);
     const result = await runClaudeStream(dir, prompt, (chunk) => {
       sseWrite(res, { type: 'chunk', text: chunk });
       totalChars += chunk.length;
@@ -758,7 +785,7 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
       sseWrite(res, { type: 'progress', pct });
     });
     const claudeElapsed = ((Date.now() - claudeStart) / 1000).toFixed(2);
-    console.log(`[notebook-generate] Claude done ts=${new Date().toISOString()} elapsed=${claudeElapsed}s`);
+    console.log(`[notebook-generate] Claude done ts=${new Date().toISOString()} elapsed=${claudeElapsed}s status=${result.ok ? 'ok' : 'error'} charsGenerated=${totalChars}`);
 
     sseWrite(res, { type: 'progress', pct: 100 });
 
@@ -767,7 +794,7 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
     const created = allArtifacts.filter((a) => !before.has(a.name));
     touchNotebook(id);
 
-    const totalElapsed = ((Date.now() - requestTime) / 1000).toFixed(2);
+    const totalElapsed = parseFloat(((Date.now() - requestTime) / 1000).toFixed(1));
     console.log(
       `[notebook-generate] request complete ts=${new Date().toISOString()} totalElapsed=${totalElapsed}s createdCount=${created.length} ok=${result.ok}`,
     );
@@ -778,6 +805,12 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
       created,
       artifacts: allArtifacts,
       report: (result.stdout || '').trim(),
+      metadata: {
+        elapsed: totalElapsed,
+        pathType: result.ok ? ragPath : 'error',
+        chunkCount: ragChunks.length,
+        pathReason,
+      },
       ...(result.error ? { error: result.error } : {}),
     });
     res.end();
@@ -785,17 +818,17 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
   }
 
   const claudeStart = Date.now();
-  console.log(`[notebook-generate] Claude start ts=${new Date().toISOString()}`);
+  console.log(`[notebook-generate] Claude start ts=${new Date().toISOString()} method=json kind=${kind}`);
   const result = await runClaude(dir, prompt);
   const claudeElapsed = ((Date.now() - claudeStart) / 1000).toFixed(2);
-  console.log(`[notebook-generate] Claude done ts=${new Date().toISOString()} elapsed=${claudeElapsed}s`);
+  console.log(`[notebook-generate] Claude done ts=${new Date().toISOString()} elapsed=${claudeElapsed}s status=${result.ok ? 'ok' : 'error'}`);
 
   const detail = getNotebookDetail(id);
   const allArtifacts = detail?.artifacts ?? [];
   const created = allArtifacts.filter((a) => !before.has(a.name));
 
   touchNotebook(id);
-  const totalElapsed = ((Date.now() - requestTime) / 1000).toFixed(2);
+  const totalElapsed = parseFloat(((Date.now() - requestTime) / 1000).toFixed(1));
   console.log(
     `[notebook-generate] request complete ts=${new Date().toISOString()} totalElapsed=${totalElapsed}s createdCount=${created.length} ok=${result.ok}`,
   );
@@ -805,9 +838,16 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
     created,
     artifacts: allArtifacts,
     report: (result.stdout || '').trim(),
+    metadata: {
+      elapsed: totalElapsed,
+      pathType: ragPath,
+      chunkCount: ragChunks.length,
+      pathReason,
+    },
     ...(result.error ? { error: result.error } : {}),
   });
 }
+
 
 // ─── 索引再構築 ──────────────────────────────────────────
 
@@ -1277,6 +1317,32 @@ function handleUpdateArtifact(req: Request, res: Response): void {
   });
 }
 
+// GET /:id/debug-log — ノートブック診断ログのダウンロード
+function handleDebugLog(req: Request, res: Response): void {
+  const id = idParam(req);
+  try {
+    const dir = resolveNotebookDir(id, false);
+    const logFile = join(dir, 'logs', `notebooks-${id}.log`);
+
+    if (!existsSync(logFile)) {
+      res.status(404).json({ error: 'ログファイルが見つかりません。' });
+      return;
+    }
+
+    const content = readFileSync(logFile, 'utf-8');
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="notebooks-${id}.log"`);
+    res.send(content);
+  } catch (e) {
+    if (e instanceof SafePathError) {
+      res.status(/not found/i.test(e.message) ? 404 : 400).json({ error: e.message });
+      return;
+    }
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(500).json({ error: msg });
+  }
+}
+
 // ─── Router 組み立て ─────────────────────────────────────
 
 export function notebookRouter(): Router {
@@ -1301,6 +1367,7 @@ export function notebookRouter(): Router {
   router.post('/:id/ask', (req, res) => void handleAsk(req, res));
   router.post('/:id/generate', (req, res) => void handleGenerate(req, res));
   router.post('/:id/reindex', (req, res) => void handleReindex(req, res));
+  router.get('/:id/debug-log', handleDebugLog);
   router.post('/:id/minutes/transcribe', (req, res) => void handleTranscribe(req, res));
   router.post('/:id/minutes/extract-file', (req, res) => void handleExtractFile(req, res));
   router.post('/:id/minutes/export', (req, res) => void handleMinutesExport(req, res));

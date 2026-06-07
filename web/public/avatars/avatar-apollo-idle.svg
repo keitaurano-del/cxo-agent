@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs><style>.pixel { shape-rendering: crispEdges; }</style></defs>
+  <g class="pixel">
+    <!-- Body - Steel Blue -->
+    <rect x="24" y="26" width="16" height="18" fill="#4A5A7F"/>
+    <!-- Left arm -->
+    <rect x="18" y="30" width="6" height="12" fill="#4A5A7F"/>
+    <!-- Right arm (raised - monitoring) -->
+    <rect x="40" y="24" width="6" height="14" fill="#4A5A7F"/>
+    <!-- Left leg -->
+    <rect x="26" y="44" width="6" height="14" fill="#4A5A7F"/>
+    <!-- Right leg -->
+    <rect x="32" y="44" width="6" height="14" fill="#4A5A7F"/>
+    
+    <!-- Neck -->
+    <rect x="28" y="22" width="8" height="4" fill="#C0C0C0"/>
+    <!-- Head -->
+    <rect x="26" y="14" width="12" height="12" fill="#C0C0C0"/>
+    
+    <!-- Eyes - alert surveillance -->
+    <rect x="28" y="17" width="3" height="2" fill="#FFFFFF"/>
+    <rect x="35" y="17" width="3" height="2" fill="#FFFFFF"/>
+    <!-- Pupils -->
+    <rect x="29" y="17" width="1" height="1" fill="#000000"/>
+    <rect x="36" y="17" width="1" height="1" fill="#000000"/>
+    
+    <!-- Mouth - neutral/stern -->
+    <rect x="29" y="22" width="6" height="1" fill="#4A5A7F"/>
+    
+    <!-- Tech indicator (orange stripe) -->
+    <rect x="26" y="26" width="12" height="2" fill="#FF8C00"/>
+  </g>
+</svg>

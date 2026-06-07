@@ -485,3 +485,20 @@ export function GripIcon(props: IconProps) {
     </svg>
   );
 }
+
+// 設定アイコン（MC-178 フォントサイズ等）
+export function SettingsIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 4v2.5" />
+      <path d="M12 17.5v2.5" />
+      <path d="M18.4 7.1l1.8-1.8" />
+      <path d="M5.3 18.3l1.8-1.8" />
+      <path d="M20 12h2.5" />
+      <path d="M1.5 12h2.5" />
+      <path d="M18.4 16.9l1.8 1.8" />
+      <path d="M5.3 5.8l1.8 1.8" />
+    </svg>
+  );
+}

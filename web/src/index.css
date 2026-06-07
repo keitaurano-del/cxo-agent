@@ -9,6 +9,9 @@
  * designer が後から差し替えやすいよう、配色は全てここに集約する。
  */
 :root {
+  /* フォントサイズスケーリング（MC-178） */
+  --font-scale: 1;
+
   /* surface（目に優しいライトグレー系・AA コントラスト確保） */
   --mc-bg:        #f4f6f9;   /* ページ背景: やや青みがかったオフホワイト */
   --mc-surface:   #ffffff;   /* カード・サイドバー: 白 */
@@ -172,6 +175,20 @@ body {
     'Hiragino Sans', 'Noto Sans JP', sans-serif;
   font-feature-settings: 'palt';
   -webkit-font-smoothing: antialiased;
+  font-size: calc(16px * var(--font-scale));
+}
+
+/* ダッシュボード全体にフォントスケーリングを適用（MC-178） */
+.dashboard-container {
+  font-size: calc(1rem * var(--font-scale));
+  line-height: calc(1.5 * var(--font-scale));
+}
+
+/* ターミナルはフォントスケーリングを除外（fixed-width 保持） */
+.terminal-view {
+  font-scale: 1 !important;
+  font-size: 1rem !important;
+  line-height: 1.5 !important;
 }
 
 /* scrollbar（ライトトーンに馴染ませる） */

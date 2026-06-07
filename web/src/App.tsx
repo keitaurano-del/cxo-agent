@@ -21,6 +21,7 @@ import {
   SunIcon,
   MoonIcon,
   ChatIcon,
+  SettingsIcon,
 } from './components/icons';
 import DashboardLayout from './components/DashboardLayout';
 import { isDashboardPath } from './lib/nav';
@@ -45,6 +46,8 @@ import AddTaskFab from './components/AddTaskFab';
 import { UploadProvider } from './lib/UploadContext';
 import { UploadToast } from './components/UploadToast';
 import { UpdateToast, fireUpdateToast } from './components/UpdateToast';
+import Settings from './components/Settings';
+import { useFontSize } from './lib/useFontSize';
 
 // ---- テーマ管理 ----
 type ThemeMode = 'auto' | 'dark' | 'light';
@@ -181,6 +184,7 @@ function Sidebar({
   onThemeToggle,
   navItems,
   onReorder,
+  onSettingsClick,
 }: {
   connected: boolean;
   badges: Partial<Record<string, number>>;
@@ -191,6 +195,7 @@ function Sidebar({
   onThemeToggle: () => void;
   navItems: NavItem[];
   onReorder: (next: NavItem[]) => void;
+  onSettingsClick: () => void;
 }) {
   const { pathname } = useLocation();
   const dashActive = isDashboardPath(pathname);
@@ -283,6 +288,18 @@ function Sidebar({
               : 'ライト固定'}
           </span>
         </button>
+        {/* 設定ボタン（MC-178） */}
+        <button
+          type="button"
+          onClick={onSettingsClick}
+          aria-label="設定を開く"
+          className="flex items-center gap-2 text-[11px] text-text-muted hover:text-text rounded px-1 -ml-1 py-0.5 transition-colors"
+        >
+          <span aria-hidden>
+            <SettingsIcon width={13} height={13} />
+          </span>
+          <span>設定</span>
+        </button>
         {/* 接続状態 */}
         <div
           className="flex items-center gap-2 text-[11px]"
@@ -310,6 +327,10 @@ export default function App() {
   const { ticks, connected } = useLiveStream();
   const { data: approvals } = useLiveResource<ApprovalsResponse>('/api/approvals', ticks.tasks);
   const approvalCount = approvals?.total ?? 0;
+
+  // フォントサイズ設定（MC-178）
+  const { fontSize } = useFontSize();
+  const [showSettings, setShowSettings] = useState(false);
 
   // チャット未読数: チャンネル別に管理し、/chat 表示中でも他チャンネルの未読を保持する。
   // localStorage に { channelId: lastSeenTs } を保存して未読を計算する。
@@ -494,7 +515,7 @@ export default function App() {
   return (
     <LiveContext.Provider value={{ ticks }}>
       <UploadProvider>
-        <div className="flex h-dvh overflow-hidden bg-bg text-text">
+        <div className="flex h-dvh overflow-hidden bg-bg text-text" style={{ '--font-scale': fontSize === 'small' ? '0.9' : fontSize === 'large' ? '1.1' : '1' } as any}>
           <Sidebar
             connected={connected}
             badges={badges}
@@ -505,8 +526,9 @@ export default function App() {
             onThemeToggle={toggleTheme}
             navItems={navItems}
             onReorder={reorderNav}
+            onSettingsClick={() => setShowSettings(true)}
           />
-          <main className="flex-1 overflow-hidden">
+          <main className="dashboard-container flex-1 overflow-hidden">
             <Routes>
               {/* ダッシュボード（/）配下に各タブを入れ子。各子ビューの URL は従来どおり。 */}
               {/* エージェントタブは / に統合。ティック+消費量は /activity に統合。 */}
@@ -547,6 +569,7 @@ export default function App() {
           {pathname === '/tasks' && <AddTaskFab />}
           <UploadToast />
           <UpdateToast />
+          <Settings open={showSettings} onClose={() => setShowSettings(false)} />
         </div>
       </UploadProvider>
     </LiveContext.Provider>

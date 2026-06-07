@@ -27,64 +27,64 @@ export const personaMap: Record<string, PersonaMeta> = {
     key: 'task-manager',
     name: '棚町 結',
     avatar: {
-      working: 'https://placeholder.com/64x64?text=task-manager-work',
-      idle: 'https://placeholder.com/64x64?text=task-manager-idle',
+      working: '/avatars/avatar-task-manager-working.svg',
+      idle: '/avatars/avatar-task-manager-idle.svg',
     },
   },
   designer: {
     key: 'designer',
     name: '紺野 蒼',
     avatar: {
-      working: 'https://placeholder.com/64x64?text=designer-work',
-      idle: 'https://placeholder.com/64x64?text=designer-idle',
+      working: '/avatars/avatar-designer-working.svg',
+      idle: '/avatars/avatar-designer-idle.svg',
     },
   },
   'content-creator': {
     key: 'content-creator',
     name: '編 詠子',
     avatar: {
-      working: 'https://placeholder.com/64x64?text=content-creator-work',
-      idle: 'https://placeholder.com/64x64?text=content-creator-idle',
+      working: '/avatars/avatar-content-creator-working.svg',
+      idle: '/avatars/avatar-content-creator-idle.svg',
     },
   },
   reviewer: {
     key: 'reviewer',
     name: '関 守',
     avatar: {
-      working: 'https://placeholder.com/64x64?text=reviewer-work',
-      idle: 'https://placeholder.com/64x64?text=reviewer-idle',
+      working: '/avatars/avatar-apollo-working.svg',
+      idle: '/avatars/avatar-apollo-idle.svg',
     },
   },
   'logic-coach': {
     key: 'logic-coach',
     name: '論堂 透',
     avatar: {
-      working: 'https://placeholder.com/64x64?text=logic-coach-work',
-      idle: 'https://placeholder.com/64x64?text=logic-coach-idle',
+      working: '/avatars/avatar-haru-working.svg',
+      idle: '/avatars/avatar-haru-idle.svg',
     },
   },
   'test-functional': {
     key: 'test-functional',
     name: '試野 緑',
     avatar: {
-      working: 'https://placeholder.com/64x64?text=test-functional-work',
-      idle: 'https://placeholder.com/64x64?text=test-functional-idle',
+      working: '/avatars/avatar-test-functional-working.svg',
+      idle: '/avatars/avatar-test-functional-idle.svg',
     },
   },
   'night-patrol': {
     key: 'night-patrol',
     name: '夜目',
     avatar: {
-      working: 'https://placeholder.com/64x64?text=night-patrol-work',
-      idle: 'https://placeholder.com/64x64?text=night-patrol-idle',
+      working: '/avatars/avatar-hayashi-rin-working.svg',
+      idle: '/avatars/avatar-hayashi-rin-idle.svg',
     },
   },
   'feedback-watcher': {
     key: 'feedback-watcher',
     name: '耳塚 聡',
     avatar: {
-      working: 'https://placeholder.com/64x64?text=feedback-watcher-work',
-      idle: 'https://placeholder.com/64x64?text=feedback-watcher-idle',
+      working: '/avatars/avatar-masayoshi-working.svg',
+      idle: '/avatars/avatar-masayoshi-idle.svg',
     },
   },
 };

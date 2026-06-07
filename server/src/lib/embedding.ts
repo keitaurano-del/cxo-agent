@@ -12,6 +12,7 @@ const EMBED_ENDPOINT =
 /**
  * exponential backoff でリトライする（429 Too Many Requests 対策）。
  * 1s → 2s → 4s → 8s → 60s（最大 60s にクランプ）、最大5回試行。
+ * API エラー（ステータス・レスポンス本体）をログに記録。
  */
 async function retryWithBackoff<T>(
   fn: (attempt: number) => Promise<T>,
@@ -22,21 +23,32 @@ async function retryWithBackoff<T>(
       return await fn(attempt);
     } catch (err) {
       const isLastAttempt = attempt === maxAttempts - 1;
+
+      // エラー情報をログに記録
+      const statusCode = (err as any)?.statusCode;
+      const responseBody = (err as any)?.responseBody;
+      const errorMsg = err instanceof Error ? err.message : String(err);
+
+      if (!isLastAttempt) {
+        console.warn(
+          `[embedding] attempt ${attempt + 1}/${maxAttempts} failed: status=${statusCode} error="${errorMsg}" body="${responseBody}"`,
+        );
+      }
+
       if (isLastAttempt) throw err;
 
       // ネットワークエラーは即再試行
       const isNetworkError = err instanceof TypeError;
       if (!isNetworkError) {
         // HTTP ステータス 429 のみリトライ
-        const httpError = (err as any)?.statusCode;
-        if (httpError !== 429) throw err;
+        if (statusCode !== 429) throw err;
       }
 
       // backoff: 1s 2^n（n=attempt）、最大 60s
       const delaySec = Math.min(Math.pow(2, attempt), 60);
       const delayMs = delaySec * 1000;
       console.warn(
-        `[embedding] attempt ${attempt + 1}/${maxAttempts} failed, retrying after ${delaySec}s...`,
+        `[embedding] retrying after ${delaySec}s (${statusCode})...`,
       );
       await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
     }
@@ -71,9 +83,17 @@ export async function embedText(text: string): Promise<number[]> {
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '(no body)');
-      const err = new Error(
-        `Gemini embedText failed: ${res.status} ${res.statusText} — ${errText}`,
-      ) as any;
+      let shortMsg = `Gemini API ${res.status}`;
+      if (res.status === 429) {
+        shortMsg = 'Gemini API 429 - Rate limited';
+      } else if (res.status === 401 || res.status === 403) {
+        shortMsg = 'Gemini API key invalid or unauthorized';
+      } else if (res.status === 400) {
+        shortMsg = 'Gemini API bad request';
+      } else if (res.status >= 500) {
+        shortMsg = 'Gemini API server error';
+      }
+      const err = new Error(`${shortMsg} — ${errText}`) as any;
       err.statusCode = res.status;
       err.responseBody = errText;
       throw err;

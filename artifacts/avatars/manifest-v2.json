@@ -1,0 +1,50 @@
+[
+  {
+    "key": "ren",
+    "name": "蓮",
+    "working": "avatar-ren-working-v2.gif",
+    "idle": "avatar-ren-idle-v2.gif",
+    "workingStill": "avatar-ren-working-v2.png",
+    "idleStill": "avatar-ren-idle-v2.png"
+  },
+  {
+    "key": "apollo",
+    "name": "apollo",
+    "working": "avatar-apollo-working-v2.gif",
+    "idle": "avatar-apollo-idle-v2.gif",
+    "workingStill": "avatar-apollo-working-v2.png",
+    "idleStill": "avatar-apollo-idle-v2.png"
+  },
+  {
+    "key": "content-creator",
+    "name": "ナオ",
+    "working": "avatar-content-creator-working-v2.gif",
+    "idle": "avatar-content-creator-idle-v2.gif",
+    "workingStill": "avatar-content-creator-working-v2.png",
+    "idleStill": "avatar-content-creator-idle-v2.png"
+  },
+  {
+    "key": "designer",
+    "name": "アオイ",
+    "working": "avatar-designer-working-v2.gif",
+    "idle": "avatar-designer-idle-v2.gif",
+    "workingStill": "avatar-designer-working-v2.png",
+    "idleStill": "avatar-designer-idle-v2.png"
+  },
+  {
+    "key": "haru",
+    "name": "ハル",
+    "working": "avatar-haru-working-v2.gif",
+    "idle": "avatar-haru-idle-v2.gif",
+    "workingStill": "avatar-haru-working-v2.png",
+    "idleStill": "avatar-haru-idle-v2.png"
+  },
+  {
+    "key": "hayashi-rin",
+    "name": "林",
+    "working": "avatar-hayashi-rin-working-v2.gif",
+    "idle": "avatar-hayashi-rin-idle-v2.gif",
+    "workingStill": "avatar-hayashi-rin-working-v2.png",
+    "idleStill": "avatar-hayashi-rin-idle-v2.png"
+  }
+]

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs><style>.pixel { shape-rendering: crispEdges; }</style></defs>
+  <g class="pixel">
+    <rect x="24" y="26" width="16" height="18" fill="#228B22"/>
+    <rect x="16" y="28" width="8" height="14" fill="#228B22"/>
+    <rect x="40" y="28" width="8" height="14" fill="#228B22"/>
+    <rect x="26" y="44" width="6" height="14" fill="#228B22"/>
+    <rect x="32" y="44" width="6" height="14" fill="#228B22"/>
+    <rect x="28" y="22" width="8" height="4" fill="#FFFFFF"/>
+    <rect x="26" y="14" width="12" height="12" fill="#FFFFFF"/>
+    <rect x="28" y="17" width="3" height="2" fill="#DC143C"/>
+    <rect x="35" y="17" width="3" height="2" fill="#DC143C"/>
+    <rect x="29" y="17" width="1" height="1" fill="#000000"/>
+    <rect x="36" y="17" width="1" height="1" fill="#000000"/>
+    <rect x="28" y="22" width="8" height="1" fill="#DC143C"/>
+  </g>
+</svg>
