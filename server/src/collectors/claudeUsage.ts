@@ -98,11 +98,12 @@ const EMAIL_IDENTITY: Record<string, AccountIdentity> = {
   'keita.urano2@gmail.com': { label: 'Claude2 / keita.urano2', rank: 1 },
 };
 // email がまだ取れていない（429 や初回失敗）ときの暫定。現状の実配置に合わせる:
-//   ~/.claude（local）= keita.urano2 / ~/.claude-urano2（oldbox）= keita.urano。
+//   ~/.claude（local）= keita.urano = Claude1 / ~/.claude-urano2（oldbox）= keita.urano2 = Claude2
+//   （2026-06-07 再検証で交差解消済）。
 // email が取れたら EMAIL_IDENTITY が優先されるので、配置が直ればこの fallback に依存しない。
 const KEY_FALLBACK: Record<AccountKey, AccountIdentity> = {
-  local: { label: 'Claude2 / keita.urano2', rank: 1 },
-  oldbox: { label: 'Claude1 / keita.urano', rank: 0 },
+  local: { label: 'Claude1 / keita.urano', rank: 0 },
+  oldbox: { label: 'Claude2 / keita.urano2', rank: 1 },
 };
 /** email（あれば一次）→ なければ key 実配置 fallback でアカウント識別を決める。 */
 function identityFor(email: string | undefined, key: AccountKey): AccountIdentity {
