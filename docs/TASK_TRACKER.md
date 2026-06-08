@@ -2377,8 +2377,8 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-212 |
 | タイトル | Claude使用量カード: urano2取得失敗時のフォールバック表記が Claude1/keita.urano に誤る（KEY_FALLBACK反転） |
 | 優先度 | P2 |
-| ステータス | TODO |
-| 担当 | dev（林/凜） |
+| ステータス | 実機反映済（2026-06-08 Son subagent 修正・server tsc 0・restart 反映。commit d434bb7）。Keita 確認待ち |
+| 担当 | Son（subagent 直）|
 | 詳細 | Keita 報告（2026-06-08）: 「Claude 使用量」画面で、本来 Claude2 / keita.urano2 の右カードが「Claude1 / keita.urano」と誤表記。<br>【根本原因（Son 調査）】`server/src/collectors/claudeUsage.ts` の `KEY_FALLBACK`（103-106行）が現在のcredential配置と逆になっている。reference memory（reference_claude_credential_crosswiring, 2026-06-07再検証）で交差は解消済み＝ `~/.claude`(key=local)=keita.urano=Claude1 / `~/.claude-urano2`(key=oldbox)=keita.urano2=Claude2。だが KEY_FALLBACK は local→Claude2、oldbox→Claude1 と旧（交差時）のまま。email取得成功時は EMAIL_IDENTITY が優先され正しいが、**urano2トークン失効で usage が 401 になり email を取れない**と `degraded()`→`identityFor(undefined,'oldbox')`→KEY_FALLBACK['oldbox']='Claude1 / keita.urano' に落ちる。結果、正常な local(=Claude1) と失効した oldbox(=誤Claude1) が両方Claude1表記になる（reboot後 lastGood キャッシュ空のため特に顕在）。 |
 | 受け入れ条件（DoD） | (1) `KEY_FALLBACK` を現配置に修正: local={label:'Claude1 / keita.urano', rank:0} / oldbox={label:'Claude2 / keita.urano2', rank:1}。併せて100-102行の stale コメントも実態に更新。(2) urano2 が 401/失効・429・初回失敗で email 未取得でも、右カードが「Claude2 / keita.urano2」表記・rank1（右側）に出ること。(3) email取得成功時の挙動は不変（EMAIL_IDENTITY優先）。(4) server tsc --noEmit 0エラー・build green。 |
 | 依存 | server/src/collectors/claudeUsage.ts。関連: MC-172（email基準ラベル化）、MC-161（urano2ローカル読み統一）、reference_claude_credential_crosswiring。 |
