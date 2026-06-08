@@ -795,6 +795,8 @@ function NewFolderButton({ onCreated }: { onCreated: () => void }) {
 
 export default function Deliverables() {
   const [showMinutesPane, setShowMinutesPane] = useState(false);
+  // 入口の「履歴」ボタンから開いたときだけ、作成画面で履歴モーダルを自動表示する。
+  const [openMinutesHistory, setOpenMinutesHistory] = useState(false);
   const { data, error, loading, fetchedAt, refetch } = useLiveResource<DeliverablesResponse>(
     '/api/deliverables',
   );
@@ -823,6 +825,7 @@ export default function Deliverables() {
       <MinutesPane
         id="deliverables"
         mode="deliverables"
+        openHistoryOnMount={openMinutesHistory}
         onGenerated={(relpath?: string) => {
           refetch();
           if (relpath) {
@@ -837,7 +840,10 @@ export default function Deliverables() {
             setOpenFolders(prev => new Set([...prev, ...toOpen]));
           }
         }}
-        onBack={() => setShowMinutesPane(false)}
+        onBack={() => {
+          setShowMinutesPane(false);
+          setOpenMinutesHistory(false);
+        }}
       />
     );
   }
@@ -861,14 +867,28 @@ export default function Deliverables() {
         fetchedAt={fetchedAt}
       />
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
-        <div className="mb-4">
+        <div className="mb-4 flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setShowMinutesPane(true)}
+            onClick={() => {
+              setOpenMinutesHistory(false);
+              setShowMinutesPane(true);
+            }}
             className="inline-flex items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             <NoteIcon width={14} height={14} />
             議事録を作成
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpenMinutesHistory(true);
+              setShowMinutesPane(true);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-4 py-1.5 text-xs text-text-muted transition-colors hover:border-accent/50 hover:text-text"
+            title="過去の議事録を読み込む"
+          >
+            🕘 履歴
           </button>
         </div>
         <UploadPanel />

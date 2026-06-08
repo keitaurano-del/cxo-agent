@@ -2454,12 +2454,14 @@ export function MinutesPane({
   onBack,
   mode = 'notebook',
   notebookId,
+  openHistoryOnMount = false,
 }: {
   id: string;
   onGenerated: (relpath?: string) => void;
   onBack?: () => void;
   mode?: 'notebook' | 'deliverables';
   notebookId?: string;
+  openHistoryOnMount?: boolean;
 }) {
   // deliverables モードでは notebook id を使わず /api/minutes/* を叩く。
   // notebook モードでは従来どおり /api/notebooks/:id/minutes/* を叩く。
@@ -2692,6 +2694,16 @@ export function MinutesPane({
       .catch(() => setHistoryError('ネットワークエラーで履歴を取得できませんでした。'))
       .finally(() => setHistoryLoading(false));
   }, [mode]);
+
+  // 入口（Deliverables）の「履歴」ボタンから開かれた場合、マウント後に一度だけ履歴モーダルを開く。
+  const historyOnMountDone = useRef(false);
+  useEffect(() => {
+    if (historyOnMountDone.current) return;
+    if (openHistoryOnMount && mode === 'deliverables') {
+      historyOnMountDone.current = true;
+      openHistory();
+    }
+  }, [openHistoryOnMount, mode, openHistory]);
 
   // 履歴 1 件を作成画面に読み込む（入力テキスト / スタイル / 形式 / 添付を復元）。
   const loadHistoryItem = useCallback(
@@ -3347,7 +3359,7 @@ export function MinutesPane({
               type="button"
               onClick={() => void generate()}
               disabled={generating || !inputText.trim() || selectedStyles.size === 0}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition-opacity disabled:opacity-40"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition-opacity disabled:opacity-40"
             >
               {generating ? (
                 <>
@@ -3361,18 +3373,6 @@ export function MinutesPane({
                 </>
               )}
             </button>
-            {/* 履歴: 過去の議事録を作成画面に読み込み直す（deliverables モードのみ）。 */}
-            {mode === 'deliverables' && (
-              <button
-                type="button"
-                onClick={openHistory}
-                disabled={generating}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-muted transition-colors hover:border-accent/50 hover:text-text disabled:opacity-40"
-                title="過去の議事録を読み込む"
-              >
-                🕘 履歴
-              </button>
-            )}
           </div>
 
           {/* 履歴から復元した既存添付（再生成で使う/外すを選べる。元フォルダは破壊しない）。 */}
