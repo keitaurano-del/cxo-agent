@@ -314,50 +314,6 @@ body {
   accent-color: var(--mc-accent);
 }
 
-/* ── 議事録プレビュー専用（mc-minutes-tight）─────────────────────────
-   Keita 指示: 縦余白を詰める／大トピック(h1,h2)前だけ余白を残す／文字色を全て黒(#000)に。
-   .mc-markdown は他ビュー(Narrative等)共用のため、議事録プレビューのみに限定したスコープで上書きする。
-   list-style(disc/decimal, MC-213)等の既存挙動は継承・維持。 */
-.mc-markdown.mc-minutes-tight {
-  line-height: 1.5;
-  color: #000;
-}
-/* 文字色を全て黒に統一 */
-.mc-markdown.mc-minutes-tight,
-.mc-markdown.mc-minutes-tight :is(h1, h2, h3, h4, h5, h6, p, li, th, td, blockquote, strong, em) {
-  color: #000;
-}
-/* 大トピック見出し(h1,h2)の前余白は残す（下は詰める） */
-.mc-markdown.mc-minutes-tight :is(h1, h2) {
-  margin-bottom: 0.25em;
-}
-.mc-markdown.mc-minutes-tight h1 {
-  margin-top: 0.7em;
-}
-.mc-markdown.mc-minutes-tight h2 {
-  margin-top: 1em;
-  padding-bottom: 0.2em;
-}
-/* 小見出し(h3,h4)・本文・箇条書きの縦余白は詰める */
-.mc-markdown.mc-minutes-tight :is(h3, h4) {
-  margin: 0.4em 0 0.2em;
-}
-.mc-markdown.mc-minutes-tight p {
-  margin: 0.2em 0;
-}
-.mc-markdown.mc-minutes-tight :is(ul, ol) {
-  margin: 0.2em 0;
-}
-.mc-markdown.mc-minutes-tight li {
-  margin: 0.1em 0;
-}
-.mc-markdown.mc-minutes-tight blockquote {
-  margin: 0.4em 0;
-}
-.mc-markdown.mc-minutes-tight table {
-  margin: 0.4em 0;
-}
-
 /* Obsidian callout（> [!info] 等）— 種別色付きブロック */
 .mc-callout {
   border-left: 4px solid var(--mc-callout-color, var(--mc-accent));
