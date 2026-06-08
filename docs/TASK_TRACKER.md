@@ -2262,7 +2262,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-197 |
 | タイトル | Vaultの中身確認して不要なものは削除してほしい。構成も考えてナンバリングとかも直してほしい |
 | 優先度 | P2 |
-| ステータス | TODO |
+| ステータス | IN_PROGRESS（2026-06-08 Son: Phase1=テスト/conflict残骸5件＋.broken を削除しvault push済(c34c05b)。Phase2以降=採番20-重複の解消(20-Projects→30-Projects案A)・masayoshi(68)/memory(14)重複の扱い・ルート運用docs集約 をKeita確認待ち） |
 | 担当 | 未定 |
 | 詳細 | 【Apollo投入】 Vaultの中身確認して不要なものは削除してほしい。構成も考えてナンバリングとかも直してほしい |
 | 更新日 | 2026-06-07 |
