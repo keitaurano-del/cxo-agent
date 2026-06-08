@@ -2550,3 +2550,20 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 依存 | server/src/lib/{notebookIndex,embedding,notebookClaude}.ts, notebookRouter.ts, web/src/views/Notebooks.tsx。関連 MC-202/182/183/184。設計書: docs/RAG_REDESIGN_2026-06-09.md。 |
 | 備考 | Keita 確認事項4点（主用途優先/外部API可否/ベクトルストア可否/着手順）を提案書§6に記載。合意後Sonが subagent 直で段階実装→自己検証→push。 |
 | 更新日 | 2026-06-09 |
+
+---
+
+### MC-224 — ドキュメント・テンプレート（様式）ライブラリ機能（用途別パターン化・推薦）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-224 |
+| タイトル | ドキュメント・テンプレート（様式）ライブラリ機能（用途別パターン化・推薦） |
+| 優先度 | P2 |
+| ステータス | DESIGN_REVIEW（2026-06-09 Son: 設計提案書 docs/TEMPLATE_LIBRARY_DESIGN_2026-06-09.md 作成。Keita 方針合意待ち） |
+| 担当 | Son（設計）→ 実装 subagent/dev 直 |
+| 詳細 | Keita「いろんな資料からドキュメンテーションの雛形を作り、用途毎に“この用途にはこのテンプレ”とパターン化する機能（RAGとは別）」。【着想の肝】Keita資産はコンサル/PM支援の標準成果物（PMBOK系様式・定義書/設計書/報告書/計画書/WBS、pptx360/xlsx285/docx30、PM人材育成支援/標準様式・標準フレームワーク）。既存の優れた様式を“用途タグ付きカタログ”に資産化＋推薦＋着手支援する機能。【パイプライン】取込/解析→分類(種別×工程)→テンプレ(型+記入ガイド)抽出→用途タグ→カタログ→推薦→利用(空様式/AI下書き)。【データモデル】Template{name,docType,useCases,process,format,structure,fieldGuidance,sourceDocs,blankFile}。議事録テンプレ(minutesPresets)の一般化版。Deliverables基盤流用。 |
+| 受け入れ条件（DoD） | 提案合意後Phaseごとに定義。Phase1: 標準様式を走査→AI分類(種別/用途/工程)提案→Keita確定→カタログ登録(メタ+出典+実ファイルリンク)、カタログUI(一覧/フィルタ)＋用途から探す(タグ推薦)＋記入ガイド。 |
+| 依存 | 新規（Deliverables/office変換/AI分類を流用）。設計書: docs/TEMPLATE_LIBRARY_DESIGN_2026-06-09.md。関連: minutesPresets(議事録テンプレ)の一般化。 |
+| 備考 | Keita確認5点（提案§8: 様式カタログ化(b)から/一次コーパス=標準様式/分類軸=工程×種別/共有範囲/着手順）。合意後Sonが Phase1 設計→subagent実装→検証→push。 |
+| 更新日 | 2026-06-09 |
