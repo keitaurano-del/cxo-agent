@@ -8,8 +8,6 @@
 //
 // バックエンド API は全て auth 配下で Cookie mc_token が same-origin 自動付与される。
 import { useCallback, useEffect, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { useLiveResource } from '../lib/useLiveData';
 import type {
   NotebookSummary,
@@ -161,6 +159,57 @@ function PreviewModal({
               title={`${file.name} プレビュー`}
               className="relative h-full w-full"
             />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── 議事録の生成ファイル用プレビューモーダル（PDF/Office=iframe / 画像=img / text・md=iframe）──
+// notebook / deliverables どちらのファイルURLでも使えるよう src を直接受け取る。
+
+function MinutesPreviewModal({
+  file,
+  src,
+  onClose,
+}: {
+  file: GeneratedFile;
+  src: string;
+  onClose: () => void;
+}) {
+  const asImage = isMinutesImageFile(file.ext);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-bg/90 p-2 backdrop-blur md:p-6"
+      role="dialog"
+      aria-modal
+      aria-label={`${file.name} プレビュー`}
+    >
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="truncate text-sm font-medium text-text" title={file.name}>
+          {file.name}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="shrink-0 rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
+          aria-label="プレビューを閉じる"
+        >
+          <CloseIcon width={18} height={18} />
+        </button>
+      </div>
+      <div className="relative flex-1 overflow-auto rounded-lg border border-border bg-surface">
+        {asImage ? (
+          <div className="flex h-full items-center justify-center p-2">
+            <img src={src} alt={file.name} className="max-h-full max-w-full rounded" />
+          </div>
+        ) : (
+          <>
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-text-faint">
+              プレビューを生成しています…
+            </div>
+            <iframe src={src} title={`${file.name} プレビュー`} className="relative h-full w-full" />
           </>
         )}
       </div>
@@ -1379,6 +1428,33 @@ function ArtifactsPane({
 
 type ExportFmt = 'docx' | 'xlsx' | 'pdf' | 'txt';
 
+// 生成APIが返した出力ファイル 1 件（議事録md + エクスポートした docx/pdf/xlsx/txt）。
+type GeneratedFile = {
+  name: string;
+  relpath: string;
+  sizeBytes: number;
+  ext: string; // '.docx' 等（先頭ドット付き）
+};
+
+function extOfName(name: string): string {
+  const i = name.lastIndexOf('.');
+  return i >= 0 ? name.slice(i).toLowerCase() : '';
+}
+
+// 議事録の成果物ファイルが inline プレビュー（iframe / img）で見られるか。
+// docx/xlsx/pptx はサーバ側で PDF 変換して inline=1 で返るためプレビュー可。
+const MINUTES_PREVIEWABLE_EXTS = new Set([
+  '.pdf', '.md', '.txt', '.csv',
+  '.docx', '.xlsx', '.pptx', '.doc', '.xls', '.ppt',
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg',
+]);
+function isMinutesFilePreviewable(ext: string): boolean {
+  return MINUTES_PREVIEWABLE_EXTS.has(ext.toLowerCase());
+}
+function isMinutesImageFile(ext: string): boolean {
+  return IMG_EXTS.has(ext.toLowerCase());
+}
+
 const MINUTES_STYLES = [
   {
     id: 'standard',
@@ -2292,12 +2368,12 @@ export function MinutesPane({
   const [selectedStyles, setSelectedStyles] = useState<Set<string>>(() => new Set(['standard']));
   const [previewStyleId, setPreviewStyleId] = useState<string | null>(null);
   const [selectedExportFormats, setSelectedExportFormats] = useState<Set<ExportFmt>>(() => new Set<ExportFmt>(['docx']));
-  // 生成後の編集用
+  // 生成後: 議事録mdの本文（ダウンロード・再生成のベースに使う。プレビュー描画には使わない）。
   const [generatedContent, setGeneratedContent] = useState<string | null>(null);
-  const [editedContent, setEditedContent] = useState<string>('');
-  const [savingEdit, setSavingEdit] = useState(false);
-  const [saveEditError, setSaveEditError] = useState<string | null>(null);
-  const [saveEditOk, setSaveEditOk] = useState(false);
+  // 生成後: その回に出力したファイル群（議事録md + docx/pdf/xlsx/txt）。
+  const [generatedFiles, setGeneratedFiles] = useState<GeneratedFile[]>([]);
+  // ファイルプレビュー対象（モーダル）。null で閉じる。
+  const [previewFile, setPreviewFile] = useState<GeneratedFile | null>(null);
   const [selectedType, setSelectedType] = useState<MinutesType>('decisions');
   const [selectedFormat, setSelectedFormat] = useState<MinutesFormat>('sections');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
@@ -2316,10 +2392,8 @@ export function MinutesPane({
   const [lastArtifact, setLastArtifact] = useState<{ relpath: string; name: string } | null>(null);
   // 入力に使った元ファイル（音声・テキスト・PDF など）。生成時に sources/ へ保存させる。
   const [sourceFiles, setSourceFiles] = useState<File[]>([]);
-  // 生成完了後はプレビュー表示モードに遷移し、ダウンロード直行をやめる。
+  // 生成完了後はファイル一覧表示モードに遷移し、ダウンロード直行をやめる。
   const [previewMode, setPreviewMode] = useState(false);
-  // プレビューの表示切替（rendered = マークダウンレンダリング / raw = 編集用テキスト）。
-  const [previewView, setPreviewView] = useState<'rendered' | 'raw'>('rendered');
   // フィードバック→再生成
   const [feedbackText, setFeedbackText] = useState('');
   const [regenerating, setRegenerating] = useState(false);
@@ -2480,7 +2554,7 @@ export function MinutesPane({
     async (
       styleId: string,
       opts?: { feedback?: string; previousContent?: string; attachSources?: boolean },
-    ): Promise<{ relpath: string; name: string } | null> => {
+    ): Promise<{ relpath: string; name: string; files: GeneratedFile[] } | null> => {
       const style = MINUTES_STYLES.find((s) => s.id === styleId);
       const preset = presets?.types.find((t) => t.type === (style?.type ?? selectedType));
       const tmpl = preset?.templates.find((t) => t.id === selectedTemplateId);
@@ -2533,7 +2607,7 @@ export function MinutesPane({
       if (!reader) throw new Error('no body');
       const decoder = new TextDecoder();
       let buf = '';
-      let result: { relpath: string; name: string } | null = null;
+      let result: { relpath: string; name: string; files: GeneratedFile[] } | null = null;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -2546,7 +2620,7 @@ export function MinutesPane({
             type?: string;
             pct?: number;
             ok?: boolean;
-            created?: Array<{ name?: string; relpath?: string }>;
+            created?: Array<{ name?: string; relpath?: string; sizeBytes?: number; ext?: string }>;
             report?: string;
             error?: string;
             exportErrors?: string[];
@@ -2565,9 +2639,19 @@ export function MinutesPane({
                 '一部の形式の出力に失敗しました：\n' + evt.exportErrors.join('\n'),
               );
             }
-            const first = evt.created?.[0];
-            if (first?.relpath && first?.name) {
-              result = { relpath: first.relpath, name: first.name };
+            const created = Array.isArray(evt.created) ? evt.created : [];
+            const files: GeneratedFile[] = created
+              .filter((f): f is { name: string; relpath: string; sizeBytes?: number; ext?: string } =>
+                !!f?.relpath && !!f?.name)
+              .map((f) => ({
+                name: f.name,
+                relpath: f.relpath,
+                sizeBytes: typeof f.sizeBytes === 'number' ? f.sizeBytes : 0,
+                ext: f.ext || extOfName(f.name),
+              }));
+            const first = files[0];
+            if (first) {
+              result = { relpath: first.relpath, name: first.name, files };
             }
           }
         }
@@ -2575,6 +2659,17 @@ export function MinutesPane({
       return result;
     },
     [minutesBase, inputText, selectedType, selectedFormat, selectedTemplateId, customInstructions, presets, sourceFiles],
+  );
+
+  // 生成済みファイルの取得URL。inline=1 なら docx/xlsx 等はサーバが PDF 変換して返す（プレビュー用）。
+  const minutesFileUrl = useCallback(
+    (relpath: string, inline: boolean): string => {
+      const q = inline ? '&inline=1' : '';
+      return mode === 'deliverables'
+        ? `/api/deliverables/file?path=${encodeURIComponent(relpath)}${q}`
+        : `/api/notebooks/${nbId}/file?path=${encodeURIComponent(relpath)}${q}`;
+    },
+    [mode, nbId],
   );
 
   const fetchArtifactContent = useCallback(
@@ -2599,13 +2694,12 @@ export function MinutesPane({
     setGenPct(0);
     setGenStage('生成を準備しています…');
     setGeneratedContent(null);
-    setEditedContent('');
-    setSaveEditOk(false);
+    setGeneratedFiles([]);
     setPreviewMode(false);
-    setPreviewView('rendered');
 
     const stylesArr = Array.from(selectedStyles);
-    let lastArt: { relpath: string; name: string } | null = null;
+    let lastArt: { relpath: string; name: string; files: GeneratedFile[] } | null = null;
+    const allFiles: GeneratedFile[] = [];
 
     try {
       for (let i = 0; i < stylesArr.length; i++) {
@@ -2620,6 +2714,7 @@ export function MinutesPane({
         if (art) {
           lastArt = art;
           setLastArtifact(art);
+          allFiles.push(...art.files);
         }
         if (i < stylesArr.length - 1) setGenPct(0); // reset for next
       }
@@ -2628,11 +2723,11 @@ export function MinutesPane({
       const n = stylesArr.length;
       setGenReport(n > 0 ? String(n) + ' 件の議事録を作成しました。' : '完了しました。');
 
-      // 生成後: 最後のファイルの内容を取得してプレビュー表示（ダウンロードはしない）。
+      // 生成後: 出力ファイル一覧を表示。ダウンロード・再生成用に議事録md本文も取得しておく。
       if (lastArt) {
+        setGeneratedFiles(allFiles);
         const content = await fetchArtifactContent(lastArt.relpath);
         setGeneratedContent(content);
-        setEditedContent(content);
         setPreviewMode(true);
       }
 
@@ -2654,31 +2749,29 @@ export function MinutesPane({
     setExportWarn(null);
     setGenPct(0);
     setGenStage('修正を反映して再生成しています…');
-    setSaveEditOk(false);
 
     const stylesArr = Array.from(selectedStyles);
     const styleId = stylesArr[0] ?? 'standard';
-    const base = editedContent || generatedContent || '';
+    const base = generatedContent || '';
 
     try {
       const art = await runSingleGenerate(styleId, { feedback: fb, previousContent: base });
       if (art) {
         setLastArtifact(art);
+        setGeneratedFiles(art.files);
         const content = await fetchArtifactContent(art.relpath);
         setGeneratedContent(content);
-        setEditedContent(content);
       }
       setGenStage('完了しました');
       setGenReport('修正を反映して再生成しました。');
       setFeedbackText('');
-      setPreviewView('rendered');
       onGenerated(art?.relpath ?? undefined);
     } catch (e) {
       setGenError(e instanceof Error ? e.message : 'ネットワークエラーで再生成できませんでした。');
     } finally {
       setRegenerating(false);
     }
-  }, [feedbackText, regenerating, generating, selectedStyles, editedContent, generatedContent, runSingleGenerate, fetchArtifactContent, onGenerated]);
+  }, [feedbackText, regenerating, generating, selectedStyles, generatedContent, runSingleGenerate, fetchArtifactContent, onGenerated]);
 
   // プレビューを閉じて新規作成のため入力フォームへ戻す。
   const backToForm = useCallback(() => {
@@ -2687,67 +2780,19 @@ export function MinutesPane({
     setGenPct(0);
     setGenStage('');
     setGeneratedContent(null);
-    setEditedContent('');
+    setGeneratedFiles([]);
+    setPreviewFile(null);
     setLastArtifact(null);
     setFeedbackText('');
     setInputText('');
     setSourceFiles([]);
-    setSaveEditOk(false);
   }, []);
-
-  const saveEdit = useCallback(() => {
-    if (!lastArtifact || savingEdit) return;
-    setSavingEdit(true);
-    setSaveEditError(null);
-    setSaveEditOk(false);
-    // deliverables モードは PUT /api/deliverables/file で上書き保存する。
-    if (mode === 'deliverables') {
-      fetch('/api/deliverables/file', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: lastArtifact.relpath, content: editedContent }),
-      })
-        .then(async (res) => {
-          if (res.ok) {
-            setSaveEditOk(true);
-            setGeneratedContent(editedContent);
-            onGenerated(lastArtifact.relpath);
-          } else {
-            const body = (await res.json().catch(() => ({}))) as { error?: string };
-            setSaveEditError(body.error || '保存に失敗しました。');
-          }
-        })
-        .catch(() => setSaveEditError('ネットワークエラーで保存できませんでした。'))
-        .finally(() => setSavingEdit(false));
-      return;
-    }
-    setSavingEdit(true);
-    setSaveEditError(null);
-    setSaveEditOk(false);
-    fetch(`/api/notebooks/${nbId}/artifacts`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ relpath: lastArtifact.relpath, content: editedContent }),
-    })
-      .then(async (res) => {
-        if (res.ok) {
-          setSaveEditOk(true);
-          setGeneratedContent(editedContent);
-          onGenerated(lastArtifact.relpath);
-        } else {
-          const body = (await res.json().catch(() => ({}))) as { error?: string };
-          setSaveEditError(body.error || '保存に失敗しました。');
-        }
-      })
-      .catch(() => setSaveEditError('ネットワークエラーで保存できませんでした。'))
-      .finally(() => setSavingEdit(false));
-  }, [mode, nbId, lastArtifact, editedContent, savingEdit, onGenerated]);
 
   // 生成後プレビューから事前指定フォーマットを直接ダウンロードする。
   // ファイル名は YYYYMMDD_議事録（生成日基準・ゼロ埋め）。拡張子はサーバが付与する。
   const downloadFormat = useCallback((fmt: ExportFmt) => {
     if (downloadingFmt) return;
-    const content = editedContent || generatedContent;
+    const content = generatedContent;
     if (!content) return;
     setDownloadingFmt(fmt);
     setDownloadError(null);
@@ -2785,7 +2830,7 @@ export function MinutesPane({
         setDownloadError(e instanceof Error ? e.message : 'ネットワークエラーでダウンロードできませんでした。'),
       )
       .finally(() => setDownloadingFmt(null));
-  }, [downloadingFmt, editedContent, generatedContent]);
+  }, [downloadingFmt, generatedContent]);
 
   const savePattern = useCallback(() => {
     if (!patternName.trim() || savingPattern) return;
@@ -2827,6 +2872,13 @@ export function MinutesPane({
           onClose={() => setShowDeliverablePicker(false)}
           onPick={(df) => void handleDeliverablePick(df)}
           picking={loadingFromDeliverable}
+        />
+      )}
+      {previewFile && (
+        <MinutesPreviewModal
+          file={previewFile}
+          src={minutesFileUrl(previewFile.relpath, true)}
+          onClose={() => setPreviewFile(null)}
         />
       )}
       <div className="border-b border-border px-3 py-2 flex items-center gap-2">
@@ -3167,71 +3219,63 @@ export function MinutesPane({
                 </button>
               </div>
 
-              {/* プレビュー（レンダリング / 編集 切替） */}
-              <div className="flex flex-col overflow-hidden rounded-lg border border-border bg-surface">
-                <div className="flex items-center gap-1 border-b border-border bg-surface-2/60 px-2 py-1.5">
-                  <span className="mr-auto text-[11px] font-semibold uppercase tracking-wide text-text-faint">
-                    プレビュー
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPreviewView('rendered')}
-                    className={
-                      'rounded-full px-2.5 py-0.5 text-[11px] transition-colors ' +
-                      (previewView === 'rendered'
-                        ? 'bg-accent font-semibold text-bg'
-                        : 'text-text-muted hover:text-text')
-                    }
-                  >
-                    表示
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPreviewView('raw')}
-                    className={
-                      'rounded-full px-2.5 py-0.5 text-[11px] transition-colors ' +
-                      (previewView === 'raw'
-                        ? 'bg-accent font-semibold text-bg'
-                        : 'text-text-muted hover:text-text')
-                    }
-                  >
-                    編集
-                  </button>
+              {/* 生成されたファイル一覧（各ファイルをプレビュー / ダウンロード） */}
+              {generatedFiles.length > 0 && (
+                <div className="flex flex-col overflow-hidden rounded-lg border border-border bg-surface">
+                  <div className="border-b border-border bg-surface-2/60 px-2 py-1.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-text-faint">
+                      生成されたファイル
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1.5 p-2">
+                    {generatedFiles.map((f) => {
+                      const previewable = isMinutesFilePreviewable(f.ext);
+                      return (
+                        <div
+                          key={f.relpath}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-border bg-bg p-2.5"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="shrink-0 text-text-faint">
+                              <FileIcon width={18} height={18} />
+                            </span>
+                            <div className="min-w-0">
+                              <div className="truncate text-sm text-text" title={f.name}>
+                                {f.name}
+                              </div>
+                              {f.sizeBytes > 0 && (
+                                <div className="text-[11px] text-text-faint">
+                                  {humanReadableSize(f.sizeBytes)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-0.5">
+                            {previewable && (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewFile(f)}
+                                className="rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
+                                aria-label={`${f.name} をプレビュー`}
+                              >
+                                <EyeIcon width={15} height={15} />
+                              </button>
+                            )}
+                            <a
+                              href={minutesFileUrl(f.relpath, false)}
+                              download={f.name}
+                              className="rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
+                              aria-label={`${f.name} をダウンロード`}
+                            >
+                              <DownloadIcon width={15} height={15} />
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-
-                {previewView === 'rendered' ? (
-                  <div
-                    className="mc-markdown mc-minutes-tight overflow-auto px-3 py-3"
-                    style={{ maxHeight: 420, overflowWrap: 'anywhere', wordBreak: 'break-word' }}
-                  >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {editedContent || generatedContent || ''}
-                    </ReactMarkdown>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2 p-2">
-                    <textarea
-                      value={editedContent}
-                      onChange={(e) => { setEditedContent(e.target.value); setSaveEditOk(false); }}
-                      rows={14}
-                      className="w-full resize-y whitespace-pre-wrap break-words rounded border border-border bg-bg px-2 py-1.5 text-xs font-mono leading-relaxed text-text focus:border-accent focus:outline-none"
-                      style={{ wordBreak: 'break-word' }}
-                    />
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={saveEdit}
-                        disabled={savingEdit || editedContent === generatedContent}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-bg disabled:opacity-50"
-                      >
-                        {savingEdit ? <><Spinner />保存中…</> : '編集を保存'}
-                      </button>
-                      {saveEditOk && <span className="text-[11px]" style={{ color: 'var(--mc-active)' }}>保存しました</span>}
-                      {saveEditError && <span className="text-[11px]" style={{ color: 'var(--mc-stalled)' }}>{saveEditError}</span>}
-                    </div>
-                  </div>
-                )}
-              </div>
+              )}
 
               {/* ダウンロード（事前指定フォーマット） */}
               {selectedExportFormats.size > 0 && (
