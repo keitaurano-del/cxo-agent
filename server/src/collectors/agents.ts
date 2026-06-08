@@ -12,13 +12,19 @@ import {
   AGENT_COLLECT_TTL_MS,
   AGENT_SCAN_MAX_AGE_MS,
 } from '../config.js';
-import { readJsonl, lastActivity, firstText, type JsonlLine } from '../lib/jsonl.js';
+import {
+  readJsonl,
+  readJsonlAsync,
+  lastActivityAsync,
+  firstText,
+  type JsonlLine,
+} from '../lib/jsonl.js';
 import { projectFromPath, projectLabel, type ProjectName } from '../lib/projectMap.js';
 import { agentStatus, type AgentStatus } from '../lib/stall.js';
 import { redactText } from '../lib/redact.js';
 import {
   AgentTypeIndex,
-  indexParentSession,
+  indexParentSessionAsync,
   type AgentSpec,
 } from '../lib/agentMap.js';
 
@@ -156,22 +162,24 @@ let cachedIndexAt = 0;
  * 古い親は内容読み取りをスキップして走査を激減させる（直近に動いたエージェントのラベル付けに
  * 必要な親は閾値内に収まるため live のラベルは維持される）。
  */
-function buildIndex(parents: ParentRef[]): AgentTypeIndex {
+async function buildIndex(parents: ParentRef[]): Promise<AgentTypeIndex> {
   const now = Date.now();
   if (cachedIndex && now - cachedIndexAt < AGENT_COLLECT_TTL_MS) return cachedIndex;
   const idx = new AgentTypeIndex();
   for (const f of parents) {
     if (now - f.mtimeMs >= AGENT_SCAN_MAX_AGE_MS) continue; // 古い親は読まない（ブロック時間短縮の本丸）
-    indexParentSession(f.path, idx);
+    // 1 ファイルずつ await し、ファイル間で必ずイベントループに制御を返す（本丸）。
+    // これで数百MB規模の親セッション走査中もターミナル/他 API が処理される。
+    await indexParentSessionAsync(f.path, idx);
   }
   cachedIndex = idx;
   cachedIndexAt = now;
   return idx;
 }
 
-/** subagent ファイル 1 本を解析して AgentSummary に。 */
-function analyzeSubagent(filePath: string, index: AgentTypeIndex): AgentSummary {
-  const lines = readJsonl(filePath);
+/** subagent ファイル 1 本を解析して AgentSummary に（非同期読み取り）。 */
+async function analyzeSubagent(filePath: string, index: AgentTypeIndex): Promise<AgentSummary> {
+  const lines = await readJsonlAsync(filePath);
   const head = lines[0];
   const cwd = head?.cwd;
   const gitBranch = head?.gitBranch;
@@ -198,7 +206,7 @@ function analyzeSubagent(filePath: string, index: AgentTypeIndex): AgentSummary 
   }
 
   const hadAnyActivity = lines.length > 0;
-  const last = lastActivity(filePath, lines);
+  const last = await lastActivityAsync(filePath, lines);
   const status = agentStatus({
     lastActivity: last,
     hasResult: hasResultLine(lines),
@@ -234,23 +242,67 @@ function analyzeSubagent(filePath: string, index: AgentTypeIndex): AgentSummary 
 // 再フェッチ間隔とも整合）。collectAgentGroups / feed 等の依存関数も同キャッシュの恩恵を受ける。
 let cachedAgents: AgentSummary[] | null = null;
 let cachedAgentsAt = 0;
+// 背景リフレッシュの二重起動ガード（fire-and-forget のため戻り値は使わない）。
+let agentsInflight: Promise<void> | null = null;
 
-function computeAgents(): AgentSummary[] {
+/**
+ * 実スキャン本体（非同期）。重いファイル読み取りは fs.promises + ファイル間 await で行い、
+ * スキャン中もイベントループに制御を返す（ターミナル/他 API が固まらない）。
+ * walkJsonl のディレクトリ走査(readdir/stat)は安価なので同期のまま。
+ * 出力は従来の同期版 computeAgents と同一内容（同フィールド・同ソート）。
+ */
+async function computeAgentsAsync(): Promise<AgentSummary[]> {
   if (!existsSync(CLAUDE_PROJECTS_DIR)) return [];
   const walk = walkJsonl(CLAUDE_PROJECTS_DIR, { parents: [], subagents: [] });
-  const index = buildIndex(walk.parents);
-  const out = walk.subagents.map((f) => analyzeSubagent(f, index));
+  const index = await buildIndex(walk.parents);
+  const out: AgentSummary[] = [];
+  // subagent も 1 本ずつ await で読み、ファイル間でイベントループに制御を返す。
+  for (const f of walk.subagents) {
+    out.push(await analyzeSubagent(f, index));
+  }
   out.sort((a, b) => Date.parse(b.lastActivity) - Date.parse(a.lastActivity));
   return out;
 }
 
-/** 全 subagent の稼働サマリ一覧（AGENT_COLLECT_TTL_MS キャッシュ）。最終活動の新しい順。 */
+/**
+ * 背景リフレッシュを起動する（fire-and-forget・inflight ガードで二重起動防止）。
+ * 完了時にキャッシュをアトミックに入れ替える。リクエスト経路はこの Promise を await しない。
+ */
+function refreshAgentsInBackground(): void {
+  if (agentsInflight) return; // 既に走っているなら二重起動しない。
+  agentsInflight = (async () => {
+    try {
+      const fresh = await computeAgentsAsync();
+      // アトミック入れ替え（参照差し替えのみ。読み手は常に一貫した配列を見る）。
+      cachedAgents = fresh;
+      cachedAgentsAt = Date.now();
+    } catch {
+      // 失敗時はキャッシュを更新せず、次回ポーリングで再試行する。
+    } finally {
+      agentsInflight = null;
+    }
+  })();
+  // 意図的に await しない（fire-and-forget）。
+}
+
+/**
+ * 全 subagent の稼働サマリ一覧。最終活動の新しい順。
+ *
+ * 公開 IF は同期のまま（呼び出し側多数を壊さない）。stale-while-revalidate:
+ *   - キャッシュが新鮮ならそのまま返す。
+ *   - TTL 切れなら、前回キャッシュ（無ければ空配列）を即返しつつ、背景で非同期リフレッシュを起動する。
+ *     新データは次回ポーリングで反映される。これによりリクエスト経路で重い同期 fs 走査が走らず、
+ *     イベントループをブロックしない（= ターミナル固まり解消）。
+ */
 export function collectAgents(): AgentSummary[] {
   const now = Date.now();
-  if (cachedAgents && now - cachedAgentsAt < AGENT_COLLECT_TTL_MS) return cachedAgents;
-  cachedAgents = computeAgents();
-  cachedAgentsAt = now;
-  return cachedAgents;
+  const fresh = cachedAgents !== null && now - cachedAgentsAt < AGENT_COLLECT_TTL_MS;
+  if (!fresh) {
+    // TTL 切れ（初回含む）→ 背景リフレッシュを起動。リクエストはブロックしない。
+    refreshAgentsInBackground();
+  }
+  // 前回キャッシュを即返す（初回でまだ無ければ空配列）。
+  return cachedAgents ?? [];
 }
 
 // ─── 人格別の集約（MC-88）────────────────────────────────

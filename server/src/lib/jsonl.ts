@@ -5,6 +5,7 @@
 // 必要な行だけ拾うようにして無駄なパースを避ける。
 
 import { readFileSync, statSync } from 'node:fs';
+import { readFile as readFileAsync, stat as statAsync } from 'node:fs/promises';
 
 export interface JsonlLine {
   type?: string;
@@ -49,6 +50,30 @@ export function readJsonl(filePath: string): JsonlLine[] {
 }
 
 /**
+ * readJsonl の非同期版（fs.promises.readFile）。
+ * 重い親セッション群の背景スキャンで、ファイル間にイベントループへ制御を返すために使う。
+ * パース結果は readJsonl と同一（壊れた行・空行はスキップ）。
+ */
+export async function readJsonlAsync(filePath: string): Promise<JsonlLine[]> {
+  let raw: string;
+  try {
+    raw = await readFileAsync(filePath, 'utf-8');
+  } catch {
+    return [];
+  }
+  const out: JsonlLine[] = [];
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      out.push(JSON.parse(line) as JsonlLine);
+    } catch {
+      // 壊れた行は無視
+    }
+  }
+  return out;
+}
+
+/**
  * 最終活動時刻を ISO 文字列で返す。
  * 末尾行から遡って最初に見つかった timestamp を採用。
  * どの行にも timestamp が無ければ mtime をフォールバック。
@@ -61,6 +86,22 @@ export function lastActivity(filePath: string, lines?: JsonlLine[]): string {
   }
   try {
     return statSync(filePath).mtime.toISOString();
+  } catch {
+    return new Date(0).toISOString();
+  }
+}
+
+/**
+ * lastActivity の非同期版。lines に timestamp が無いときの mtime フォールバックを
+ * fs.promises.stat で行い、背景スキャンで同期 stat を避ける。
+ */
+export async function lastActivityAsync(filePath: string, lines: JsonlLine[]): Promise<string> {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const ts = lines[i].timestamp;
+    if (ts) return ts;
+  }
+  try {
+    return (await statAsync(filePath)).mtime.toISOString();
   } catch {
     return new Date(0).toISOString();
   }

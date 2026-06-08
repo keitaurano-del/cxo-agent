@@ -11,7 +11,7 @@
 //
 // 注意: grep に依存せず、すべて Node の fs 読み込みで解析する（ugrep エイリアス問題回避）。
 
-import { readJsonl } from './jsonl.js';
+import { readJsonl, readJsonlAsync } from './jsonl.js';
 
 export interface AgentSpec {
   subagentType: string;
@@ -66,9 +66,8 @@ export class AgentTypeIndex {
 
 const AGENT_TOOL_NAMES = new Set(['Agent', 'Task']);
 
-/** 1 つの親セッションファイルから Agent tool_use を抽出して index に投入。 */
-export function indexParentSession(filePath: string, index: AgentTypeIndex): void {
-  const lines = readJsonl(filePath);
+/** lines（パース済み）から Agent tool_use を抽出して index に投入する共通ロジック。 */
+function indexLines(lines: ReturnType<typeof readJsonl>, index: AgentTypeIndex): void {
   for (const line of lines) {
     if (line.type !== 'assistant') continue;
     const content = line.message?.content;
@@ -91,4 +90,20 @@ export function indexParentSession(filePath: string, index: AgentTypeIndex): voi
       }
     }
   }
+}
+
+/** 1 つの親セッションファイルから Agent tool_use を抽出して index に投入（同期）。 */
+export function indexParentSession(filePath: string, index: AgentTypeIndex): void {
+  indexLines(readJsonl(filePath), index);
+}
+
+/**
+ * indexParentSession の非同期版（fs.promises.readFile）。
+ * 背景スキャンで親セッション群をファイル間に await しながら読むために使う。結果は同期版と同一。
+ */
+export async function indexParentSessionAsync(
+  filePath: string,
+  index: AgentTypeIndex,
+): Promise<void> {
+  indexLines(await readJsonlAsync(filePath), index);
 }
