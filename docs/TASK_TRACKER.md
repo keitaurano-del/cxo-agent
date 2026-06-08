@@ -2316,12 +2316,13 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 
 ---
 
-### MC-209 — Apollo 公開URLを無料の固定URL化（Cloudflare Named Tunnel）
+### MC-210 — Apollo 公開URLを無料の固定URL化（Cloudflare Named Tunnel）
 
 | フィールド | 値 |
 |---|---|
-| ID | MC-209 |
+| ID | MC-210 |
 | タイトル | Apollo 公開URLを無料の固定URL化（Cloudflare Named Tunnel） |
+| 備考2 | 採番訂正（2026-06-08 棚町）: 旧 MC-209 が議事録DL（Son 起票・git commit 9d987f4 で MC-209 確定）と二重採番だったため、本カードを MC-210 に振り直し。[[reference-task-id-numbering]] 参照。 |
 | 優先度 | P2 |
 | ステータス | TODO（Keita 判断待ち：Cloudflare 登録ドメインの有無） |
 | 担当 | apollo番人 / dev（インフラ） |
@@ -2346,4 +2347,38 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 受け入れ条件（DoD） | (1) MinutesPane の生成後プレビュー領域に、事前指定した形式（`selectedExportFormats`、複数可）でのダウンロードボタンを追加。クリックで `POST /api/minutes/export` を呼び（content = 編集後 or 生成内容）、ブラウザ保存。(2) ダウンロード名が `YYYYMMDD_議事録.<ext>`（日付は生成日。複数形式選択時は拡張子で区別、同名衝突時の扱いも定義）。(3) Deliverables へ保存される議事録ファイル名も可能なら `YYYYMMDD_議事録` 系に揃える（範囲が広ければ DL名優先で、保存名整合は別途相談）。(4) docx/xlsx/pdf/txt すべてで実DL確認。(5) web/server tsc --noEmit 0エラー・build green。 |
 | 依存 | MinutesPane（web/src/views/Notebooks.tsx）／minutesRouter.ts（/export）。関連: MC-207・MC-208（議事録エクスポート整備の一連）。MC-202 の議事録UI分離方針と衝突しないか要確認（議事録機能の扱い）。 |
 | 備考 | 実装は dev 委譲。「事前に指定したフォーマット」= 作成画面で選んだエクスポート形式（docx等）の解釈。日付の基準（会議日 or 生成日）に迷えば生成日で実装し Son 経由で Keita 確認。push/restart は Masayoshi 検証ゲート。Son は調査・起票まで。 |
+| 更新日 | 2026-06-08 |
+
+---
+
+### MC-211 — Apollo collector の空TODO誤発火を止める（status を表4列目で判定／DONE行 note の "TODO" 文字列を拾わせない）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-211 |
+| タイトル | Apollo collector の空TODO誤発火を止める（status 判定を表4列目に統一） |
+| 優先度 | P1 |
+| ステータス | TODO |
+| 担当 | dev-apollo（ソラ） |
+| 詳細 | 林・レン・ケンの診断（2026-06-08、4〜5巡確定）: イベントルーター/Apollo collector が `cxo-agent` の TASK_TRACKER から「- TODO:（空）」を未着手タスクとして繰り返し検知し、アサイン先ゼロのゴーストがチャットに無限ループで湧く。<br>【根本原因】collector が status を判定する際、DONE 行や詳細セクションの note 本文中に出現する "TODO" という文字列（例: 「IN_PROGRESS→DONE」「TODO→DONE」等の履歴記述や受け入れ条件文）を status として誤って拾っている。実体のカードは表4列目（ステータス列）に正規の値を持つため、そこを正本にすれば誤発火しない。 |
+| 受け入れ条件（DoD） | (1) collector の status 抽出を「カード表の4列目（ステータス列）」または明示の `| ステータス | ... |` 行のみから取得する方式に統一し、note/詳細本文中の "TODO"/"DONE" 文字列を status として拾わない。(2) 空タイトル・空ステータスのゴースト行は検知対象から除外。(3) 現行の cxo-agent TASK_TRACKER（MC-206〜211 含む）を食わせて「- TODO:（空）」由来の未着手検知が0件になることを確認。(4) 正規 TODO カード（実体あり）は従来どおり検知される（非退行）。(5) server tsc green・restart 後に誤発火イベントが再発しないことを確認。 |
+| 依存 | Apollo collector（server/src/collectors/*）。関連: 本件と並走の実体タスクは MC-206/207/208/MC-209/MC-210 のみ。 |
+| 備考 | これが本丸。空TODOへの個別アサインは無効（検証対象が存在しない）。実装は dev-apollo（ソラ）。push/restart は Apollo 領分の手順に従う。台帳は task-manager（棚町）管轄。 |
+| 更新日 | 2026-06-08 |
+
+---
+
+### MC-212 — Claude使用量カード: urano2取得失敗時のフォールバック表記が Claude1/keita.urano に誤る（KEY_FALLBACK反転）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-212 |
+| タイトル | Claude使用量カード: urano2取得失敗時のフォールバック表記が Claude1/keita.urano に誤る（KEY_FALLBACK反転） |
+| 優先度 | P2 |
+| ステータス | TODO |
+| 担当 | dev（林/凜） |
+| 詳細 | Keita 報告（2026-06-08）: 「Claude 使用量」画面で、本来 Claude2 / keita.urano2 の右カードが「Claude1 / keita.urano」と誤表記。<br>【根本原因（Son 調査）】`server/src/collectors/claudeUsage.ts` の `KEY_FALLBACK`（103-106行）が現在のcredential配置と逆になっている。reference memory（reference_claude_credential_crosswiring, 2026-06-07再検証）で交差は解消済み＝ `~/.claude`(key=local)=keita.urano=Claude1 / `~/.claude-urano2`(key=oldbox)=keita.urano2=Claude2。だが KEY_FALLBACK は local→Claude2、oldbox→Claude1 と旧（交差時）のまま。email取得成功時は EMAIL_IDENTITY が優先され正しいが、**urano2トークン失効で usage が 401 になり email を取れない**と `degraded()`→`identityFor(undefined,'oldbox')`→KEY_FALLBACK['oldbox']='Claude1 / keita.urano' に落ちる。結果、正常な local(=Claude1) と失効した oldbox(=誤Claude1) が両方Claude1表記になる（reboot後 lastGood キャッシュ空のため特に顕在）。 |
+| 受け入れ条件（DoD） | (1) `KEY_FALLBACK` を現配置に修正: local={label:'Claude1 / keita.urano', rank:0} / oldbox={label:'Claude2 / keita.urano2', rank:1}。併せて100-102行の stale コメントも実態に更新。(2) urano2 が 401/失効・429・初回失敗で email 未取得でも、右カードが「Claude2 / keita.urano2」表記・rank1（右側）に出ること。(3) email取得成功時の挙動は不変（EMAIL_IDENTITY優先）。(4) server tsc --noEmit 0エラー・build green。 |
+| 依存 | server/src/collectors/claudeUsage.ts。関連: MC-172（email基準ラベル化）、MC-161（urano2ローカル読み統一）、reference_claude_credential_crosswiring。 |
+| 備考 | 別件のトークン失効（urano2 OAuth refresh が console.anthropic.com で連続429・00:43JST失効）はこの表記バグとは独立のops事象。失効が解消すれば値は復帰するが、表記バグは失効と無関係に修正要。push/restart は Masayoshi 検証ゲート。Son は調査・起票まで。 |
 | 更新日 | 2026-06-08 |
