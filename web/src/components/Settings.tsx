@@ -1,5 +1,5 @@
 // 設定ダイアログ（MC-178 フォントサイズ等）
-import { type FontSizeScale, useFontSize } from '../lib/useFontSize';
+import { FONT_PX_MAX, FONT_PX_MIN, FONT_PX_STEP, useFontSize } from '../lib/useFontSize';
 import { CloseIcon } from './icons';
 
 interface SettingsProps {
@@ -8,7 +8,7 @@ interface SettingsProps {
 }
 
 export default function Settings({ open, onClose }: SettingsProps) {
-  const { fontSize, changeFontSize } = useFontSize();
+  const { fontPx, changeFontPx } = useFontSize();
 
   if (!open) return null;
 
@@ -43,28 +43,49 @@ export default function Settings({ open, onClose }: SettingsProps) {
         {/* フォントサイズ設定セクション */}
         <div className="space-y-4">
           <div>
-            <h3 className="mb-3 text-sm font-semibold text-text">フォントサイズ</h3>
-            <div className="space-y-2">
-              {(['small', 'medium', 'large'] as const).map((size) => {
-                const labels: Record<FontSizeScale, string> = {
-                  small: '小 (90%)',
-                  medium: '中 (100%)',
-                  large: '大 (110%)',
-                };
-                return (
-                  <label key={size} className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="font-size"
-                      value={size}
-                      checked={fontSize === size}
-                      onChange={(e) => changeFontSize(e.target.value as FontSizeScale)}
-                      className="h-4 w-4 cursor-pointer accent-accent"
-                    />
-                    <span className="text-sm text-text-muted">{labels[size]}</span>
-                  </label>
-                );
-              })}
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-text">フォントサイズ</h3>
+              <span className="text-sm tabular-nums text-text-muted">文字サイズ: {fontPx}px</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => changeFontPx(fontPx - FONT_PX_STEP)}
+                disabled={fontPx <= FONT_PX_MIN}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-text-muted hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="文字サイズを小さく"
+              >
+                −
+              </button>
+              <input
+                type="range"
+                min={FONT_PX_MIN}
+                max={FONT_PX_MAX}
+                step={FONT_PX_STEP}
+                value={fontPx}
+                onChange={(e) => changeFontPx(Number(e.target.value))}
+                className="h-4 flex-1 cursor-pointer accent-accent"
+                aria-label="文字サイズ (px)"
+              />
+              <button
+                type="button"
+                onClick={() => changeFontPx(fontPx + FONT_PX_STEP)}
+                disabled={fontPx >= FONT_PX_MAX}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-text-muted hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="文字サイズを大きく"
+              >
+                +
+              </button>
+              <input
+                type="number"
+                min={FONT_PX_MIN}
+                max={FONT_PX_MAX}
+                step={FONT_PX_STEP}
+                value={fontPx}
+                onChange={(e) => changeFontPx(Number(e.target.value))}
+                className="w-16 shrink-0 rounded border border-border bg-surface-2 px-2 py-1 text-sm text-text tabular-nums"
+                aria-label="文字サイズ (px) を入力"
+              />
             </div>
             <p className="mt-3 text-xs text-text-faint">
               ダッシュボード全体の文字サイズを変更します。

@@ -328,7 +328,7 @@ export default function App() {
   const approvalCount = approvals?.total ?? 0;
 
   // フォントサイズ設定（MC-178）
-  const { fontSize } = useFontSize();
+  const { fontPx } = useFontSize();
   const [showSettings, setShowSettings] = useState(false);
 
   const pathnameRef = useRef(pathname);
@@ -442,7 +442,7 @@ export default function App() {
   return (
     <LiveContext.Provider value={{ ticks }}>
       <UploadProvider>
-        <div className="flex h-dvh overflow-hidden bg-bg text-text" style={{ '--font-scale': fontSize === 'small' ? '0.9' : fontSize === 'large' ? '1.1' : '1' } as any}>
+        <div className="flex h-dvh overflow-hidden bg-bg text-text" style={{ '--font-scale': String(fontPx / 16) } as any}>
           <Sidebar
             connected={connected}
             badges={badges}
