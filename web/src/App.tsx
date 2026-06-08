@@ -337,21 +337,21 @@ export default function App() {
   // ページ別バッジ: SSE update イベントの type → nav path にマッピング
   // ページを訪問したら badge.{path} を 0 にリセットする
   // tasks バッジは不要（MC-159）
+  // エージェントの通知は出さない（Keita 指示）。agents 種別は SSE で流れ続けてよいが
+  // ホーム '/' バッジには使わない。vault/deliverables のバッジ挙動は不変。
   const NAV_BADGE_MAP: Record<string, string> = {
     vault: '/vault',
     deliverables: '/deliverables',
-    agents: '/',
   };
   const loadBadge = (path: string) => parseInt(localStorage.getItem(`badge.${path}`) ?? '0', 10) || 0;
   const [navBadges, setNavBadges] = useState<Record<string, number>>(() => ({
     '/vault': loadBadge('/vault'),
     '/deliverables': loadBadge('/deliverables'),
-    '/': loadBadge('/'),
   }));
 
   // ページ訪問時にそのバッジをリセット
   useEffect(() => {
-    const path = pathname === '/' || pathname.startsWith('/feed') || pathname.startsWith('/agents') || pathname.startsWith('/today') ? '/' : pathname;
+    const path = pathname;
     if (navBadges[path] > 0) {
       localStorage.setItem(`badge.${path}`, '0');
       setNavBadges((prev) => ({ ...prev, [path]: 0 }));
@@ -368,9 +368,7 @@ export default function App() {
           const navPath = NAV_BADGE_MAP[type];
           // 現在そのページを見ていたら増やさない
           const cur = pathnameRef.current;
-          const isActive = !navPath ? false : navPath === '/'
-            ? cur === '/' || cur.startsWith('/feed') || cur.startsWith('/agents') || cur.startsWith('/today')
-            : cur.startsWith(navPath);
+          const isActive = navPath ? cur.startsWith(navPath) : false;
 
           if (navPath && !isActive) {
             setNavBadges((prev) => {
