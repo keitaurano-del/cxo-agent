@@ -2305,7 +2305,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-208 |
 | タイトル | 議事録テンプレート出力で議題一覧の番号が脱落（順序付きリスト未対応） |
 | 優先度 | P1 |
-| ステータス | REVIEW（2026-06-08 Son subagent 実装完了・build green・実生成で番号表示確認。commit 0f74ffe。Masayoshi 検証ゲート＋Keita 実機確認待ち） |
+| ステータス | 実機反映済（2026-06-08 14:10 mission-control restart で適用。Son がライブAPIで docx=議題一覧に 1./2.・保留事項に中点・ファイル名 20260608_議事録.docx を実証。origin push のみ Masayoshi ゲート残）。Keita 実機確認待ち（要ハードリロード） |
 | 実装エビデンス | minutesExport.ts の docx `case 'list'`（314行付近）と xlsx レンダラ（508行付近）で `block.ordered===true` 時に連番「1. 2.」描画（indentレベル毎カウンタ）、false は従来の中点「・」。実生成で docx=議題一覧に `1. /2. `・決定事項は `・`、xlsx sharedStrings に `1. （議題1）` 等を確認。server tsc --noEmit EXIT 0。PDF は別経路（buildPdf=marked→HTML→chromium）で `<ol>` により元から番号表示＝影響なし。txt（buildText）は別ロジックで `1. 1.` の軽微な二重番号が残るが既存挙動・既定形式でない・本件スコープ外（必要なら別起票）。commit 0f74ffe（ローカル、push未）。 |
 | 担当 | dev（林/凜） |
 | 詳細 | Keita 報告（2026-06-08）: 議事録の標準テンプレートを出力すると「議題一覧」の番号（1. 2. …）が抜ける。<br>【根本原因（Son 調査・特定済）】`server/src/lib/minutesExport.ts` の docx レンダラ `case 'list'`（314–330行）が、リスト項目を常に中点 `・ ` 固定で描画しており、`block.ordered` を無視している。パーサ側は順序付きリストを `ordered` フラグで正しく検出済（型定義49行 / `isOrderedItem` 123行 / パース93行・106行で `ordered` をblockに格納）だが、レンダラがそのフラグを参照しないため `1. （議題1）`/`2. （議題2）` の番号が脱落する。xlsx レンダラ（508行付近、`cell.value = ... ・ ...`）も同じく `・` 固定で同症状。MC-207 の「中点左寄せ」対応時に順序付きリストの分岐が漏れたもの。 |
@@ -2342,7 +2342,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-209 |
 | タイトル | 議事録作成画面から事前指定フォーマットを直接DL＋ファイル名を YYYYMMDD_議事録 に |
 | 優先度 | P1 |
-| ステータス | REVIEW（2026-06-08 Son subagent 実装完了・web tsc/build green。commit d80184e。Masayoshi 検証ゲート＋Keita 実機確認待ち） |
+| ステータス | 実機反映済（2026-06-08 web/dist 13:59 build 配信中・新DLコードの固有文言が live バンドル Notebooks-CXl_MKQp.js に存在を確認。生成後プレビューにDLボタン表示）。origin push のみ Masayoshi ゲート残。Keita 実機確認待ち（要ハードリロード→生成→DL） |
 | 実装エビデンス | Notebooks.tsx の MinutesPane 生成後プレビュー領域（保存先情報の直前）に「ダウンロード」ボタン群を追加。`selectedExportFormats`（事前指定形式）だけを EXPORT_OPTS から filter してボタン化。`downloadFormat(fmt)` で POST /api/minutes/export を呼び（content=editedContent||generatedContent, format=fmt, filename=`YYYYMMDD_議事録`＝生成日基準・ゼロ埋め）、blob を createObjectURL→一時 a[download]→revoke で保存。DL名は Content-Disposition から復元、無ければ `${filename}.${fmt}`。state downloadingFmt/downloadError 追加、DL中 Spinner＋disabled、エラーは既存スタイル表示。server minutesRouter.ts は調整不要（filename 既定「議事録」温存、`20260608_議事録.docx` 等になる）。web tsc --noEmit EXIT 0・npm run build EXIT 0。commit d80184e（ローカル、push未）。 |
 | 担当 | dev（林/凜） |
 | 詳細 | Keita 要望（2026-06-08）: (A) 議事録を作成する画面（MinutesPane）からも、事前に指定したフォーマットをダウンロードできるようにする。(B) 保存/DL名を `YYYYMMDD_議事録`（例 `20260608_議事録.docx`）にする。<br>【現状（Son 調査）】作成画面 `web/src/views/Notebooks.tsx` の `MinutesPane` には「エクスポート形式（複数選択可）」UI（EXPORT_OPTS = docx/xlsx/pdf/txt、`selectedExportFormats`、3000行付近）で事前指定はできるが、**生成後のプレビュー領域（3123行〜）にダウンロードボタンが無い**。現状ダウンロードは Deliverables 画面経由。バックの DL API は `POST /api/minutes/export {content, format, filename}`（minutesRouter.ts:140-171）が既存で、`filename`（拡張子除去してタイトル化）→ `${title}.${ext}` で Content-Disposition を返す（filename 既定は「議事録」）。 |
