@@ -237,6 +237,19 @@ body {
   margin: 0.5em 0;
   padding-left: 1.4em;
 }
+.mc-markdown ul {
+  list-style: disc;
+}
+.mc-markdown ol {
+  list-style: decimal;
+}
+.mc-markdown ul.contains-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+.mc-markdown li.task-list-item {
+  list-style: none;
+}
 .mc-markdown li {
   margin: 0.25em 0;
 }
