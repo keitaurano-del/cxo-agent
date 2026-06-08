@@ -13,6 +13,7 @@
   "dependencies": {
     "@types/http-proxy": "^1.17.17",
     "chokidar": "^4.0.3",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "docx": "^9.7.1",
     "exceljs": "^4.4.0",
@@ -26,6 +27,7 @@
     "playwright-core": "^1.60.0"
   },
   "devDependencies": {
+    "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/mime-types": "^3.0.1",

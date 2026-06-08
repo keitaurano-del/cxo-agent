@@ -4,6 +4,7 @@
 // 起動: npm run dev → http://localhost:PORT
 
 import express, { type Request, type Response, type NextFunction } from 'express';
+import compression from 'compression';
 import cors from 'cors';
 import { existsSync, statSync, unlinkSync, readdirSync, mkdirSync } from 'node:fs';
 import { basename, dirname, join, resolve, sep } from 'node:path';
@@ -68,6 +69,28 @@ const SERVER_ROOT = resolve(__dirname, '..');
 const WEB_DIST = join(SERVER_ROOT, '..', 'web', 'dist');
 
 const app = express();
+
+// ─── gzip 圧縮（MC-206 横断軽量化）── 他ミドルウェア/ルートより前段に置く ──────────
+// JSON API（/api/tasks?scope=closed の ~714KB 等）・静的配信を圧縮して転送量を削減する。
+// 重大な除外を filter で担保する:
+//   1) SSE（Content-Type: text/event-stream）— 圧縮するとバッファされてリアルタイム配信が
+//      壊れ、バッジ/ボードのライブ更新が死ぬ。/api/stream の Content-Type で確実に弾く。
+//   2) ターミナル proxy（/terminal・ttyd）— ttyd 側 gzip との二重化で文字化けする既往（MC-93）。
+//      proxy の HTTP 応答が二重圧縮されないよう path で弾く（WebSocket は res を通らないため対象外）。
+// 上記以外（JSON API・web/dist 静的配信）は既定どおり圧縮対象とする。
+app.use(
+  compression({
+    filter: (req, res) => {
+      // SSE は絶対に圧縮しない（リアルタイム配信が壊れる）。
+      const contentType = String(res.getHeader('Content-Type') ?? '');
+      if (contentType.includes('text/event-stream')) return false;
+      // SSE エンドポイント・ターミナル proxy（ttyd 二重 gzip 防止 / MC-93）は path でも弾く。
+      if (req.path === '/api/stream' || req.path.startsWith('/terminal')) return false;
+      // それ以外は compression 既定の判定（圧縮可能な Content-Type のみ）に委ねる。
+      return compression.filter(req, res);
+    },
+  }),
+);
 
 // CORS: 同一オリジン配信前提（web/dist を同じ server が配る）＋ MC_TOKEN 認証下なので
 // クロスオリジンを許可する必要がない。全許可（origin:true）をやめ、CORS ヘッダを付けない
@@ -300,14 +323,45 @@ app.get('/api/agents/:agentId/feed', (req, res) => {
 // 実データでは DONE+CANCELLED が 99%（689KB の主因）。ライブ tick で毎回パースするのは
 // 稼働中だけにし、完了/キャンセルはフロントが必要時のみ closed を遅延読込する設計（MC perf）。
 const CLOSED_STATUSES = new Set(['DONE', 'CANCELLED']);
+
+// MC-206: 一覧レスポンスから重い detail（本文 ~840字/件）を除外して軽量版を返す。
+// detail は単一タスク取得（GET /api/tasks/:taskId/detail）か、後方互換の ?detail=1 でのみ返す。
+function stripDetail(t: ReturnType<typeof collectTasks>[number]) {
+  const { detail: _detail, ...light } = t;
+  return light;
+}
+
 app.get('/api/tasks', (req, res) => {
   safeJson(res, () => {
     const scope = String(req.query.scope ?? 'all');
+    // 後方互換: ?detail=1 のときだけ従来どおり detail 付きで返す（既定は detail 無し）。
+    const withDetail = String(req.query.detail ?? '') === '1';
     const all = collectTasks();
     let tasks = all;
     if (scope === 'open') tasks = all.filter((t) => !CLOSED_STATUSES.has(t.status));
     else if (scope === 'closed') tasks = all.filter((t) => CLOSED_STATUSES.has(t.status));
-    return { tasks };
+    return { tasks: withDetail ? tasks : tasks.map(stripDetail) };
+  });
+});
+
+// MC-206: 単一タスクのフル取得（detail 含む）。一覧は detail を返さないため、
+// TaskDetail がカードを開いた時にここから本文を遅延取得する。
+// パスは `/:taskId/detail` とし、taskEditRouter の固定パス（/hash・/edit）や
+// `:taskId/links`・`:taskId/timeline` と衝突しないようにする。
+app.get('/api/tasks/:taskId/detail', (req, res) => {
+  safeJson(res, () => {
+    const id = req.params.taskId;
+    // source 指定があれば source+id で厳密一致、無ければ id 一致の先頭。
+    const source = typeof req.query.source === 'string' ? req.query.source : undefined;
+    const all = collectTasks();
+    const task =
+      (source ? all.find((t) => t.id === id && t.source === source) : undefined) ??
+      all.find((t) => t.id === id);
+    if (!task) {
+      res.status(404).json({ error: 'task not found', id });
+      return undefined;
+    }
+    return { task };
   });
 });
 

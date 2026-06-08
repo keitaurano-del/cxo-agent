@@ -340,11 +340,43 @@ function TaskDetailBody({
   // ローカル上書き表示（保存成功で即時反映。親 refetch が届くまでのギャップを埋める）。
   const [localTask, setLocalTask] = useState<Task>(task);
   const [editing, setEditing] = useState(false);
+  // 詳細本文（detail）の遅延取得状態（MC-206）。一覧 API は軽量化のため detail を返さないので、
+  // カードを開いた時に単一タスク API から detail を取りに行く。未取得時は詳細メモを出さない。
+  const [detailLoading, setDetailLoading] = useState(false);
   // 親から別タスクが渡し直されたらローカル状態をリセット。
   useEffect(() => {
     setLocalTask(task);
     setEditing(false);
   }, [task]);
+
+  // MC-206: 開いたタスクの detail を単一タスク API から取得して merge する。
+  // 一覧（軽量版）には detail が無いため、ここで /api/tasks/:id/detail を 1 回だけ叩く。
+  // 取得済み（detail が既にある）ならスキップ。失敗時はクラッシュさせず詳細メモ非表示のまま。
+  useEffect(() => {
+    if (task.detail !== undefined) return; // 既に detail を持つ（?detail=1 経由等）なら不要
+    let cancelled = false;
+    setDetailLoading(true);
+    const params = new URLSearchParams();
+    if (task.source) params.set('source', task.source);
+    const qs = params.toString();
+    fetch(`/api/tasks/${encodeURIComponent(task.id)}/detail${qs ? `?${qs}` : ''}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then((json: { task?: Task }) => {
+        if (cancelled || !json.task) return;
+        // detail（と取れれば付帯フィールド）だけを上書き merge。編集中のローカル状態は壊さない。
+        setLocalTask((prev) => ({ ...prev, detail: json.task!.detail }));
+      })
+      .catch(() => {
+        /* 失敗時は詳細メモ非表示のまま（安全側） */
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [task]);
+
   const view = localTask;
   const editable = isEditableSource(view.source);
   const statusMeta = taskStatusMeta(view.status);
@@ -532,8 +564,10 @@ function TaskDetailBody({
             )}
           </section>
 
-          {/* (a-2) 詳細メモ（MC-83）— 台帳の「詳細」/受け入れ条件/サブタスク等。取れた時のみ表示。 */}
-          {view.detail && (
+          {/* (a-2) 詳細メモ（MC-83 / MC-206）— 台帳の「詳細」/受け入れ条件/サブタスク等。
+              一覧 API は軽量化で detail を返さないため、カードを開いた時に単一タスク API から遅延取得する。
+              取得中はローディング、本文があれば表示、無ければセクション自体を出さない。 */}
+          {view.detail ? (
             <section className="mb-5">
               <SectionHeading>詳細メモ</SectionHeading>
               <div className="rounded-lg border border-border bg-surface px-3 py-3">
@@ -542,7 +576,14 @@ function TaskDetailBody({
                 </p>
               </div>
             </section>
-          )}
+          ) : detailLoading ? (
+            <section className="mb-5">
+              <SectionHeading>詳細メモ</SectionHeading>
+              <div className="rounded-lg border border-border bg-surface px-3 py-3">
+                <p className="text-[12px] text-text-faint">詳細を読み込み中…</p>
+              </div>
+            </section>
+          ) : null}
 
           {/* (MC-167) 削除: 紐づくワークフロー（タスクに紐づけられず無関係 wf_xxx をトークン数つき羅列＝ノイズ） */}
           {/* REMOVED: LinkedWorkflows セクション */}
