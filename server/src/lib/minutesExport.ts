@@ -172,11 +172,11 @@ function inlineToRuns(text: string, baseSize = 20, color?: string): TextRun[] {
 
 // ── docx スタイル定数（プレビューUIと同一配色） ─────────────────────
 const D = {
-  // テキスト色
-  textMain:   '1E2A3A',  // #1e2a3a  本文
-  textMuted:  '4A5A72',  // #4a5a72  小見出し・補助
-  textFaint:  '7A8FA8',  // #7a8fa8  引用
-  textHeader: '333333',  // #333333  テーブルヘッダーテキスト
+  // テキスト色（Keita 指示で全文字色を黒に統一）
+  textMain:   '000000',  // #000000  本文
+  textMuted:  '000000',  // #000000  小見出し・補助（旧グレーを黒へ）
+  textFaint:  '000000',  // #000000  引用（旧グレーを黒へ）
+  textHeader: '000000',  // #000000  テーブルヘッダーテキスト
   // 罫線
   border:     'D0D8E4',  // #d0d8e4  テーブル罫線・区切り線
   borderHr:   'D0D8E4',
@@ -259,7 +259,7 @@ function buildDocx(blocks: MdBlock[]): Promise<Buffer> {
       case 'h1':
         children.push(new Paragraph({
           children: inlineToRuns(block.text ?? '', D.H1, D.textMain),
-          spacing: { before: 280, after: 120 },
+          spacing: { before: 280, after: 60 },
           border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: D.border } },
           pageBreakBefore: pageBreak || undefined,
         }));
@@ -268,7 +268,7 @@ function buildDocx(blocks: MdBlock[]): Promise<Buffer> {
       case 'h2':
         children.push(new Paragraph({
           children: inlineToRuns(block.text ?? '', D.H2, D.textMain),
-          spacing: { before: 220, after: 80 },
+          spacing: { before: 220, after: 50 },
           border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: D.border } },
           pageBreakBefore: pageBreak || undefined,
         }));
@@ -277,7 +277,7 @@ function buildDocx(blocks: MdBlock[]): Promise<Buffer> {
       case 'h3':
         children.push(new Paragraph({
           children: inlineToRuns(block.text ?? '', D.H3, D.textMuted),
-          spacing: { before: 180, after: 60 },
+          spacing: { before: 60, after: 30 },
           pageBreakBefore: pageBreak || undefined,
         }));
         break;
@@ -285,7 +285,7 @@ function buildDocx(blocks: MdBlock[]): Promise<Buffer> {
       case 'h4':
         children.push(new Paragraph({
           children: inlineToRuns(block.text ?? '', D.H4, D.textMuted),
-          spacing: { before: 120, after: 40 },
+          spacing: { before: 40, after: 20 },
           pageBreakBefore: pageBreak || undefined,
         }));
         break;
@@ -294,7 +294,7 @@ function buildDocx(blocks: MdBlock[]): Promise<Buffer> {
         const runs = inlineToRuns(block.text ?? '', D.BODY, D.textMain);
         children.push(new Paragraph({
           children: runs,
-          spacing: { after: 60 },
+          spacing: { after: 30 },
           pageBreakBefore: pageBreak || undefined,
         }));
         break;
@@ -304,7 +304,7 @@ function buildDocx(blocks: MdBlock[]): Promise<Buffer> {
         children.push(new Paragraph({
           children: inlineToRuns(block.text ?? '', D.BODY, D.textMuted),
           indent: { left: 600 },
-          spacing: { after: 60 },
+          spacing: { after: 30 },
           border: { left: { style: BorderStyle.THICK, size: 12, color: 'B0BCCE' } },
           pageBreakBefore: pageBreak || undefined,
         }));
@@ -333,7 +333,7 @@ function buildDocx(blocks: MdBlock[]): Promise<Buffer> {
               ...inlineToRuns(item.text, D.BODY, D.textMain),
             ],
             indent: { left: leftIndent },
-            spacing: { after: 40 },
+            spacing: { after: 20 },
             pageBreakBefore: (li === 0 && pageBreak) || undefined,
           }));
         }
@@ -388,12 +388,14 @@ function buildDocx(blocks: MdBlock[]): Promise<Buffer> {
           rows: tableRows,
           width: { size: 9000, type: WidthType.DXA },
         }));
-        children.push(new Paragraph({ text: '', spacing: { after: 100 } }));
+        children.push(new Paragraph({ text: '', spacing: { after: 40 } }));
         break;
       }
 
       case 'empty':
-        children.push(new Paragraph({ text: '', spacing: { after: 40 } }));
+        // Markdown の段落区切り由来の空行。大トピック(H1/H2)前の余白は見出し側 spacing.before
+        // が担保するため、空行スペーサ自体はごく小さくして全体の縦余白を詰める（Keita 指示1）。
+        children.push(new Paragraph({ text: '', spacing: { after: 10 } }));
         break;
     }
   }
@@ -645,19 +647,23 @@ async function buildPdf(markdownContent: string): Promise<Buffer> {
        sans-serif の前に明示し、崩れを防ぐ（MC-195）。Noto/Hiragino 系は将来インストール時に優先される。 */
     font-family: "Meiryo", "Hiragino Sans", "Yu Gothic", "Noto Sans JP", "Noto Sans CJK JP", "IPAexGothic", "IPAPGothic", "IPAGothic", sans-serif;
     font-size: 11pt;
-    line-height: 1.7;
-    color: #1e2a3a;
+    line-height: 1.5;
+    color: #000;
     background: #ffffff;
     word-break: break-word;
   }
-  h1, h2, h3, h4 { font-weight: 700; line-height: 1.3; margin: 1.2em 0 0.5em; }
-  h1 { font-size: 1.5em; }
-  h2 { font-size: 1.25em; border-bottom: 1px solid #d0d8e4; padding-bottom: 0.3em; }
-  h3 { font-size: 1.1em; }
-  h4 { font-size: 1em; }
-  p { margin: 0.6em 0; }
-  ul, ol { margin: 0.5em 0; padding-left: 1.2em; list-style-position: outside; }
-  li { margin: 0.25em 0; }
+  /* 文字色は全て黒に統一（Keita 指示3）。縦余白は詰め、大トピック(h2)前だけ余白を残す（指示1）。 */
+  h1, h2, h3, h4 { font-weight: 700; line-height: 1.3; color: #000; }
+  /* H1: ドキュメント先頭の大見出し。前余白は残す。 */
+  h1 { font-size: 1.5em; margin: 0.8em 0 0.3em; }
+  /* H2: 大トピック。前(margin-top)だけ余白を残し下は詰める。 */
+  h2 { font-size: 1.25em; margin: 1.1em 0 0.3em; border-bottom: 1px solid #d0d8e4; padding-bottom: 0.2em; }
+  /* H3/H4: 小見出し。前後とも詰める。 */
+  h3 { font-size: 1.1em; margin: 0.4em 0 0.2em; }
+  h4 { font-size: 1em; margin: 0.3em 0 0.15em; }
+  p { margin: 0.2em 0; color: #000; }
+  ul, ol { margin: 0.2em 0; padding-left: 1.2em; list-style-position: outside; }
+  li { margin: 0.1em 0; color: #000; }
   code {
     background: #edf0f5;
     padding: 0.1em 0.4em;
@@ -676,15 +682,16 @@ async function buildPdf(markdownContent: string): Promise<Buffer> {
   pre code { background: none; padding: 0; }
   blockquote {
     border-left: 3px solid #b0bcce;
-    margin: 0.8em 0;
+    margin: 0.4em 0;
     padding: 0.2em 0 0.2em 1em;
-    color: #4a5a72;
+    color: #000;
   }
   table {
     border-collapse: collapse;
     width: 100%;
-    margin: 0.8em 0;
+    margin: 0.4em 0;
     font-size: 0.92em;
+    color: #000;
   }
   th, td { border: 1px solid #d0d8e4; padding: 0.4em 0.7em; text-align: left; }
   /* 標準スタイルの TODO 表は colgroup の列幅を固定レイアウトで反映する（MC-207） */
