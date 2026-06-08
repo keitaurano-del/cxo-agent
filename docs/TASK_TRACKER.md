@@ -2533,3 +2533,20 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 詳細 | Keita「軽量化はもっと改善案ないか」→Son提案の3点を実装。MC-206(scope分割)に続く第二弾。compression は新規依存(server/package.json)。SSE/terminal は圧縮除外で非破壊。 |
 | 依存 | MC-206。server/src/index.ts, server/src/collectors/tasks.ts, web/src/components/TaskDetail.tsx, server/package.json。 |
 | 更新日 | 2026-06-08 |
+
+---
+
+### MC-222 — RAG 再設計・強化（本来あるべき形へ）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-222 |
+| タイトル | RAG 再設計・強化（検索品質・出典・規模耐性・評価） |
+| 優先度 | P1 |
+| ステータス | DESIGN_REVIEW（2026-06-09 Son: 現行RAG徹底棚卸し→再設計提案書 docs/RAG_REDESIGN_2026-06-09.md 作成。Keita 方針合意待ち→合意後フェーズ実装） |
+| 担当 | Son（設計）→ 実装は subagent/dev 直 |
+| 詳細 | Keita「RAGを強化、本来どういうものか含め設計し直し」。【現状(棚卸し)】Gemini768次元埋め込み/800字チャンク/巨大chunks.json総当たりコサインtop5(リランク・閾値・ハイブリッド無し)/claude -p生成/出典はチャンク番号粒度。【弱点】A検索が素のtop5のみ B非ハイブリッド C巨大JSON総当たりで規模非耐性 Dチャンク粗くページ/見出しメタ無し E出典がユーザに見えない F生成がCLI/共有アカウント依存 G評価の仕組み無し。【再設計】二段検索+リランク+スコア閾値+ハイブリッド(BM25)/構造認識チャンク+ページ出典/ベクトルストア移行/出典提示UI/評価ハーネス。Phase1(閾値・リランク・出典明示・BM25)→Phase2(構造チャンク・評価)→Phase3(ベクトルストア・生成耐性)。 |
+| 受け入れ条件（DoD） | 提案合意後に各Phaseで定義。Phase1: スコア閾値・二段リランク・回答に使用ソース一覧表示・BM25併用、検索ヒット率の簡易計測。 |
+| 依存 | server/src/lib/{notebookIndex,embedding,notebookClaude}.ts, notebookRouter.ts, web/src/views/Notebooks.tsx。関連 MC-202/182/183/184。設計書: docs/RAG_REDESIGN_2026-06-09.md。 |
+| 備考 | Keita 確認事項4点（主用途優先/外部API可否/ベクトルストア可否/着手順）を提案書§6に記載。合意後Sonが subagent 直で段階実装→自己検証→push。 |
+| 更新日 | 2026-06-09 |
