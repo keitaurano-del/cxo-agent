@@ -1205,7 +1205,7 @@ ID 採番: **AR-0x**。
 | ID | MC-81 |
 | タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 優先度 | P2 |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| ステータス | DONE（2026-06-08 整合是正: 詳細節に他タスク(MC-77/inbox)由来のCANCELLED文面が誤転記される autonomous-worker 汚染だったのを是正。正本=要約表のMC-81行=DONE） |
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 関連ファイル | `server/src/collectors/tasks.ts`（normStatus 71-83 行付近、STATUS_WORDS / mergeStatus 周辺）。表行/縦型カード両形式のパース経路。 |
@@ -1519,7 +1519,7 @@ ID 採番: **AR-0x**。
 | タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 種別 | feature |
 | 優先度 | 中〜高（ターミナルが切断されると現状ブラウザから復旧できず SSH が要る。Keita 直近要望） |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| ステータス | DONE（2026-06-08 整合是正: 詳細節に他タスク(MC-77/inbox)由来のCANCELLED文面が誤転記される autonomous-worker 汚染だったのを是正。正本=要約表のMC-101行=DONE） |
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 背景 | 2026-05-31 の台帳整合作業中、AM-O（BLOCKED／SKU 登録待ち）が autonomous-rin と思われる外部プロセスにより複数回 TODO に書き戻される現象を観測。HEAD `8925c39` で BLOCKED 復元済みの後、未コミット編集で再び TODO 化された。autonomous-rin は本来「設計判断」「Keita 承認待ち」「BLOCKED」タグのタスクのステータスを触らない設計（project-autonomous-rin の選定基準）なのに、BLOCKED タスクのステータスを TODO に変えている。 |
 | 検証ログ（2026-06-01 dev-logic 実機） | 構成判明: rin-terminal.sh = `tmux new-session -A -s main "cd /home/dev/projects && exec /usr/bin/claude"`（-A で attach/作成）、ttyd は systemd apollo-terminal.service 常駐。切断＝tmux main 消失 or ttyd 停止の2パターン。実装: server/src/terminalControl.ts（新規、GET /api/terminal/status＝has-session/systemctl is-active/ポート到達、POST /api/terminal/start＝冪等：main 無ければ作成・ttyd inactive なら start・両稼働なら no-op、execFile 安全）、config.ts:113-145（TERMINAL_TMUX_START_CMD 等）、index.ts:35/274-279（makeAuthMiddleware 配下に mount）、web/src/views/Terminal.tsx（status 15s ポーリング→切断時「ターミナルを開始」ボタン→start→iframe リロード）、e2e smoke 5件。commit a9ceef4（未 push）。検証: tsc/build green、restart 後 healthz 200、status API 本番 ready:true・Cookie 無し 401、別名セッション mc100test で start が created→ready・2回目 no-op（冪等）、本番 main の session_created 不変（非破壊の証拠＝DoD(5)決め手）、Playwright smoke 5/5 pass。DoD 5項目すべて充足。push は Keita 承認待ち（[[reference-deploy-commands]]）。 |
@@ -1541,7 +1541,7 @@ ID 採番: **AR-0x**。
 | タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 種別 | bug / UX 修正 |
 | 優先度 | 中〜高（Keita 実機で削除できないと報告。送信前プレビューの操作不能は体験を直接損なう） |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| ステータス | DONE（2026-06-08 整合是正: 詳細節に他タスク(MC-77/inbox)由来のCANCELLED文面が誤転記される autonomous-worker 汚染だったのを是正。正本=要約表のMC-103行=DONE） |
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 背景 | 2026-05-31 の台帳整合作業中、AM-O（BLOCKED／SKU 登録待ち）が autonomous-rin と思われる外部プロセスにより複数回 TODO に書き戻される現象を観測。HEAD `8925c39` で BLOCKED 復元済みの後、未コミット編集で再び TODO 化された。autonomous-rin は本来「設計判断」「Keita 承認待ち」「BLOCKED」タグのタスクのステータスを触らない設計（project-autonomous-rin の選定基準）なのに、BLOCKED タスクのステータスを TODO に変えている。 |
 | 想定設計 | `web/src/views/Terminal.tsx` のステージングサムネ削除 UI を見直す。削除ボタンを常時表示（ホバー依存をやめる）・ヒット領域とタップターゲットを十分大きく（44px 目安）・z-index と重なり順を確認し iframe/他要素に隠れないようにする。removeStaged ハンドラと object URL revoke の動作を実機で確認。本番 dist の反映状況も確認（restart/build 漏れがないか）。原因が (c) なら build/restart で解消、(a)(b)(d) なら CSS/JSX/ハンドラ修正。 |
@@ -1561,7 +1561,7 @@ ID 採番: **AR-0x**。
 | タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 種別 | feature / UX 改善 |
 | 優先度 | 中 |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| ステータス | DONE（2026-06-08 整合是正: 詳細節に他タスク(MC-77/inbox)由来のCANCELLED文面が誤転記される autonomous-worker 汚染だったのを是正。正本=要約表のMC-102行=DONE） |
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 完了検証（2026-06-01・DoD 逆引き） | 実装＝web/src/views/Terminal.tsx を「選択即送信」→「ステージング方式」へ。StagedImage 配列で貯め、URL.createObjectURL でサムネ、revokeObjectURL（個別削除/送信成功/アンマウント）でメモリ解放、サムネ個別削除×、5枚上限（サーバ TERMINAL_UPLOAD_MAX_FILES=5 と整合）、「林に送る（N枚）」で /api/terminal/upload に multipart 一括→201→クリア→role=status 表示、in-flight ガード。paste も addToStaging に切替。MC-100/101 の開始ボタン・status ポーリングと共存。サーバ terminalUpload.ts は複数対応済みで無変更。commit 2065363（未 push→今回 push 予定）。検証＝web build green・server tsc exit 0・restart 後 healthz 200・Playwright smoke 7/7 PASS（複数選択サムネ3枚・即送信されない＝upload 0回・貼付追加・個別削除・7枚→5枚抑止 alert・林に送るで 3枚 1リクエスト multipart 201 クリア・1280px 回帰）・認証 Cookie 無し 401・非退行 MC-100 start spec 5/5・実機 authed 2枚 upload count:2/別パス2本/injected・本番 main 注入文字は BSpace で消去し非破壊（自動 Enter なし）。DoD (1)〜(5) すべて充足。 |
 | 背景 | 2026-05-31 の台帳整合作業中、AM-O（BLOCKED／SKU 登録待ち）が autonomous-rin と思われる外部プロセスにより複数回 TODO に書き戻される現象を観測。HEAD `8925c39` で BLOCKED 復元済みの後、未コミット編集で再び TODO 化された。autonomous-rin は本来「設計判断」「Keita 承認待ち」「BLOCKED」タグのタスクのステータスを触らない設計（project-autonomous-rin の選定基準）なのに、BLOCKED タスクのステータスを TODO に変えている。 |
@@ -1600,7 +1600,7 @@ ID 採番: **AR-0x**。
 | タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 種別 | chore / test 負債 |
 | 優先度 | 中（本番機能には影響なし。ただし MC-95 等の新規 smoke が既存 fail に埋もれて新規回帰を見逃すリスクがあるので近いうちに解消） |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| ステータス | DONE（2026-06-08 整合是正: 詳細節に他タスク(MC-77/inbox)由来のCANCELLED文面が誤転記される autonomous-worker 汚染だったのを是正。正本=要約表のMC-98行=DONE） |
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 対応方針 | 古い smoke テストを現状の Apollo ナビ構成（5項目）に合わせて更新。MC-95 で追加された /terminal-view・画像添付の smoke（`e2e/render-smoke-20260601-terminal-upload.spec.ts`、4/4 pass）と整合させ、ナビ項目数をハードコードしている箇所を現状構成に追従させる。 |
@@ -1620,7 +1620,7 @@ ID 採番: **AR-0x**。
 | タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 種別 | chore / 堅牢化 |
 | 優先度 | 中（2026-06-01 低〜中→中 に引き上げ。MC-101 検証のフル smoke 実行中に inbox 経由で SMOKE タスク（MC-102 等）が台帳に自動混入し dev-logic が git checkout で戻す事象が繰り返し発生。再発が実作業を妨げているため優先度を上げる） |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| ステータス | DONE（2026-06-08 整合是正: 詳細節に他タスク(MC-77/inbox)由来のCANCELLED文面が誤転記される autonomous-worker 汚染だったのを是正。正本=要約表のMC-99行=DONE） |
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 背景 | 2026-05-31 の台帳整合作業中、AM-O（BLOCKED／SKU 登録待ち）が autonomous-rin と思われる外部プロセスにより複数回 TODO に書き戻される現象を観測。HEAD `8925c39` で BLOCKED 復元済みの後、未コミット編集で再び TODO 化された。autonomous-rin は本来「設計判断」「Keita 承認待ち」「BLOCKED」タグのタスクのステータスを触らない設計（project-autonomous-rin の選定基準）なのに、BLOCKED タスクのステータスを TODO に変えている。 |
 | 対応方針 | inbox 消費ロジックで、text が `__SMOKE_..__` パターンに一致するものは TASK_TRACKER へ起票せず「スモーク扱い」で消費する（inbox-consumed.jsonl への記録は行い、台帳カード化はしない）フィルタを入れる。 |
@@ -1643,7 +1643,7 @@ ID 採番: **AR-0x**。
 | タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 種別 | bug / UX |
 | 優先度 | 高（Keita「選択肢が出た時にタップが反応せずどうしようもない」＝モバイルで実質操作不能。ターミナルからの林との対話が選択肢提示で詰まる） |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| ステータス | DONE（2026-06-08 整合是正: 詳細節に他タスク(MC-77/inbox)由来のCANCELLED文面が誤転記される autonomous-worker 汚染だったのを是正。正本=要約表のMC-104行=DONE） |
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 背景 | 2026-05-31 の台帳整合作業中、AM-O（BLOCKED／SKU 登録待ち）が autonomous-rin と思われる外部プロセスにより複数回 TODO に書き戻される現象を観測。HEAD `8925c39` で BLOCKED 復元済みの後、未コミット編集で再び TODO 化された。autonomous-rin は本来「設計判断」「Keita 承認待ち」「BLOCKED」タグのタスクのステータスを触らない設計（project-autonomous-rin の選定基準）なのに、BLOCKED タスクのステータスを TODO に変えている。 |
 | 想定設計 | MC-92/94 で `server/src/terminalProxy.ts` に注入している script（`__apolloPasteFix` 等）と同じ仕組みで、xterm.js のタッチイベント（touchstart/touchend）を捕捉し、TUI が期待するマウスレポーティング（SGR mouse、`\x1b[<...M`/`m`）へ変換するハンドラを注入する。タップ座標→セル座標（cols/rows・charWidth/lineHeight）への換算が肝。PC マウス・キーボード経路は触らず非退行を保つ。 |
@@ -1998,7 +1998,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-148 |
 | タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 優先度 | P0 |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| ステータス | DONE（2026-06-08 整合是正: 詳細節に他タスク(MC-77/inbox)由来のCANCELLED文面が誤転記される autonomous-worker 汚染だったのを是正。正本=要約表のMC-148行=DONE） |
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
@@ -2019,7 +2019,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-150 |
 | タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 優先度 | P0 |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| ステータス | DONE（2026-06-08 整合是正: 詳細節に他タスク(MC-77/inbox)由来のCANCELLED文面が誤転記される autonomous-worker 汚染だったのを是正。正本=要約表のMC-150行=DONE） |
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 実行コマンド | `sudo systemctl restart mission-control.service` |
@@ -2090,7 +2090,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-151 |
 | タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 優先度 | P1 |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| ステータス | DONE（2026-06-08 整合是正: 詳細節に他タスク(MC-77/inbox)由来のCANCELLED文面が誤転記される autonomous-worker 汚染だったのを是正。正本=要約表のMC-151行=DONE） |
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
@@ -2104,7 +2104,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-152 |
 | タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 優先度 | P2 |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| ステータス | DONE（2026-06-08 整合是正: 詳細節に他タスク(MC-77/inbox)由来のCANCELLED文面が誤転記される autonomous-worker 汚染だったのを是正。正本=要約表のMC-152行=DONE） |
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
@@ -2116,7 +2116,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-153 |
 | タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 優先度 | P1 |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| ステータス | DONE（2026-06-08 整合是正: 詳細節に他タスク(MC-77/inbox)由来のCANCELLED文面が誤転記される autonomous-worker 汚染だったのを是正。正本=要約表のMC-153行=DONE） |
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
@@ -2131,7 +2131,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-154 |
 | タイトル | tasks collector のステータス誤表示（表行DONEがREVIEWに巻き戻る）＋縦型カード非対応を修正 |
 | 優先度 | P1 |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
+| ステータス | DONE（2026-06-08 整合是正: 詳細節に他タスク(MC-77/inbox)由来のCANCELLED文面が誤転記される autonomous-worker 汚染だったのを是正。正本=要約表のMC-154行=DONE） |
 | 担当 | task-manager（棚卸し調整）+ test-functional（内部検証）+ reviewer（品質判定） |
 | 詳細 | 開発はできるだけ自動（autonomous-rin の24時間ティック）で進めたいが、Keita の確認・承認が要る事項（設計判断・BLOCKED・デプロイ可否・仕様未確定など）は Apollo 上で一覧して見たい。Apollo に新メニュー/ビュー（例「承認待ち」or「要確認」）を追加し、全 TASK_TRACKER から status=BLOCKED や「Keita承認待ち」「設計判断」タグ、REVIEW で Keita 目視待ちの項目を集約表示する。各項目から詳細（MC-61 ドリルダウン）へ飛べると理想。Keita がそこで承認/却下/コメントできると更に良いが、まずは可視化から、操作は段階的に。Keita 明言「メニューを追加するイメージ」。 |
 | 受け入れ条件（DoD） | (1) status セル本文に他ステータス語（REVIEW/BLOCKED 等）が混ざっても、先頭ステータスで正しく正規化される。(2) 既存の表行（summary table）形式・縦型カード（フィールド表）形式の両方で回帰なし（既存タスクのステータス表示が変わらないこと）。(3) MC-71 で入れた回避（status セルを素の DONE にして検証文を別行に出す）に依存しなくても正しく DONE と読める。(4) server 反映は `sudo systemctl restart mission-control.service`、本番 4317 の /api/tasks で代表タスクのステータスが従前どおり返ることを確認。 |
