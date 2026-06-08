@@ -2401,3 +2401,20 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 依存 | web/src/index.css。関連: MC-208（エクスポート側の同種番号問題）。commit b06ad30。 |
 | 備考 | Son が subagent 直で実装（林非経由）。web は静的配信のため build で即反映（restart不要）。origin push のみ Masayoshi ゲート残。 |
 | 更新日 | 2026-06-08 |
+
+---
+
+### MC-214 — 議事録の見た目調整（余白圧縮・全黒統一・TODO内容コンパクト化）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-214 |
+| タイトル | 議事録の見た目調整（余白圧縮・全黒統一・TODO内容コンパクト化） |
+| 優先度 | P1 |
+| ステータス | 実機反映済（2026-06-08 restart＋web build 配信。live docx 文字色=全000000・プレビュー mc-minutes-tight 配信確認）。Keita 実機確認待ち（要ハードリロード） |
+| 担当 | Son（subagent 直）|
+| 詳細 | Keita 指示（2026-06-08）: ①空白行が多い→詰める（大トピック=H2 の前だけ1行空け）②TODOのタスク「内容」をコンパクトに③色は全部黒に統一（グレー廃止）。プレビューとエクスポート(docx/PDF)の両面で揃える。 |
+| 受け入れ条件（DoD） | (A) docx/PDF(minutesExport.ts): パレット textMain/textMuted 等を#000化、H3/H4・段落・list・blockquote の縦余白圧縮、H1/H2 の before は維持。PDF の `<style>` も color #000・margin圧縮・h2 margin-top維持。(B) プレビュー: `.mc-markdown.mc-minutes-tight` スコープ追加（共用mc-markdownは不変更）、MinutesPaneプレビューdivにクラス付与、文字#000・余白圧縮・h1/h2前のみ余白。(C) テンプレ: TODO「内容」を簡潔指示へ。(D) server/web tsc 0・build成功。→全充足。 |
+| 依存 | server/src/lib/minutesExport.ts, web/src/index.css, web/src/views/Notebooks.tsx。commit cdefe44 / 4a887f7。関連 MC-208/213。 |
+| 備考 | Son subagent 直実装（林非経由）。docx/PDF=server restart 14:1x で反映、preview/テンプレ=web build で反映。origin push のみ Masayoshi ゲート残。判断保留: docx の見出し下罫線/blockquote左罫線はグレー(D.border)のまま据置（指示で罫線は対象外）。気になる場合は黒化/除去可。 |
+| 更新日 | 2026-06-08 |
