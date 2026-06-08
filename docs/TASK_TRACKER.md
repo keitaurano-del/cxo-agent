@@ -2373,14 +2373,16 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 
 ---
 
-### MC-221 — スマホで左下サイドバーの設定・テーマ切替に到達できない（モバイルメニュー欠落）
+### MC-222 — スマホで左下サイドバーの設定・テーマ切替に到達できない（モバイルメニュー欠落）
+
+> 注: 当初 MC-221 で起票したが、自律フローが同番号(MC-221=タスクボード軽量化)を並行採番し衝突（next-task-id.sh が ① 混入で誤動作）。本タスクを MC-222 に振り直し。
 
 | フィールド | 値 |
 |---|---|
-| ID | MC-221 |
+| ID | MC-222 |
 | タイトル | スマホで左下サイドバー（設定・テーマ切替）に到達できない |
 | 優先度 | P2 |
-| ステータス | IN_PROGRESS |
+| ステータス | REVIEW（BottomNav に footerActions 追加・App から設定/テーマ(setShowSettings/toggleTheme)を合成・tsc 0・web build green。ライブ配信 JS index-DfyTT_KH.js に footerActions 反映を実機確認。Keita スマホ実機目視待ち。git push 未） |
 | 担当 | dev（実装委譲・林オーケスト） |
 | 詳細 | Keita 報告（2026-06-09）: スマホから「左下の設定とか」が見えない。<br>【根本原因（林 調査・file:line で確証）】設定・テーマ切替・接続状態は左サイドバーの footer（web/src/App.tsx 内、テーマトグル ~270-289 / 設定ボタン 290-301 / 接続状態 302-314）に置かれているが、その aside は `hidden ... md:flex`（App.tsx:222）で md 未満では非表示。モバイルのナビは右上ハンバーガー（components/BottomNav.tsx）のドロップダウンに切替わるが、BottomNav は navItems（ページ群）のみ描画し、設定・テーマ切替を含まない（BottomNav.tsx:142-144 の renderRows は items のみ）。よって MC-220 で直した文字サイズ設定を含む「設定」自体にスマホから到達不能。 |
 | 受け入れ条件（DoD） | (1) モバイルのハンバーガーメニュー（BottomNav ドロップダウン）に「設定」項目を追加し、タップで Settings モーダルが開く（既存 onSettingsClick=setShowSettings(true) を流用）。(2) 同メニューに「テーマ切替」も追加し、デスクトップ footer と同じ挙動（既存ハンドラ流用）。(3) メニュー項目タップ後はメニューを閉じる。(4) nav 項目との視覚的区切り（divider）を入れる。(5) デスクトップ（md+）のサイドバー footer は現状維持・非退行。(6) スマホ実機幅（≤390px）で設定・テーマに到達でき横溢れ無し。(7) web の tsc/build green。接続状態インジケータ追加は任意（低優先）。 |

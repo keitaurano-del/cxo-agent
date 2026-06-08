@@ -17,11 +17,17 @@ export default function BottomNav({
   items,
   badges = {},
   onReorder,
+  footerActions,
 }: {
   items: BottomNavItem[];
   badges?: Partial<Record<string, number>>;
   /** ドラッグ並べ替え確定で呼ぶ（MC-158）。未指定なら並べ替え不可。 */
   onReorder?: (next: BottomNavItem[]) => void;
+  /**
+   * ドロップダウン下部（nav 行の下）に出す追加アクション（設定・テーマ切替など）。
+   * close を呼ぶとメニューを閉じる。未指定なら何も出さない（MC-221）。
+   */
+  footerActions?: (close: () => void) => ReactNode;
 }) {
   const { pathname } = useLocation();
   const dashActive = isDashboardPath(pathname);
@@ -141,6 +147,12 @@ export default function BottomNav({
         >
           <div className="flex flex-col gap-0.5 p-2">
             {renderRows()}
+            {/* 設定・テーマ切替などの追加アクション（スマホからの設定到達導線・MC-221） */}
+            {footerActions && (
+              <div className="mt-1 flex flex-col gap-0.5 border-t border-border pt-1">
+                {footerActions(() => setOpen(false))}
+              </div>
+            )}
           </div>
         </nav>
       )}

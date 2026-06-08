@@ -490,7 +490,45 @@ export default function App() {
             </Routes>
             </Suspense>
           </main>
-          <BottomNav items={navItems} badges={badges} onReorder={reorderNav} />
+          <BottomNav
+            items={navItems}
+            badges={badges}
+            onReorder={reorderNav}
+            footerActions={(close) => (
+              <>
+                {/* テーマ切替（デスクトップ footer と同じハンドラ・アイコン） */}
+                <button
+                  type="button"
+                  onClick={() => { toggleTheme(); close(); }}
+                  aria-label={`テーマ切替: ${themeMode === 'auto' ? '自動' : themeMode === 'dark' ? 'ダーク固定' : 'ライト固定'}`}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-text-muted hover:bg-surface-2 hover:text-text"
+                >
+                  <span className="shrink-0" aria-hidden>
+                    {isDark ? <MoonIcon /> : <SunIcon />}
+                  </span>
+                  <span>
+                    {themeMode === 'auto'
+                      ? `自動 (${isDark ? '夜間' : '日中'})`
+                      : themeMode === 'dark'
+                      ? 'ダーク固定'
+                      : 'ライト固定'}
+                  </span>
+                </button>
+                {/* 設定（デスクトップ footer と同じく設定モーダルを開く） */}
+                <button
+                  type="button"
+                  onClick={() => { setShowSettings(true); close(); }}
+                  aria-label="設定を開く"
+                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-text-muted hover:bg-surface-2 hover:text-text"
+                >
+                  <span className="shrink-0" aria-hidden>
+                    <SettingsIcon />
+                  </span>
+                  <span>設定</span>
+                </button>
+              </>
+            )}
+          />
           {pathname === '/tasks' && <AddTaskFab />}
           <UploadToast />
           <Settings open={showSettings} onClose={() => setShowSettings(false)} />
