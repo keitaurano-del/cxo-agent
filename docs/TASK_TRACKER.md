@@ -2453,3 +2453,18 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 依存 | server/src/minutesRouter.ts, server/src/lib/minutesDeliverables.ts, web/src/views/Notebooks.tsx。既存: GET /api/deliverables（一覧）, /api/deliverables/file（取得）, POST /api/deliverables/upload（添付追加）。関連 MC-215。 |
 | 備考 | Son subagent 直実装（林非経由）。実装規模大。push/restart は Masayoshi ゲート（server 変更があれば反映に restart 要）。 |
 | 更新日 | 2026-06-08 |
+
+
+---
+
+### MC-217 — 議事録 履歴ボタンを「議事録を作成」の右横へ移動
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-217 |
+| タイトル | 議事録 履歴ボタンを「議事録を作成」の右横へ移動 |
+| 優先度 | P2 |
+| ステータス | 実機反映済（2026-06-08 web build 配信確認）。Keita 実機確認待ち（要ハードリロード） |
+| 担当 | Son（subagent 直）|
+| 詳細 | Keita 指示: 履歴ボタンを作成画面内の「議事録を生成」横から、入口の Deliverables「議事録を作成」ボタンの右横へ移動。履歴ボタン押下で作成画面を開きつつ履歴モーダルを自動表示（openHistoryOnMount）。生成ボタン横の重複は撤去。commit c66b47f。関連 MC-216。 |
+| 更新日 | 2026-06-08 |
