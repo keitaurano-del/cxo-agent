@@ -312,13 +312,24 @@ function buildDocx(blocks: MdBlock[]): Promise<Buffer> {
       }
 
       case 'list': {
+        // 番号付きリスト（block.ordered）は連番マーカー「1. 」「2. 」…で描画する。
+        // 連番は同一 indent レベルごとにカウンタを持ち、上位レベルに戻ったら下位カウンタはリセットする。
+        const counters: number[] = [];
         for (let li = 0; li < (block.items ?? []).length; li++) {
           const item = (block.items ?? [])[li];
           // 中点（・）を左端起点にするため、最上位アイテムは左インデント0とする
           const leftIndent = item.indent * 320;
+          let marker: string;
+          if (block.ordered) {
+            counters[item.indent] = (counters[item.indent] ?? 0) + 1;
+            counters.length = item.indent + 1; // 下位レベルのカウンタを破棄
+            marker = `${counters[item.indent]}. `;
+          } else {
+            marker = '・ ';
+          }
           children.push(new Paragraph({
             children: [
-              new TextRun({ text: '・ ', font: D.FONT, size: D.BODY - 2, color: D.textMuted }),
+              new TextRun({ text: marker, font: D.FONT, size: D.BODY - 2, color: D.textMuted }),
               ...inlineToRuns(item.text, D.BODY, D.textMain),
             ],
             indent: { left: leftIndent },
@@ -502,10 +513,20 @@ async function buildXlsx(blocks: MdBlock[], title: string): Promise<Buffer> {
         break;
       }
       case 'list': {
+        // 番号付きリスト（block.ordered）は連番マーカー「1. 」「2. 」…で描画する（docx と同様）。
+        const counters: number[] = [];
         for (const item of block.items ?? []) {
           ws.mergeCells(`A${row}:F${row}`);
           const cell = ws.getCell(`A${row}`);
-          cell.value = `${'　'.repeat(item.indent)}・ ${stripInline(item.text)}`;
+          let marker: string;
+          if (block.ordered) {
+            counters[item.indent] = (counters[item.indent] ?? 0) + 1;
+            counters.length = item.indent + 1; // 下位レベルのカウンタを破棄
+            marker = `${counters[item.indent]}. `;
+          } else {
+            marker = '・ ';
+          }
+          cell.value = `${'　'.repeat(item.indent)}${marker}${stripInline(item.text)}`;
           cell.font = { name: 'Meiryo', size: 10, color: { argb: 'FF1E2A3A' } };
           cell.alignment = { wrapText: true, indent: 1 };
           row++;
