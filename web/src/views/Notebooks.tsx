@@ -2325,6 +2325,9 @@ export function MinutesPane({
   const [regenerating, setRegenerating] = useState(false);
   // ステップ進捗ラベル（アップロード→文字起こし→生成→完了）。
   const [genStage, setGenStage] = useState<string>('');
+  // 生成後プレビューからの直接ダウンロード（事前指定フォーマット）。ダウンロード中の形式を保持する。
+  const [downloadingFmt, setDownloadingFmt] = useState<ExportFmt | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/notebooks/minutes/presets')
@@ -2739,6 +2742,50 @@ export function MinutesPane({
       .catch(() => setSaveEditError('ネットワークエラーで保存できませんでした。'))
       .finally(() => setSavingEdit(false));
   }, [mode, nbId, lastArtifact, editedContent, savingEdit, onGenerated]);
+
+  // 生成後プレビューから事前指定フォーマットを直接ダウンロードする。
+  // ファイル名は YYYYMMDD_議事録（生成日基準・ゼロ埋め）。拡張子はサーバが付与する。
+  const downloadFormat = useCallback((fmt: ExportFmt) => {
+    if (downloadingFmt) return;
+    const content = editedContent || generatedContent;
+    if (!content) return;
+    setDownloadingFmt(fmt);
+    setDownloadError(null);
+    const now = new Date();
+    const yyyymmdd =
+      String(now.getFullYear()) +
+      String(now.getMonth() + 1).padStart(2, '0') +
+      String(now.getDate()).padStart(2, '0');
+    const filename = `${yyyymmdd}_議事録`;
+    fetch('/api/minutes/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, format: fmt, filename }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error || 'ダウンロードに失敗しました。');
+        }
+        const blob = await res.blob();
+        // Content-Disposition の filename*（UTF-8）からファイル名を復元。取れなければ自前で組み立てる。
+        const cd = res.headers.get('Content-Disposition') || '';
+        const m = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+        const dlName = m ? decodeURIComponent(m[1]) : `${filename}.${fmt}`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = dlName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      })
+      .catch((e: unknown) =>
+        setDownloadError(e instanceof Error ? e.message : 'ネットワークエラーでダウンロードできませんでした。'),
+      )
+      .finally(() => setDownloadingFmt(null));
+  }, [downloadingFmt, editedContent, generatedContent]);
 
   const savePattern = useCallback(() => {
     if (!patternName.trim() || savingPattern) return;
@@ -3185,6 +3232,30 @@ export function MinutesPane({
                   </div>
                 )}
               </div>
+
+              {/* ダウンロード（事前指定フォーマット） */}
+              {selectedExportFormats.size > 0 && (
+                <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface px-3 py-2">
+                  <span className="text-[11px] font-semibold text-text-muted">ダウンロード</span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {EXPORT_OPTS.filter(({ fmt }) => selectedExportFormats.has(fmt)).map(({ fmt, label, icon }) => (
+                      <button
+                        key={fmt}
+                        type="button"
+                        onClick={() => downloadFormat(fmt)}
+                        disabled={downloadingFmt !== null}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-semibold text-text hover:bg-surface-2 disabled:opacity-50"
+                      >
+                        {downloadingFmt === fmt ? <Spinner /> : <span>{icon}</span>}
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {downloadError && (
+                    <span className="text-[11px]" style={{ color: 'var(--mc-stalled)' }}>{downloadError}</span>
+                  )}
+                </div>
+              )}
 
               {/* 保存済み情報 */}
               <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-2/50 px-3 py-2">
