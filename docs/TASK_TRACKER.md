@@ -2346,12 +2346,29 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-211 |
 | タイトル | Apollo collector の空TODO誤発火を止める（status 判定を表4列目に統一） |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | DONE（2026-06-08 Son: collector の status を表4列目/明示行のみ採用に修正・本文の TODO/DONE 文字列を不採用。server tsc 0・回帰テスト6/6 pass・既存31/31&3/3 pass。restart後 live /api/tasks でゴースト0件・空タイトル0件を実機確認。commit c26a9f1・push済） |
 | 担当 | dev-apollo（ソラ） |
 | 詳細 | 林・レン・ケンの診断（2026-06-08、4〜5巡確定）: イベントルーター/Apollo collector が `cxo-agent` の TASK_TRACKER から「- TODO:（空）」を未着手タスクとして繰り返し検知し、アサイン先ゼロのゴーストがチャットに無限ループで湧く。<br>【根本原因】collector が status を判定する際、DONE 行や詳細セクションの note 本文中に出現する "TODO" という文字列（例: 「IN_PROGRESS→DONE」「TODO→DONE」等の履歴記述や受け入れ条件文）を status として誤って拾っている。実体のカードは表4列目（ステータス列）に正規の値を持つため、そこを正本にすれば誤発火しない。 |
 | 受け入れ条件（DoD） | (1) collector の status 抽出を「カード表の4列目（ステータス列）」または明示の `| ステータス | ... |` 行のみから取得する方式に統一し、note/詳細本文中の "TODO"/"DONE" 文字列を status として拾わない。(2) 空タイトル・空ステータスのゴースト行は検知対象から除外。(3) 現行の cxo-agent TASK_TRACKER（MC-206〜211 含む）を食わせて「- TODO:（空）」由来の未着手検知が0件になることを確認。(4) 正規 TODO カード（実体あり）は従来どおり検知される（非退行）。(5) server tsc green・restart 後に誤発火イベントが再発しないことを確認。 |
 | 依存 | Apollo collector（server/src/collectors/*）。関連: 本件と並走の実体タスクは MC-206/207/208/MC-209/MC-210 のみ。 |
 | 備考 | これが本丸。空TODOへの個別アサインは無効（検証対象が存在しない）。実装は dev-apollo（ソラ）。push/restart は Apollo 領分の手順に従う。台帳は task-manager（棚町）管轄。 |
+| 更新日 | 2026-06-08 |
+
+---
+
+### MC-220 — 設定の文字サイズ変更が実画面に効かない（MC-219 回帰／rem 文字が --font-scale に追従しない）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-220 |
+| タイトル | 設定の文字サイズ変更が実画面に効かない（rem ベース文字が --font-scale に未追従） |
+| 優先度 | P2 |
+| ステータス | DONE（2026-06-08 Son完走: html{font-size:calc(16px*var(--font-scale))} 追加で rem文字(Tailwind text-xx 283箇所)が全体スケール、body/.dashboard-container の二重スケール除去、terminalは固定16px。web build→live CSS index-uXqrp_RF.css に反映確認（--font-scale 使用は html 1箇所のみ・二重スケール残0）。push済。Keita 実機目視＝ハードリロード後スライダーで確認） |
+| 担当 | dev（実装委譲・林オーケスト） |
+| 詳細 | Keita 報告（2026-06-08）: Apollo 設定の文字サイズ変更が使えない。MC-219（commit 78cac54、px値調整への作り替え）の DONE は早計で、機能が実画面で効いていない回帰。<br>【根本原因（林 調査・file:line で確証）】MC-219 は App.tsx / Settings.tsx / useFontSize.ts のみ変更し index.css は未修正。`--font-scale`（px÷16）が掛かるのは web/src/index.css:178 の body と :182-185 の `.dashboard-container`（App.tsx:458 の main）だけ。一方ダッシュボードの文字は大半が Tailwind `text-xs/sm/base/...`（rem 単位、283箇所）。rem は `<html>` ルートの font-size を基準に解決するが、index.css の html ルールは height と dark 色のみで font-size 指定が無い → rem は常に 16px 固定でスライダーに追従しない。ロジック（useFontSize の localStorage 保存・`--font-scale` 適用）は正常で、欠陥は CSS 適用先。 |
+| 受け入れ条件（DoD） | (1) `html { font-size: calc(16px * var(--font-scale)); }` を index.css に追加し rem 全体がスケール追従。(2) 二重スケール防止: `.dashboard-container` の font-size/line-height と body font-size から `* var(--font-scale)` 係数を外す（rem 側で効くため）。(3) ターミナル `.terminal-view` は固定幅維持で除外（index.css:189 の `font-scale: 1 !important` は実在しない無効プロパティ→絶対 px へ修正）。(4) Settings のスライダー/ステッパーで 12〜24px がダッシュ全体の文字に反映されることを実機目視。(5) ターミナル表示が崩れない（非退行）。(6) web の `tsc`/build green。 |
+| 依存 | MC-219（前提の px 作り替え）。関連ファイル: web/src/index.css（html/body/.dashboard-container/.terminal-view）、web/src/App.tsx:445/458、web/src/lib/useFontSize.ts、web/src/components/Settings.tsx。web は `cd web && npm run build` で dist 更新→静的配信に即反映（server restart 不要）。 |
+| 備考 | 実装は dev 委譲。build green＋実機目視まで自走、git commit/push（台帳・web/dist）は Keita 承認後。MC-219 は本件解消後に「DoD：実画面反映の目視」未達だった旨を note 追記。 |
 | 更新日 | 2026-06-08 |
 
 ---
