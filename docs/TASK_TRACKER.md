@@ -2418,3 +2418,21 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 依存 | server/src/lib/minutesExport.ts, web/src/index.css, web/src/views/Notebooks.tsx。commit cdefe44 / 4a887f7。関連 MC-208/213。 |
 | 備考 | Son subagent 直実装（林非経由）。docx/PDF=server restart 14:1x で反映、preview/テンプレ=web build で反映。origin push のみ Masayoshi ゲート残。判断保留: docx の見出し下罫線/blockquote左罫線はグレー(D.border)のまま据置（指示で罫線は対象外）。気になる場合は黒化/除去可。 |
 | 更新日 | 2026-06-08 |
+
+---
+
+### MC-215 — 議事録作成画面：生成後をMDプレビュー廃止→「生成ファイル一覧＋実ファイルプレビュー」に刷新
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-215 |
+| タイトル | 議事録作成画面：生成後をMDプレビュー廃止→「生成ファイル一覧＋実ファイルプレビュー」に刷新 |
+| 優先度 | P1 |
+| ステータス | 実機反映済（2026-06-08 web build 配信。新JS配信200・旧mc-minutes-tight撤去をlive確認）。Keita 実機確認待ち（要ハードリロード） |
+| 担当 | Son（subagent 直）|
+| 詳細 | Keita 指示（2026-06-08）: 作成画面のインラインMarkdownプレビューは不要。代わりに、作成したら**その画面に生成ファイルが一覧表示**され、**そのファイルからプレビュー**（＆DL）できるようにしたい。 |
+| 受け入れ条件（DoD） | (1) MinutesPane の生成後 ReactMarkdown プレビュー（rendered/raw切替・編集欄）を撤去。(2) 生成ファイル（議事録md＋docx/pdf/xlsx/txt）を一覧表示、各行に「プレビュー」(実ファイルを inline=1 で開く=PDF/OfficeはPDF変換iframe)＋「ダウンロード」。(3) DL名 YYYYMMDD_議事録 維持。(4) 修正→再生成は維持（元入力＋フィードバック＋直近md）。(5) 未使用化した mc-minutes-tight CSS 撤去。(6) web tsc 0・build成功。→全充足。 |
+| 依存 | web/src/views/Notebooks.tsx, web/src/index.css。生成API /generate の done.created（name/relpath/ext/kind）を流用（server変更不要）。commit bc8e811 / ea4f906。関連 MC-208/209/213/214。 |
+| 残（別途確認） | 「あとから過去の議事録を作成画面で開き直して再作成」の**外部からの入口**（成果物一覧の「再作成」ボタン案）は未実装。Keita 確認のうえ次段で対応。今回は当該セッション内の生成→ファイル表示→プレビュー＋再生成までを実装。 |
+| 備考 | Son subagent 直実装（林非経由）。web静的配信のため build で即反映（restart不要）。origin push のみ Masayoshi ゲート残。 |
+| 更新日 | 2026-06-08 |
