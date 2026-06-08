@@ -2373,6 +2373,23 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 
 ---
 
+### MC-221 — スマホで左下サイドバーの設定・テーマ切替に到達できない（モバイルメニュー欠落）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-221 |
+| タイトル | スマホで左下サイドバー（設定・テーマ切替）に到達できない |
+| 優先度 | P2 |
+| ステータス | IN_PROGRESS |
+| 担当 | dev（実装委譲・林オーケスト） |
+| 詳細 | Keita 報告（2026-06-09）: スマホから「左下の設定とか」が見えない。<br>【根本原因（林 調査・file:line で確証）】設定・テーマ切替・接続状態は左サイドバーの footer（web/src/App.tsx 内、テーマトグル ~270-289 / 設定ボタン 290-301 / 接続状態 302-314）に置かれているが、その aside は `hidden ... md:flex`（App.tsx:222）で md 未満では非表示。モバイルのナビは右上ハンバーガー（components/BottomNav.tsx）のドロップダウンに切替わるが、BottomNav は navItems（ページ群）のみ描画し、設定・テーマ切替を含まない（BottomNav.tsx:142-144 の renderRows は items のみ）。よって MC-220 で直した文字サイズ設定を含む「設定」自体にスマホから到達不能。 |
+| 受け入れ条件（DoD） | (1) モバイルのハンバーガーメニュー（BottomNav ドロップダウン）に「設定」項目を追加し、タップで Settings モーダルが開く（既存 onSettingsClick=setShowSettings(true) を流用）。(2) 同メニューに「テーマ切替」も追加し、デスクトップ footer と同じ挙動（既存ハンドラ流用）。(3) メニュー項目タップ後はメニューを閉じる。(4) nav 項目との視覚的区切り（divider）を入れる。(5) デスクトップ（md+）のサイドバー footer は現状維持・非退行。(6) スマホ実機幅（≤390px）で設定・テーマに到達でき横溢れ無し。(7) web の tsc/build green。接続状態インジケータ追加は任意（低優先）。 |
+| 依存 | 関連ファイル: web/src/components/BottomNav.tsx（footer/アクション領域追加）、web/src/App.tsx:493 付近（BottomNav 呼び出しに設定・テーマのアクションを渡す）。設計案: BottomNav に footerActions?:(close:()=>void)=>ReactNode を追加し、App 側が設定/テーマボタンを合成して close() でメニューを閉じる。web は build で dist 反映（server restart 不要）。 |
+| 備考 | 実装は dev 委譲・スコープは BottomNav.tsx＋App.tsx のみ。注意: 現在 web/src/components/TaskDetail.tsx が別アクターにより編集中（未コミット）→ build はツリーが落ち着いてから（他人の未完を巻き込まない）。git commit/push は Keita 承認後。 |
+| 更新日 | 2026-06-09 |
+
+---
+
 ### MC-212 — Claude使用量カード: urano2取得失敗時のフォールバック表記が Claude1/keita.urano に誤る（KEY_FALLBACK反転）
 
 | フィールド | 値 |
@@ -2498,4 +2515,19 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ステータス | DONE（実機反映・push済 / 2026-06-08 web build 配信確認） |
 | 担当 | Son（subagent 直）|
 | 詳細 | Keita 指示: 設定の文字サイズを％プリセット（小90/中100/大110）でなく値で調整したい。useFontSize.ts を px基準（12〜24px・既定16、--font-scale=px/16）に作り替え、Settings.tsx をスライダー＋−/＋＋数値入力に。App.tsx の inline --font-scale も px由来に。旧 small/medium/large は 14/16/18px へ後方互換移行。commit 78cac54。 |
+| 更新日 | 2026-06-08 |
+
+---
+
+### MC-221 — タスクボード追加軽量化（一覧から detail 分離＋gzip＋パースキャッシュ）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-221 |
+| タイトル | タスクボード追加軽量化（一覧から detail 分離＋gzip＋パースキャッシュ） |
+| 優先度 | P2 |
+| ステータス | DONE（2026-06-08 Son: MC-206の続き。①/api/tasks 一覧から detail(~840字/件)除外・?detail=1後方互換・GET /api/tasks/:id/detail 新設、フロントTaskDetailはカード展開時に遅延取得 ②compression(gzip)追加・filterでSSE(text/event-stream)とterminalを除外しライブ更新を保護 ③collector を監視ファイルmtimeでキャッシュ(81ms→0.1ms)。実機検証=closed一覧 714KB→約20KB(gzip+detail分離)・SSE非圧縮確認・単一detail API 200。server/web tsc・build green・既存テスト全pass。commit 03dc1fd/a719b02。push済） |
+| 担当 | Son（subagent 直）|
+| 詳細 | Keita「軽量化はもっと改善案ないか」→Son提案の3点を実装。MC-206(scope分割)に続く第二弾。compression は新規依存(server/package.json)。SSE/terminal は圧縮除外で非破壊。 |
+| 依存 | MC-206。server/src/index.ts, server/src/collectors/tasks.ts, web/src/components/TaskDetail.tsx, server/package.json。 |
 | 更新日 | 2026-06-08 |
