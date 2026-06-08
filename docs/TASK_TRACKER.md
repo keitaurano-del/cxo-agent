@@ -2312,3 +2312,38 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 依存 | MC-207（議事録PDF/docx エクスポート整備。中点左寄せ対応の続き）。関連ファイル: server/src/lib/minutesExport.ts、server/src/scripts/generateMinutesTemplates.ts。 |
 | 備考 | 実装は dev 委譲。修正後 build green を確認のうえ Masayoshi 検証ゲート（push/restart は Masayoshi 検証後）。Son は調査・起票まで。 |
 | 更新日 | 2026-06-08 |
+
+
+---
+
+### MC-209 — Apollo 公開URLを無料の固定URL化（Cloudflare Named Tunnel）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-209 |
+| タイトル | Apollo 公開URLを無料の固定URL化（Cloudflare Named Tunnel） |
+| 優先度 | P2 |
+| ステータス | TODO（Keita 判断待ち：Cloudflare 登録ドメインの有無） |
+| 担当 | apollo番人 / dev（インフラ） |
+| 詳細 | Keita 依頼（2026-06-08）: Apollo の公開URLが再起動のたびに変わって「落ちてる」ように見える件を恒久対策する。<br>【根本原因】origin(:4317)/rescue(:4318) のトンネルが quick tunnel（`cloudflared tunnel --url http://localhost:4317`）で、再起動ごとにランダムな `*.trycloudflare.com` が払い出される（systemd: cloudflared.service / cloudflared-rescue.service）。サーバ自体は健全（HTTP 401=認証ゲートで正常）。2026-06-08 の事象は旧URL `able-strict-driver-preferred` が死に、新URL `automatic-disturbed-delays-annually` に変わったことが原因で、Apollo ダウンではなかった。<br>【対策】Cloudflare Named Tunnel に切替えて apollo.&lt;domain&gt; / rescue.&lt;domain&gt; を固定発行する。費用は Named Tunnel/Zero Trust 無料枠で賄える（追加課金なし）。ただし Cloudflare に登録済みドメインが1つ必須。 |
+| 受け入れ条件（DoD） | (1) origin/rescue が固定ホスト名で安定アクセスできる（再起動してもURL不変）。(2) `?token=<MC_TOKEN>`→Cookie 方式のスマホ1クリック認証が固定URLでも維持。(3) systemd の cloudflared.service / cloudflared-rescue.service を named tunnel 実行に書き換え（--url quick tunnel をやめる）。(4) 固定URL+token で live 200 を実機検証。 |
+| 依存 | Keita 判断: Cloudflare 登録ドメインの有無。【あり】Keita が `cloudflared tunnel login`（対話・ブラウザ、ドメイン選択）で ~/.cloudflared/cert.pem を取得 → 以降 林/番人が tunnel create・ingress 設定・`tunnel route dns`・systemd 切替・検証を実施（DNS/トンネル等の外向き変更は実行前に都度 Keita 確認）。【なし】完全無料&固定は不可（ドメイン取得 年$10前後が要る）→ 代替: quick tunnel のまま再起動時に新URLを自動通知する無料の仕組みを別途組む。 |
+| 備考 | cloudflared は /usr/local/bin に導入済み。関連: [[project-apollo-dashboard]]「スマホ固定 URL」項（cloudflared 名前付きトンネル方針）。実装は番人/dev に委譲、push/restart/外向き変更は Keita 承認後。 |
+| 更新日 | 2026-06-08 |
+
+---
+
+### MC-209 — 議事録作成画面から事前指定フォーマットを直接DL＋ファイル名を YYYYMMDD_議事録 に
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-209 |
+| タイトル | 議事録作成画面から事前指定フォーマットを直接DL＋ファイル名を YYYYMMDD_議事録 に |
+| 優先度 | P2 |
+| ステータス | TODO |
+| 担当 | dev（林/凜） |
+| 詳細 | Keita 要望（2026-06-08）: (A) 議事録を作成する画面（MinutesPane）からも、事前に指定したフォーマットをダウンロードできるようにする。(B) 保存/DL名を `YYYYMMDD_議事録`（例 `20260608_議事録.docx`）にする。<br>【現状（Son 調査）】作成画面 `web/src/views/Notebooks.tsx` の `MinutesPane` には「エクスポート形式（複数選択可）」UI（EXPORT_OPTS = docx/xlsx/pdf/txt、`selectedExportFormats`、3000行付近）で事前指定はできるが、**生成後のプレビュー領域（3123行〜）にダウンロードボタンが無い**。現状ダウンロードは Deliverables 画面経由。バックの DL API は `POST /api/minutes/export {content, format, filename}`（minutesRouter.ts:140-171）が既存で、`filename`（拡張子除去してタイトル化）→ `${title}.${ext}` で Content-Disposition を返す（filename 既定は「議事録」）。 |
+| 受け入れ条件（DoD） | (1) MinutesPane の生成後プレビュー領域に、事前指定した形式（`selectedExportFormats`、複数可）でのダウンロードボタンを追加。クリックで `POST /api/minutes/export` を呼び（content = 編集後 or 生成内容）、ブラウザ保存。(2) ダウンロード名が `YYYYMMDD_議事録.<ext>`（日付は生成日。複数形式選択時は拡張子で区別、同名衝突時の扱いも定義）。(3) Deliverables へ保存される議事録ファイル名も可能なら `YYYYMMDD_議事録` 系に揃える（範囲が広ければ DL名優先で、保存名整合は別途相談）。(4) docx/xlsx/pdf/txt すべてで実DL確認。(5) web/server tsc --noEmit 0エラー・build green。 |
+| 依存 | MinutesPane（web/src/views/Notebooks.tsx）／minutesRouter.ts（/export）。関連: MC-207・MC-208（議事録エクスポート整備の一連）。MC-202 の議事録UI分離方針と衝突しないか要確認（議事録機能の扱い）。 |
+| 備考 | 実装は dev 委譲。「事前に指定したフォーマット」= 作成画面で選んだエクスポート形式（docx等）の解釈。日付の基準（会議日 or 生成日）に迷えば生成日で実装し Son 経由で Keita 確認。push/restart は Masayoshi 検証ゲート。Son は調査・起票まで。 |
+| 更新日 | 2026-06-08 |
