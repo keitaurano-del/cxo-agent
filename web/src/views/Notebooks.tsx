@@ -1441,6 +1441,34 @@ function extOfName(name: string): string {
   return i >= 0 ? name.slice(i).toLowerCase() : '';
 }
 
+// 履歴一覧の 1 件（GET /api/minutes/history）。
+type MinutesHistoryItem = {
+  folderRelpath: string;
+  folderName: string;
+  title: string;
+  date: string;
+  mtime: string;
+};
+
+// 履歴 1 件の復元情報（GET /api/minutes/history/:folder）。
+type MinutesHistoryDetail = {
+  folderRelpath: string;
+  title: string;
+  inputText: string;
+  styles: string[];
+  exportFormats: string[];
+  attachments: Array<{ name: string; relpath: string; sizeBytes: number; ext: string }>;
+};
+
+// 履歴から復元したサーバ上の既存添付（再生成で再利用 or 除外を選べる）。
+type RestoredAttachment = {
+  name: string;
+  relpath: string;
+  sizeBytes: number;
+  ext: string;
+  keep: boolean; // false なら再生成時に除外（excludeSources に入れる）
+};
+
 // 議事録の成果物ファイルが inline プレビュー（iframe / img）で見られるか。
 // docx/xlsx/pptx はサーバ側で PDF 変換して inline=1 で返るためプレビュー可。
 const MINUTES_PREVIEWABLE_EXTS = new Set([
@@ -2332,6 +2360,92 @@ function DeliverablePickerModal({
   );
 }
 
+// ─── 議事録 履歴モーダル ─────────────────────────────────────
+// 過去の議事録（議事録/ 直下のフォルダ）を新しい順で一覧し、選ぶと作成画面に読み込み直す。
+
+function MinutesHistoryModal({
+  items,
+  loading,
+  error,
+  picking,
+  onPick,
+  onClose,
+}: {
+  items: MinutesHistoryItem[];
+  loading: boolean;
+  error: string | null;
+  picking: boolean;
+  onPick: (item: MinutesHistoryItem) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-3 backdrop-blur md:p-6"
+      role="dialog"
+      aria-modal
+      aria-label="議事録の履歴"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+          <span className="text-sm font-semibold text-text">🕘 議事録の履歴</span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
+            aria-label="閉じる"
+          >
+            <CloseIcon width={18} height={18} />
+          </button>
+        </div>
+        <p className="border-b border-border px-4 py-1.5 text-[11px] text-text-faint">
+          選ぶと入力テキスト・スタイル・形式・添付を作成画面に復元します。
+        </p>
+        <div className="relative flex-1 overflow-y-auto p-2">
+          {picking && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface/70">
+              <span className="inline-flex items-center gap-2 text-xs text-text-muted"><Spinner />読み込み中…</span>
+            </div>
+          )}
+          {error ? (
+            <div role="alert" className="m-2 rounded-lg border border-stalled/40 bg-stalled-bg/60 px-3 py-2 text-xs" style={{ color: 'var(--mc-stalled)' }}>
+              {error}
+            </div>
+          ) : loading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-xs text-text-muted"><Spinner />読み込み中…</div>
+          ) : items.length === 0 ? (
+            <EmptyState>過去の議事録がまだありません</EmptyState>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {items.map((item) => (
+                <li key={item.folderRelpath}>
+                  <button
+                    type="button"
+                    onClick={() => onPick(item)}
+                    disabled={picking}
+                    className="flex w-full items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 text-left transition-colors hover:border-accent/50 hover:bg-surface-2 disabled:opacity-50"
+                  >
+                    <FileIcon width={16} height={16} />
+                    <span className="min-w-0 flex-1 truncate text-sm text-text" title={item.title}>
+                      {item.title}
+                    </span>
+                    {item.date && (
+                      <span className="shrink-0 text-[11px] text-text-faint">{item.date}</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── 議事録ペイン ─────────────────────────────────────────
 
 export function MinutesPane({
@@ -2358,6 +2472,8 @@ export function MinutesPane({
   const [inputText, setInputText] = useState('');
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // 添付を追加（テキスト抽出せず、そのまま sources/ に保存する元ファイル）用の input。
+  const attachInputRef = useRef<HTMLInputElement | null>(null);
   // Apollo（Deliverables）から選ぶモーダル
   const [showDeliverablePicker, setShowDeliverablePicker] = useState(false);
   const [loadingFromDeliverable, setLoadingFromDeliverable] = useState(false);
@@ -2392,6 +2508,17 @@ export function MinutesPane({
   const [lastArtifact, setLastArtifact] = useState<{ relpath: string; name: string } | null>(null);
   // 入力に使った元ファイル（音声・テキスト・PDF など）。生成時に sources/ へ保存させる。
   const [sourceFiles, setSourceFiles] = useState<File[]>([]);
+  // ─── 履歴（過去議事録の読み込み直し / 再生成）─────────────────────
+  // deliverables モードのみ対応（notebook モードには議事録/ 履歴 API が無い）。
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyItems, setHistoryItems] = useState<MinutesHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [loadingHistoryDetail, setLoadingHistoryDetail] = useState(false);
+  // 履歴から復元したフォルダ relpath（再生成時に sources/ を流用する元）。null なら通常作成。
+  const [reuseFolderRelpath, setReuseFolderRelpath] = useState<string | null>(null);
+  // 復元された添付（サーバ上の既存 sources/）。keep=false にすると再生成で使わない（除外）。
+  const [restoredAttachments, setRestoredAttachments] = useState<RestoredAttachment[]>([]);
   // 生成完了後はファイル一覧表示モードに遷移し、ダウンロード直行をやめる。
   const [previewMode, setPreviewMode] = useState(false);
   // フィードバック→再生成
@@ -2550,6 +2677,70 @@ export function MinutesPane({
     [handleAudioFile, handleExtractFile],
   );
 
+  // 履歴一覧を取得してモーダルを開く（deliverables モードのみ）。
+  const openHistory = useCallback(() => {
+    if (mode !== 'deliverables') return;
+    setShowHistory(true);
+    setHistoryError(null);
+    setHistoryLoading(true);
+    fetch('/api/minutes/history')
+      .then((r) => r.json().catch(() => null) as Promise<{ items?: MinutesHistoryItem[]; error?: string } | null>)
+      .then((data) => {
+        if (data?.items) setHistoryItems(data.items);
+        else setHistoryError(data?.error || '履歴を取得できませんでした。');
+      })
+      .catch(() => setHistoryError('ネットワークエラーで履歴を取得できませんでした。'))
+      .finally(() => setHistoryLoading(false));
+  }, [mode]);
+
+  // 履歴 1 件を作成画面に読み込む（入力テキスト / スタイル / 形式 / 添付を復元）。
+  const loadHistoryItem = useCallback(
+    async (item: MinutesHistoryItem) => {
+      setLoadingHistoryDetail(true);
+      setHistoryError(null);
+      try {
+        const res = await fetch(`/api/minutes/history/${encodeURIComponent(item.folderName)}`);
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error || `履歴の読み込みに失敗しました（HTTP ${res.status}）。`);
+        }
+        const detail = (await res.json()) as MinutesHistoryDetail;
+        // 生成後プレビュー状態なら作成フォームへ戻してから復元する。
+        setPreviewMode(false);
+        setGeneratedContent(null);
+        setGeneratedFiles([]);
+        setLastArtifact(null);
+        setGenError(null);
+        setGenReport(null);
+        setExportWarn(null);
+
+        setInputText(detail.inputText);
+        setInputMode('text');
+        // スタイル復元（既知の id のみ。無ければ既定 standard）。
+        const validStyles = detail.styles.filter((s) => MINUTES_STYLES.some((m) => m.id === s));
+        setSelectedStyles(new Set(validStyles.length > 0 ? validStyles : ['standard']));
+        // エクスポート形式復元（無ければ既定 docx）。
+        const validFmts = detail.exportFormats.filter((f): f is ExportFmt =>
+          EXPORT_OPTS.some((o) => o.fmt === f),
+        );
+        setSelectedExportFormats(new Set<ExportFmt>(validFmts.length > 0 ? validFmts : ['docx']));
+        // 添付復元（サーバ上の既存 sources を再利用対象として保持）。
+        setReuseFolderRelpath(detail.folderRelpath);
+        setRestoredAttachments(
+          detail.attachments.map((a) => ({ ...a, keep: true })),
+        );
+        // 新規アップロード分（File）はクリアして混同を避ける。
+        setSourceFiles([]);
+        setShowHistory(false);
+      } catch (e) {
+        setHistoryError(e instanceof Error ? e.message : '履歴の読み込みに失敗しました。');
+      } finally {
+        setLoadingHistoryDetail(false);
+      }
+    },
+    [],
+  );
+
   const runSingleGenerate = useCallback(
     async (
       styleId: string,
@@ -2562,8 +2753,16 @@ export function MinutesPane({
         .filter(Boolean)
         .join('\n');
 
-      // 元ファイルがあれば multipart で送って sources/ へ保存させる。なければ JSON。
-      const useMultipart = !!opts?.attachSources && sourceFiles.length > 0;
+      // この回が当該生成の 1 スタイル目か（添付・履歴流用は 1 回目だけ反映して重複保存を避ける）。
+      const isFirst = !!opts?.attachSources;
+      // 履歴から復元した既存添付のうち keep=true のものを流用、keep=false は除外する。
+      const reuseFrom = isFirst ? reuseFolderRelpath : null;
+      const excludeNames = isFirst
+        ? restoredAttachments.filter((a) => !a.keep).map((a) => a.name)
+        : [];
+      const stylesArr = [...selectedStyles];
+      // 新規アップロード添付があるか、または履歴 sources を流用するなら multipart で送る。
+      const useMultipart = isFirst && (sourceFiles.length > 0 || !!reuseFrom);
       let res: Response;
       if (useMultipart) {
         const fd = new FormData();
@@ -2577,6 +2776,10 @@ export function MinutesPane({
         if (opts?.previousContent) fd.append('previousContent', opts.previousContent);
         for (const f of sourceFiles) fd.append('sourceFiles', f, f.name);
         for (const fmt of selectedExportFormats) fd.append('exportFormats', fmt);
+        for (const s of stylesArr) fd.append('styles', s);
+        // 履歴から復元した既存議事録フォルダの sources/ を流用する（元フォルダは破壊しない）。
+        if (reuseFrom) fd.append('reuseSourcesFrom', reuseFrom);
+        for (const n of excludeNames) fd.append('excludeSources', n);
         res = await fetch(minutesBase + '/generate', {
           method: 'POST',
           headers: { Accept: 'text/event-stream' },
@@ -2596,6 +2799,7 @@ export function MinutesPane({
             feedback: opts?.feedback || undefined,
             previousContent: opts?.previousContent || undefined,
             exportFormats: [...selectedExportFormats],
+            styles: stylesArr,
           }),
         });
       }
@@ -2658,7 +2862,7 @@ export function MinutesPane({
       }
       return result;
     },
-    [minutesBase, inputText, selectedType, selectedFormat, selectedTemplateId, customInstructions, presets, sourceFiles],
+    [minutesBase, inputText, selectedType, selectedFormat, selectedTemplateId, customInstructions, presets, sourceFiles, selectedStyles, selectedExportFormats, reuseFolderRelpath, restoredAttachments],
   );
 
   // 生成済みファイルの取得URL。inline=1 なら docx/xlsx 等はサーバが PDF 変換して返す（プレビュー用）。
@@ -2786,6 +2990,8 @@ export function MinutesPane({
     setFeedbackText('');
     setInputText('');
     setSourceFiles([]);
+    setReuseFolderRelpath(null);
+    setRestoredAttachments([]);
   }, []);
 
   // 生成後プレビューから事前指定フォーマットを直接ダウンロードする。
@@ -2872,6 +3078,16 @@ export function MinutesPane({
           onClose={() => setShowDeliverablePicker(false)}
           onPick={(df) => void handleDeliverablePick(df)}
           picking={loadingFromDeliverable}
+        />
+      )}
+      {showHistory && (
+        <MinutesHistoryModal
+          items={historyItems}
+          loading={historyLoading}
+          error={historyError}
+          picking={loadingHistoryDetail}
+          onPick={(item) => void loadHistoryItem(item)}
+          onClose={() => setShowHistory(false)}
         />
       )}
       {previewFile && (
@@ -3126,24 +3342,103 @@ export function MinutesPane({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => void generate()}
-            disabled={generating || !inputText.trim() || selectedStyles.size === 0}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition-opacity disabled:opacity-40"
-          >
-            {generating ? (
-              <>
-                <Spinner />
-                議事録を生成中…
-              </>
-            ) : (
-              <>
-                <SparkIcon width={15} height={15} />
-                議事録を生成{selectedStyles.size > 1 ? `（${selectedStyles.size}スタイル）` : ''}
-              </>
+          <div className="flex items-stretch gap-2">
+            <button
+              type="button"
+              onClick={() => void generate()}
+              disabled={generating || !inputText.trim() || selectedStyles.size === 0}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition-opacity disabled:opacity-40"
+            >
+              {generating ? (
+                <>
+                  <Spinner />
+                  議事録を生成中…
+                </>
+              ) : (
+                <>
+                  <SparkIcon width={15} height={15} />
+                  議事録を生成{selectedStyles.size > 1 ? `（${selectedStyles.size}スタイル）` : ''}
+                </>
+              )}
+            </button>
+            {/* 履歴: 過去の議事録を作成画面に読み込み直す（deliverables モードのみ）。 */}
+            {mode === 'deliverables' && (
+              <button
+                type="button"
+                onClick={openHistory}
+                disabled={generating}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-muted transition-colors hover:border-accent/50 hover:text-text disabled:opacity-40"
+                title="過去の議事録を読み込む"
+              >
+                🕘 履歴
+              </button>
             )}
-          </button>
+          </div>
+
+          {/* 履歴から復元した既存添付（再生成で使う/外すを選べる。元フォルダは破壊しない）。 */}
+          {restoredAttachments.length > 0 && (
+            <div className="rounded-lg border border-border bg-surface px-3 py-2">
+              <p className="mb-1 text-[11px] text-text-faint">
+                復元された添付（チェックを外すと再生成で使いません）
+              </p>
+              <ul className="flex flex-col gap-1">
+                {restoredAttachments.map((a, i) => (
+                  <li key={a.relpath} className="flex items-center gap-2 text-xs text-text-muted">
+                    <input
+                      type="checkbox"
+                      checked={a.keep}
+                      onChange={() =>
+                        setRestoredAttachments((prev) =>
+                          prev.map((x, idx) => (idx === i ? { ...x, keep: !x.keep } : x)),
+                        )
+                      }
+                      className="shrink-0 accent-accent"
+                    />
+                    <span
+                      className={'min-w-0 flex-1 truncate ' + (a.keep ? '' : 'line-through opacity-50')}
+                      title={a.name}
+                    >
+                      📎 {a.name}
+                    </span>
+                    <a
+                      href={`/api/deliverables/file?path=${encodeURIComponent(a.relpath)}&inline=1`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-text-faint hover:text-text"
+                      title="プレビュー"
+                    >
+                      <EyeIcon width={14} height={14} />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* 添付を追加（テキスト抽出せず、そのまま元ファイルとして sources/ に保存する）。 */}
+          {mode === 'deliverables' && (reuseFolderRelpath || restoredAttachments.length > 0 || sourceFiles.length > 0) && (
+            <div>
+              <input
+                ref={attachInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length > 0) setSourceFiles((prev) => [...prev, ...files]);
+                  if (attachInputRef.current) attachInputRef.current.value = '';
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => attachInputRef.current?.click()}
+                disabled={generating}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs text-text-muted hover:border-accent/50 hover:text-text disabled:opacity-50"
+              >
+                ＋ 添付を追加
+              </button>
+            </div>
+          )}
           {!inputText.trim() && (
             <p className="text-[11px] text-text-faint">
               テキストを入力または音声をアップロードすると生成できます。
