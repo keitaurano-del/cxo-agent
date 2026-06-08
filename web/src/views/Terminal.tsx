@@ -17,15 +17,25 @@
 //   capture-pane する。各操作はアクティブタブの terminal 番号をサーバへ渡し、全ターミナルで効く。
 //   「ターミナルを開始」は対象タブの systemd ユニットを冪等復旧する（terminal 番号をサーバへ渡す）。
 //
-// MC-95 / MC-102 / MC-123 画像添付（全ターミナル）:
-//   選んだ／貼り付けた画像をフロントの配列に貯め、サムネでプレビュー → 「送る」で一括 POST。
+// MC-95 / MC-102 / MC-123 ファイル添付（全ターミナル）:
+//   選んだ／貼り付けたファイル（画像 / テキスト / ドキュメント / 動画 / 音声）をフロントの配列に
+//   貯め、画像はサムネ・非画像は種別アイコン付きチップでプレビュー → 「送る」で一括 POST。
 //   サーバは data/terminal-uploads/ に保存し、絶対パス群を対象セッションの入力欄へ send-keys で
 //   リテラル注入する（自動 Enter なし）。remote(2) は scp で旧箱へコピーしてから旧箱パスを注入する。
-//   林はそのパスを Read で画像として読める。
+//   林はそのパスを Read で読める（注入はパスを送るだけなのでファイル種別を問わず動く）。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { ImageFileIcon, CloseIcon, TerminalIcon, PlusIcon, KeyboardIcon } from '../components/icons';
+import {
+  ImageFileIcon,
+  CloseIcon,
+  TerminalIcon,
+  PlusIcon,
+  KeyboardIcon,
+  DocumentsIcon,
+  VideoFileIcon,
+  AudioFileIcon,
+} from '../components/icons';
 import { Spinner } from '../components/ui';
 
 // ─── 利用可能モデル定義 ─────────────────────────────────────
@@ -116,30 +126,72 @@ async function postSendKeys(keys: string, terminal: number): Promise<void> {
 }
 
 const ACCEPTED_IMAGE_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
-const ACCEPTED_TEXT_EXT = new Set(['.txt', '.md', '.ts', '.js', '.py', '.json', '.yaml', '.yml', '.csv']);
-const MAX_IMAGES = 5;
-const MAX_BYTES = 10 * 1024 * 1024; // 10MB / ファイル
+// 個別許可 application MIME（ドキュメント系）。text/* video/* audio/* は prefix 判定で通す。
+const ACCEPTED_DOC_MIME = new Set([
+  'application/json',
+  'application/javascript',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.oasis.opendocument.text',
+  'application/vnd.oasis.opendocument.spreadsheet',
+  'application/vnd.oasis.opendocument.presentation',
+  'application/rtf',
+  'application/x-yaml',
+  'application/yaml',
+]);
+// 拡張子ホワイトリスト（MIME が空/unknown のローカルファイル救済用）。サーバと揃える。
+const ACCEPTED_EXT = new Set([
+  '.png', '.jpg', '.jpeg', '.webp', '.gif',
+  '.txt', '.md', '.csv', '.ts', '.js', '.py', '.json', '.yaml', '.yml',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp', '.rtf',
+  '.mp4', '.mov', '.webm', '.mkv', '.avi', '.m4v',
+  '.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac',
+]);
+const MAX_FILES = 5;
+const MAX_BYTES = 1024 * 1024 * 1024; // 1GB / ファイル（サーバ既定と揃える）
 
-/** MIME またはファイル拡張子でテキスト系ファイルか判定する。 */
+/** ファイル末尾の小文字拡張子を返す（無ければ ''）。 */
+function fileExt(name: string): string {
+  const dotIdx = name.lastIndexOf('.');
+  return dotIdx >= 0 ? name.slice(dotIdx).toLowerCase() : '';
+}
+
+/** MIME またはファイル拡張子で受理可能なファイルか判定する（画像/テキスト/ドキュメント/動画/音声）。 */
 function isAcceptedFile(f: File): boolean {
   if (ACCEPTED_IMAGE_MIME.includes(f.type)) return true;
-  if (f.type.startsWith('text/')) return true;
-  if (f.type === 'application/json' || f.type === 'application/javascript') return true;
+  if (f.type.startsWith('text/') || f.type.startsWith('video/') || f.type.startsWith('audio/')) return true;
+  if (ACCEPTED_DOC_MIME.has(f.type)) return true;
   // MIME が空または unknown のときは拡張子で判断する（ローカルファイルで多い）。
-  const dotIdx = f.name.lastIndexOf('.');
-  if (dotIdx >= 0) {
-    const ext = f.name.slice(dotIdx).toLowerCase();
-    if (ACCEPTED_TEXT_EXT.has(ext)) return true;
-  }
-  return false;
+  return ACCEPTED_EXT.has(fileExt(f.name));
+}
+
+/** ステージング表示用の種別。画像はサムネ、それ以外は種別アイコン付きチップで出す。 */
+type StagedKind = 'image' | 'video' | 'audio' | 'doc';
+
+/** ファイルの表示種別を MIME / 拡張子から判定する。 */
+function stagedKind(f: File): StagedKind {
+  if (ACCEPTED_IMAGE_MIME.includes(f.type)) return 'image';
+  if (f.type.startsWith('video/')) return 'video';
+  if (f.type.startsWith('audio/')) return 'audio';
+  if (f.type.startsWith('image/')) return 'image';
+  const ext = fileExt(f.name);
+  if (['.mp4', '.mov', '.webm', '.mkv', '.avi', '.m4v'].includes(ext)) return 'video';
+  if (['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'].includes(ext)) return 'audio';
+  return 'doc';
 }
 
 // ステージング中の 1 ファイル。file は送信用、url は画像サムネ表示用（非画像は url=''）。
 interface StagedImage {
   id: string;
   file: File;
-  url: string; // 画像のみ ObjectURL。テキスト系は ''。
+  url: string; // 画像のみ ObjectURL。非画像は ''。
   isImage: boolean;
+  kind: StagedKind; // 表示用の種別（image=サムネ / video/audio/doc=チップ）。
 }
 
 type UploadState =
@@ -607,31 +659,31 @@ export default function Terminal() {
   const addToStaging = useCallback((files: File[]) => {
     const accepted = files.filter((f) => isAcceptedFile(f));
     if (accepted.length === 0) {
-      setState({ kind: 'error', message: '対応するファイル（画像 PNG/JPEG/WebP/GIF またはテキスト系）が見つかりませんでした。' });
+      setState({ kind: 'error', message: '対応するファイル（画像 / テキスト / ドキュメント / 動画 / 音声）が見つかりませんでした。' });
       return;
     }
     const tooLarge = accepted.find((f) => f.size > MAX_BYTES);
     if (tooLarge) {
-      setState({ kind: 'error', message: '各ファイルは 10MB までです。' });
+      setState({ kind: 'error', message: '各ファイルは 1GB までです。' });
       return;
     }
     setStaged((prev) => {
-      const room = MAX_IMAGES - prev.length;
+      const room = MAX_FILES - prev.length;
       if (room <= 0) {
-        setState({ kind: 'error', message: `ファイルは合計 ${MAX_IMAGES} 個までです。先に何個か削除してください。` });
+        setState({ kind: 'error', message: `ファイルは合計 ${MAX_FILES} 個までです。先に何個か削除してください。` });
         return prev;
       }
       const toAdd = accepted.slice(0, room);
       if (toAdd.length < accepted.length) {
         setState({
           kind: 'error',
-          message: `ファイルは合計 ${MAX_IMAGES} 個までです。${accepted.length - toAdd.length} 個は追加できませんでした。`,
+          message: `ファイルは合計 ${MAX_FILES} 個までです。${accepted.length - toAdd.length} 個は追加できませんでした。`,
         });
       } else {
         setState({ kind: 'idle' });
       }
       const next = toAdd.map((f, i) => {
-        const isImage = ACCEPTED_IMAGE_MIME.includes(f.type);
+        const isImage = ACCEPTED_IMAGE_MIME.includes(f.type) || f.type.startsWith('image/');
         const named =
           f.name && f.name.trim() !== ''
             ? f
@@ -643,6 +695,7 @@ export default function Terminal() {
           file: named,
           url: isImage ? URL.createObjectURL(named) : '',
           isImage,
+          kind: stagedKind(named),
         };
       });
       return [...prev, ...next];
@@ -859,7 +912,7 @@ export default function Terminal() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,text/*,.ts,.js,.py,.json,.yaml,.yml,.csv,.md,.txt"
+            accept="image/*,video/*,audio/*,text/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.rtf,.csv,.md,.txt,.json,.yaml,.yml,.ts,.js,.py"
             multiple
             onChange={(e) => handleFiles(e.target.files)}
             className="hidden"
@@ -868,14 +921,14 @@ export default function Terminal() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={state.kind === 'uploading' || staged.length >= MAX_IMAGES}
+            disabled={state.kind === 'uploading' || staged.length >= MAX_FILES}
             className="flex items-center gap-1.5 rounded border border-border bg-surface-2 px-2 py-1 text-xs text-text hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ImageFileIcon width={13} height={13} />
             ファイルを選択
           </button>
           {staged.length > 0 && (
-            <span className="text-[11px] text-text-faint">{staged.length} / {MAX_IMAGES}</span>
+            <span className="text-[11px] text-text-faint">{staged.length} / {MAX_FILES}</span>
           )}
           <button
             type="button"
@@ -894,7 +947,8 @@ export default function Terminal() {
           </a>
         </div>
 
-        {/* ステージング中のサムネ一覧。画像はサムネ表示、テキスト系はファイル名表示。 */}
+        {/* ステージング中の一覧。画像はサムネ表示、非画像（ドキュメント/動画/音声）は
+            種別アイコン＋ファイル名のチップ表示。 */}
         {staged.length > 0 && (
           <div className="mt-2.5 flex flex-wrap gap-2">
             {staged.map((s) => (
@@ -910,10 +964,17 @@ export default function Terminal() {
                   />
                 ) : (
                   <div
-                    className="flex h-16 w-full items-center justify-center rounded-t-md bg-surface-3 px-1"
+                    className="flex h-16 w-full flex-col items-center justify-center gap-1 rounded-t-md bg-surface-3 px-1 text-text-muted"
                     title={s.file.name}
                   >
-                    <span className="truncate text-center text-[9px] text-text-muted leading-tight">
+                    {s.kind === 'video' ? (
+                      <VideoFileIcon width={22} height={22} className="pointer-events-none shrink-0" />
+                    ) : s.kind === 'audio' ? (
+                      <AudioFileIcon width={22} height={22} className="pointer-events-none shrink-0" />
+                    ) : (
+                      <DocumentsIcon width={22} height={22} className="pointer-events-none shrink-0" />
+                    )}
+                    <span className="w-full truncate text-center text-[9px] leading-tight">
                       {s.file.name}
                     </span>
                   </div>

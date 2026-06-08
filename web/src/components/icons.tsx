@@ -486,6 +486,27 @@ export function GripIcon(props: IconProps) {
   );
 }
 
+// 動画ファイル（添付チップ用）。フィルムフレーム＋再生三角。
+export function VideoFileIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m10 9.5 5 2.5-5 2.5z" />
+    </svg>
+  );
+}
+
+// 音声ファイル（添付チップ用）。音符。
+export function AudioFileIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M9 18V6l10-2v12" />
+      <circle cx="6.5" cy="18" r="2.5" />
+      <circle cx="16.5" cy="16" r="2.5" />
+    </svg>
+  );
+}
+
 // 設定アイコン（MC-178 フォントサイズ等）
 export function SettingsIcon(props: IconProps) {
   return (
