@@ -292,3 +292,59 @@ kill $(cat /tmp/apollo-tunnel.pid)
 - 安定した固定ドメイン（例: `apollo.keita.dev`）で使いたい場合は、Cloudflare アカウントでの認証と名前付きトンネルの設定が必要です。これには Keita の Cloudflare アカウントへのログインが必要です（現在は未ログイン状態のため quick tunnel のみ利用可能）
 - cloudflared は `/usr/local/bin/cloudflared` にインストール済みです
 - tunnel ログは `/tmp/apollo-tunnel.log` に出力されます
+
+---
+
+## 8. システム依存（OS パッケージ）— 箱の再構築・移設時は必須
+
+アプリ（npm 依存）とは別に、**この箱に手で入れた OS レベルの依存**がある。
+package.json には載らないため、箱を再構築・移設したら下記を**ターミナルで再導入しないと壊れる**。
+
+### 8-1. 日本語 PDF フォント（議事録 PDF 出力に必須）
+
+`POST /api/minutes/export {format:'pdf'}` の日本語描画は **fonts-noto-cjk** に依存する。
+無いと日本語が豆腐／フォールバック崩れになる（Keita 決定 = Noto Sans JP 採用, MC-207, 2026-06-08）。
+
+```bash
+# 再構築・移設時に必ず実行
+sudo apt-get install -y fonts-noto-cjk
+fc-cache -f
+
+# 確認: Noto CJK が見えていれば OK
+fc-list | grep -i "noto.*cjk" | head
+```
+
+検証（実 PDF で確認）:
+
+```bash
+# PDF を実生成し、ページ数と埋め込みフォントを確認
+#   pdffonts に NotoSansCJKjp-Regular/Bold が emb=yes で出れば Noto 実描画が効いている
+curl -s -X POST http://localhost:4317/api/minutes/export \
+  -H "Content-Type: application/json" -d '{"format":"pdf", ...}' -o /tmp/minutes.pdf
+pdfinfo /tmp/minutes.pdf | grep Pages
+pdffonts /tmp/minutes.pdf
+```
+
+備考: Meiryo / Hiragino / Yu Gothic は Linux 未導入のため、font-fallback で Noto Sans CJK JP が実採用される。
+
+### 8-2. Chromium（PDF レンダリングエンジン）
+
+PDF 生成は Chromium 本体に依存する。`/usr/bin/chromium-browser` にインストール済み。
+再構築時に無ければ別途導入が必要。
+
+### 8-3. cloudflared（スマホアクセス用トンネル）
+
+`/usr/local/bin/cloudflared` にインストール済み（詳細は「7. トンネル」）。
+
+---
+
+## 9. カーネル更新の保留（現状の FYI）
+
+`/var/run/reboot-required` あり。保留中: **linux-image-6.8.0-124-generic / linux-base**。
+反映には **reboot が必要**。reboot は本番停止を伴うため、実施タイミングは Keita / Masayoshi 判断（勝手に再起動しない）。
+
+```bash
+# 保留状態の確認
+cat /var/run/reboot-required 2>/dev/null
+cat /var/run/reboot-required.pkgs 2>/dev/null
+```
