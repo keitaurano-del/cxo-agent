@@ -2295,3 +2295,20 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 詳細 | 【Apollo投入】 RAG機能を改善してほしい。RAGからの回答もちゃんと返ってこないし。RAGに議事録はいらない。あと生成物がそれぞれ何ができるのか不明なので消していいと思う。フロントもバックも改善する必要がある。Masayoshi, Son, 林で議論しながら進めて。<br>【★2026-06-08 Masayoshi 実機検証で真因確定（前提覆る）】(1) **sources:0 は誤り**。ライブAPI実測で資料・index実在（02c1c9ff9a=5 / 0faca0284f=222 / 7e78566d53=2）、RAG検索も正常（chunks found, vectorDim3072, 0.42s）。(2) **本当の不達原因**=生成エンジンが `claude -p --model claude-sonnet-4-6` で、そのアカウントが**Sonnet上限到達（Jun10 10:00復帰）**。全 ask/generate が「You've hit your Sonnet limit…」(63文字固定)を**回答として保存・表示**。(3) **runner不具合**：ok=false にしつつ上限文字列を回答に貼る（notebookClaude / notebookRouter）。<br>【3者合意の優先順位】**P0=モデル切替（opus or 別アカ）で即復旧 ＋ エンジンエラー検出→回答に貼らずバナー化（「AI生成が一時上限/Jun10復帰」）** ← 本丸。**P0のモデル/アカウント選択はquota影響ありKeita判断に上げる（確定待ち）**。次に ②議事録UI分離（backendは minutesRouter.ts で分離済＝フロント MinutesPane 除去のみ・低リスク・backend温存）／③生成物6種（summary/faq/timeline/template/template_extract/custom）はエンジン復旧後に整理、template と template_extract が紛らわしく説明追加 or 片方削除（優先度中）。①空NB/sources:0フォールバックは前提誤りで優先度低→「エンジンエラーガード」として②③に吸収。確定後フロント/バック分割実装。 |
 | 更新日 | 2026-06-08 |
 
+
+---
+
+### MC-208 — 議事録テンプレート出力で議題一覧の番号が脱落（順序付きリスト未対応）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-208 |
+| タイトル | 議事録テンプレート出力で議題一覧の番号が脱落（順序付きリスト未対応） |
+| 優先度 | P2 |
+| ステータス | TODO |
+| 担当 | dev（林/凜） |
+| 詳細 | Keita 報告（2026-06-08）: 議事録の標準テンプレートを出力すると「議題一覧」の番号（1. 2. …）が抜ける。<br>【根本原因（Son 調査・特定済）】`server/src/lib/minutesExport.ts` の docx レンダラ `case 'list'`（314–330行）が、リスト項目を常に中点 `・ ` 固定で描画しており、`block.ordered` を無視している。パーサ側は順序付きリストを `ordered` フラグで正しく検出済（型定義49行 / `isOrderedItem` 123行 / パース93行・106行で `ordered` をblockに格納）だが、レンダラがそのフラグを参照しないため `1. （議題1）`/`2. （議題2）` の番号が脱落する。xlsx レンダラ（508行付近、`cell.value = ... ・ ...`）も同じく `・` 固定で同症状。MC-207 の「中点左寄せ」対応時に順序付きリストの分岐が漏れたもの。 |
+| 受け入れ条件（DoD） | (1) docx `case 'list'` で `block.ordered` が true のとき、項目マーカーを連番 `1. 2. 3. …` で描画（同一インデント階層ごとにカウンタ。最低でもブロック先頭からの通し番号）。false のときは現状どおり中点 `・`。(2) xlsx レンダラ（508行付近）も同様に ordered 対応。(3) 標準テンプレ（generateMinutesTemplates.ts の `1. （議題1）` を含むもの）を `POST /api/minutes/export {format:'pdf'}`／docx で実生成し、議題一覧に番号が出ることを目視確認。(4) 中点リスト（決定事項等）が従来どおり崩れないこと（リグレッション無し）。(5) server `tsc --noEmit` 0エラー・build green。 |
+| 依存 | MC-207（議事録PDF/docx エクスポート整備。中点左寄せ対応の続き）。関連ファイル: server/src/lib/minutesExport.ts、server/src/scripts/generateMinutesTemplates.ts。 |
+| 備考 | 実装は dev 委譲。修正後 build green を確認のうえ Masayoshi 検証ゲート（push/restart は Masayoshi 検証後）。Son は調査・起票まで。 |
+| 更新日 | 2026-06-08 |
