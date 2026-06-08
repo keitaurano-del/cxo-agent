@@ -2436,3 +2436,20 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 残（別途確認） | 「あとから過去の議事録を作成画面で開き直して再作成」の**外部からの入口**（成果物一覧の「再作成」ボタン案）は未実装。Keita 確認のうえ次段で対応。今回は当該セッション内の生成→ファイル表示→プレビュー＋再生成までを実装。 |
 | 備考 | Son subagent 直実装（林非経由）。web静的配信のため build で即反映（restart不要）。origin push のみ Masayoshi ゲート残。 |
 | 更新日 | 2026-06-08 |
+
+---
+
+### MC-216 — 議事録：作成ボタン横に履歴→過去議事録を作成画面で開き直し（入力・添付を編集して成果物を再作成）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-216 |
+| タイトル | 議事録：作成ボタン横に履歴→過去議事録を作成画面で開き直し（入力・添付を編集して成果物を再作成） |
+| 優先度 | P1 |
+| ステータス | IN_PROGRESS（2026-06-08 Son subagent 実装中） |
+| 担当 | Son（subagent 直）|
+| 詳細 | Keita 指示（2026-06-08）: ①「議事録を生成」ボタンの横に**履歴**を残し、そこから作成画面に入れるようにする ②再作成時に**添付資料も直せる**（追加/削除/差し替え）③開き直して**成果物も再作成（再生成）**できる。MC-215 の続き（生成後ファイル一覧は実装済）。 |
+| 受け入れ条件（DoD） | (1) MinutesPane の生成ボタン付近に過去議事録の履歴一覧（タイトル＋日付）を表示、クリックで作成画面に読み込み。(2) 読み込み時に入力テキスト（sources/入力テキスト.txt）＋スタイル/形式設定＋添付資料(sources/)を復元。(3) 復元した添付資料を編集可能（削除/追加）にしてから再生成できる。(4) 再生成で成果物（docx/pdf等）を作り直す。(5) 設定復元のため生成時に最小メタ(meta.json: title/styles/exportFormats/createdAt)を保存。(6) 一覧/取得は既存 GET /api/deliverables・/file を流用、不足分のみ最小追加。(7) server/web tsc 0・build成功。 |
+| 依存 | server/src/minutesRouter.ts, server/src/lib/minutesDeliverables.ts, web/src/views/Notebooks.tsx。既存: GET /api/deliverables（一覧）, /api/deliverables/file（取得）, POST /api/deliverables/upload（添付追加）。関連 MC-215。 |
+| 備考 | Son subagent 直実装（林非経由）。実装規模大。push/restart は Masayoshi ゲート（server 変更があれば反映に restart 要）。 |
+| 更新日 | 2026-06-08 |
