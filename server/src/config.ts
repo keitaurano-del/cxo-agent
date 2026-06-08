@@ -434,6 +434,28 @@ export const AGENT_LOG_TTL_MS =
   envNum('AGENT_LOG_TTL_DAYS', 7) * 24 * 60 * 60 * 1000;
 
 /**
+ * collectAgents() の結果キャッシュ TTL（ミリ秒、既定 12 秒）。env AGENT_COLLECT_TTL_MS で上書き可。
+ * collectAgents は ~/.claude/projects 配下の全 jsonl を同期 fs でフルスキャンするため、
+ * SSE/tick で多数回呼ばれるとイベントループ（＝ターミナル proxy も捌く単一プロセス）を
+ * その都度ブロックしてしまう。この TTL 内は再スキャンせずキャッシュを返し、実スキャンを
+ * TTL ごとに 1 回へ減らす。collectAgentGroups / feed 等の依存関数も同キャッシュの恩恵を受ける。
+ * リアルタイム性は十数秒粒度で十分（watch broadcast → frontend 再フェッチ間隔とも整合）。
+ */
+export const AGENT_COLLECT_TTL_MS = envNum('AGENT_COLLECT_TTL_MS', 12000);
+
+/**
+ * セッションログ走査で「内容を読む」対象の最大経過時間（ミリ秒、既定 3 日）。env AGENT_SCAN_MAX_AGE_MS で上書き可。
+ * collectAgents の実コストの大半は、親セッション jsonl（数百MB規模）を Agent tool_use 索引のために
+ * 同期 readFileSync + JSON.parse することにある（実測 752MB / 1545 件、mtime 無制限）。
+ * 最終更新がこの閾値より古い親セッションは索引構築時に内容読み取りをスキップする。
+ * 「稼働中・直近のエージェント」のラベル付けに必要な親はこの閾値内に収まるため live 表示は維持される
+ * （active/idle は STALL_MINUTES=8分 / 直近で、3 日は十分な余裕）。閾値を超えて古い stale ログは
+ * done/idle 表示のままラベルが unmatched: に寄るだけで、状態判定（active/idle/done/never）は壊さない。
+ */
+export const AGENT_SCAN_MAX_AGE_MS =
+  envNum('AGENT_SCAN_MAX_AGE_DAYS', 3) * 24 * 60 * 60 * 1000;
+
+/**
  * roster に表示するエージェント名の allowlist（MC-75）。
  * Keita 方針: Apollo の roster には「人格を持つエージェント」と「その他の主要エージェント」だけを出す。
  * cron 常駐のバックグラウンド系含め、ここに列挙したものだけ表示し、

@@ -5,7 +5,13 @@
 
 import { readdirSync, statSync, lstatSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { CLAUDE_PROJECTS_DIR, ROSTER_VISIBLE, AGENT_LOG_TTL_MS } from '../config.js';
+import {
+  CLAUDE_PROJECTS_DIR,
+  ROSTER_VISIBLE,
+  AGENT_LOG_TTL_MS,
+  AGENT_COLLECT_TTL_MS,
+  AGENT_SCAN_MAX_AGE_MS,
+} from '../config.js';
 import { readJsonl, lastActivity, firstText, type JsonlLine } from '../lib/jsonl.js';
 import { projectFromPath, projectLabel, type ProjectName } from '../lib/projectMap.js';
 import { agentStatus, type AgentStatus } from '../lib/stall.js';
@@ -43,8 +49,13 @@ export interface FeedItem {
   text: string;
 }
 
+interface ParentRef {
+  path: string;
+  mtimeMs: number;
+}
+
 interface WalkResult {
-  parents: string[];
+  parents: ParentRef[];
   subagents: string[];
 }
 
@@ -80,8 +91,9 @@ function walkJsonl(dir: string, acc: WalkResult): WalkResult {
         }
       } else {
         // 親セッションは <sessionId>.jsonl 命名なので agent- 接頭辞は付かない。
-        // agentMap の index 構築に必要なため、こちらは広く拾う。
-        acc.parents.push(p);
+        // agentMap の index 構築に必要なため列挙はするが、内容を読むかは mtime で後段
+        // （buildIndex）が判定する。ここでは mtime を持たせるだけ（statSync 済みで安価）。
+        acc.parents.push({ path: p, mtimeMs: st.mtimeMs });
       }
     }
   }
@@ -136,14 +148,22 @@ function firstUserText(lines: JsonlLine[]): string | null {
 
 let cachedIndex: AgentTypeIndex | null = null;
 let cachedIndexAt = 0;
-const INDEX_TTL_MS = 15000;
 
-/** 親セッション全部から Agent tool_use index を構築（短期キャッシュ）。 */
-function buildIndex(parents: string[]): AgentTypeIndex {
+/**
+ * 親セッション群から Agent tool_use index を構築（短期キャッシュ）。
+ * 親セッション jsonl は数百MB規模・最終更新無制限で、これを全件 readFileSync + parse するのが
+ * collectAgents の実コストの大半（実測 752MB/1545件）。最終更新が AGENT_SCAN_MAX_AGE_MS より
+ * 古い親は内容読み取りをスキップして走査を激減させる（直近に動いたエージェントのラベル付けに
+ * 必要な親は閾値内に収まるため live のラベルは維持される）。
+ */
+function buildIndex(parents: ParentRef[]): AgentTypeIndex {
   const now = Date.now();
-  if (cachedIndex && now - cachedIndexAt < INDEX_TTL_MS) return cachedIndex;
+  if (cachedIndex && now - cachedIndexAt < AGENT_COLLECT_TTL_MS) return cachedIndex;
   const idx = new AgentTypeIndex();
-  for (const f of parents) indexParentSession(f, idx);
+  for (const f of parents) {
+    if (now - f.mtimeMs >= AGENT_SCAN_MAX_AGE_MS) continue; // 古い親は読まない（ブロック時間短縮の本丸）
+    indexParentSession(f.path, idx);
+  }
   cachedIndex = idx;
   cachedIndexAt = now;
   return idx;
@@ -208,11 +228,12 @@ function analyzeSubagent(filePath: string, index: AgentTypeIndex): AgentSummary 
 }
 
 // collectAgents は全 jsonl をフルスキャンするため、SSE による再フェッチ頻度が
-// 上がると負荷が出る。15 秒の短期キャッシュで連続呼び出しを吸収する
-// （リアルタイム性は 15 秒粒度で十分。watch broadcast → frontend 再フェッチ間隔とも整合）。
+// 上がると負荷が出る（単一プロセスでターミナル proxy も捌くためイベントループがブロックする）。
+// AGENT_COLLECT_TTL_MS（既定 12 秒）の短期キャッシュで連続呼び出しを吸収し、実スキャンを
+// TTL ごとに 1 回へ減らす（リアルタイム性は十数秒粒度で十分。watch broadcast → frontend
+// 再フェッチ間隔とも整合）。collectAgentGroups / feed 等の依存関数も同キャッシュの恩恵を受ける。
 let cachedAgents: AgentSummary[] | null = null;
 let cachedAgentsAt = 0;
-const AGENTS_TTL_MS = 15000;
 
 function computeAgents(): AgentSummary[] {
   if (!existsSync(CLAUDE_PROJECTS_DIR)) return [];
@@ -223,10 +244,10 @@ function computeAgents(): AgentSummary[] {
   return out;
 }
 
-/** 全 subagent の稼働サマリ一覧（15 秒キャッシュ）。最終活動の新しい順。 */
+/** 全 subagent の稼働サマリ一覧（AGENT_COLLECT_TTL_MS キャッシュ）。最終活動の新しい順。 */
 export function collectAgents(): AgentSummary[] {
   const now = Date.now();
-  if (cachedAgents && now - cachedAgentsAt < AGENTS_TTL_MS) return cachedAgents;
+  if (cachedAgents && now - cachedAgentsAt < AGENT_COLLECT_TTL_MS) return cachedAgents;
   cachedAgents = computeAgents();
   cachedAgentsAt = now;
   return cachedAgents;
