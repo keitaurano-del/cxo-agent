@@ -26,7 +26,13 @@ import {
 import { listPatterns, type MinutesPattern } from './lib/minutesPatterns.js';
 import { exportMinutes, type ExportFormat } from './lib/minutesExport.js';
 import { runClaude, runClaudeStream } from './lib/notebookClaude.js';
-import { saveMinutesToDeliverables } from './lib/minutesDeliverables.js';
+import {
+  saveMinutesToDeliverables,
+  listMinutesHistory,
+  readMinutesHistoryDetail,
+  loadReusableSources,
+} from './lib/minutesDeliverables.js';
+import { SafePathError } from './lib/vaultPath.js';
 import { DELIVERABLES_DIR } from './config.js';
 
 // 音声文字起こし用 multer（memoryStorage）
@@ -202,6 +208,9 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
     feedback,
     previousContent,
     exportFormats: exportFormatsRaw,
+    styles: stylesRaw,
+    reuseSourcesFrom,
+    excludeSources: excludeSourcesRaw,
   } = req.body as {
     inputText?: string;
     type?: string;
@@ -213,7 +222,29 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
     feedback?: string;
     previousContent?: string;
     exportFormats?: string | string[];
+    styles?: string | string[];
+    reuseSourcesFrom?: string;
+    excludeSources?: string | string[];
   };
+  // multipart では配列でなく繰り返しフィールドか JSON 文字列で来る場合がある。
+  // 文字列配列フィールド（styles / excludeSources）を正規化するヘルパー。
+  const toStringArray = (raw: string | string[] | undefined): string[] => {
+    if (Array.isArray(raw)) return raw.filter((s): s is string => typeof s === 'string');
+    if (typeof raw === 'string') {
+      if (raw.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(raw) as unknown;
+          return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === 'string') : [];
+        } catch {
+          return [raw];
+        }
+      }
+      return [raw];
+    }
+    return [];
+  };
+  const styles = toStringArray(stylesRaw);
+  const excludeSources = toStringArray(excludeSourcesRaw);
   // multipart では配列でなく繰り返しフィールドか JSON 文字列で来る場合がある
   const exportFormats: ExportFormat[] = (
     Array.isArray(exportFormatsRaw)
@@ -359,6 +390,17 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
           buffer: f.buffer,
           ext: extOf(f.originalname),
         }));
+        // 履歴から再生成: 既存議事録フォルダの sources/ を流用する（excludeSources は除外）。
+        // 元フォルダは破壊せず、流用した添付は新フォルダの sources/ に複製保存される。
+        let reusedSources: import('./lib/minutesDeliverables.js').OriginalFileInput[] = [];
+        if (typeof reuseSourcesFrom === 'string' && reuseSourcesFrom.trim()) {
+          try {
+            reusedSources = loadReusableSources(reuseSourcesFrom.trim(), excludeSources);
+          } catch (e) {
+            // パス不正等は流用なしで続行（生成自体は止めない）。
+            console.error('[minutes reuseSources error]', e instanceof Error ? e.message : String(e));
+          }
+        }
         // inputText が空でなければ「入力テキスト.txt」として sources/ に保存する。
         // 音声文字起こしの場合は inputText に文字起こし結果が入っており、元音声は mappedSources に含まれる。
         const inputTextTrimmed = typeof inputText === 'string' ? inputText.trim() : '';
@@ -373,11 +415,14 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
         const allSources = [
           ...(inputTextSource ? [inputTextSource] : []),
           ...mappedSources,
+          ...reusedSources,
         ];
         saved = saveMinutesToDeliverables({
           title,
           markdownContent: markdown,
           ...(allSources.length > 0 ? { sourceFiles: allSources } : {}),
+          ...(styles.length > 0 ? { styles } : {}),
+          ...(exportFormats.length > 0 ? { exportFormats } : {}),
         });
 
         // 選択されたエクスポート形式もフォルダに保存する
@@ -508,6 +553,45 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
   await finish({ ok: result.ok, error: result.error, report: (result.stdout || '').trim() });
 }
 
+// ─── GET /history ───────────────────────────────────────────
+// 過去の議事録（議事録/ 直下のフォルダ）を新しい順で一覧する。
+function handleHistoryList(_req: Request, res: Response): void {
+  try {
+    res.json({ items: listMinutesHistory() });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[minutes history list error]', msg);
+    res.status(500).json({ error: msg });
+  }
+}
+
+// ─── GET /history/:folder ───────────────────────────────────
+// 1 議事録分の復元情報（inputText / styles / exportFormats / 添付一覧）を返す。
+// :folder はフォルダ名のみ（議事録/ 直下）。relpath は議事録/<folder> に組み立てる。
+function handleHistoryDetail(req: Request, res: Response): void {
+  try {
+    const folder = req.params.folder;
+    if (!folder) {
+      res.status(400).json({ error: 'folder is required' });
+      return;
+    }
+    const detail = readMinutesHistoryDetail(`議事録/${folder}`);
+    if (!detail) {
+      res.status(404).json({ error: '議事録が見つかりません。' });
+      return;
+    }
+    res.json(detail);
+  } catch (e) {
+    if (e instanceof SafePathError) {
+      res.status(400).json({ error: e.message });
+      return;
+    }
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[minutes history detail error]', msg);
+    res.status(500).json({ error: msg });
+  }
+}
+
 // ─── Router 組み立て ─────────────────────────────────────
 export function minutesRouter(): Router {
   const router = Router();
@@ -515,5 +599,7 @@ export function minutesRouter(): Router {
   router.post('/extract-file', (req, res) => void handleExtractFile(req, res));
   router.post('/export', (req, res) => void handleMinutesExport(req, res));
   router.post('/generate', (req, res) => void handleMinutesGenerate(req, res));
+  router.get('/history', (req, res) => handleHistoryList(req, res));
+  router.get('/history/:folder', (req, res) => handleHistoryDetail(req, res));
   return router;
 }
