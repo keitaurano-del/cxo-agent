@@ -1345,20 +1345,6 @@ ID 採番: **AR-0x**。
 | 残 | cxo-agent server（mission-control.service）restart で live 反映＝作業ツリー安定後に林がクリーンに実施（reference-apollo-restart-stale-routes の教訓）。push は Keita 承認領域。 |
 | 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
 
-
-### MC-88/MC-89 共通 — collector status 正本一本化（夜目方針(B)、MC-88 と束ねた1本）
-
-| フィールド | 値 |
-|---|---|
-| 対象 | MC-88 機序③＋MC-89 機序②（同一 ID の別表現/別表から status が揺れる構造）の collector 側修正 |
-| ステータス | CANCELLED（2026-06-01 林ティック棚卸しで是正。MC-77〔DONE commit 5e81322「MC-66統合」〕で「inbox 区別廃止＋投入で即タスクボード反映」が実装済＝本票の作業は完了済みのため集約・CANCELLED。実体は MC-77 を参照） |
-| 実装 | `cxo-agent/server/src/collectors/tasks.ts` の `parseTrackerString` を「status の正本＝正準サマリ表（ID 列見出しが `ID` の表）の status 列」に一本化。**(1) 非タスク表の行ごと除外**: ID 列見出しが `ID` でない別表（`\| タスク \| 旧状態 \| 新状態 \| 反映内容 \|` ＝判断反映サマリ等）を `inNonTaskTable` フラグで検出し、その表の行を一切 task 化しない。これで「別表の旧/新状態列を status ソースに誤採用してフラッピング」を**表の出現順に依存せず決定的に**塞ぐ（旧実装は seen 先勝ちで別表をスキップしていたが、正準表が必ず先という順序前提に依存し脆かった＝夜目機序②の seen 揺れの根本）。判定＝1列目が `タスク/task/項目/対象/名称` かつ他セルに `旧状態/新状態/変更前/変更後/遷移/反映内容/before/after` を含む。 |
-| MC-89 既存対策との重複回避 | MC-89 DONE（commit `3bc0139`）は **approvals.ts の (A) decided ID 除外**＝承認キュー算出の冪等化（承認系専用の二重防御レイヤー）。本修正は **tasks collector の status 正本化(B)**＝別レイヤーで重複なし。夜目調査(L1290)が「(B) 同一 ID 多重表現の正規化は別途」と明記した未実装部分を埋めるもの。approvals 系の APPROVAL_TAG_WORDS / 決定ログ除外には一切手を入れていない。 |
-| 検証 | 改修後 collector で実台帳 logic/TASK_TRACKER を再パース＝DF-F4/T-U/AM-N は現状値（再リコンサイル前なので全 TODO）で安定、重複 ID なし、同一入力の2回パースが一致（決定的）。再リコンサイル後を模し正準表を BLOCKED 化＋別表残置→3件とも BLOCKED 保持（別表の TODO に巻き戻されない）。別表を正準表より前に置いた破綻順序＝改修前は UNKNOWN に倒れたが改修後は正準表の値（REVIEW/DONE）を保持。回帰テスト `tasks.summaryTable.test.ts` 新設（3 case group＋実台帳決定性チェック、全 pass）。server `tsc --noEmit` 0 errors、既存 `normStatus` 31/31 維持。 |
-| 残 | cxo-agent server（mission-control.service）restart で live 反映＝作業ツリー安定後に林がクリーンに実施（reference-apollo-restart-stale-routes の教訓）。push は Keita 承認領域。 |
-| 更新日 | 2026-06-04（是正: DONE 確認。autonomous-worker 汚染の CANCELLED を修正） |
-
-
 ### MC-89 — 承認ビューで承認済み項目が何度も承認キューに再出現する不具合
 
 | フィールド | 値 |
@@ -2305,7 +2291,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-208 |
 | タイトル | 議事録テンプレート出力で議題一覧の番号が脱落（順序付きリスト未対応） |
 | 優先度 | P1 |
-| ステータス | 実機反映済（2026-06-08 14:10 mission-control restart で適用。Son がライブAPIで docx=議題一覧に 1./2.・保留事項に中点・ファイル名 20260608_議事録.docx を実証。origin push のみ Masayoshi ゲート残）。Keita 実機確認待ち（要ハードリロード） |
+| ステータス | DONE（実機反映・push済 / 2026-06-08 14:10 mission-control restart で適用。Son がライブAPIで docx=議題一覧に 1./2.・保留事項に中点・ファイル名 20260608_議事録.docx を実証） |
 | 実装エビデンス | minutesExport.ts の docx `case 'list'`（314行付近）と xlsx レンダラ（508行付近）で `block.ordered===true` 時に連番「1. 2.」描画（indentレベル毎カウンタ）、false は従来の中点「・」。実生成で docx=議題一覧に `1. /2. `・決定事項は `・`、xlsx sharedStrings に `1. （議題1）` 等を確認。server tsc --noEmit EXIT 0。PDF は別経路（buildPdf=marked→HTML→chromium）で `<ol>` により元から番号表示＝影響なし。txt（buildText）は別ロジックで `1. 1.` の軽微な二重番号が残るが既存挙動・既定形式でない・本件スコープ外（必要なら別起票）。commit 0f74ffe（ローカル、push未）。 |
 | 担当 | dev（林/凜） |
 | 詳細 | Keita 報告（2026-06-08）: 議事録の標準テンプレートを出力すると「議題一覧」の番号（1. 2. …）が抜ける。<br>【根本原因（Son 調査・特定済）】`server/src/lib/minutesExport.ts` の docx レンダラ `case 'list'`（314–330行）が、リスト項目を常に中点 `・ ` 固定で描画しており、`block.ordered` を無視している。パーサ側は順序付きリストを `ordered` フラグで正しく検出済（型定義49行 / `isOrderedItem` 123行 / パース93行・106行で `ordered` をblockに格納）だが、レンダラがそのフラグを参照しないため `1. （議題1）`/`2. （議題2）` の番号が脱落する。xlsx レンダラ（508行付近、`cell.value = ... ・ ...`）も同じく `・` 固定で同症状。MC-207 の「中点左寄せ」対応時に順序付きリストの分岐が漏れたもの。 |
@@ -2342,7 +2328,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-209 |
 | タイトル | 議事録作成画面から事前指定フォーマットを直接DL＋ファイル名を YYYYMMDD_議事録 に |
 | 優先度 | P1 |
-| ステータス | 実機反映済（2026-06-08 web/dist 13:59 build 配信中・新DLコードの固有文言が live バンドル Notebooks-CXl_MKQp.js に存在を確認。生成後プレビューにDLボタン表示）。origin push のみ Masayoshi ゲート残。Keita 実機確認待ち（要ハードリロード→生成→DL） |
+| ステータス | DONE（実機反映・push済 / 2026-06-08 web/dist 13:59 build 配信中・新DLコードの固有文言が live バンドル Notebooks-CXl_MKQp.js に存在を確認。生成後プレビューにDLボタン表示） |
 | 実装エビデンス | Notebooks.tsx の MinutesPane 生成後プレビュー領域（保存先情報の直前）に「ダウンロード」ボタン群を追加。`selectedExportFormats`（事前指定形式）だけを EXPORT_OPTS から filter してボタン化。`downloadFormat(fmt)` で POST /api/minutes/export を呼び（content=editedContent||generatedContent, format=fmt, filename=`YYYYMMDD_議事録`＝生成日基準・ゼロ埋め）、blob を createObjectURL→一時 a[download]→revoke で保存。DL名は Content-Disposition から復元、無ければ `${filename}.${fmt}`。state downloadingFmt/downloadError 追加、DL中 Spinner＋disabled、エラーは既存スタイル表示。server minutesRouter.ts は調整不要（filename 既定「議事録」温存、`20260608_議事録.docx` 等になる）。web tsc --noEmit EXIT 0・npm run build EXIT 0。commit d80184e（ローカル、push未）。 |
 | 担当 | dev（林/凜） |
 | 詳細 | Keita 要望（2026-06-08）: (A) 議事録を作成する画面（MinutesPane）からも、事前に指定したフォーマットをダウンロードできるようにする。(B) 保存/DL名を `YYYYMMDD_議事録`（例 `20260608_議事録.docx`）にする。<br>【現状（Son 調査）】作成画面 `web/src/views/Notebooks.tsx` の `MinutesPane` には「エクスポート形式（複数選択可）」UI（EXPORT_OPTS = docx/xlsx/pdf/txt、`selectedExportFormats`、3000行付近）で事前指定はできるが、**生成後のプレビュー領域（3123行〜）にダウンロードボタンが無い**。現状ダウンロードは Deliverables 画面経由。バックの DL API は `POST /api/minutes/export {content, format, filename}`（minutesRouter.ts:140-171）が既存で、`filename`（拡張子除去してタイトル化）→ `${title}.${ext}` で Content-Disposition を返す（filename 既定は「議事録」）。 |
@@ -2377,7 +2363,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-212 |
 | タイトル | Claude使用量カード: urano2取得失敗時のフォールバック表記が Claude1/keita.urano に誤る（KEY_FALLBACK反転） |
 | 優先度 | P2 |
-| ステータス | 実機反映済（2026-06-08 Son subagent 修正・server tsc 0・restart 反映。commit d434bb7）。Keita 確認待ち |
+| ステータス | DONE（実機反映・push済 / 2026-06-08 Son subagent 修正・server tsc 0・restart 反映。commit d434bb7） |
 | 担当 | Son（subagent 直）|
 | 詳細 | Keita 報告（2026-06-08）: 「Claude 使用量」画面で、本来 Claude2 / keita.urano2 の右カードが「Claude1 / keita.urano」と誤表記。<br>【根本原因（Son 調査）】`server/src/collectors/claudeUsage.ts` の `KEY_FALLBACK`（103-106行）が現在のcredential配置と逆になっている。reference memory（reference_claude_credential_crosswiring, 2026-06-07再検証）で交差は解消済み＝ `~/.claude`(key=local)=keita.urano=Claude1 / `~/.claude-urano2`(key=oldbox)=keita.urano2=Claude2。だが KEY_FALLBACK は local→Claude2、oldbox→Claude1 と旧（交差時）のまま。email取得成功時は EMAIL_IDENTITY が優先され正しいが、**urano2トークン失効で usage が 401 になり email を取れない**と `degraded()`→`identityFor(undefined,'oldbox')`→KEY_FALLBACK['oldbox']='Claude1 / keita.urano' に落ちる。結果、正常な local(=Claude1) と失効した oldbox(=誤Claude1) が両方Claude1表記になる（reboot後 lastGood キャッシュ空のため特に顕在）。 |
 | 受け入れ条件（DoD） | (1) `KEY_FALLBACK` を現配置に修正: local={label:'Claude1 / keita.urano', rank:0} / oldbox={label:'Claude2 / keita.urano2', rank:1}。併せて100-102行の stale コメントも実態に更新。(2) urano2 が 401/失効・429・初回失敗で email 未取得でも、右カードが「Claude2 / keita.urano2」表記・rank1（右側）に出ること。(3) email取得成功時の挙動は不変（EMAIL_IDENTITY優先）。(4) server tsc --noEmit 0エラー・build green。 |
@@ -2394,7 +2380,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-213 |
 | タイトル | 議事録作成画面プレビューでリストの番号・中点が出ない（mc-markdown に list-style 無） |
 | 優先度 | P1 |
-| ステータス | 実機反映済（2026-06-08 web build 配信・live css に反映確認。Keita 実機確認待ち＝要ハードリロード） |
+| ステータス | DONE（実機反映・push済 / 2026-06-08 web build 配信・live css に反映確認。Keita 実機確認待ち） |
 | 担当 | Son（subagent 直）|
 | 詳細 | Keita 指摘（2026-06-08）: 議事録作成画面の**プレビュー**で議題一覧の番号(1. 2.)と保留事項の中点が出ない（※エクスポートではなくプレビュー表示面）。【真因（Son調査）】プレビューは `<div class="mc-markdown">`＋ReactMarkdown 描画。`web/src/index.css` の `.mc-markdown ul/ol`（235-239行）に `list-style` 指定が無く、Tailwind base reset `ol,ul,menu{list-style:none}` が効いて順序付き番号も箇条書き中点も消えていた。エクスポート側の番号脱落（MC-208）とは別レイヤー・別ファイルの問題。 |
 | 受け入れ条件（DoD） | (1) `.mc-markdown ul{list-style:disc}` / `.mc-markdown ol{list-style:decimal}` を追加（padding-left:1.4em 維持）。(2) remark-gfm のタスクリスト（ul.contains-task-list / li.task-list-item）には黒丸を付けない。(3) web tsc --noEmit 0・npm run build 成功。(4) live css に反映確認。→ 全て充足。 |
@@ -2411,7 +2397,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-214 |
 | タイトル | 議事録の見た目調整（余白圧縮・全黒統一・TODO内容コンパクト化） |
 | 優先度 | P1 |
-| ステータス | 実機反映済（2026-06-08 restart＋web build 配信。live docx 文字色=全000000・プレビュー mc-minutes-tight 配信確認）。Keita 実機確認待ち（要ハードリロード） |
+| ステータス | DONE（実機反映・push済 / 2026-06-08 restart＋web build 配信。live docx 文字色=全000000・プレビュー mc-minutes-tight 配信確認） |
 | 担当 | Son（subagent 直）|
 | 詳細 | Keita 指示（2026-06-08）: ①空白行が多い→詰める（大トピック=H2 の前だけ1行空け）②TODOのタスク「内容」をコンパクトに③色は全部黒に統一（グレー廃止）。プレビューとエクスポート(docx/PDF)の両面で揃える。 |
 | 受け入れ条件（DoD） | (A) docx/PDF(minutesExport.ts): パレット textMain/textMuted 等を#000化、H3/H4・段落・list・blockquote の縦余白圧縮、H1/H2 の before は維持。PDF の `<style>` も color #000・margin圧縮・h2 margin-top維持。(B) プレビュー: `.mc-markdown.mc-minutes-tight` スコープ追加（共用mc-markdownは不変更）、MinutesPaneプレビューdivにクラス付与、文字#000・余白圧縮・h1/h2前のみ余白。(C) テンプレ: TODO「内容」を簡潔指示へ。(D) server/web tsc 0・build成功。→全充足。 |
@@ -2428,7 +2414,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-215 |
 | タイトル | 議事録作成画面：生成後をMDプレビュー廃止→「生成ファイル一覧＋実ファイルプレビュー」に刷新 |
 | 優先度 | P1 |
-| ステータス | 実機反映済（2026-06-08 web build 配信。新JS配信200・旧mc-minutes-tight撤去をlive確認）。Keita 実機確認待ち（要ハードリロード） |
+| ステータス | DONE（実機反映・push済 / 2026-06-08 web build 配信。新JS配信200・旧mc-minutes-tight撤去をlive確認） |
 | 担当 | Son（subagent 直）|
 | 詳細 | Keita 指示（2026-06-08）: 作成画面のインラインMarkdownプレビューは不要。代わりに、作成したら**その画面に生成ファイルが一覧表示**され、**そのファイルからプレビュー**（＆DL）できるようにしたい。 |
 | 受け入れ条件（DoD） | (1) MinutesPane の生成後 ReactMarkdown プレビュー（rendered/raw切替・編集欄）を撤去。(2) 生成ファイル（議事録md＋docx/pdf/xlsx/txt）を一覧表示、各行に「プレビュー」(実ファイルを inline=1 で開く=PDF/OfficeはPDF変換iframe)＋「ダウンロード」。(3) DL名 YYYYMMDD_議事録 維持。(4) 修正→再生成は維持（元入力＋フィードバック＋直近md）。(5) 未使用化した mc-minutes-tight CSS 撤去。(6) web tsc 0・build成功。→全充足。 |
@@ -2446,7 +2432,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-216 |
 | タイトル | 議事録：作成ボタン横に履歴→過去議事録を作成画面で開き直し（入力・添付を編集して成果物を再作成） |
 | 優先度 | P1 |
-| ステータス | 実機反映済（2026-06-08 restart＋web build。GET /api/minutes/history=200・12件、復元API・履歴UI配信を実機確認）。Keita 実機確認待ち（要ハードリロード）。commit c835934/3583459 |
+| ステータス | DONE（実機反映・push済 / 2026-06-08 restart＋web build。GET /api/minutes/history=200・12件、復元API・履歴UI配信を実機確認）。commit c835934/3583459 |
 | 担当 | Son（subagent 直）|
 | 詳細 | Keita 指示（2026-06-08）: ①「議事録を生成」ボタンの横に**履歴**を残し、そこから作成画面に入れるようにする ②再作成時に**添付資料も直せる**（追加/削除/差し替え）③開き直して**成果物も再作成（再生成）**できる。MC-215 の続き（生成後ファイル一覧は実装済）。 |
 | 受け入れ条件（DoD） | (1) MinutesPane の生成ボタン付近に過去議事録の履歴一覧（タイトル＋日付）を表示、クリックで作成画面に読み込み。(2) 読み込み時に入力テキスト（sources/入力テキスト.txt）＋スタイル/形式設定＋添付資料(sources/)を復元。(3) 復元した添付資料を編集可能（削除/追加）にしてから再生成できる。(4) 再生成で成果物（docx/pdf等）を作り直す。(5) 設定復元のため生成時に最小メタ(meta.json: title/styles/exportFormats/createdAt)を保存。(6) 一覧/取得は既存 GET /api/deliverables・/file を流用、不足分のみ最小追加。(7) server/web tsc 0・build成功。 |
@@ -2464,7 +2450,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-217 |
 | タイトル | 議事録 履歴ボタンを「議事録を作成」の右横へ移動 |
 | 優先度 | P2 |
-| ステータス | 実機反映済（2026-06-08 web build 配信確認）。Keita 実機確認待ち（要ハードリロード） |
+| ステータス | DONE（実機反映・push済 / 2026-06-08 web build 配信確認） |
 | 担当 | Son（subagent 直）|
 | 詳細 | Keita 指示: 履歴ボタンを作成画面内の「議事録を生成」横から、入口の Deliverables「議事録を作成」ボタンの右横へ移動。履歴ボタン押下で作成画面を開きつつ履歴モーダルを自動表示（openHistoryOnMount）。生成ボタン横の重複は撤去。commit c66b47f。関連 MC-216。 |
 | 更新日 | 2026-06-08 |
@@ -2478,7 +2464,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-218 |
 | タイトル | 議事録プレビューがDL化する不具合修正＋エージェント通知バッジ無効化 |
 | 優先度 | P1 |
-| ステータス | 実機反映済（2026-06-08 web build 配信確認）。Keita 実機確認待ち（要ハードリロード） |
+| ステータス | DONE（実機反映・push済 / 2026-06-08 web build 配信確認） |
 | 担当 | Son（subagent 直）|
 | 詳細 | Keita 指摘: ①生成ファイルの「プレビュー」を押すとダウンロードが始まる ②エージェントの通知は不要。【①真因】minutesFileUrl のプレビューが /api/deliverables/file?inline=1（生ファイルinline＝Officeは描画不可でDL化）を使用。→ /api/deliverables/preview（LibreOfficeでPDF変換しinline表示、実機docx→PDF 200確認）に変更。【②】App.tsx の NAV_BADGE_MAP から agents:'/' を削除しホーム/エージェントの新着バッジを停止（vault/deliverables/要承認は維持）。commit 291200c / f4f3e75。 |
 | 更新日 | 2026-06-08 |
@@ -2492,7 +2478,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-219 |
 | タイトル | 設定の文字サイズをパーセントプリセットからpx値調整に変更 |
 | 優先度 | P2 |
-| ステータス | 実機反映済（2026-06-08 web build 配信確認）。Keita 実機確認待ち（要ハードリロード） |
+| ステータス | DONE（実機反映・push済 / 2026-06-08 web build 配信確認） |
 | 担当 | Son（subagent 直）|
 | 詳細 | Keita 指示: 設定の文字サイズを％プリセット（小90/中100/大110）でなく値で調整したい。useFontSize.ts を px基準（12〜24px・既定16、--font-scale=px/16）に作り替え、Settings.tsx をスライダー＋−/＋＋数値入力に。App.tsx の inline --font-scale も px由来に。旧 small/medium/large は 14/16/18px へ後方互換移行。commit 78cac54。 |
 | 更新日 | 2026-06-08 |
