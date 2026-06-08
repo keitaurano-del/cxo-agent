@@ -12,12 +12,12 @@
 //   GET {BASE}/api/oauth/profile  （同ヘッダ）
 //     account.email / organization.rate_limit_tier
 //
-// トークンの在処（2 アカウント、どちらもこの箱のローカルファイルを毎回読む）:
-//   local  : ~/.claude/.credentials.json の claudeAiOauth.accessToken（Claude1 / keita.urano。
-//            常駐 claude が自動 refresh する）
-//   urano2 : /home/dev/.claude-urano2/.credentials.json（Claude2 / keita.urano2）。
-//            MC-161 で旧箱 SSH 経路を廃止しローカル読みに統一。常駐 claude が無いので
-//            cron keeper（refresh-urano2-token.sh）が refresh_token grant で定期更新する。
+// トークンの在処（単一アカウント、この箱のローカルファイルを毎回読む）:
+//   local  : ~/.claude/.credentials.json の claudeAiOauth.accessToken
+//            （常駐 claude が自動 refresh する）。
+//   ※ 以前は 'oldbox'(~/.claude-urano2) も取得していたが、全 Claude を keita.urano2 に
+//     切り替えた結果 ~/.claude 自身が urano2 となり、~/.claude-urano2 は冗長・失効した。
+//     使用量カードでの urano2 二重表示を解消するため local の 1 アカウントのみ返す。
 //
 // 429 / 強キャッシュ（最重要）:
 //   usage エンドポイントは頻繁に叩くと 429（rate_limit_error）を返す。
@@ -33,7 +33,6 @@ import {
   CLAUDE_OAUTH_API_BASE,
   CLAUDE_OAUTH_TIMEOUT_MS,
   CLAUDE_LOCAL_CREDENTIALS,
-  CLAUDE_URANO2_CREDENTIALS,
 } from '../config.js';
 
 // ─── 型 ───────────────────────────────────────────────
@@ -47,9 +46,8 @@ export interface UsageBar {
 }
 
 // key は内部識別子（web 側は account.label を表示し、key は React の list key にしか使わない）。
-// MC-161 で取得元を旧箱 SSH からローカルファイルに変えたが、lastGood キャッシュ互換のため
-// key 名 'oldbox' はそのまま温存し、表示ラベルだけ実態（Claude2 / keita.urano2）に直す。
-export type AccountKey = 'local' | 'oldbox';
+// 単一アカウント化に伴い 'local'（~/.claude）のみ。
+export type AccountKey = 'local';
 
 /** 1 アカウント分の使用量。取得に失敗した部分は error に畳む。 */
 export interface ClaudeAccountUsage {
@@ -94,25 +92,19 @@ interface AccountIdentity {
   rank: number;
 }
 const EMAIL_IDENTITY: Record<string, AccountIdentity> = {
-  'keita.urano@gmail.com': { label: 'Claude1 / keita.urano', rank: 0 },
-  'keita.urano2@gmail.com': { label: 'Claude2 / keita.urano2', rank: 1 },
+  'keita.urano@gmail.com': { label: 'Claude / keita.urano', rank: 0 },
+  'keita.urano2@gmail.com': { label: 'Claude / keita.urano2', rank: 0 },
 };
-// email がまだ取れていない（429 や初回失敗）ときの暫定。現状の実配置に合わせる:
-//   ~/.claude（local）= keita.urano = Claude1 / ~/.claude-urano2（oldbox）= keita.urano2 = Claude2
-//   （2026-06-07 再検証で交差解消済）。
-// email が取れたら EMAIL_IDENTITY が優先されるので、配置が直ればこの fallback に依存しない。
+// email がまだ取れていない（429 や初回失敗）ときの暫定。
+// 全 Claude を keita.urano2 に切り替えたため ~/.claude の実体は不定（urano1/urano2 どちらにも
+// なり得る）。email が取れれば EMAIL_IDENTITY が優先されるので、ここでは実体を断定せず中立表記にする。
 const KEY_FALLBACK: Record<AccountKey, AccountIdentity> = {
-  local: { label: 'Claude1 / keita.urano', rank: 0 },
-  oldbox: { label: 'Claude2 / keita.urano2', rank: 1 },
+  local: { label: 'Claude（keita）', rank: 0 },
 };
 /** email（あれば一次）→ なければ key 実配置 fallback でアカウント識別を決める。 */
 function identityFor(email: string | undefined, key: AccountKey): AccountIdentity {
   if (email && EMAIL_IDENTITY[email]) return EMAIL_IDENTITY[email];
   return KEY_FALLBACK[key];
-}
-/** アカウントの表示順位（Claude1=0 → Claude2=1 → 不明）。lastGood/前回 email も加味される。 */
-function accountRank(acc: ClaudeAccountUsage): number {
-  return identityFor(acc.email, acc.key).rank;
 }
 
 // ─── OAuth API レスポンス（必要フィールドのみ）───────────────────
@@ -182,14 +174,9 @@ async function readTokenFromFile(path: string): Promise<string> {
   return tokenFromCredentialsJson(json);
 }
 
-/** local（Claude1 / keita.urano）: ~/.claude/.credentials.json を毎回読む（claude が自動 refresh）。 */
+/** local: ~/.claude/.credentials.json を毎回読む（常駐 claude が自動 refresh）。 */
 function readLocalToken(): Promise<string> {
   return readTokenFromFile(CLAUDE_LOCAL_CREDENTIALS);
-}
-
-/** urano2（Claude2 / keita.urano2）: この箱の .claude-urano2/.credentials.json を毎回読む（cron keeper が refresh）。 */
-function readUrano2Token(): Promise<string> {
-  return readTokenFromFile(CLAUDE_URANO2_CREDENTIALS);
 }
 
 // ─── OAuth API 呼び出し ──────────────────────────────────
@@ -306,18 +293,13 @@ async function collectAccount(
 }
 
 async function compute(): Promise<ClaudeUsageSummary> {
-  // 2 アカウントを並行取得（どちらもローカルファイル読み＝MC-161、片方失敗でも全体は返す）。
-  const [local, oldbox] = await Promise.all([
-    collectAccount('local', readLocalToken),
-    collectAccount('oldbox', readUrano2Token),
-  ]);
-  // 表示順は email 由来の rank で安定ソート（Claude1=keita.urano → Claude2=keita.urano2）。
-  const accounts = [local, oldbox].sort((a, b) => accountRank(a) - accountRank(b));
+  // 単一アカウント（local = ~/.claude）のみ取得。失敗しても全体は 200 で返す。
+  const local = await collectAccount('local', readLocalToken);
   return {
     generatedAt: new Date().toISOString(),
     cached: false,
     ttlMs: CLAUDE_USAGE_TTL_MS,
-    accounts,
+    accounts: [local],
   };
 }
 
