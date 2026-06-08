@@ -2304,8 +2304,8 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 |---|---|
 | ID | MC-208 |
 | タイトル | 議事録テンプレート出力で議題一覧の番号が脱落（順序付きリスト未対応） |
-| 優先度 | P2 |
-| ステータス | TODO |
+| 優先度 | P1 |
+| ステータス | IN_PROGRESS（2026-06-08 Keita 優先指示。林未着手のため Son が subagent で着手） |
 | 担当 | dev（林/凜） |
 | 詳細 | Keita 報告（2026-06-08）: 議事録の標準テンプレートを出力すると「議題一覧」の番号（1. 2. …）が抜ける。<br>【根本原因（Son 調査・特定済）】`server/src/lib/minutesExport.ts` の docx レンダラ `case 'list'`（314–330行）が、リスト項目を常に中点 `・ ` 固定で描画しており、`block.ordered` を無視している。パーサ側は順序付きリストを `ordered` フラグで正しく検出済（型定義49行 / `isOrderedItem` 123行 / パース93行・106行で `ordered` をblockに格納）だが、レンダラがそのフラグを参照しないため `1. （議題1）`/`2. （議題2）` の番号が脱落する。xlsx レンダラ（508行付近、`cell.value = ... ・ ...`）も同じく `・` 固定で同症状。MC-207 の「中点左寄せ」対応時に順序付きリストの分岐が漏れたもの。 |
 | 受け入れ条件（DoD） | (1) docx `case 'list'` で `block.ordered` が true のとき、項目マーカーを連番 `1. 2. 3. …` で描画（同一インデント階層ごとにカウンタ。最低でもブロック先頭からの通し番号）。false のときは現状どおり中点 `・`。(2) xlsx レンダラ（508行付近）も同様に ordered 対応。(3) 標準テンプレ（generateMinutesTemplates.ts の `1. （議題1）` を含むもの）を `POST /api/minutes/export {format:'pdf'}`／docx で実生成し、議題一覧に番号が出ることを目視確認。(4) 中点リスト（決定事項等）が従来どおり崩れないこと（リグレッション無し）。(5) server `tsc --noEmit` 0エラー・build green。 |
@@ -2340,8 +2340,8 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 |---|---|
 | ID | MC-209 |
 | タイトル | 議事録作成画面から事前指定フォーマットを直接DL＋ファイル名を YYYYMMDD_議事録 に |
-| 優先度 | P2 |
-| ステータス | TODO |
+| 優先度 | P1 |
+| ステータス | IN_PROGRESS（2026-06-08 Keita 優先指示。林未着手のため Son が subagent で着手） |
 | 担当 | dev（林/凜） |
 | 詳細 | Keita 要望（2026-06-08）: (A) 議事録を作成する画面（MinutesPane）からも、事前に指定したフォーマットをダウンロードできるようにする。(B) 保存/DL名を `YYYYMMDD_議事録`（例 `20260608_議事録.docx`）にする。<br>【現状（Son 調査）】作成画面 `web/src/views/Notebooks.tsx` の `MinutesPane` には「エクスポート形式（複数選択可）」UI（EXPORT_OPTS = docx/xlsx/pdf/txt、`selectedExportFormats`、3000行付近）で事前指定はできるが、**生成後のプレビュー領域（3123行〜）にダウンロードボタンが無い**。現状ダウンロードは Deliverables 画面経由。バックの DL API は `POST /api/minutes/export {content, format, filename}`（minutesRouter.ts:140-171）が既存で、`filename`（拡張子除去してタイトル化）→ `${title}.${ext}` で Content-Disposition を返す（filename 既定は「議事録」）。 |
 | 受け入れ条件（DoD） | (1) MinutesPane の生成後プレビュー領域に、事前指定した形式（`selectedExportFormats`、複数可）でのダウンロードボタンを追加。クリックで `POST /api/minutes/export` を呼び（content = 編集後 or 生成内容）、ブラウザ保存。(2) ダウンロード名が `YYYYMMDD_議事録.<ext>`（日付は生成日。複数形式選択時は拡張子で区別、同名衝突時の扱いも定義）。(3) Deliverables へ保存される議事録ファイル名も可能なら `YYYYMMDD_議事録` 系に揃える（範囲が広ければ DL名優先で、保存名整合は別途相談）。(4) docx/xlsx/pdf/txt すべてで実DL確認。(5) web/server tsc --noEmit 0エラー・build green。 |
