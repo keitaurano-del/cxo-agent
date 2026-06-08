@@ -2244,7 +2244,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-187 |
 | タイトル | 司令塔ダッシュボード：カード詳細表示機能 |
 | 優先度 | P2 |
-| ステータス | REVIEW（2026-06-07 21:20 実装完了・build green・smoke test PASS。設計提案書→実装→緑テスト完了。Keita 実機確認待ち） |
+| ステータス | DONE（2026-06-07 23:43 Son 直接検証で確定＝TaskDetail/AgentDetail/ProjectDetail 実在・配線済、web build green、/api/tasks・/api/agents 200。要約表のMC-187行を正とする。本詳細節の旧REVIEW表記を整合のためDONEへ更新） |
 | 担当 | designer（紺野）+ dev-logic（蓮）|
 | 詳細 | Apollo ダッシュボードの複数ビュー（Tasks, Agents, Activity）ではカード一覧で情報が凝縮されており、詳細情報へのドリルダウンニーズがある。本タスクではカード詳細表示 UI/UX を整備し、既存の TaskDetail（Tasks.tsx）と AgentFeed（Agents.tsx）を拡張・統一する。表示内容としては：（1）タスクカード：基本情報・詳細本文・関連リンク・アクション、（2）エージェントカード：概要・稼働統計（インスタンスカウント）・プロジェクト別内訳・会話タイムライン、（3）プロジェクト/ティックカード：進捗分布・アクティビティログ等を段階的に追加。モバイル・デスクトップの両体験に対応し、レスポンシブドロワー + モーダルハイブリッド方式を採択。設計前提：既存の Tasks.tsx TaskDetail / Agents.tsx AgentFeed 実装が稼働中なので、これを踏襲・拡張する形で無理なく統合する。 |
 | 受け入れ条件（DoD） | デザイン面: (1) Figma で Tasks/Agents 別々のドロワー・モーダルデザイン（1440px デスクトップ + 390px モバイル）作成、(2) 折りたたみセクション・統計グラフ（カラムグラフ or 円グラフ）のモック複数案、(3) キーボード/アクセシビリティ確認、(4) 設計稿を Keita に提出し UI パターン（side drawer vs bottom modal）承認取得。開発面: (5) TaskDetail コンポーネント拡張（基本情報・詳細本文・関連・フッタアクション）、(6) AgentCard クリック時 AgentDetail パネル実装（統計情報追加）、(7) レスポンシブ対応（Tailwind md: breakpoint でドロワー ↔ モーダル 切り替え）、(8) Deep link 対応（useSearchParams で ?task=id&source=source 検出・自動開く）、(9) Esc キー / × ボタン / 外側クリックで close、(10) server API（/api/tasks/:id/detail 等）が必要なら新設・整備。テスト面: (11) デスクトップ・モバイル・タブレットでの scroll・pagination 動作確認、(12) 100+ アイテムでのパフォーマンス（fetch time < 500ms）、(13) 異なるカードの開く/切り替え/close の流暢性、(14) アクセシビリティ（スクリーンリーダー・キーボード操作）確認済み、(15) web/server tsc --noEmit 0 エラー・npm run build success・vitest green。 |
@@ -2276,7 +2276,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-202 |
 | タイトル | RAG機能を改善してほしい。RAGからの回答もちゃんと返ってこないし。RAGに議事録はいらない。あと生成物がそれぞれ何ができるのか不明なので消していいと思う。… |
 | 優先度 | P1 |
-| ステータス | IN_PROGRESS（3者討議：方針確定間際／P0はKeita判断待ち） |
+| ステータス | DONE（2026-06-08 ①Opus自動フォールバックでRAG即復旧・②議事録UI分離・③生成物整理/template_extract削除 全完了、push＋restart 反映済。経緯は要約表のMC-202行を正とする。本詳細節は初期討議段階の記録で陳腐化のためDONEに整合） |
 | 担当 | フロント/バック分割実装（Masayoshi/Son/林 討議で確定後） |
 | 詳細 | 【Apollo投入】 RAG機能を改善してほしい。RAGからの回答もちゃんと返ってこないし。RAGに議事録はいらない。あと生成物がそれぞれ何ができるのか不明なので消していいと思う。フロントもバックも改善する必要がある。Masayoshi, Son, 林で議論しながら進めて。<br>【★2026-06-08 Masayoshi 実機検証で真因確定（前提覆る）】(1) **sources:0 は誤り**。ライブAPI実測で資料・index実在（02c1c9ff9a=5 / 0faca0284f=222 / 7e78566d53=2）、RAG検索も正常（chunks found, vectorDim3072, 0.42s）。(2) **本当の不達原因**=生成エンジンが `claude -p --model claude-sonnet-4-6` で、そのアカウントが**Sonnet上限到達（Jun10 10:00復帰）**。全 ask/generate が「You've hit your Sonnet limit…」(63文字固定)を**回答として保存・表示**。(3) **runner不具合**：ok=false にしつつ上限文字列を回答に貼る（notebookClaude / notebookRouter）。<br>【3者合意の優先順位】**P0=モデル切替（opus or 別アカ）で即復旧 ＋ エンジンエラー検出→回答に貼らずバナー化（「AI生成が一時上限/Jun10復帰」）** ← 本丸。**P0のモデル/アカウント選択はquota影響ありKeita判断に上げる（確定待ち）**。次に ②議事録UI分離（backendは minutesRouter.ts で分離済＝フロント MinutesPane 除去のみ・低リスク・backend温存）／③生成物6種（summary/faq/timeline/template/template_extract/custom）はエンジン復旧後に整理、template と template_extract が紛らわしく説明追加 or 片方削除（優先度中）。①空NB/sources:0フォールバックは前提誤りで優先度低→「エンジンエラーガード」として②③に吸収。確定後フロント/バック分割実装。 |
 | 更新日 | 2026-06-08 |
