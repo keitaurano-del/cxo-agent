@@ -255,10 +255,15 @@ export const INBOX_MAX_FILES = envNum('INBOX_MAX_FILES', 5);
 /** ターミナルアップロード画像の保存ディレクトリ（data/terminal-uploads）。絶対パスを林に渡す基準。 */
 export const TERMINAL_UPLOADS_DIR = join(INBOX_DATA_DIR, 'terminal-uploads');
 
-/** ターミナルアップロード 1 枚あたりの最大バイト数（10MB。inbox と揃える）。 */
+/**
+ * ターミナルアップロード 1 ファイルあたりの最大バイト数（既定 1GB）。
+ * ドキュメント/動画/音声の添付を考慮して引き上げた。multer は diskStorage 相当の
+ * ストリーム保存（メモリ非常駐）なので大物でもメモリは載らない。env で上書き可。
+ * 注意: cloudflared 無料トンネル経由は ~100MB で頭打ち。大物は直アクセス/LAN で送る。
+ */
 export const TERMINAL_UPLOAD_MAX_FILE_BYTES = envNum(
   'TERMINAL_UPLOAD_MAX_FILE_BYTES',
-  10 * 1024 * 1024,
+  1024 * 1024 * 1024,
 );
 
 /** ターミナルアップロードの最大枚数（5 枚。inbox と揃える）。 */

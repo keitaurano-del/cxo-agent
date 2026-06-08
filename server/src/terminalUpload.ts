@@ -7,8 +7,9 @@
 //
 // 流儀は inbox.ts の画像添付に倣う:
 //  - multipart（images フィールド）でメモリ受け → サニタイズ名で保存
-//  - MIME（画像 + テキスト系）と拡張子の二重検証
-//  - 1 ファイル 10MB・最大 5 個（config の TERMINAL_UPLOAD_* で上限）
+//  - MIME（画像 / テキスト / ドキュメント / 動画 / 音声）と拡張子の二重検証
+//  - サイズ上限は config の TERMINAL_UPLOAD_MAX_FILE_BYTES（既定 1GB）、最大 5 個
+//    （注入はパスを送るだけなのでファイル種別を問わず動く＝関門は MIME 許可と上限のみ）
 //
 // 大量ファイルの自動分散（拡張）:
 //  - アップロードされたファイルが 5 個を超える場合、複数ターミナルにラウンドロビン分散する。
@@ -26,7 +27,7 @@
 //  - 認証は index.ts 側の makeAuthMiddleware 配下に mount することで担保（Cookie 必須）。
 
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, unlinkSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { Router, type Request, type Response } from 'express';
@@ -45,7 +46,8 @@ import {
 import { sanitizeFilename } from './lib/inboxPath.js';
 
 // ─── 許可する MIME と拡張子 ──────────────────────────────────
-// 画像（png/jpeg/webp/gif）に加え、テキスト系ファイルも受け付ける。
+// 画像（png/jpeg/webp/gif）＋テキスト系に加え、ドキュメント（PDF/Office/OpenDocument/RTF）と
+// 動画（video/*）・音声（audio/*）も受け付ける。動画/音声は prefix 判定（text/* と同様）。
 const ALLOWED_MIME = new Set([
   // 画像
   'image/png',
@@ -60,24 +62,66 @@ const ALLOWED_MIME = new Set([
   'text/x-python',
   'text/javascript',
   'text/x-javascript',
-  // application 系
+  'text/rtf',
+  // application 系（コード/設定）
   'application/json',
   'application/javascript',
   'application/x-yaml',
   'application/yaml',
+  // ドキュメント
+  'application/pdf',
+  'application/msword', // .doc
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+  'application/vnd.ms-excel', // .xls
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.ms-powerpoint', // .ppt
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+  'application/vnd.oasis.opendocument.text', // .odt
+  'application/vnd.oasis.opendocument.spreadsheet', // .ods
+  'application/vnd.oasis.opendocument.presentation', // .odp
+  'application/rtf',
 ]);
 
+// 拡張子ホワイトリスト（MIME の二重検証）。MIME が空/unknown のときの判定にも使う。
+// 画像・テキスト・ドキュメント・動画・音声を網羅する。
+const ALLOWED_EXT = new Set([
+  // 画像
+  '.png', '.jpg', '.jpeg', '.webp', '.gif',
+  // テキスト/コード/設定
+  '.txt', '.md', '.csv', '.ts', '.js', '.py', '.json', '.yaml', '.yml',
+  // ドキュメント
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp', '.rtf',
+  // 動画
+  '.mp4', '.mov', '.webm', '.mkv', '.avi', '.m4v',
+  // 音声
+  '.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac',
+]);
+
+/** ファイル名から小文字拡張子を取り出す（無ければ ''）。 */
+function lowerExt(name: string): string {
+  return extname(name || '').toLowerCase();
+}
+
 /**
- * MIME が許可されているか判定する。
- * text/* プレフィックスはすべて許容する（text/x-* 等の未知サブタイプ込み）。
+ * ファイルが許可されているか判定する。
+ * - text/ / video/ / audio/ プレフィックスはすべて許容する（未知サブタイプ込み）。
+ * - 個別 MIME は ALLOWED_MIME で判定。
+ * - MIME が空/unknown（application/octet-stream 等）のときは拡張子ホワイトリストで判定する。
+ *   これによりブラウザが MIME を付けない大物（mkv 等）も拡張子で通せる。
  */
-function isAllowedMime(mime: string): boolean {
-  const m = mime.toLowerCase().split(';')[0].trim();
-  if (m.startsWith('text/')) return true;
-  return ALLOWED_MIME.has(m);
+function isAllowedMime(mime: string, originalName = ''): boolean {
+  const m = (mime || '').toLowerCase().split(';')[0].trim();
+  if (m.startsWith('text/') || m.startsWith('video/') || m.startsWith('audio/')) return true;
+  if (ALLOWED_MIME.has(m)) return true;
+  // MIME が空 or 汎用（octet-stream）なら拡張子で救済する。
+  if (!m || m === 'application/octet-stream') {
+    return ALLOWED_EXT.has(lowerExt(originalName));
+  }
+  return false;
 }
 
 // MIME → 正規拡張子。画像のみ。元ファイル名の拡張子が欠落/不一致のとき画像は補正する。
+// 非画像（ドキュメント/動画/音声/テキスト）は元名の拡張子を尊重する（補正しない）。
 const MIME_TO_EXT: Record<string, string> = {
   'image/png': '.png',
   'image/jpeg': '.jpg',
@@ -87,21 +131,60 @@ const MIME_TO_EXT: Record<string, string> = {
 // 画像拡張子の許可リスト（jpeg/jpg 両方許容）。画像以外は拡張子補正対象外。
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 
+// 非画像の代表 MIME → 拡張子。拡張子が全く無いファイルにのみ補完用途で使う
+// （元名に拡張子があればそちらを尊重する）。網羅しなくてよい＝無ければ無拡張のまま。
+const NON_IMAGE_MIME_TO_EXT: Record<string, string> = {
+  'application/pdf': '.pdf',
+  'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/vnd.ms-excel': '.xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  'application/vnd.ms-powerpoint': '.ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+  'application/vnd.oasis.opendocument.text': '.odt',
+  'application/vnd.oasis.opendocument.spreadsheet': '.ods',
+  'application/vnd.oasis.opendocument.presentation': '.odp',
+  'application/rtf': '.rtf',
+  'application/json': '.json',
+  'video/mp4': '.mp4',
+  'video/quicktime': '.mov',
+  'video/webm': '.webm',
+  'video/x-matroska': '.mkv',
+  'audio/mpeg': '.mp3',
+  'audio/wav': '.wav',
+  'audio/x-wav': '.wav',
+  'audio/mp4': '.m4a',
+  'audio/aac': '.aac',
+  'audio/ogg': '.ogg',
+  'audio/flac': '.flac',
+};
+
 /** 分散送信のグループサイズ上限。 */
 const DISTRIBUTE_GROUP_SIZE = 5;
 
-// ─── multer（メモリ保存）──────────────────────────────────
-// 保存名は id 確定後に組むため、いったんメモリに溜める。
+// ─── multer（ディスク保存・ストリーム）──────────────────────────
+// diskStorage でディスクへ直接ストリーム保存する。動画/音声・最大1GB をメモリに載せない
+// （memoryStorage だと 1GB×複数が RAM に載り、さらに writeFileSync(1GB) の同期書き込みが
+// イベントループをブロックしてターミナル固まりを再発させる）。保存名は filename コールバックで
+// buildFilename（タイムスタンプ+乱数+サニタイズ名）を使い衝突を避ける。
 // fileFilter で MIME を弾き、サイズ/枚数は limits で弾く。
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination(_req, _file, cb) {
+      mkdirSync(TERMINAL_UPLOADS_DIR, { recursive: true });
+      cb(null, TERMINAL_UPLOADS_DIR);
+    },
+    filename(_req, file, cb) {
+      cb(null, buildFilename(new Date(), file.originalname, file.mimetype));
+    },
+  }),
   limits: {
     fileSize: TERMINAL_UPLOAD_MAX_FILE_BYTES,
     files: TERMINAL_UPLOAD_MAX_FILES,
   },
   fileFilter(_req, file, cb) {
-    if (!isAllowedMime(file.mimetype)) {
-      cb(new Error('unsupported file type: only images (png/jpeg/webp/gif) and text files (txt/md/ts/js/py/json/yaml/csv) are allowed'));
+    if (!isAllowedMime(file.mimetype, file.originalname)) {
+      cb(new Error('unsupported file type: images / text / documents (pdf, office, opendocument, rtf) / video / audio are allowed'));
       return;
     }
     cb(null, true);
@@ -147,10 +230,13 @@ function buildFilename(now: Date, originalName: string, mimetype: string): strin
       return `${iso}-${rand}-${stem}${wantExt}`;
     }
   } else {
-    // テキスト系: 拡張子が許可リスト外でも補正しない（元名を尊重）。
-    // ただし拡張子が全く無い場合は .txt を補う。
+    // 非画像（テキスト/ドキュメント/動画/音声）: 拡張子が許可外でも補正しない（元名を尊重）。
+    // ただし拡張子が全く無い場合のみ補う。テキスト系は .txt、それ以外は MIME 由来があれば
+    // それを使い、無ければ無拡張のまま残す（動画/音声の binary を .txt 化しない）。
     if (!ext) {
-      return `${iso}-${rand}-${safe}.txt`;
+      if (m.startsWith('text/')) return `${iso}-${rand}-${safe}.txt`;
+      const fromMime = NON_IMAGE_MIME_TO_EXT[m];
+      if (fromMime) return `${iso}-${rand}-${safe}${fromMime}`;
     }
   }
   return `${iso}-${rand}-${safe}`;
@@ -272,28 +358,17 @@ async function handleUpload(req: Request, res: Response): Promise<void> {
   const body = req.body as { sendEnter?: unknown } | undefined;
   const shouldSendEnter = String(body?.sendEnter ?? '0') !== '0';
 
-  const now = new Date();
+  // diskStorage が既に data/terminal-uploads/ へストリーム保存済み。multer が確定した
+  // 絶対パス（f.path）をそのまま使う。MIME は fileFilter で gate 済みだが念のため二重チェックし、
+  // NG なら保存済みファイルを片付けて 400（diskStorage は fileFilter 通過後に書くので通常ここは通る）。
   const savedPaths: string[] = [];
-  const used = new Set<string>();
   for (const f of files) {
-    // MIME を二重チェック（fileFilter を通っているはずだが念のため）。
-    if (!isAllowedMime(f.mimetype)) {
+    const abs = f.path ?? join(TERMINAL_UPLOADS_DIR, f.filename);
+    if (!isAllowedMime(f.mimetype, f.originalname)) {
+      try { unlinkSync(abs); } catch { /* 片付け失敗は無視 */ }
       res.status(400).json({ error: `unsupported file type: ${f.mimetype}` });
       return;
     }
-    let fname = buildFilename(now, f.originalname, f.mimetype);
-    // タイムスタンプ+乱数で実質衝突しないが、同一バッチの取り違え保険に連番化。
-    if (used.has(fname)) {
-      const ext = extname(fname);
-      const stem = fname.slice(0, fname.length - ext.length);
-      let n = 1;
-      while (used.has(`${stem}-${n}${ext}`)) n += 1;
-      fname = `${stem}-${n}${ext}`;
-    }
-    used.add(fname);
-    // 保存は常に NEW 箱（この箱）の data/terminal-uploads/。
-    const abs = join(TERMINAL_UPLOADS_DIR, fname);
-    writeFileSync(abs, f.buffer);
     savedPaths.push(abs);
   }
 
