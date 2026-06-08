@@ -2311,7 +2311,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | タイトル | Apollo 公開URLを無料の固定URL化（Cloudflare Named Tunnel） |
 | 備考2 | 採番訂正（2026-06-08 棚町）: 旧 MC-209 が議事録DL（Son 起票・git commit 9d987f4 で MC-209 確定）と二重採番だったため、本カードを MC-210 に振り直し。[[reference-task-id-numbering]] 参照。 |
 | 優先度 | P2 |
-| ステータス | TODO（Keita 判断待ち：Cloudflare 登録ドメインの有無） |
+| ステータス | IN_PROGRESS（2026-06-08 Keita 決定: 方針B=Cloudflare名前付きトンネル＋独自ドメイン。ドメイン=apollomansion.com（全TLD空き確認済・.com推奨）。Keitaのドメイン購入(Cloudflare Registrar)＋cloudflared tunnel login 待ち→以降のtunnel作成/ingress/DNS/systemd切替/検証はSonが実施。最終URL=https://apollomansion.com 予定） |
 | 担当 | apollo番人 / dev（インフラ） |
 | 詳細 | Keita 依頼（2026-06-08）: Apollo の公開URLが再起動のたびに変わって「落ちてる」ように見える件を恒久対策する。<br>【根本原因】origin(:4317)/rescue(:4318) のトンネルが quick tunnel（`cloudflared tunnel --url http://localhost:4317`）で、再起動ごとにランダムな `*.trycloudflare.com` が払い出される（systemd: cloudflared.service / cloudflared-rescue.service）。サーバ自体は健全（HTTP 401=認証ゲートで正常）。2026-06-08 の事象は旧URL `able-strict-driver-preferred` が死に、新URL `automatic-disturbed-delays-annually` に変わったことが原因で、Apollo ダウンではなかった。<br>【対策】Cloudflare Named Tunnel に切替えて apollo.&lt;domain&gt; / rescue.&lt;domain&gt; を固定発行する。費用は Named Tunnel/Zero Trust 無料枠で賄える（追加課金なし）。ただし Cloudflare に登録済みドメインが1つ必須。 |
 | 受け入れ条件（DoD） | (1) origin/rescue が固定ホスト名で安定アクセスできる（再起動してもURL不変）。(2) `?token=<MC_TOKEN>`→Cookie 方式のスマホ1クリック認証が固定URLでも維持。(3) systemd の cloudflared.service / cloudflared-rescue.service を named tunnel 実行に書き換え（--url quick tunnel をやめる）。(4) 固定URL+token で live 200 を実機検証。 |
