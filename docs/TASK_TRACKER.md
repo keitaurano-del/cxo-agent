@@ -2468,3 +2468,17 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 担当 | Son（subagent 直）|
 | 詳細 | Keita 指示: 履歴ボタンを作成画面内の「議事録を生成」横から、入口の Deliverables「議事録を作成」ボタンの右横へ移動。履歴ボタン押下で作成画面を開きつつ履歴モーダルを自動表示（openHistoryOnMount）。生成ボタン横の重複は撤去。commit c66b47f。関連 MC-216。 |
 | 更新日 | 2026-06-08 |
+
+---
+
+### MC-218 — 議事録プレビューがDL化する不具合修正＋エージェント通知バッジ無効化
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-218 |
+| タイトル | 議事録プレビューがDL化する不具合修正＋エージェント通知バッジ無効化 |
+| 優先度 | P1 |
+| ステータス | 実機反映済（2026-06-08 web build 配信確認）。Keita 実機確認待ち（要ハードリロード） |
+| 担当 | Son（subagent 直）|
+| 詳細 | Keita 指摘: ①生成ファイルの「プレビュー」を押すとダウンロードが始まる ②エージェントの通知は不要。【①真因】minutesFileUrl のプレビューが /api/deliverables/file?inline=1（生ファイルinline＝Officeは描画不可でDL化）を使用。→ /api/deliverables/preview（LibreOfficeでPDF変換しinline表示、実機docx→PDF 200確認）に変更。【②】App.tsx の NAV_BADGE_MAP から agents:'/' を削除しホーム/エージェントの新着バッジを停止（vault/deliverables/要承認は維持）。commit 291200c / f4f3e75。 |
+| 更新日 | 2026-06-08 |
