@@ -640,10 +640,41 @@ function findExecutor(taskId: string, agents: AgentSummary[]): TaskExecutor | un
   return undefined;
 }
 
-export function collectTasks(): Task[] {
-  const tasks: Task[] = [];
-  const agents = collectAgents(); // MC-164: 各タスクの executor をマッチングするため事前取得
+// ─── パース結果キャッシュ（MC-206 軽量化）──────────────────────────
+// 689KB の台帳を毎リクエスト全件再パースしていたのを避ける。台帳ファイル群の mtime を
+// シグネチャ化し、いずれも変化していなければ前回のパース結果（executor 付与前の Task 配列）を
+// 再利用する。executor は live な collectAgents() に依存するため毎回フレッシュに付与し直す。
+// scope / detail の整形はこのキャッシュ後段（API ハンドラ側）で行うため、ここでは「全タスク配列」を持つ。
+const TASK_PARSE_PATHS = [
+  TASK_SOURCES.logicTracker,
+  TASK_SOURCES.nishimaruTracker,
+  TASK_SOURCES.cxoTracker,
+  TASK_SOURCES.kanban,
+  TASK_SOURCES.today,
+];
 
+/** 監視対象ファイル群の mtime（取れなければ 0）を連結したシグネチャ。1 つでも変われば変化する。 */
+function parseSignature(): string {
+  return TASK_PARSE_PATHS.map((p) => {
+    try {
+      return `${statSync(p).mtimeMs}`;
+    } catch {
+      return '0';
+    }
+  }).join('|');
+}
+
+let _parseCache: { sig: string; tasks: Task[] } | null = null;
+
+/**
+ * 台帳をパースして executor 付与前の Task 配列を返す（mtime ベースのキャッシュ付き）。
+ * すべての監視ファイルの mtime が前回と同一なら再パースせずキャッシュを返す。
+ */
+function parseAllTasks(): Task[] {
+  const sig = parseSignature();
+  if (_parseCache && _parseCache.sig === sig) return _parseCache.tasks;
+
+  const tasks: Task[] = [];
   tasks.push(...parseTrackerTable(TASK_SOURCES.logicTracker, 'logic', 'logic/TASK_TRACKER'));
   tasks.push(
     ...parseTrackerTable(TASK_SOURCES.nishimaruTracker, 'nishimaru', 'nishimaru/TASK_TRACKER'),
@@ -652,6 +683,20 @@ export function collectTasks(): Task[] {
   tasks.push(...parseTrackerTable(TASK_SOURCES.cxoTracker, 'cxo', 'cxo/TASK_TRACKER'));
   tasks.push(...parseCheckboxBoard(TASK_SOURCES.kanban, 'kanban', 'private'));
   tasks.push(...parseCheckboxBoard(TASK_SOURCES.today, 'today', 'private'));
+
+  _parseCache = { sig, tasks };
+  return tasks;
+}
+
+/** テスト用: パースキャッシュを明示的に無効化する。 */
+export function clearTaskCache(): void {
+  _parseCache = null;
+}
+
+export function collectTasks(): Task[] {
+  const agents = collectAgents(); // MC-164: 各タスクの executor をマッチングするため事前取得
+  // キャッシュされた Task 配列を複製してから executor を付与する（キャッシュ実体を汚さない）。
+  const tasks = parseAllTasks().map((t) => ({ ...t }));
 
   // executor をマッチング（MC-164）
   for (const task of tasks) {
