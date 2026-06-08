@@ -2877,13 +2877,21 @@ export function MinutesPane({
     [minutesBase, inputText, selectedType, selectedFormat, selectedTemplateId, customInstructions, presets, sourceFiles, selectedStyles, selectedExportFormats, reuseFolderRelpath, restoredAttachments],
   );
 
-  // 生成済みファイルの取得URL。inline=1 なら docx/xlsx 等はサーバが PDF 変換して返す（プレビュー用）。
+  // 生成済みファイルの取得URL。
+  // プレビュー(inline=true)時、deliverables では /api/deliverables/preview を使う（LibreOffice で
+  // docx/xlsx 等を PDF 変換して inline 返す。pdf/画像/テキストはそのまま passthrough）。
+  // /api/deliverables/file?inline=1 は変換せず生ファイルを inline 指定で返すだけなので docx 等はDLに化ける。
+  // notebooks 側の file エンドポイントは変換対応済みなので従来どおり inline=1 を使う。
+  // ダウンロード(inline=false)は常に生ファイルを返す file エンドポイントを使う。
   const minutesFileUrl = useCallback(
     (relpath: string, inline: boolean): string => {
+      if (mode === 'deliverables') {
+        return inline
+          ? `/api/deliverables/preview?path=${encodeURIComponent(relpath)}`
+          : `/api/deliverables/file?path=${encodeURIComponent(relpath)}`;
+      }
       const q = inline ? '&inline=1' : '';
-      return mode === 'deliverables'
-        ? `/api/deliverables/file?path=${encodeURIComponent(relpath)}${q}`
-        : `/api/notebooks/${nbId}/file?path=${encodeURIComponent(relpath)}${q}`;
+      return `/api/notebooks/${nbId}/file?path=${encodeURIComponent(relpath)}${q}`;
     },
     [mode, nbId],
   );
