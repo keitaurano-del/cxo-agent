@@ -284,10 +284,12 @@ async function handleMinutesGenerate(req: Request, res: Response): Promise<void>
     return;
   }
 
-  if (!resolvedTemplateBody && templateId) {
-    const tmpl = getTypePreset(resolvedType as MinutesType)?.templates.find(
-      (t) => t.id === templateId,
-    );
+  if (!resolvedTemplateBody) {
+    const preset = getTypePreset(resolvedType as MinutesType);
+    // templateId 指定時はそれを、未指定時は型の先頭テンプレート（＝標準フォーマット）を既定採用する。
+    const tmpl = templateId
+      ? preset?.templates.find((t) => t.id === templateId)
+      : preset?.templates[0];
     if (tmpl) resolvedTemplateBody = tmpl.body;
   }
 
