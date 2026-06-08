@@ -1,10 +1,10 @@
-// ノートブック（NotebookLM 的な資料セット＋資料根拠 Q&A＋生成物、MC-126）。
+// ノートブック（NotebookLM 的な資料セット＋資料根拠 Q&A、MC-126 / MC-223 で Q&A 専用化）。
 //
 // 一覧画面: ノートブックの作成・選択・削除。
-// 詳細画面: md+ は 3 ペイン（資料 / チャット / 生成物）、モバイルはタブ切替。
+// 詳細画面: md+ は 2 ペイン（資料 / Q&A）、モバイルはタブ切替。
 //   - 左 = 資料: アップロード（D&D＋選択、進捗バー）・一覧・プレビュー・削除。
-//   - 中央 = チャット: 履歴（吹き出し）＋質問送信（claude が時間かかるのでローディング）。
-//   - 右 = 生成物: 生成ボタン群（要約/FAQ/時系列/テンプレート/カスタム）＋生成物一覧。
+//   - 右 = Q&A: 履歴（吹き出し）＋質問送信。回答の下に出典（使用ソース一覧）を表示する。
+// 生成物作成（要約/FAQ/時系列/雛形/custom）は RAG と相性が悪いため MC-223 で撤去した。
 //
 // バックエンド API は全て auth 配下で Cookie mc_token が same-origin 自動付与される。
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -14,8 +14,6 @@ import type {
   NotebookDetail,
   NotebookFileRef,
   NotebookSourceKind,
-  NotebookGenerateKind,
-  NotebookGenerateResponse,
   MinutesType,
   MinutesFormat,
   MinutesPattern,
@@ -23,8 +21,6 @@ import type {
   MinutesTranscribeResponse,
   MinutesPatternsResponse,
   MinutesGenerateResponse,
-  NotebookFolderTree,
-  NotebookFolderEntry,
   DeliverableFile,
   DeliverablesResponse,
   NotebookChatMessage,
@@ -568,6 +564,8 @@ function ChatPane({
   const [error, setError] = useState<string | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
   const [pendingAnswer, setPendingAnswer] = useState(false);
+  // 直近の回答が根拠に使ったソースファイル名一覧（出典表示用、MC-223）。
+  const [lastSources, setLastSources] = useState<string[]>([]);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [viewer, setViewer] = useState<FileViewerState | null>(null);
@@ -637,6 +635,7 @@ function ChatPane({
     setAsking(true);
     setError(null);
     setPendingQuestion(q);
+    setLastSources([]);
     setQuestion('');
     fetch(`/api/notebooks/${id}/ask`, {
       method: 'POST',
@@ -656,6 +655,10 @@ function ChatPane({
         } else if (body.error) {
           setError('回答が途中で打ち切られた可能性があります。');
         }
+        // 出典（使用ソース）を保持して回答の下に表示する（MC-223）。
+        if (res.ok && !body.errorKind && body.metadata?.sources) {
+          setLastSources(body.metadata.sources);
+        }
         onAnswered();
       })
       .catch(() => {
@@ -670,7 +673,7 @@ function ChatPane({
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-faint">
-        チャット
+        Q&amp;A
       </div>
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3">
         {chat.length === 0 && !pendingQuestion ? (
@@ -684,6 +687,17 @@ function ChatPane({
             {chat.map((m, i) => (
               <ChatBubble key={`${m.ts}-${i}`} msg={m} onCite={handleCite} />
             ))}
+            {/* 直近回答の出典（使用ソース一覧）。回答が最新の assistant メッセージのときのみ表示。 */}
+            {!asking && !pendingAnswer && !pendingQuestion &&
+              lastSources.length > 0 &&
+              chat.at(-1)?.role === 'assistant' && (
+                <div className="flex justify-start">
+                  <div className="max-w-[85%] rounded-lg bg-surface-2/60 px-2.5 py-1.5 text-[11px] text-text-faint">
+                    <span className="font-medium text-text-muted">出典: </span>
+                    {lastSources.join(', ')}
+                  </div>
+                </div>
+              )}
             {pendingQuestion && (
               <ChatBubble msg={{ ts: '', role: 'user', text: pendingQuestion }} />
             )}
@@ -916,513 +930,6 @@ function SourcesPane({
   );
 }
 
-
-// ─── 生成物ペイン ─────────────────────────────────────────
-
-const GENERATE_BUTTONS: { kind: NotebookGenerateKind; label: string }[] = [
-  { kind: 'summary', label: '要約' },
-  { kind: 'faq', label: 'FAQ' },
-  { kind: 'timeline', label: '時系列' },
-  { kind: 'template', label: 'テンプレート' },
-  { kind: 'custom', label: 'カスタム' },
-];
-
-// 各生成物の用途を 1 行で説明する（選択中の種別の下に表示、MC-202③）。
-const GENERATE_DESCRIPTIONS: Record<NotebookGenerateKind, string> = {
-  summary: '資料全体の要点を 1 つにまとめた要約を作成します。',
-  faq: '資料から想定される質問と回答を整理した FAQ を作成します。',
-  timeline: '資料に登場する出来事・日付を時系列に並べた年表を作成します。',
-  template: '資料の書式・項目構成をまねた、記入用の空の雛形ファイルを作成します。',
-  custom: '指示した内容に沿った成果物を自由に作成します（指示の入力が必要です）。',
-};
-
-// テンプレートで指定できる出力形式。
-const TEMPLATE_FORMATS = ['指定なし', 'xlsx', 'docx', 'pptx', 'md'];
-
-function ArtifactRow({
-  id,
-  file,
-  onPreview,
-}: {
-  id: string;
-  file: NotebookFileRef;
-  onPreview: (file: NotebookFileRef) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface p-2.5">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="shrink-0 text-text-faint">
-          <KindIcon kind={file.kind} ext={file.ext} />
-        </span>
-        <div className="min-w-0">
-          <div className="truncate text-sm text-text" title={file.name}>
-            {file.name}
-          </div>
-          <div className="text-[11px] text-text-faint">{humanReadableSize(file.sizeBytes)}</div>
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-0.5">
-        {isPreviewable(file) && (
-          <button
-            type="button"
-            onClick={() => onPreview(file)}
-            className="rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
-            aria-label={`${file.name} をプレビュー`}
-          >
-            <EyeIcon width={15} height={15} />
-          </button>
-        )}
-        <a
-          href={fileUrl(id, file, false)}
-          download={file.name}
-          className="rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
-          aria-label={`${file.name} をダウンロード`}
-        >
-          <DownloadIcon width={15} height={15} />
-        </a>
-      </div>
-    </div>
-  );
-}
-
-function ArtifactsPane({
-  id,
-  artifacts,
-  hasSources,
-  onGenerated,
-  onPreview,
-}: {
-  id: string;
-  artifacts: NotebookFileRef[];
-  hasSources: boolean;
-  onGenerated: () => void;
-  onPreview: (file: NotebookFileRef) => void;
-}) {
-  const [activeKind, setActiveKind] = useState<NotebookGenerateKind | null>(null);
-  const [instruction, setInstruction] = useState('');
-  const [templateFormat, setTemplateFormat] = useState(TEMPLATE_FORMATS[0]);
-  const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [report, setReport] = useState<string | null>(null);
-  const [genPct, setGenPct] = useState<number>(0);
-  // 離脱後復帰時: 生成リクエスト送信後に HTTP 接続が切れても artifacts 増加をポーリングで検出。
-  const [generatingKind, setGeneratingKind] = useState<NotebookGenerateKind | null>(null);
-  const artifactPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // ポーリング開始時点の artifacts 件数を記憶して増加を検出する。
-  const artifactBaseCount = useRef<number>(0);
-
-  // フォルダツリー
-  const [folderTree, setFolderTree] = useState<NotebookFolderTree | null>(null);
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
-  const [creatingFolder, setCreatingFolder] = useState(false);
-  const [newFolderName, setNewFolderName] = useState('');
-  const [folderCreateError, setFolderCreateError] = useState<string | null>(null);
-  const newFolderInputRef = useRef<HTMLInputElement | null>(null);
-
-  const fetchFolderTree = useCallback(() => {
-    fetch(`/api/notebooks/${id}/folders`)
-      .then((r) => r.json().catch(() => null))
-      .then((data: NotebookFolderTree | null) => {
-        if (data) setFolderTree(data);
-      })
-      .catch(() => {});
-  }, [id]);
-
-  useEffect(() => {
-    fetchFolderTree();
-  }, [fetchFolderTree, artifacts]);
-
-  useEffect(() => {
-    if (creatingFolder && newFolderInputRef.current) {
-      newFolderInputRef.current.focus();
-    }
-  }, [creatingFolder]);
-
-  const handleCreateFolder = useCallback(() => {
-    const name = newFolderName.trim();
-    if (!name) return;
-    setFolderCreateError(null);
-    fetch(`/api/notebooks/${id}/folders`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    })
-      .then(async (res) => {
-        if (res.ok) {
-          setNewFolderName('');
-          setCreatingFolder(false);
-          fetchFolderTree();
-        } else {
-          const body = (await res.json().catch(() => ({}))) as { error?: string };
-          setFolderCreateError(body.error || 'フォルダの作成に失敗しました。');
-        }
-      })
-      .catch(() => setFolderCreateError('ネットワークエラーでフォルダを作成できませんでした。'));
-  }, [id, newFolderName, fetchFolderTree]);
-
-  // 生成中に実際の progress イベントが来ない間、時間ベースで擬似進捗を増やす。
-  // SSH ラッパー経由の場合 chunk が逐次来ないため、sqrt カーブで最大95%まで自動増加。
-  // 実際の progress イベントや done イベントが来た時点でそちらが上書きする。
-  useEffect(() => {
-    if (!generating) return;
-    const start = Date.now();
-    const EXPECTED_MS = 120_000; // 想定 2 分
-    const timer = setInterval(() => {
-      const elapsed = Date.now() - start;
-      const pct = Math.min(95, Math.round(Math.sqrt(elapsed / EXPECTED_MS) * 95));
-      setGenPct((prev) => Math.max(prev, pct));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [generating]);
-
-  // generatingKind がセットされたら 3 秒ごとに artifacts 件数を確認。
-  useEffect(() => {
-    if (!generatingKind) {
-      if (artifactPollingRef.current) {
-        clearInterval(artifactPollingRef.current);
-        artifactPollingRef.current = null;
-      }
-      return;
-    }
-    artifactBaseCount.current = artifacts.length;
-    artifactPollingRef.current = setInterval(() => {
-      fetch(`/api/notebooks/${id}`)
-        .then((res) => res.json().catch(() => null))
-        .then((data: { artifacts?: NotebookFileRef[] } | null) => {
-          if (!data) return;
-          const count = data.artifacts?.length ?? 0;
-          if (count > artifactBaseCount.current) {
-            // 新しい生成物が増えた → 親を更新してポーリング停止。
-            onGenerated();
-            setGeneratingKind(null);
-            setGenerating(false);
-          }
-        })
-        .catch(() => { /* ネットワーク一時エラーは無視してリトライ */ });
-    }, 3000);
-
-    return () => {
-      if (artifactPollingRef.current) {
-        clearInterval(artifactPollingRef.current);
-        artifactPollingRef.current = null;
-      }
-    };
-  }, [generatingKind, id, artifacts.length, onGenerated]);
-
-  const needsInstruction = activeKind === 'custom';
-  const showInstruction = activeKind === 'custom' || activeKind === 'template';
-
-  const run = useCallback(() => {
-    if (!activeKind || generating) return;
-    if (needsInstruction && instruction.trim() === '') {
-      setError('カスタムは指示を入力してください。');
-      return;
-    }
-    setGenerating(true);
-    setError(null);
-    setReport(null);
-
-    // テンプレート系は出力形式の指定を instruction に織り込む。
-    let instr = instruction.trim();
-    if (activeKind === 'template' && templateFormat !== TEMPLATE_FORMATS[0]) {
-      const fmt = `出力形式は ${templateFormat} で作成してください。`;
-      instr = instr ? `${fmt} ${instr}` : fmt;
-    }
-
-    const requestedKind = activeKind;
-    setGenPct(0);
-
-    // SSE ストリームで進捗を受け取る。
-    const ctrl = new AbortController();
-    fetch(`/api/notebooks/${id}/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify({ kind: activeKind, instruction: instr || undefined }),
-      signal: ctrl.signal,
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as NotebookGenerateResponse;
-          setError(body.error || `生成に失敗しました（HTTP ${res.status}）。`);
-          setGenerating(false);
-          setGeneratingKind(null);
-          return;
-        }
-        // SSE を行単位でパースして進捗・完了を処理。
-        const reader = res.body?.getReader();
-        if (!reader) throw new Error('no body');
-        const decoder = new TextDecoder();
-        let buf = '';
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split('\n');
-          buf = lines.pop() ?? '';
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            let evt: { type?: string; pct?: number; ok?: boolean; created?: unknown[]; report?: string; error?: string; errorKind?: NotebookEngineErrorKind } = {};
-            try { evt = JSON.parse(line.slice(6)) as typeof evt; } catch { continue; }
-            if (evt.type === 'progress' && typeof evt.pct === 'number') {
-              setGenPct(evt.pct);
-            } else if (evt.type === 'done') {
-              setGenPct(100);
-              if (!evt.ok) {
-                // エンジン失敗（上限/エラー）時はバナー文言、それ以外は資料不足等の既定文言。
-                setError(
-                  evt.errorKind
-                    ? engineErrorMessage(evt.errorKind)
-                    : (evt.error || '生成物を作成できませんでした。資料が十分か確認してください。'),
-                );
-              } else {
-                const created = evt.created?.length ?? 0;
-                setReport(created > 0 ? `${created} 件の生成物を作成しました。` : (evt.report || '生成が完了しました。'));
-                setInstruction('');
-              }
-              onGenerated();
-              setGeneratingKind(null);
-              setGenerating(false);
-            }
-          }
-        }
-      })
-      .catch((e: unknown) => {
-        if (e instanceof Error && e.name === 'AbortError') return;
-        // HTTP 切断（離脱後復帰のケース）: generating 状態を維持してポーリングに委ねる。
-        setGeneratingKind(requestedKind);
-      });
-  }, [id, activeKind, instruction, templateFormat, needsInstruction, generating, onGenerated]);
-
-  return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-border px-3 py-2 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-text-faint">
-          フォルダ <span className="ml-1 text-text-muted">{artifacts.length}</span>
-        </span>
-        <button
-          type="button"
-          title="フォルダを追加"
-          onClick={() => { setCreatingFolder(true); setFolderCreateError(null); setNewFolderName(''); }}
-          className="rounded p-0.5 text-text-faint hover:bg-surface-2 hover:text-text"
-          aria-label="フォルダを追加"
-        >
-          <PlusIcon width={14} height={14} />
-        </button>
-      </div>
-
-      {creatingFolder && (
-        <div className="border-b border-border px-3 py-2 flex flex-col gap-1">
-          <div className="flex gap-1.5">
-            <input
-              ref={newFolderInputRef}
-              type="text"
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') { e.preventDefault(); handleCreateFolder(); }
-                if (e.key === 'Escape') { setCreatingFolder(false); }
-              }}
-              placeholder="フォルダ名…"
-              className="flex-1 rounded border border-border bg-bg px-2 py-1 text-xs text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={handleCreateFolder}
-              disabled={!newFolderName.trim()}
-              className="rounded-full bg-accent px-2.5 py-1 text-xs font-semibold text-bg disabled:opacity-50"
-            >
-              作成
-            </button>
-            <button
-              type="button"
-              onClick={() => setCreatingFolder(false)}
-              className="rounded-full px-2 py-1 text-xs text-text-muted hover:text-text"
-            >
-              ×
-            </button>
-          </div>
-          {folderCreateError && (
-            <p className="text-[11px]" style={{ color: 'var(--mc-stalled)' }}>{folderCreateError}</p>
-          )}
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto p-3">
-        {/* フォルダツリー */}
-        {folderTree && (
-          <div className="mb-3 flex flex-col gap-2">
-            {folderTree.folders.map((folder: NotebookFolderEntry) => {
-              const isCollapsed = collapsedFolders.has(folder.name);
-              return (
-                <div key={folder.name} className="rounded-lg border border-border bg-surface overflow-hidden">
-                  <div className="flex items-center justify-between px-2.5 py-2 bg-surface-2">
-                    <button
-                      type="button"
-                      onClick={() => setCollapsedFolders((prev) => {
-                        const n = new Set(prev);
-                        if (n.has(folder.name)) n.delete(folder.name); else n.add(folder.name);
-                        return n;
-                      })}
-                      className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-                    >
-                      <FolderIcon width={14} height={14} className="shrink-0 text-text-faint" />
-                      <span className="truncate text-xs font-semibold text-text">{folder.name}</span>
-                      <span className="ml-1 text-[10px] text-text-faint">{folder.files.length}</span>
-                      <ChevronRightIcon
-                        width={12} height={12}
-                        className="shrink-0 text-text-faint ml-auto"
-                        style={{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform 0.15s' }}
-                      />
-                    </button>
-                  </div>
-                  {!isCollapsed && (
-                    <div className="flex flex-col gap-1.5 p-2">
-                      {folder.files.length === 0 ? (
-                        <p className="text-[11px] text-text-faint px-1">
-                          ファイルがありません
-                        </p>
-                      ) : (
-                        folder.files.map((f) => (
-                          <ArtifactRow key={f.relpath} id={id} file={f} onPreview={onPreview} />
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {folderTree.rootFiles.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <p className="text-[10px] text-text-faint uppercase tracking-wide px-0.5">ルート</p>
-                {folderTree.rootFiles.map((f) => (
-                  <ArtifactRow key={f.relpath} id={id} file={f} onPreview={onPreview} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="mb-3 rounded-lg border border-border bg-surface p-3">
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {GENERATE_BUTTONS.map((b) => (
-              <button
-                key={b.kind}
-                type="button"
-                onClick={() => {
-                  setActiveKind((prev) => (prev === b.kind ? null : b.kind));
-                  setError(null);
-                  setReport(null);
-                }}
-                disabled={generating}
-                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs transition-colors disabled:opacity-50 ${
-                  activeKind === b.kind
-                    ? 'bg-accent font-semibold text-bg'
-                    : 'bg-surface-2 text-text-muted hover:bg-surface-3 hover:text-text'
-                }`}
-              >
-                <SparkIcon width={12} height={12} />
-                {b.label}
-              </button>
-            ))}
-          </div>
-
-          {activeKind && (
-            <p className="mb-2 text-[11px] text-text-muted">
-              {GENERATE_DESCRIPTIONS[activeKind]}
-            </p>
-          )}
-
-          {activeKind === 'template' && (
-            <div className="mb-2">
-              <label className="mb-1 block text-[11px] text-text-faint">出力形式</label>
-              <div className="flex flex-wrap gap-1.5">
-                {TEMPLATE_FORMATS.map((fmt) => (
-                  <button
-                    key={fmt}
-                    type="button"
-                    onClick={() => setTemplateFormat(fmt)}
-                    disabled={generating}
-                    className={`rounded-full px-2.5 py-0.5 text-[11px] transition-colors disabled:opacity-50 ${
-                      templateFormat === fmt
-                        ? 'bg-surface-3 font-semibold text-text'
-                        : 'bg-surface-2 text-text-muted hover:text-text'
-                    }`}
-                  >
-                    {fmt}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {showInstruction && (
-            <textarea
-              value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
-              disabled={generating}
-              rows={2}
-              placeholder={
-                activeKind === 'custom'
-                  ? '作成してほしい内容を指示してください（必須）…'
-                  : '雛形の追加要望があれば入力（任意）…'
-              }
-              className="mb-2 w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none disabled:opacity-60"
-            />
-          )}
-
-          {activeKind && (
-            <button
-              type="button"
-              onClick={run}
-              disabled={generating || !!generatingKind || !hasSources}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition-opacity disabled:opacity-40"
-            >
-              {(generating || generatingKind) ? (
-                <>
-                  <Spinner />
-                  生成しています…
-                </>
-              ) : (
-                <>
-                  <SparkIcon width={15} height={15} />
-                  生成する
-                </>
-              )}
-            </button>
-          )}
-          {!hasSources && activeKind && (
-            <p className="mt-1.5 text-[11px] text-text-faint">資料を追加すると生成できます。</p>
-          )}
-          {(generating || generatingKind) && (
-            <div className="mt-2" role="status" aria-live="polite">
-              <div className="mb-1 flex items-center justify-between text-[11px] text-text-muted">
-                <span>資料を読み込んでいます…</span>
-                <span>{genPct}%</span>
-              </div>
-              <div className="h-1 w-full overflow-hidden rounded-full bg-surface-2">
-                <div
-                  className="h-1 rounded-full bg-accent transition-[width] duration-150"
-                  style={{ width: `${genPct}%` }}
-                />
-              </div>
-            </div>
-          )}
-          {error && (
-            <div role="alert" className="mt-2 rounded-lg border border-stalled/40 bg-stalled-bg/60 px-3 py-1.5 text-xs" style={{ color: 'var(--mc-stalled)' }}>
-              {error}
-            </div>
-          )}
-          {report && !error && (
-            <p className="mt-2 text-xs" style={{ color: 'var(--mc-active)' }}>
-              {report}
-            </p>
-          )}
-        </div>
-
-      </div>
-    </div>
-  );
-}
 
 // ─── 議事録スタイル定義 ─────────────────────────────────────
 
@@ -3704,7 +3211,7 @@ export function MinutesPane({
 
 // ─── 詳細画面（3 ペイン / モバイルはタブ）────────────────────────
 
-type DetailTab = 'sources' | 'chat' | 'artifacts';
+type DetailTab = 'sources' | 'chat';
 
 function NotebookDetailView({
   id,
@@ -3728,7 +3235,6 @@ function NotebookDetailView({
 
   const detail = data && data.meta ? data : null;
   const sources = detail?.sources ?? [];
-  const artifacts = detail?.artifacts ?? [];
   const hasSources = sources.length > 0;
   const chat = detail?.chat ?? [];
 
@@ -3786,20 +3292,10 @@ function NotebookDetailView({
   const chatPane = (
     <ChatPane id={id} chat={chat} hasSources={hasSources} onAnswered={refetch} />
   );
-  const artifactsPane = (
-    <ArtifactsPane
-      id={id}
-      artifacts={artifacts}
-      hasSources={hasSources}
-      onGenerated={refetch}
-      onPreview={setPreview}
-    />
-  );
 
   const TABS: { key: DetailTab; label: string; count?: number }[] = [
     { key: 'sources', label: '資料', count: sources.length },
-    { key: 'chat', label: 'チャット' },
-    { key: 'artifacts', label: 'フォルダ', count: artifacts.length },
+    { key: 'chat', label: 'Q&A' },
   ];
 
   // ヘッダのタイトル部分（インライン編集対応）
@@ -3849,7 +3345,7 @@ function NotebookDetailView({
           <div className="group">
             {titleContent}
             {detail && !editingName && (
-              <p className="mt-0.5 text-xs text-text-muted">資料 {sources.length}・生成物 {artifacts.length}</p>
+              <p className="mt-0.5 text-xs text-text-muted">資料 {sources.length}</p>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -3891,17 +3387,15 @@ function NotebookDetailView({
         <ResourceState loading={loading} error={error} hasData={!!detail}>
           {detail && (
             <>
-              {/* デスクトップ: 3ペイン（資料 / チャット / フォルダ） */}
-              <div className="hidden h-full md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
+              {/* デスクトップ: 2ペイン（資料 / Q&A） */}
+              <div className="hidden h-full md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
                 <div className="min-h-0 border-r border-border">{sourcesPane}</div>
-                <div className="min-h-0 border-r border-border">{chatPane}</div>
-                <div className="min-h-0">{artifactsPane}</div>
+                <div className="min-h-0">{chatPane}</div>
               </div>
-              {/* モバイル: display:none で切り替え（アンマウントしないため生成中 state を保持）*/}
+              {/* モバイル: display:none で切り替え（アンマウントしないため state を保持）*/}
               <div className="h-full md:hidden">
                 <div className="h-full" style={{ display: tab === 'sources' ? undefined : 'none' }}>{sourcesPane}</div>
                 <div className="h-full" style={{ display: tab === 'chat' ? undefined : 'none' }}>{chatPane}</div>
-                <div className="h-full" style={{ display: tab === 'artifacts' ? undefined : 'none' }}>{artifactsPane}</div>
               </div>
             </>
           )}

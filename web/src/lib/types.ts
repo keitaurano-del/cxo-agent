@@ -602,24 +602,21 @@ export interface NotebookDetail {
 /** エンジン（claude -p）失敗の種別。model_limit=利用上限、engine_error=その他失敗（MC-202）。 */
 export type NotebookEngineErrorKind = 'model_limit' | 'engine_error';
 
+/** ask 応答の診断・出典メタデータ（MC-223）。 */
+export interface NotebookAskMetadata {
+  elapsed?: number;
+  pathType?: string; // 'RAG' | 'traditional' | 'no_match' | 'error'
+  chunkCount?: number;
+  pathReason?: string;
+  sources?: string[]; // 回答根拠に使ったユニークなソースファイル名一覧
+}
+
 /** POST /api/notebooks/:id/ask のレスポンス。 */
 export interface NotebookAskResponse {
   answer: string;
   error?: string; // 部分劣化（タイムアウト等）時のみ
   errorKind?: NotebookEngineErrorKind; // エンジン失敗時（生エラー文字列は answer に載せない）
-}
-
-/** 生成物 kind。custom は instruction 必須。 */
-export type NotebookGenerateKind = 'summary' | 'faq' | 'timeline' | 'template' | 'custom';
-
-/** POST /api/notebooks/:id/generate のレスポンス。 */
-export interface NotebookGenerateResponse {
-  ok: boolean;
-  created: NotebookFileRef[]; // 今回新規作成された成果物
-  artifacts: NotebookFileRef[]; // 現在の全成果物
-  report: string; // claude の最終報告（作成ファイル名等）
-  error?: string;
-  errorKind?: NotebookEngineErrorKind; // エンジン失敗時（生エラー文字列は report に載せない）
+  metadata?: NotebookAskMetadata; // 出典・診断情報（MC-223）
 }
 
 // ─── 議事録（Minutes）──────────────────────────────────────

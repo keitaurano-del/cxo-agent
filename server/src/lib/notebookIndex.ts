@@ -9,7 +9,14 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, extname } from 'node:path';
-import { NOTEBOOK_RAG_CHUNK_SIZE, NOTEBOOK_RAG_CHUNK_OVERLAP, NOTEBOOK_RAG_TOP_K } from '../config.js';
+import {
+  NOTEBOOK_RAG_CHUNK_SIZE,
+  NOTEBOOK_RAG_CHUNK_OVERLAP,
+  NOTEBOOK_RAG_TOP_K,
+  NOTEBOOK_RAG_CANDIDATES,
+  NOTEBOOK_RAG_MIN_SCORE,
+  NOTEBOOK_RAG_RRF_K,
+} from '../config.js';
 import { embedText, embedTexts } from './embedding.js';
 
 // ─── 型定義 ──────────────────────────────────────────────────
@@ -327,18 +334,164 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dot / denom;
 }
 
+// ─── ハイブリッド検索（キーワード＋ベクトル）の純粋ロジック（MC-223）──────────
+
 /**
- * クエリテキストをベクトル化し、索引から上位 topK チャンクを返す。
- * - 索引がない場合は [] を返す。
- * - embed 失敗（空ベクトル）の場合は先頭 topK 件を返す。
+ * テキストを簡易トークナイズする。
+ * - 英数字（ラテン・数字・記号混じりの ID 含む）は語単位（小文字化）。"MC-202" 等の固有 ID を 1 トークンとして拾う。
+ * - 日本語（CJK ひらがな・カタカナ・漢字）は空白で区切れないため文字 bigram（2-gram）に分解する。
+ *   1 文字しかない連なりはその 1 文字を 1 トークンにする。
+ * 外部ライブラリ非依存。検索のキーワードスコア用。
+ */
+export function tokenize(text: string): string[] {
+  const tokens: string[] = [];
+  // 英数字＋ID 的記号（- _ . / 数字）を 1 語として拾う。
+  const wordRe = /[A-Za-z0-9]+(?:[-_./][A-Za-z0-9]+)*/g;
+  // CJK（ひらがな・カタカナ・CJK統合漢字・長音）の連続。
+  const cjkRe = /[぀-ヿ㐀-鿿豈-﫿ー]+/g;
+
+  let m: RegExpExecArray | null;
+  while ((m = wordRe.exec(text)) !== null) {
+    tokens.push(m[0].toLowerCase());
+  }
+  while ((m = cjkRe.exec(text)) !== null) {
+    const seg = m[0];
+    if (seg.length === 1) {
+      tokens.push(seg);
+    } else {
+      for (let i = 0; i < seg.length - 1; i++) {
+        tokens.push(seg.slice(i, i + 2));
+      }
+    }
+  }
+  return tokens;
+}
+
+/**
+ * クエリトークンに対するチャンクのキーワードスコアを返す（TF ベースの簡易 BM25 風）。
+ * チャンク本文中に現れたクエリトークンの出現数を、頻出語のサチュレーションを掛けて加算する。
+ * 固有名詞・ID の完全一致（語トークン一致）も自然に拾える。クエリに無いトークンは無視。
+ */
+export function keywordScore(queryTokens: string[], chunkText: string): number {
+  if (queryTokens.length === 0) return 0;
+  const chunkTokens = tokenize(chunkText);
+  if (chunkTokens.length === 0) return 0;
+
+  // チャンク内のトークン頻度。
+  const tf = new Map<string, number>();
+  for (const t of chunkTokens) tf.set(t, (tf.get(t) ?? 0) + 1);
+
+  // クエリのユニークトークンごとに、TF サチュレーション（tf/(tf+1.5)）を加算。
+  const uniqueQuery = new Set(queryTokens);
+  let score = 0;
+  for (const qt of uniqueQuery) {
+    const freq = tf.get(qt) ?? 0;
+    if (freq > 0) score += freq / (freq + 1.5);
+  }
+  // 長さ正規化: 長いチャンクほど偶発一致しやすいので軽く割り引く。
+  const lengthNorm = 1 / (1 + Math.log10(1 + chunkTokens.length / 50));
+  return score * lengthNorm;
+}
+
+export interface ScoredChunk {
+  chunk: Chunk;
+  /** ベクトルのコサイン類似度（ベクトル無し検索時は NaN ではなく 0）。 */
+  vectorScore: number;
+  /** キーワードスコア。 */
+  keywordScore: number;
+  /** RRF 統合スコア。 */
+  rrfScore: number;
+}
+
+export interface HybridSearchOptions {
+  candidates?: number;
+  topK?: number;
+  minScore?: number;
+  rrfK?: number;
+}
+
+/**
+ * ベクトル順位とキーワード順位を RRF（Reciprocal Rank Fusion）で統合する純粋関数（テスト可能）。
+ * - queryVector が空（embed 未使用）なら vectorScore は全て 0 として扱い、キーワードのみで統合する。
+ * - ベクトル閾値 minScore: vectorScore がこの値以上のチャンクのみベクトル候補に含める
+ *   （ベクトルが使えない＝queryVector 空のときは閾値ゲートをスキップしキーワードに委ねる）。
+ * - 統合後 topK 件を返す。該当（閾値後ベクトル候補 or キーワード候補）が 0 件なら空配列。
+ */
+export function hybridRank(
+  chunks: Chunk[],
+  queryVector: number[],
+  queryTokens: string[],
+  opts: HybridSearchOptions = {},
+): ScoredChunk[] {
+  const candidates = opts.candidates ?? NOTEBOOK_RAG_CANDIDATES;
+  const topK = opts.topK ?? NOTEBOOK_RAG_TOP_K;
+  const minScore = opts.minScore ?? NOTEBOOK_RAG_MIN_SCORE;
+  const rrfK = opts.rrfK ?? NOTEBOOK_RAG_RRF_K;
+  const hasVector = queryVector.length > 0;
+
+  // 全チャンクの両スコアを計算。
+  const all = chunks.map((chunk) => ({
+    chunk,
+    vectorScore: hasVector ? cosineSimilarity(queryVector, chunk.vector) : 0,
+    keywordScore: keywordScore(queryTokens, chunk.text),
+  }));
+
+  // ベクトルランキング: 閾値を超えるものだけ、降順で上位 candidates。
+  const vectorRanked = hasVector
+    ? all
+        .filter((s) => s.vectorScore >= minScore)
+        .sort((a, b) => b.vectorScore - a.vectorScore)
+        .slice(0, candidates)
+    : [];
+
+  // キーワードランキング: スコア > 0 のものだけ、降順で上位 candidates。
+  const keywordRanked = all
+    .filter((s) => s.keywordScore > 0)
+    .sort((a, b) => b.keywordScore - a.keywordScore)
+    .slice(0, candidates);
+
+  // RRF: 各ランキングでの順位から 1/(k + rank + 1) を加算。
+  const rrf = new Map<Chunk, number>();
+  const addRank = (ranked: typeof all): void => {
+    ranked.forEach((s, rank) => {
+      rrf.set(s.chunk, (rrf.get(s.chunk) ?? 0) + 1 / (rrfK + rank + 1));
+    });
+  };
+  addRank(vectorRanked);
+  addRank(keywordRanked);
+
+  const merged: ScoredChunk[] = [];
+  const byChunk = new Map(all.map((s) => [s.chunk, s]));
+  for (const [chunk, rrfScore] of rrf) {
+    const s = byChunk.get(chunk)!;
+    merged.push({ chunk, vectorScore: s.vectorScore, keywordScore: s.keywordScore, rrfScore });
+  }
+  merged.sort((a, b) => b.rrfScore - a.rrfScore);
+  return merged.slice(0, topK);
+}
+
+/**
+ * クエリテキストでハイブリッド検索（ベクトル＋キーワード RRF＋閾値）を行い、上位チャンクを返す。
+ * - 索引がない / 空 → [] を返す。
+ * - embed 失敗・未設定（空ベクトル）→ キーワード検索のみで統合する（ベクトル閾値はスキップ）。
+ * - 閾値後に候補が 0 件なら [] を返す（呼び出し側で「該当なし」として扱う）。
  */
 export async function searchChunks(
   notebookDir: string,
   query: string,
   topK?: number,
 ): Promise<Chunk[]> {
-  const k = topK ?? NOTEBOOK_RAG_TOP_K;
+  return (await searchChunksScored(notebookDir, query, topK)).map((s) => s.chunk);
+}
 
+/**
+ * searchChunks のスコア付き版（ask 側で診断・閾値判定に使う）。
+ */
+export async function searchChunksScored(
+  notebookDir: string,
+  query: string,
+  topK?: number,
+): Promise<ScoredChunk[]> {
   if (!indexExists(notebookDir)) {
     return [];
   }
@@ -355,29 +508,16 @@ export async function searchChunks(
     return [];
   }
 
-  // クエリをベクトル化
+  // クエリをベクトル化（失敗・未設定なら空ベクトル＝キーワードのみ）。
   let queryVector: number[];
   try {
     queryVector = await embedText(query);
   } catch {
-    // embed 失敗 → 先頭 topK 件をフォールバックで返す
-    return chunks.slice(0, k);
+    queryVector = [];
   }
 
-  // embed が空ベクトル（API キー未設定）→ 先頭 topK 件をフォールバックで返す
-  if (queryVector.length === 0) {
-    return chunks.slice(0, k);
-  }
-
-  // コサイン類似度でランク付け
-  const scored = chunks.map((chunk) => ({
-    chunk,
-    score: cosineSimilarity(queryVector, chunk.vector),
-  }));
-
-  scored.sort((a, b) => b.score - a.score);
-
-  return scored.slice(0, k).map((s) => s.chunk);
+  const queryTokens = tokenize(query);
+  return hybridRank(chunks, queryVector, queryTokens, { topK: topK ?? NOTEBOOK_RAG_TOP_K });
 }
 
 // ─── 索引削除 ──────────────────────────────────────────────────

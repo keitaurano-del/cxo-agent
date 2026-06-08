@@ -140,8 +140,29 @@ export const NOTEBOOK_ARTIFACT_MAX_TOTAL_BYTES = envNum(
 /** Gemini embedding API キー（text-embedding-004 用）。未設定なら RAG 索引なしの従来動作にフォールバック。 */
 export const GEMINI_API_KEY = env('GEMINI_API_KEY', '');
 
-/** RAG 検索で返す上位チャンク数。デフォルト 5（TOP_K=8 から削減・性能最適化）。 */
+/** RAG 検索で返す上位チャンク数（ハイブリッド統合後の最終採用件数）。デフォルト 5。 */
 export const NOTEBOOK_RAG_TOP_K = envNum('NOTEBOOK_RAG_TOP_K', 5);
+
+/**
+ * RAG 検索の候補拡大件数（MC-223）。
+ * ベクトル検索・キーワード検索それぞれで上位この件数まで候補を取り、RRF で統合してから
+ * TOP_K に絞る。広めに取ることで、ベクトル単体では取りこぼす固有名詞・ID 一致も拾える。
+ */
+export const NOTEBOOK_RAG_CANDIDATES = envNum('NOTEBOOK_RAG_CANDIDATES', 30);
+
+/**
+ * ベクトルのコサイン類似度の下限閾値（MC-223）。
+ * この値未満のチャンクは「関連なし」とみなして候補から除外する。閾値を超える候補が
+ * 0 件なら ask 側で「該当なし」として扱い、幻覚を抑制する。0.5 は目安・要調整。
+ */
+export const NOTEBOOK_RAG_MIN_SCORE = envNum('NOTEBOOK_RAG_MIN_SCORE', 0.5);
+
+/**
+ * RRF（Reciprocal Rank Fusion）の平滑化定数 k（MC-223）。
+ * 各ランキングでの順位 r（0 始まり）に対し 1/(k + r + 1) を加算して統合スコアとする。
+ * 情報検索の慣例値 60 を既定とする。小さいほど上位順位の影響が強くなる。
+ */
+export const NOTEBOOK_RAG_RRF_K = envNum('NOTEBOOK_RAG_RRF_K', 60);
 
 /** チャンク分割のターゲット文字数。 */
 export const NOTEBOOK_RAG_CHUNK_SIZE = envNum('NOTEBOOK_RAG_CHUNK_SIZE', 800);

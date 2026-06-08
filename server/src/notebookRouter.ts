@@ -1,8 +1,9 @@
-// notebookRouter — NotebookLM 的「ノートブック」機能の API（MC-126）。
+// notebookRouter — NotebookLM 的「ノートブック」機能の API（MC-126 / MC-223 で Q&A 専用化）。
 //
-// ノートブック = 資料セット（sources/）＋資料に根ざしたチャット（ask）＋生成物（generate→artifacts/）。
+// ノートブック = 資料セット（sources/）＋資料に根ざした Q&A（ask）。
+// 生成物作成（要約/FAQ/時系列/雛形/custom）は RAG と相性が悪いため MC-223 Phase1 で撤去した。
 // 分析エンジンは headless `claude -p` を cwd=ノートブック dir で起動し、./sources/ と ./extracted/ の
-// 資料だけを根拠に回答・生成物作成させる（lib/notebookClaude.ts）。
+// 資料だけを根拠に回答させる（lib/notebookClaude.ts）。
 //
 // ルート（index.ts で auth ミドルウェア配下に /api/notebooks で mount）:
 //   GET    /                  一覧
@@ -12,7 +13,7 @@
 //   POST   /:id/sources       ソース追加（multipart, field "files"）
 //   DELETE /:id/sources?name= ソース削除
 //   POST   /:id/ask           資料根拠 Q&A { question }
-//   POST   /:id/generate      生成物作成 { kind, instruction? }
+//   POST   /:id/reindex       索引再構築
 
 import { mkdirSync, statSync, existsSync, unlinkSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -39,7 +40,6 @@ import {
   deleteSource,
   touchNotebook,
   renameNotebook,
-  artifactNames,
   artifactRelpaths,
   resolveNotebookFile,
   readChatHistory,
@@ -52,7 +52,14 @@ import {
 import { extractSourceText } from './lib/notebookExtract.js';
 import { runClaude, runClaudeStream } from './lib/notebookClaude.js';
 import { convertOfficeToPdf, isConvertibleToPdf } from './lib/officeToPdf.js';
-import { buildIndex, searchChunks, deleteIndex, type Chunk } from './lib/notebookIndex.js';
+import {
+  buildIndex,
+  searchChunksScored,
+  deleteIndex,
+  indexExists,
+  type Chunk,
+  type ScoredChunk,
+} from './lib/notebookIndex.js';
 import { transcribeAudio, extractFileText } from './lib/transcribe.js';
 import {
   MINUTES_TYPES,
@@ -461,6 +468,7 @@ function buildRagAskPrompt(question: string, chunks: Chunk[], history: ChatMessa
     'チャンクインデックスが不明な場合は省略してください: {{cite:ファイル名}}',
     '資料抜粋に書かれていないことは推測せず「資料に記載がありません」と述べてください。',
     '回答は簡潔で読みやすい日本語にしてください。',
+    '回答の末尾に、根拠として使った資料ファイル名を「出典: A.pdf, B.xlsx」の形式で 1 行挙げてください。',
     '',
     '【資料抜粋】',
   ];
@@ -483,6 +491,25 @@ function buildRagAskPrompt(question: string, chunks: Chunk[], history: ChatMessa
 
   lines.push('', `質問: ${question}`);
   return lines.join('\n');
+}
+
+/** 閾値後の関連チャンクが 0 件のときの「該当なし」回答（幻覚抑制・MC-223）。 */
+const NO_MATCH_ANSWER = 'アップロード資料の中に該当が見つかりませんでした。';
+
+/**
+ * スコア付きチャンクから、回答根拠に使ったユニークなソースファイル名一覧（出現順）を返す。
+ * フロントの「出典」表示・metadata.sources に使う。
+ */
+function uniqueSources(scored: ScoredChunk[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const s of scored) {
+    if (!seen.has(s.chunk.sourceFile)) {
+      seen.add(s.chunk.sourceFile);
+      out.push(s.chunk.sourceFile);
+    }
+  }
+  return out;
 }
 
 /** SSE イベントを 1 行書き出す。 */
@@ -558,20 +585,60 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
   // user メッセージを先に記録。
   appendChat(id, { ts: requestTs, role: 'user', text: question });
 
-  // RAG チャンク検索
+  // RAG ハイブリッド検索（ベクトル＋キーワード RRF＋スコア閾値、MC-223）
   const searchStart = Date.now();
-  const ragChunks = await searchChunks(dir, question).catch(() => [] as Chunk[]);
+  const scored = await searchChunksScored(dir, question).catch(() => [] as ScoredChunk[]);
+  const ragChunks: Chunk[] = scored.map((s) => s.chunk);
+  const usedSources = uniqueSources(scored);
   const searchElapsed = ((Date.now() - searchStart) / 1000).toFixed(2);
-  const ragPath = ragChunks.length > 0 ? 'RAG' : 'traditional';
-  const pathReason = ragChunks.length > 0 ? `RAG chunks found (${ragChunks.length})` : 'Fallback no chunks';
+  // 索引が存在する＝RAG 対象。索引が無い（未構築/ソースなし）ときだけ従来の Read 委譲にフォールバックする。
+  const hasIndex = indexExists(dir);
+  // 索引があるのに閾値後 0 件 → 「該当なし」として正直に返す（幻覚抑制）。
+  const noMatch = hasIndex && ragChunks.length === 0;
+  const ragPath = ragChunks.length > 0 ? 'RAG' : noMatch ? 'no_match' : 'traditional';
+  const pathReason =
+    ragChunks.length > 0
+      ? `RAG chunks found (${ragChunks.length})`
+      : noMatch
+        ? 'No chunks above score threshold'
+        : 'Fallback no index';
   console.log(
-    `[notebook-ask] RAG search: path=${ragPath} topK=${NOTEBOOK_RAG_TOP_K} chunkCount=${ragChunks.length} vectorDim=${ragChunks[0]?.vector.length ?? 'N/A'} elapsed=${searchElapsed}s reason=${pathReason}`,
+    `[notebook-ask] RAG search: path=${ragPath} topK=${NOTEBOOK_RAG_TOP_K} chunkCount=${ragChunks.length} sources=${usedSources.length} topVec=${scored[0]?.vectorScore.toFixed(3) ?? 'N/A'} elapsed=${searchElapsed}s reason=${pathReason}`,
   );
+
+  const wantsStream = (req.headers.accept ?? '').includes('text/event-stream');
+
+  // 該当なし: Claude を呼ばず「見つかりませんでした」を返す（幻覚抑制・コスト節約）。
+  if (noMatch) {
+    const answerTs = new Date().toISOString();
+    appendChat(id, { ts: answerTs, role: 'assistant', text: NO_MATCH_ANSWER });
+    touchNotebook(id);
+    const totalElapsed = parseFloat(((Date.now() - requestTime) / 1000).toFixed(1));
+    const metadata = {
+      elapsed: totalElapsed,
+      pathType: 'no_match',
+      chunkCount: 0,
+      pathReason,
+      sources: [] as string[],
+    };
+    console.log(`[notebook-ask] request complete (no_match) ts=${answerTs} totalElapsed=${totalElapsed}s`);
+    if (wantsStream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
+      sseWrite(res, { type: 'chunk', text: NO_MATCH_ANSWER });
+      sseWrite(res, { type: 'done', answer: NO_MATCH_ANSWER, metadata });
+      res.end();
+    } else {
+      res.status(200).json({ answer: NO_MATCH_ANSWER, metadata });
+    }
+    return;
+  }
 
   const prompt = ragChunks.length > 0
     ? buildRagAskPrompt(question, ragChunks, history)
     : buildAskPrompt(question, history);
-  const wantsStream = (req.headers.accept ?? '').includes('text/event-stream');
 
   if (wantsStream) {
     res.setHeader('Content-Type', 'text/event-stream');
@@ -626,6 +693,7 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
         pathType: result.ok ? ragPath : 'error',
         chunkCount: ragChunks.length,
         pathReason,
+        sources: usedSources,
       },
       ...(result.error ? { error: result.error } : {}),
     });
@@ -675,233 +743,7 @@ async function handleAsk(req: Request, res: Response): Promise<void> {
       pathType: ragPath,
       chunkCount: ragChunks.length,
       pathReason,
-    },
-    ...(result.error ? { error: result.error } : {}),
-  });
-}
-
-// ─── 生成物作成 ───────────────────────────────────────
-
-const KIND_INSTRUCTIONS: Record<string, string> = {
-  summary: '資料全体の要点を日本語でまとめた要約を ./artifacts/要約.md に Markdown で作成してください。',
-  faq: '資料から想定される質問と回答を日本語でまとめた FAQ を ./artifacts/FAQ.md に Markdown で作成してください。',
-  timeline:
-    '資料に登場する出来事・日付・マイルストーンを時系列に整理した年表を ./artifacts/時系列.md に Markdown で作成してください。',
-  template:
-    '資料の書式・項目構成を真似た再利用可能な雛形ファイルを ./artifacts/ に作成してください。' +
-    '形式の指定（xlsx / docx / pptx 等）が instruction にあればそれに従い、ファイルは openpyxl / python-docx / python-pptx で生成してください。指定が無ければ Markdown で作成してください。',
-};
-
-function buildGeneratePrompt(kind: string, instruction: string): string {
-  const base = KIND_INSTRUCTIONS[kind];
-  const task = base
-    ? instruction
-      ? `${base}\n追加の指示: ${instruction}`
-      : base
-    : // custom / 未知 kind は instruction を主指示にする。
-      instruction || '資料の内容を日本語でまとめた成果物を ./artifacts/ に作成してください。';
-  return [
-    'あなたはこのノートブックの資料アシスタントです。',
-    '回答・成果物の文章は中立的な丁寧体（です・ます）で書いてください。キャラクター人格・方言・特定の口調（「〜じゃ」「〜のう」「ほっほっ」等）は一切使わず、エンドユーザー向けの自然な日本語にしてください。',
-    'カレントディレクトリの ./sources/ と ./extracted/ にある資料を Read で読んだうえで、次の成果物を作成してください。',
-    task,
-    '',
-    '注意:',
-    '- 成果物ファイルは必ず ./artifacts/ ディレクトリの中に書き出してください。',
-    '- 表計算・文書・スライド等のファイルは openpyxl / python-docx / python-pptx を使って生成してください（Bash でスクリプトを実行して構いません）。',
-    '- 要約・FAQ・年表など文章主体のものは Markdown（.md）で作成してください。',
-    '- 文章はアシスタントの口調を出さず、中立的な丁寧体（です・ます）で書いてください。',
-    '- 資料に無い情報を創作しないでください。',
-    '最後に、作成したファイル名を「作成: <ファイル名>」の形式で 1 行で報告してください。',
-  ].join('\n');
-}
-
-/**
- * RAG 検索結果チャンクを根拠に含めた generate プロンプトを構築する。
- * KIND_INSTRUCTIONS を活かしながら「以下の資料抜粋を参考に」形式にする。
- */
-function buildRagGeneratePrompt(kind: string, instruction: string, chunks: Chunk[]): string {
-  const base = KIND_INSTRUCTIONS[kind];
-  const task = base
-    ? instruction
-      ? `${base}\n追加の指示: ${instruction}`
-      : base
-    : instruction || '資料の内容を日本語でまとめた成果物を ./artifacts/ に作成してください。';
-
-  const lines = [
-    'あなたはこのノートブックの資料アシスタントです。',
-    '回答・成果物の文章は中立的な丁寧体（です・ます）で書いてください。キャラクター人格・方言・特定の口調（「〜じゃ」「〜のう」「ほっほっ」等）は一切使わず、エンドユーザー向けの自然な日本語にしてください。',
-    '以下の【資料抜粋】を参考に、次の成果物を作成してください。',
-    'より詳細な情報が必要な場合は ./sources/ と ./extracted/ の資料を Read で追加確認してください。',
-    task,
-    '',
-    '【資料抜粋】',
-  ];
-
-  chunks.forEach((chunk, i) => {
-    lines.push(`--- 抜粋 ${i + 1}: ファイル名=${chunk.sourceFile}, チャンク=${chunk.chunkIndex} ---`);
-    lines.push(chunk.text);
-    lines.push('');
-  });
-
-  lines.push('【資料抜粋ここまで】');
-  lines.push('');
-  lines.push('注意:');
-  lines.push('- 成果物ファイルは必ず ./artifacts/ ディレクトリの中に書き出してください。');
-  lines.push('- 表計算・文書・スライド等のファイルは openpyxl / python-docx / python-pptx を使って生成してください（Bash でスクリプトを実行して構いません）。');
-  lines.push('- 要約・FAQ・年表など文章主体のものは Markdown（.md）で作成してください。');
-  lines.push('- 文章はアシスタントの口調を出さず、中立的な丁寧体（です・ます）で書いてください。');
-  lines.push('- 資料に無い情報を創作しないでください。');
-  lines.push('最後に、作成したファイル名を「作成: <ファイル名>」の形式で 1 行で報告してください。');
-
-  return lines.join('\n');
-}
-
-async function handleGenerate(req: Request, res: Response): Promise<void> {
-  const kind = typeof req.body?.kind === 'string' ? req.body.kind.trim() : 'custom';
-  const instruction = typeof req.body?.instruction === 'string' ? req.body.instruction.trim() : '';
-  if (kind === 'custom' && !instruction) {
-    res.status(400).json({ error: 'custom には instruction が必要です。' });
-    return;
-  }
-  const id = idParam(req);
-  let dir: string;
-  try {
-    dir = resolveNotebookDir(id, true);
-  } catch (e) {
-    if (e instanceof SafePathError) {
-      res.status(/not found/i.test(e.message) ? 404 : 400).json({ error: e.message });
-      return;
-    }
-    throw e;
-  }
-
-  // Phase 1 診断ログ
-  const requestTs = new Date().toISOString();
-  const requestTime = Date.now();
-  console.log(
-    `[notebook-generate] request start ts=${requestTs} notebookId=${id} kind=${kind} instructionLen=${instruction.length}`,
-  );
-
-  // artifacts/ の合計サイズが上限を超えていたら 413 で弾く。
-  const maxArtifacts = NOTEBOOK_ARTIFACT_MAX_TOTAL_BYTES;
-  if (maxArtifacts > 0) {
-    const currentBytes = totalArtifactBytes(id);
-    if (currentBytes >= maxArtifacts) {
-      const mb = Math.round(maxArtifacts / (1024 * 1024));
-      res
-        .status(413)
-        .json({ error: `artifacts の合計サイズが上限（${mb}MB）に達しています。不要な生成物を削除してから再実行してください。` });
-      return;
-    }
-  }
-
-  const before = artifactNames(id);
-  console.log(`[notebook-generate] artifact count before=${before.size}`);
-
-  // RAG チャンク検索
-  const searchStart = Date.now();
-  const ragChunks = await searchChunks(dir, instruction || kind).catch(() => [] as Chunk[]);
-  const searchElapsed = ((Date.now() - searchStart) / 1000).toFixed(2);
-  const ragPath = ragChunks.length > 0 ? 'RAG' : 'traditional';
-  const pathReason = ragChunks.length > 0 ? `RAG chunks found (${ragChunks.length})` : 'Fallback no chunks';
-  console.log(
-    `[notebook-generate] RAG search: path=${ragPath} topK=${NOTEBOOK_RAG_TOP_K} chunkCount=${ragChunks.length} vectorDim=${ragChunks[0]?.vector.length ?? 'N/A'} elapsed=${searchElapsed}s reason=${pathReason}`,
-  );
-
-  const prompt = ragChunks.length > 0
-    ? buildRagGeneratePrompt(kind, instruction, ragChunks)
-    : buildGeneratePrompt(kind, instruction);
-  const wantsStream = (req.headers.accept ?? '').includes('text/event-stream');
-
-  if (wantsStream) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders();
-
-    // 生成開始を即 0% で通知（クライアント側で確実に 0 から始まるようにする）。
-    sseWrite(res, { type: 'progress', pct: 0 });
-    let totalChars = 0;
-    // Claude の生成物は長いと数千〜数万文字になるため EXPECTED_CHARS を大きくして
-    // 進捗が早期に 99% に張り付かないようにする。
-    const EXPECTED_CHARS = 8000;
-
-    const claudeStart = Date.now();
-    console.log(`[notebook-generate] Claude start ts=${new Date().toISOString()} method=stream kind=${kind}`);
-    const result = await runClaudeStream(dir, prompt, (chunk) => {
-      sseWrite(res, { type: 'chunk', text: chunk });
-      totalChars += chunk.length;
-      const pct = Math.min(99, Math.round((totalChars / EXPECTED_CHARS) * 100));
-      sseWrite(res, { type: 'progress', pct });
-    });
-    const claudeElapsed = ((Date.now() - claudeStart) / 1000).toFixed(2);
-    console.log(`[notebook-generate] Claude done ts=${new Date().toISOString()} elapsed=${claudeElapsed}s status=${result.ok ? 'ok' : 'error'} charsGenerated=${totalChars}`);
-
-    sseWrite(res, { type: 'progress', pct: 100 });
-
-    const detail = getNotebookDetail(id);
-    const allArtifacts = detail?.artifacts ?? [];
-    const created = allArtifacts.filter((a) => !before.has(a.name));
-    touchNotebook(id);
-
-    const totalElapsed = parseFloat(((Date.now() - requestTime) / 1000).toFixed(1));
-    console.log(
-      `[notebook-generate] request complete ts=${new Date().toISOString()} totalElapsed=${totalElapsed}s createdCount=${created.length} ok=${result.ok}`,
-    );
-
-    const genOk = result.ok && created.length > 0;
-    const errorKind = genOk ? null : classifyEngineError(result);
-    sseWrite(res, {
-      type: 'done',
-      ok: genOk,
-      created,
-      artifacts: allArtifacts,
-      // エンジン失敗（上限/エラー）時は生エラー文字列を report に出さない（MC-202）。
-      report: errorKind ? '' : (result.stdout || '').trim(),
-      ...(errorKind ? { errorKind } : {}),
-      metadata: {
-        elapsed: totalElapsed,
-        pathType: result.ok ? ragPath : 'error',
-        chunkCount: ragChunks.length,
-        pathReason,
-      },
-      ...(result.error ? { error: result.error } : {}),
-    });
-    res.end();
-    return;
-  }
-
-  const claudeStart = Date.now();
-  console.log(`[notebook-generate] Claude start ts=${new Date().toISOString()} method=json kind=${kind}`);
-  const result = await runClaude(dir, prompt);
-  const claudeElapsed = ((Date.now() - claudeStart) / 1000).toFixed(2);
-  console.log(`[notebook-generate] Claude done ts=${new Date().toISOString()} elapsed=${claudeElapsed}s status=${result.ok ? 'ok' : 'error'}`);
-
-  const detail = getNotebookDetail(id);
-  const allArtifacts = detail?.artifacts ?? [];
-  const created = allArtifacts.filter((a) => !before.has(a.name));
-
-  touchNotebook(id);
-  const totalElapsed = parseFloat(((Date.now() - requestTime) / 1000).toFixed(1));
-  console.log(
-    `[notebook-generate] request complete ts=${new Date().toISOString()} totalElapsed=${totalElapsed}s createdCount=${created.length} ok=${result.ok}`,
-  );
-
-  const genOk = result.ok && created.length > 0;
-  const errorKind = genOk ? null : classifyEngineError(result);
-  res.status(200).json({
-    ok: genOk,
-    created,
-    artifacts: allArtifacts,
-    // エンジン失敗（上限/エラー）時は生エラー文字列を report に出さない（MC-202）。
-    report: errorKind ? '' : (result.stdout || '').trim(),
-    ...(errorKind ? { errorKind } : {}),
-    metadata: {
-      elapsed: totalElapsed,
-      pathType: ragPath,
-      chunkCount: ragChunks.length,
-      pathReason,
+      sources: usedSources,
     },
     ...(result.error ? { error: result.error } : {}),
   });
@@ -1424,7 +1266,6 @@ export function notebookRouter(): Router {
   router.post('/:id/sources', (req, res) => void handleAddSources(req, res));
   router.delete('/:id/sources', handleDeleteSource);
   router.post('/:id/ask', (req, res) => void handleAsk(req, res));
-  router.post('/:id/generate', (req, res) => void handleGenerate(req, res));
   router.post('/:id/reindex', (req, res) => void handleReindex(req, res));
   router.get('/:id/debug-log', handleDebugLog);
   router.post('/:id/minutes/transcribe', (req, res) => void handleTranscribe(req, res));
