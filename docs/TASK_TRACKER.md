@@ -2482,3 +2482,17 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 担当 | Son（subagent 直）|
 | 詳細 | Keita 指摘: ①生成ファイルの「プレビュー」を押すとダウンロードが始まる ②エージェントの通知は不要。【①真因】minutesFileUrl のプレビューが /api/deliverables/file?inline=1（生ファイルinline＝Officeは描画不可でDL化）を使用。→ /api/deliverables/preview（LibreOfficeでPDF変換しinline表示、実機docx→PDF 200確認）に変更。【②】App.tsx の NAV_BADGE_MAP から agents:'/' を削除しホーム/エージェントの新着バッジを停止（vault/deliverables/要承認は維持）。commit 291200c / f4f3e75。 |
 | 更新日 | 2026-06-08 |
+
+---
+
+### MC-219 — 設定の文字サイズをパーセントプリセットからpx値調整に変更
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-219 |
+| タイトル | 設定の文字サイズをパーセントプリセットからpx値調整に変更 |
+| 優先度 | P2 |
+| ステータス | 実機反映済（2026-06-08 web build 配信確認）。Keita 実機確認待ち（要ハードリロード） |
+| 担当 | Son（subagent 直）|
+| 詳細 | Keita 指示: 設定の文字サイズを％プリセット（小90/中100/大110）でなく値で調整したい。useFontSize.ts を px基準（12〜24px・既定16、--font-scale=px/16）に作り替え、Settings.tsx をスライダー＋−/＋＋数値入力に。App.tsx の inline --font-scale も px由来に。旧 small/medium/large は 14/16/18px へ後方互換移行。commit 78cac54。 |
+| 更新日 | 2026-06-08 |
