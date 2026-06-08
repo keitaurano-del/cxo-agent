@@ -27,7 +27,7 @@
 //  - 認証は index.ts 側の makeAuthMiddleware 配下に mount することで担保（Cookie 必須）。
 
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, unlinkSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { Router, type Request, type Response } from 'express';
@@ -162,11 +162,22 @@ const NON_IMAGE_MIME_TO_EXT: Record<string, string> = {
 /** 分散送信のグループサイズ上限。 */
 const DISTRIBUTE_GROUP_SIZE = 5;
 
-// ─── multer（メモリ保存）──────────────────────────────────
-// 保存名は id 確定後に組むため、いったんメモリに溜める。
+// ─── multer（ディスク保存・ストリーム）──────────────────────────
+// diskStorage でディスクへ直接ストリーム保存する。動画/音声・最大1GB をメモリに載せない
+// （memoryStorage だと 1GB×複数が RAM に載り、さらに writeFileSync(1GB) の同期書き込みが
+// イベントループをブロックしてターミナル固まりを再発させる）。保存名は filename コールバックで
+// buildFilename（タイムスタンプ+乱数+サニタイズ名）を使い衝突を避ける。
 // fileFilter で MIME を弾き、サイズ/枚数は limits で弾く。
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination(_req, _file, cb) {
+      mkdirSync(TERMINAL_UPLOADS_DIR, { recursive: true });
+      cb(null, TERMINAL_UPLOADS_DIR);
+    },
+    filename(_req, file, cb) {
+      cb(null, buildFilename(new Date(), file.originalname, file.mimetype));
+    },
+  }),
   limits: {
     fileSize: TERMINAL_UPLOAD_MAX_FILE_BYTES,
     files: TERMINAL_UPLOAD_MAX_FILES,
@@ -347,28 +358,17 @@ async function handleUpload(req: Request, res: Response): Promise<void> {
   const body = req.body as { sendEnter?: unknown } | undefined;
   const shouldSendEnter = String(body?.sendEnter ?? '0') !== '0';
 
-  const now = new Date();
+  // diskStorage が既に data/terminal-uploads/ へストリーム保存済み。multer が確定した
+  // 絶対パス（f.path）をそのまま使う。MIME は fileFilter で gate 済みだが念のため二重チェックし、
+  // NG なら保存済みファイルを片付けて 400（diskStorage は fileFilter 通過後に書くので通常ここは通る）。
   const savedPaths: string[] = [];
-  const used = new Set<string>();
   for (const f of files) {
-    // MIME を二重チェック（fileFilter を通っているはずだが念のため）。拡張子救済も同条件で行う。
+    const abs = f.path ?? join(TERMINAL_UPLOADS_DIR, f.filename);
     if (!isAllowedMime(f.mimetype, f.originalname)) {
+      try { unlinkSync(abs); } catch { /* 片付け失敗は無視 */ }
       res.status(400).json({ error: `unsupported file type: ${f.mimetype}` });
       return;
     }
-    let fname = buildFilename(now, f.originalname, f.mimetype);
-    // タイムスタンプ+乱数で実質衝突しないが、同一バッチの取り違え保険に連番化。
-    if (used.has(fname)) {
-      const ext = extname(fname);
-      const stem = fname.slice(0, fname.length - ext.length);
-      let n = 1;
-      while (used.has(`${stem}-${n}${ext}`)) n += 1;
-      fname = `${stem}-${n}${ext}`;
-    }
-    used.add(fname);
-    // 保存は常に NEW 箱（この箱）の data/terminal-uploads/。
-    const abs = join(TERMINAL_UPLOADS_DIR, fname);
-    writeFileSync(abs, f.buffer);
     savedPaths.push(abs);
   }
 
