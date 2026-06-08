@@ -2384,3 +2384,20 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 依存 | server/src/collectors/claudeUsage.ts。関連: MC-172（email基準ラベル化）、MC-161（urano2ローカル読み統一）、reference_claude_credential_crosswiring。 |
 | 備考 | 別件のトークン失効（urano2 OAuth refresh が console.anthropic.com で連続429・00:43JST失効）はこの表記バグとは独立のops事象。失効が解消すれば値は復帰するが、表記バグは失効と無関係に修正要。push/restart は Masayoshi 検証ゲート。Son は調査・起票まで。 |
 | 更新日 | 2026-06-08 |
+
+---
+
+### MC-213 — 議事録作成画面プレビューでリストの番号・中点が出ない（mc-markdown に list-style 無）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-213 |
+| タイトル | 議事録作成画面プレビューでリストの番号・中点が出ない（mc-markdown に list-style 無） |
+| 優先度 | P1 |
+| ステータス | 実機反映済（2026-06-08 web build 配信・live css に反映確認。Keita 実機確認待ち＝要ハードリロード） |
+| 担当 | Son（subagent 直）|
+| 詳細 | Keita 指摘（2026-06-08）: 議事録作成画面の**プレビュー**で議題一覧の番号(1. 2.)と保留事項の中点が出ない（※エクスポートではなくプレビュー表示面）。【真因（Son調査）】プレビューは `<div class="mc-markdown">`＋ReactMarkdown 描画。`web/src/index.css` の `.mc-markdown ul/ol`（235-239行）に `list-style` 指定が無く、Tailwind base reset `ol,ul,menu{list-style:none}` が効いて順序付き番号も箇条書き中点も消えていた。エクスポート側の番号脱落（MC-208）とは別レイヤー・別ファイルの問題。 |
+| 受け入れ条件（DoD） | (1) `.mc-markdown ul{list-style:disc}` / `.mc-markdown ol{list-style:decimal}` を追加（padding-left:1.4em 維持）。(2) remark-gfm のタスクリスト（ul.contains-task-list / li.task-list-item）には黒丸を付けない。(3) web tsc --noEmit 0・npm run build 成功。(4) live css に反映確認。→ 全て充足。 |
+| 依存 | web/src/index.css。関連: MC-208（エクスポート側の同種番号問題）。commit b06ad30。 |
+| 備考 | Son が subagent 直で実装（林非経由）。web は静的配信のため build で即反映（restart不要）。origin push のみ Masayoshi ゲート残。 |
+| 更新日 | 2026-06-08 |
