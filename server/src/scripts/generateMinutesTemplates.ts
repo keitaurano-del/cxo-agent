@@ -2,6 +2,7 @@
 // 実行: cd server && npx tsx src/scripts/generateMinutesTemplates.ts
 
 import { exportMinutes } from '../lib/minutesExport.js';
+import { MINUTES_TYPES } from '../lib/minutesPresets.js';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -264,6 +265,23 @@ async function main() {
     casual:      '議事録テンプレート_カジュアルメモ.docx',
     exec2page:   '議事録テンプレート_実務2ページ.docx',
   };
+
+  // 標準（実務）テンプレート — minutesPresets の summary-standard と同一体裁を docx 化して
+  // ドキュメント（deliverables/テンプレート/）に置く。添付議事録に忠実な標準フォーマット。
+  const standardBody = MINUTES_TYPES.find((t) => t.type === 'summary')?.templates.find(
+    (t) => t.id === 'summary-standard',
+  )?.body;
+  if (standardBody) {
+    const fileName = '議事録テンプレート_標準（実務）.docx';
+    console.log(`生成中: ${fileName}`);
+    try {
+      const { buffer } = await exportMinutes(standardBody, 'docx', '標準（実務）議事録テンプレート');
+      writeFileSync(join(OUT_DIR, fileName), buffer);
+      console.log(`  ✓ ${join(OUT_DIR, fileName)}`);
+    } catch (e) {
+      console.error('  ✗ 失敗:', e);
+    }
+  }
 
   for (const tmpl of TEMPLATES) {
     const fileName = fileNameMap[tmpl.id];
