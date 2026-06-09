@@ -31,7 +31,6 @@ const Agents = lazy(() => import('./views/Agents'));
 const Activity = lazy(() => import('./views/Activity'));
 const Feed = lazy(() => import('./views/Feed'));
 const Tasks = lazy(() => import('./views/Tasks'));
-const Narrative = lazy(() => import('./views/Narrative'));
 const News = lazy(() => import('./views/News'));
 const Vault = lazy(() => import('./views/Vault'));
 const Deliverables = lazy(() => import('./views/Deliverables'));
@@ -401,7 +400,6 @@ export default function App() {
   const dashboardTabDefaults = [
     { to: '/agents-live' },
     { to: '/feed' },
-    { to: '/today' },
     { to: '/news' },
     { to: '/activity' },
     { to: '/plan-usage' },
@@ -468,7 +466,6 @@ export default function App() {
                 {/* MC-165: エージェント擬人化ライブ（ダッシュボード先頭タブ／/ の着地先） */}
                 <Route path="/agents-live" element={<AgentsLive />} />
                 <Route path="/feed" element={<Feed />} />
-                <Route path="/today" element={<Narrative />} />
                 <Route path="/news" element={<News />} />
                 <Route path="/activity" element={<Activity />} />
                 {/* 後方互換リダイレクト: 旧ティック/消費量 URL */}
