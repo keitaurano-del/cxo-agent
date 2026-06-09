@@ -41,7 +41,6 @@ export default function DashboardLayout() {
               <div className="group inline-flex shrink-0 items-center">
                 <NavLink
                   to={tab.to}
-                  end={tab.to === '/today'}
                   role="tab"
                   className={({ isActive }) =>
                     `inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 text-xs transition-colors md:py-1.5 ${
