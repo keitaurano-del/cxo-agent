@@ -370,6 +370,36 @@ export interface DeliverablesResponse {
   error?: string;
 }
 
+// ─── スライドテンプレート（様式）カタログ（MC-224 / GET /api/templates）────────
+// server/src/lib/slideTemplates.ts の型と一致させる。
+
+export interface SlideTemplateCategory {
+  key: string;
+  label: string;
+}
+
+export interface SlideTemplate {
+  id: string;
+  name: string;
+  category: string; // SlideTemplateCategory.key
+  useCases: string[];
+  whenToUse: string;
+  messageLineExample: string;
+  layout: string;
+  recommendedVisual: string;
+  tips: string[];
+  structure: string[];
+  previewSvg: string; // インライン SVG 文字列（当方管理の静的データ）
+}
+
+export interface SlideTemplateCatalog {
+  version: number;
+  updatedAt: string;
+  source: string;
+  categories: SlideTemplateCategory[];
+  templates: SlideTemplate[];
+}
+
 // ─── 横断検索（MC-73 / GET /api/search）──────────────────────
 // server/src/collectors/search.ts のレスポンス形と一致させる。
 

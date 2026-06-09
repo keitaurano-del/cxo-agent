@@ -16,6 +16,7 @@ import {
   DotIcon,
   VaultIcon,
   DocumentsIcon,
+  SlidesIcon,
   SparkIcon,
   TerminalIcon,
   SunIcon,
@@ -34,6 +35,7 @@ const Tasks = lazy(() => import('./views/Tasks'));
 const News = lazy(() => import('./views/News'));
 const Vault = lazy(() => import('./views/Vault'));
 const Deliverables = lazy(() => import('./views/Deliverables'));
+const SlideTemplates = lazy(() => import('./views/SlideTemplates'));
 const Notebooks = lazy(() => import('./views/Notebooks'));
 const PlanUsage = lazy(() => import('./views/PlanUsage'));
 const Approvals = lazy(() => import('./views/Approvals'));
@@ -152,6 +154,7 @@ const NAV: NavItem[] = [
   { to: '/approvals', label: '承認フロー', shortLabel: '承認', icon: <ApprovalIcon /> },
   { to: '/vault', label: 'Vault', shortLabel: 'Vault', icon: <VaultIcon /> },
   { to: '/deliverables', label: 'ドキュメント', shortLabel: 'ドキュ', icon: <DocumentsIcon /> },
+  { to: '/slide-templates', label: 'スライド型', shortLabel: '型', icon: <SlidesIcon /> },
   { to: '/notebooks', label: 'RAG', shortLabel: 'RAG', icon: <SparkIcon /> },
   // ターミナル: iframe ホスト用 React ルートは /terminal-view。
   // サーバ proxy ルート /terminal（→ ttyd）と衝突させないため別パスにする。
@@ -480,6 +483,7 @@ export default function App() {
               <Route path="/approvals" element={<Approvals />} />
               <Route path="/vault" element={<Vault />} />
               <Route path="/deliverables" element={<Deliverables />} />
+              <Route path="/slide-templates" element={<SlideTemplates />} />
               <Route path="/notebooks" element={<Notebooks />} />
               <Route path="/terminal-view" element={<div className="flex h-full flex-col overflow-hidden"><Terminal /></div>} />
               <Route path="/terminal-standalone" element={<Terminal />} />
