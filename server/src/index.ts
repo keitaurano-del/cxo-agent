@@ -50,7 +50,6 @@ import { deliverableUploadRouter } from './deliverableUploadRouter.js';
 import { deliverableChunkRouter } from './deliverableChunkRouter.js';
 import { notebookRouter } from './notebookRouter.js';
 import { minutesRouter } from './minutesRouter.js';
-import { templatesRouter } from './templatesRouter.js';
 import { exportMinutes } from './lib/minutesExport.js';
 import { taskEditRouter } from './taskEditRouter.js';
 import { approvalRouter } from './approvalRouter.js';
@@ -893,10 +892,6 @@ app.use('/api/notebooks', notebookRouter());
 // ─── 議事録（Deliverables 直接保存版、notebook 非依存）────────────────────
 // notebook id を使わず、生成結果を DELIVERABLES_DIR/議事録/ に直接保存する。
 app.use('/api/minutes', minutesRouter());
-
-// ─── スライドテンプレート（様式）カタログ（MC-224 Phase1）────────────────────
-// data/slide-templates.json を読み出す read-only API。用途から型を探す UI が使う。
-app.use('/api/templates', templatesRouter());
 
 // ─── チャット（MC-141）──────────────────────────────────────
 // Keita・林・Masayoshi・エージェントが channel / DM でリアルタイム会話するチャット。
