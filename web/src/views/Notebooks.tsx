@@ -48,6 +48,7 @@ import {
   FolderIcon,
   EditIcon,
   SendIcon,
+  DocumentsIcon,
 } from '../components/icons';
 import { relativeTime } from '../lib/time';
 
@@ -903,16 +904,31 @@ function SourcesPane({
   sources,
   onChanged,
   onPreview,
+  onCollapse,
 }: {
   id: string;
   sources: NotebookFileRef[];
   onChanged: () => void;
   onPreview: (file: NotebookFileRef) => void;
+  onCollapse?: () => void;
 }) {
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-faint">
-        資料 <span className="ml-1 text-text-muted">{sources.length}</span>
+      <div className="flex items-center justify-between border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-faint">
+        <span>
+          資料 <span className="ml-1 text-text-muted">{sources.length}</span>
+        </span>
+        {onCollapse && (
+          <button
+            type="button"
+            onClick={onCollapse}
+            aria-label="資料を閉じる"
+            aria-expanded={true}
+            className="rounded p-0.5 text-text-faint hover:bg-surface-2 hover:text-text"
+          >
+            <ChevronRightIcon width={16} height={16} style={{ transform: 'rotate(180deg)' }} />
+          </button>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto p-3">
         <UploadPanel id={id} onUploaded={onChanged} />
@@ -3216,14 +3232,17 @@ type DetailTab = 'sources' | 'chat';
 function NotebookDetailView({
   id,
   onBack,
-  initialTab = 'sources',
+  initialTab,
 }: {
   id: string;
   onBack: () => void;
   initialTab?: DetailTab;
 }) {
   const { data, error, loading, refetch } = useLiveResource<NotebookDetail>(`/api/notebooks/${id}`);
-  const [tab, setTab] = useState<DetailTab>(initialTab);
+  // モバイル既定タブは Q&A（資料は初期非表示）。呼び出し側が明示指定していれば尊重。
+  const [tab, setTab] = useState<DetailTab>(initialTab ?? 'chat');
+  // デスクトップ: 資料ペインは初期折りたたみ（Q&A を主役に）。永続化は不要。
+  const [sourcesCollapsed, setSourcesCollapsed] = useState(true);
   const [preview, setPreview] = useState<NotebookFileRef | null>(null);
 
   // インライン名称編集
@@ -3288,6 +3307,16 @@ function NotebookDetailView({
 
   const sourcesPane = (
     <SourcesPane id={id} sources={sources} onChanged={refetch} onPreview={setPreview} />
+  );
+  // デスクトップ展開時の資料ペイン（ヘッダに折りたたみトグルを表示）
+  const sourcesPaneDesktop = (
+    <SourcesPane
+      id={id}
+      sources={sources}
+      onChanged={refetch}
+      onPreview={setPreview}
+      onCollapse={() => setSourcesCollapsed(true)}
+    />
   );
   const chatPane = (
     <ChatPane id={id} chat={chat} hasSources={hasSources} onAnswered={refetch} />
@@ -3387,9 +3416,34 @@ function NotebookDetailView({
         <ResourceState loading={loading} error={error} hasData={!!detail}>
           {detail && (
             <>
-              {/* デスクトップ: 2ペイン（資料 / Q&A） */}
-              <div className="hidden h-full md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
-                <div className="min-h-0 border-r border-border">{sourcesPane}</div>
+              {/* デスクトップ: 2ペイン（資料 / Q&A）。資料は折りたたみ可能（初期は折りたたみ） */}
+              <div
+                className={`hidden h-full md:grid ${
+                  sourcesCollapsed
+                    ? 'md:grid-cols-[auto_minmax(0,1fr)]'
+                    : 'md:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]'
+                }`}
+              >
+                {sourcesCollapsed ? (
+                  <button
+                    type="button"
+                    onClick={() => setSourcesCollapsed(false)}
+                    aria-label="資料を開く"
+                    aria-expanded={false}
+                    className="flex min-h-0 w-11 flex-col items-center gap-2 border-r border-border py-3 text-text-muted hover:bg-surface-2 hover:text-text"
+                  >
+                    <ChevronRightIcon width={16} height={16} />
+                    <DocumentsIcon width={16} height={16} />
+                    <span
+                      className="text-[11px] font-semibold uppercase tracking-wide"
+                      style={{ writingMode: 'vertical-rl' }}
+                    >
+                      資料 {sources.length}
+                    </span>
+                  </button>
+                ) : (
+                  <div className="min-h-0 border-r border-border">{sourcesPaneDesktop}</div>
+                )}
                 <div className="min-h-0">{chatPane}</div>
               </div>
               {/* モバイル: display:none で切り替え（アンマウントしないため state を保持）*/}
