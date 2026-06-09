@@ -53,17 +53,31 @@ function TemplateCard({
   template,
   categoryLabel,
   onSelect,
+  recommended,
+  reason,
 }: {
   template: SlideTemplate;
   categoryLabel: string;
   onSelect: (t: SlideTemplate) => void;
+  recommended?: boolean;
+  reason?: string;
 }) {
   return (
     <button
       type="button"
       onClick={() => onSelect(template)}
-      className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3 text-left transition-colors hover:border-accent/50"
+      className={`flex flex-col gap-2 rounded-lg border bg-surface p-3 text-left transition-colors hover:border-accent/50 ${
+        recommended ? 'border-accent ring-1 ring-accent/40' : 'border-border'
+      }`}
     >
+      {recommended && (
+        <div className="flex flex-col gap-1">
+          <span className="w-fit rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-bg">
+            AIのおすすめ
+          </span>
+          {reason && <p className="text-[11px] leading-snug text-text-muted">{reason}</p>}
+        </div>
+      )}
       <SvgPreview svg={template.previewSvg} />
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-semibold text-text">{template.name}</span>
@@ -88,6 +102,18 @@ function TemplateDetail({
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  // pptx 出力・保存の状態。
+  const [pptxBusy, setPptxBusy] = useState<'download' | 'save' | null>(null);
+  const [pptxMsg, setPptxMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  // AIで下書きの状態。
+  const [context, setContext] = useState('');
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Record<string, string> | null>(null);
+  const [draftMarkdown, setDraftMarkdown] = useState('');
+  const [draftCopied, setDraftCopied] = useState(false);
+
+  const placeholders = template.placeholders ?? [];
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -96,6 +122,103 @@ function TemplateDetail({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // 空 pptx をダウンロード（save 無し → Blob）。
+  const downloadPptx = () => {
+    if (pptxBusy) return;
+    setPptxBusy('download');
+    setPptxMsg(null);
+    fetch(`/api/templates/${encodeURIComponent(template.id)}/pptx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error || 'pptx の生成に失敗しました。');
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${template.id}.pptx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      })
+      .catch((e: unknown) =>
+        setPptxMsg({ kind: 'error', text: e instanceof Error ? e.message : 'ダウンロードに失敗しました。' }),
+      )
+      .finally(() => setPptxBusy(null));
+  };
+
+  // Deliverables へ保存（save:true）。
+  const savePptx = () => {
+    if (pptxBusy) return;
+    setPptxBusy('save');
+    setPptxMsg(null);
+    fetch(`/api/templates/${encodeURIComponent(template.id)}/pptx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ save: true }),
+    })
+      .then(async (res) => {
+        const body = (await res.json().catch(() => ({}))) as { relpath?: string; error?: string };
+        if (!res.ok || !body.relpath) {
+          throw new Error(body.error || '保存に失敗しました。');
+        }
+        setPptxMsg({ kind: 'ok', text: `保存しました: ${body.relpath}` });
+      })
+      .catch((e: unknown) =>
+        setPptxMsg({ kind: 'error', text: e instanceof Error ? e.message : '保存に失敗しました。' }),
+      )
+      .finally(() => setPptxBusy(null));
+  };
+
+  // AIで下書き（context → draft）。
+  const runDraft = () => {
+    if (draftBusy || !context.trim()) return;
+    setDraftBusy(true);
+    setDraftError(null);
+    setDraft(null);
+    setDraftMarkdown('');
+    fetch(`/api/templates/${encodeURIComponent(template.id)}/draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context: context.trim() }),
+    })
+      .then(async (res) => {
+        const body = (await res.json().catch(() => ({}))) as {
+          draft?: Record<string, string>;
+          markdown?: string;
+          error?: string;
+        };
+        if (body.error && (!body.draft || Object.keys(body.draft).length === 0)) {
+          throw new Error(body.error);
+        }
+        setDraft(body.draft ?? {});
+        setDraftMarkdown(body.markdown ?? '');
+      })
+      .catch((e: unknown) =>
+        setDraftError(e instanceof Error ? e.message : '下書きの生成に失敗しました。'),
+      )
+      .finally(() => setDraftBusy(false));
+  };
+
+  const copyDraftMarkdown = () => {
+    if (!draftMarkdown) return;
+    void navigator.clipboard
+      .writeText(draftMarkdown)
+      .then(() => {
+        setDraftCopied(true);
+        setTimeout(() => setDraftCopied(false), 1800);
+      })
+      .catch(() => {
+        /* クリップボード不可環境では無視 */
+      });
+  };
 
   const copyStructure = () => {
     // structure を Markdown 箇条書きにしてクリップボードへ。
@@ -199,6 +322,85 @@ function TemplateDetail({
               ))}
             </ul>
           </section>
+
+          {/* pptx 出力（空のたたき台） */}
+          <section className="rounded-lg border border-border bg-surface-2 p-3">
+            <h3 className="mb-2 text-xs font-semibold text-text-muted">pptx を作る（空のたたき台）</h3>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={downloadPptx}
+                disabled={pptxBusy !== null}
+                className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-surface-3 disabled:opacity-50"
+              >
+                {pptxBusy === 'download' ? '生成中…' : '空のpptxをダウンロード'}
+              </button>
+              <button
+                type="button"
+                onClick={savePptx}
+                disabled={pptxBusy !== null}
+                className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-surface-3 disabled:opacity-50"
+              >
+                {pptxBusy === 'save' ? '保存中…' : 'Deliverablesへ保存'}
+              </button>
+            </div>
+            {pptxMsg && (
+              <p
+                className={`mt-2 break-all text-[11px] ${
+                  pptxMsg.kind === 'ok' ? 'text-accent' : 'text-rose-400'
+                }`}
+              >
+                {pptxMsg.text}
+              </p>
+            )}
+          </section>
+
+          {/* AIで下書き */}
+          <section className="rounded-lg border border-border bg-surface-2 p-3">
+            <h3 className="mb-2 text-xs font-semibold text-text-muted">AIで下書き</h3>
+            <p className="mb-2 text-[11px] text-text-faint">
+              会議の要旨や背景を入れると、各記入欄の下書きを AI が作成します。
+            </p>
+            <textarea
+              value={context}
+              onChange={(e) => setContext(e.target.value)}
+              placeholder="会議要旨・背景など（例: 新製品Xへ5000万投資、12ヶ月で回収見込み）"
+              rows={3}
+              className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder-text-faint focus:border-accent focus:outline-none"
+            />
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={runDraft}
+                disabled={draftBusy || !context.trim()}
+                className="rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-bg transition-colors hover:opacity-90 disabled:opacity-50"
+              >
+                {draftBusy ? 'AIが下書き中…' : 'AIで下書き'}
+              </button>
+              {draftMarkdown && (
+                <button
+                  type="button"
+                  onClick={copyDraftMarkdown}
+                  className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text-muted transition-colors hover:bg-surface-3 hover:text-text"
+                >
+                  {draftCopied ? 'コピーしました' : '全文コピー'}
+                </button>
+              )}
+            </div>
+            {draftError && <p className="mt-2 text-[11px] text-rose-400">{draftError}</p>}
+            {draft && (
+              <div className="mt-3 space-y-2">
+                {placeholders.map((ph) => (
+                  <div key={ph.id} className="rounded-lg border border-border bg-surface p-2.5">
+                    <div className="mb-1 text-[11px] font-semibold text-accent">{ph.label}</div>
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-text">
+                      {draft[ph.id]?.trim() ? draft[ph.id] : <span className="text-text-faint">（下書きなし）</span>}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
 
         {/* フッタ: 関連ガイドへの注記 */}
@@ -222,8 +424,56 @@ export default function SlideTemplates() {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<SlideTemplate | null>(null);
 
+  // AIに相談（推薦）の状態。
+  const [consult, setConsult] = useState('');
+  const [recBusy, setRecBusy] = useState(false);
+  const [recError, setRecError] = useState<string | null>(null);
+  const [recommendations, setRecommendations] = useState<
+    { id: string; name: string; reason: string }[] | null
+  >(null);
+
   const templates = data?.templates ?? [];
   const categories = data?.categories ?? [];
+
+  // 推薦 id → 理由のマップ（カードのハイライト用）。
+  const reasonById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of recommendations ?? []) map.set(r.id, r.reason);
+    return map;
+  }, [recommendations]);
+
+  // AIに相談 → POST /recommend。
+  const runRecommend = () => {
+    if (recBusy || !consult.trim()) return;
+    setRecBusy(true);
+    setRecError(null);
+    setRecommendations(null);
+    fetch('/api/templates/recommend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: consult.trim() }),
+    })
+      .then(async (res) => {
+        const body = (await res.json().catch(() => ({}))) as {
+          recommendations?: { id: string; name: string; reason: string }[];
+          error?: string;
+        };
+        const recs = body.recommendations ?? [];
+        if (recs.length === 0 && body.error) throw new Error(body.error);
+        setRecommendations(recs);
+        if (recs.length === 0) setRecError('該当する型が見つかりませんでした。');
+      })
+      .catch((e: unknown) =>
+        setRecError(e instanceof Error ? e.message : '推薦の取得に失敗しました。'),
+      )
+      .finally(() => setRecBusy(false));
+  };
+
+  const clearRecommend = () => {
+    setRecommendations(null);
+    setRecError(null);
+    setConsult('');
+  };
 
   // カテゴリ key → ラベルの引き当て。
   const labelOf = useMemo(() => {
@@ -240,15 +490,23 @@ export default function SlideTemplates() {
   }, [templates]);
 
   // フィルタ: カテゴリ AND テキスト（name / useCases / whenToUse 部分一致・小文字化・trim）。
+  // 推薦がある場合は推薦された型を先頭に並べ替える（ハイライト＋優先表示）。
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return templates.filter((t) => {
+    const base = templates.filter((t) => {
       if (category !== 'all' && t.category !== category) return false;
       if (!q) return true;
       const haystack = [t.name, ...t.useCases, t.whenToUse].join('\n').toLowerCase();
       return haystack.includes(q);
     });
-  }, [templates, category, query]);
+    if (!recommendations || recommendations.length === 0) return base;
+    const order = new Map(recommendations.map((r, i) => [r.id, i]));
+    return [...base].sort((a, b) => {
+      const ra = order.has(a.id) ? order.get(a.id)! : Infinity;
+      const rb = order.has(b.id) ? order.get(b.id)! : Infinity;
+      return ra - rb;
+    });
+  }, [templates, category, query, recommendations]);
 
   return (
     <div className="flex h-full flex-col">
@@ -261,6 +519,49 @@ export default function SlideTemplates() {
         <ResourceState loading={loading} error={error} hasData={!!data}>
           {data && (
             <>
+              {/* AIに相談（作りたい資料を一言で → 推薦） */}
+              <div className="mb-4 rounded-lg border border-border bg-surface-2 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h2 className="text-xs font-semibold text-text-muted">AIに相談</h2>
+                  {(recommendations || recError) && (
+                    <button
+                      type="button"
+                      onClick={clearRecommend}
+                      className="text-[11px] text-text-faint hover:text-text"
+                    >
+                      クリア
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="text"
+                    value={consult}
+                    onChange={(e) => setConsult(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') runRecommend();
+                    }}
+                    placeholder="作りたい資料を一言で（例: 役員に投資判断を仰ぐ1枚）"
+                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder-text-faint focus:border-accent focus:outline-none"
+                    aria-label="AIに相談"
+                  />
+                  <button
+                    type="button"
+                    onClick={runRecommend}
+                    disabled={recBusy || !consult.trim()}
+                    className="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition-colors hover:opacity-90 disabled:opacity-50"
+                  >
+                    {recBusy ? '相談中…' : 'AIに相談'}
+                  </button>
+                </div>
+                {recError && <p className="mt-2 text-[11px] text-rose-400">{recError}</p>}
+                {recommendations && recommendations.length > 0 && (
+                  <p className="mt-2 text-[11px] text-text-muted">
+                    おすすめの型を下にハイライトしました（上位{recommendations.length}件）。
+                  </p>
+                )}
+              </div>
+
               {/* カテゴリフィルタ（タブ）＋件数バッジ */}
               <div
                 className="mb-3 flex flex-wrap gap-1.5"
@@ -340,6 +641,8 @@ export default function SlideTemplates() {
                       template={t}
                       categoryLabel={labelOf(t.category)}
                       onSelect={setSelected}
+                      recommended={reasonById.has(t.id)}
+                      reason={reasonById.get(t.id)}
                     />
                   ))}
                 </div>

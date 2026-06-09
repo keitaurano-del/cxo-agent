@@ -378,6 +378,13 @@ export interface SlideTemplateCategory {
   label: string;
 }
 
+export interface SlideTemplatePlaceholder {
+  id: string;
+  label: string;
+  type: string; // 'title'|'subtitle'|'bullet'|'chart'|'image'|'text'
+  hint?: string;
+}
+
 export interface SlideTemplate {
   id: string;
   name: string;
@@ -390,6 +397,7 @@ export interface SlideTemplate {
   tips: string[];
   structure: string[];
   previewSvg: string; // インライン SVG 文字列（当方管理の静的データ）
+  placeholders?: SlideTemplatePlaceholder[]; // 記入欄（v2）
 }
 
 export interface SlideTemplateCatalog {

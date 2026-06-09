@@ -18,6 +18,14 @@ export interface SlideTemplateCategory {
   label: string;
 }
 
+/** テンプレ内の記入欄（プレースホルダ）。pptx 生成・記入支援で使う（v2）。 */
+export interface SlideTemplatePlaceholder {
+  id: string;
+  label: string;
+  type: string; // 'title'|'subtitle'|'bullet'|'chart'|'image'|'text'
+  hint?: string;
+}
+
 /** 1 つのスライドテンプレート（様式）。 */
 export interface SlideTemplate {
   id: string;
@@ -31,6 +39,7 @@ export interface SlideTemplate {
   tips: string[];
   structure: string[];
   previewSvg: string; // インライン SVG 文字列（当方管理の静的データ）
+  placeholders?: SlideTemplatePlaceholder[]; // 記入欄（v2・pptx/記入支援で使用）
 }
 
 /** スライドテンプレートカタログ全体。 */
