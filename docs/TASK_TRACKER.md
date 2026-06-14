@@ -2731,12 +2731,12 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-234 |
 | タイトル | ドキュメント(Deliverables)のゴミ箱(.trash)を期間/容量で自動パージ |
 | 優先度 | P2 |
-| ステータス | TODO |
+| ステータス | REVIEW |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 1 積み残し（MC-230 でゴミ箱・復元・手動「空にする」は実装済み、自動パージのみ未）。`data/deliverables/.trash/<batchId>/` の `.trashinfo.json` の削除時刻を見て、一定期間（例: 30日）超過 or 総容量（例: 上限超）で古いバッチから自動パージ。コレクタ走査時 or 軽量cronで実行。閾値は config 化。 |
 | 受け入れ条件（DoD） | 期間/容量超過のゴミ箱バッチが自動削除され、残存は復元可能なまま。閾値が config（env）で変更可。誤って保持期間内のものを消さない。server tsc0、restart 後に動作確認（短い閾値で疑似検証）。 |
 | 依存 | MC-230（ゴミ箱基盤）。 |
-| 備考 | NO_PUSH。Phase1 の安全網を完結させる軽い後続。 |
+| 備考 | NO_PUSH。Phase1 の安全網を完結させる軽い後続。<br>【実装/検証 2026-06-14 ソラ・commit 2ce6f7e（ローカルのみ・未push）】`server/src/lib/trashPurge.ts` 新設：保持期間 `DELIVERABLE_TRASH_RETENTION_DAYS`（既定30日, `server/src/config.ts`）超過バッチを削除＋総容量 `DELIVERABLE_TRASH_MAX_BYTES`（既定2GB）超過時は古い削除順(deletedAt昇順)に容量内まで削る。保持期間内かつ容量内は残す。`.trashinfo.json` の deletedAt（無ければ batchId 先頭 timestamp）で判定。throttle 内蔵 `purgeTrashIfDue()`（既定6h・env `DELIVERABLE_TRASH_PURGE_INTERVAL_MS`）を GET `/api/deliverables`（`server/src/index.ts:668` 付近）で呼ぶ。検証＝tsx で短閾値疑似実行：40日前に backdate したバッチを retention=30 で `purgedByAge` 確定／recent は保持、MAX_BYTES=1 で `purgedByCapacity` 確定、既定閾値では fresh バッチ非削除を確認。server tsc green（既存無関係 googleRouter.ts 除く）・restart 後 healthz200。 |
 | 更新日 | 2026-06-14 |
 
 ---
@@ -2748,12 +2748,12 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-235 |
 | タイトル | ドキュメント(Deliverables)でファイル・フォルダをコピー/複製できるようにする |
 | 優先度 | P2 |
-| ステータス | TODO |
+| ステータス | REVIEW |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 2。`POST /api/deliverables/copy`（srcPath→destDir、deliverablePath.ts の検証ヘルパ流用、フォルダは再帰コピー、同名は「コピー」サフィックス自動付与）。UIは右クリック/メニューから「コピー」、複数選択の一括コピー（MC-229 の選択基盤流用）。同一フォルダ内コピー=複製。 |
 | 受け入れ条件（DoD） | ファイル/フォルダのコピー・複製ができ、同名は自動リネーム。data/deliverables外不可。フォルダ再帰コピー可。server tsc0 / web build0 / restart 後 実画面で確認。 |
 | 依存 | MC-228（move/path検証ヘルパ流用）、MC-229（一括選択）。 |
-| 備考 | NO_PUSH。 |
+| 備考 | NO_PUSH。<br>【実装/検証 2026-06-14 ソラ・commit 2ce6f7e（ローカルのみ・未push）】`POST /api/deliverables/copy`（`server/src/index.ts` move ルート直後）：`cpSync(recursive)` でファイル/フォルダコピー。`deliverablePath.ts` に `resolveCopyTarget`（realpath/traversal防御・フォルダの自分自身/子孫コピー拒否・同名は「<name> のコピー[ n]」自動付与）。UI＝FileCard/FileRow/FolderNodeView に CopyIcon ボタン（`onCopyRequest` を `ItemInteractions` に追加）＋ SelectionToolbar に一括コピー＋ CopyDialog（MoveDialog 流用、現在フォルダ選択＝複製可）、`web/src/views/Deliverables.tsx`。CopyIcon 追加（`web/src/components/icons.tsx`）。検証＝curl で 複製→「のコピー」/「のコピー 2」付与・別フォルダコピーは元名維持・フォルダ再帰コピー（inner.txt/sub/deep.txt 保持）・`../../etc/passwd` 400・自分自身コピー 400 を確認。Playwright で コピーボタン→CopyDialog→ここへコピー→`__uitest_b のコピー.txt` 生成を実画面確認、JSエラー0。server tsc green（既存無関係 googleRouter.ts 除く）／web build EXIT0／restart 後 healthz200。 |
 | 更新日 | 2026-06-14 |
 
 ---
@@ -2765,12 +2765,12 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-236 |
 | タイトル | ドキュメント(Deliverables)のプレビューを強化（Space=Quick Look・コードのハイライト・右ペイン詳細） |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | REVIEW |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 2。現状プレビューは PDF/画像/テキスト/markdown/Office 変換のみ。(1)スペースキーで選択中ファイルを即プレビュー（Quick Look モーダル、矢印キーで前後送り）、(2)コード/テキストのシンタックスハイライト（拡張子判定）、(3)右ペインに選択中ファイルの詳細（メタデータ＋プレビュー）を常時表示するレイアウト。 |
 | 受け入れ条件（DoD） | Spaceでプレビューモーダル開閉・矢印で送り、コードがハイライト表示、右ペイン詳細が選択追従。390px ではモーダル/単一ペインにフォールバック。web build0 / restart 後 実画面確認。 |
 | 依存 | 既存プレビュー実装（Deliverables.tsx）。 |
-| 備考 | NO_PUSH。UX効果大。 |
+| 備考 | NO_PUSH。UX効果大。<br>【実装/検証 2026-06-14 ソラ・commit 2ce6f7e（ローカルのみ・未push）】(a)Space で選択中（単一選択 or 選択アンカー）のプレビュー可能ファイルを Quick Look。入力欄/チェックボックスにフォーカス中は無視（a11y）。FileViewer を ←/→ 前後送り対応に（`previewableSiblings`＝表示順のプレビュー可能列を送り対象）。(b)依存追加なしの軽量ハイライト `web/src/lib/codeHighlight.tsx`（拡張子で code/json/markup を大別・文字列/コメント/数値/キーワードを CSS変数 `--mc-*` で配色・200KB 超は素返し）。コード拡張子(.ts/.py/.json 等)も text プレビュー対象化（収集側 kind=other でも拡張子判定）。(c)`xl` 以上で右ペイン詳細（`FileMetaPanel`＋`FileViewerBody` プレビュー）を選択追従で常時表示、390px は `hidden`＝モーダル/単一ペインにフォールバック。InfoIcon 追加（`web/src/components/icons.tsx`）。`web/src/views/Deliverables.tsx`。検証＝Playwright(1400px) で 選択→詳細ペイン追従・Space で Quick Look 起動・ハイライト span 6・ArrowRight で次ファイルへ送り・詳細ペイン「大きく表示」でモーダル起動を確認、JSエラー0。390px で 詳細ペイン非表示・横溢れ0px を確認。web build EXIT0／restart 後 healthz200。 |
 | 更新日 | 2026-06-14 |
 
 ---
