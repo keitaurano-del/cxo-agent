@@ -6,12 +6,15 @@ import { lazy, Suspense, useState } from 'react';
 
 const Deliverables = lazy(() => import('./Deliverables'));
 const Vault = lazy(() => import('./Vault'));
+const Notebooks = lazy(() => import('./Notebooks'));
 
-type DocTab = 'docs' | 'vault';
+type DocTab = 'docs' | 'vault' | 'rag';
 
 function resolveInitial(initial?: DocTab): DocTab {
   if (initial) return initial;
   if (typeof window !== 'undefined') {
+    if (window.location.pathname.startsWith('/notebooks')) return 'rag';
+    if (new URLSearchParams(window.location.search).get('tab') === 'rag') return 'rag';
     if (window.location.pathname.startsWith('/vault')) return 'vault';
     if (new URLSearchParams(window.location.search).get('tab') === 'vault') return 'vault';
   }
@@ -21,6 +24,7 @@ function resolveInitial(initial?: DocTab): DocTab {
 const TABS: [DocTab, string][] = [
   ['docs', 'ドキュメント'],
   ['vault', 'Vault'],
+  ['rag', 'RAG'],
 ];
 
 export default function DocumentsTabs({ initialTab }: { initialTab?: DocTab } = {}) {
@@ -30,7 +34,11 @@ export default function DocumentsTabs({ initialTab }: { initialTab?: DocTab } = 
     setTab(next);
     // 履歴を汚さず URL を同期（リロードでタブ維持・旧リンク互換）。
     try {
-      window.history.replaceState(null, '', next === 'vault' ? '/vault' : '/deliverables');
+      window.history.replaceState(
+        null,
+        '',
+        next === 'rag' ? '/notebooks' : next === 'vault' ? '/vault' : '/deliverables',
+      );
     } catch {
       /* noop */
     }
@@ -62,7 +70,7 @@ export default function DocumentsTabs({ initialTab }: { initialTab?: DocTab } = 
       </div>
       <div className="min-h-0 flex-1">
         <Suspense fallback={<div className="p-6 text-sm text-text-muted">読み込み中…</div>}>
-          {tab === 'docs' ? <Deliverables /> : <Vault />}
+          {tab === 'docs' ? <Deliverables /> : tab === 'vault' ? <Vault /> : <Notebooks />}
         </Suspense>
       </div>
     </div>

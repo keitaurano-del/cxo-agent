@@ -12,10 +12,8 @@ import type { ApprovalsResponse } from './lib/types';
 import {
   BoardIcon,
   GridIcon,
-  ApprovalIcon,
   DotIcon,
   DocumentsIcon,
-  SparkIcon,
   TerminalIcon,
   BabyIcon,
   SunIcon,
@@ -30,12 +28,10 @@ import AgentsLive from './views/AgentsLive';
 const Agents = lazy(() => import('./views/Agents'));
 const Activity = lazy(() => import('./views/Activity'));
 const Feed = lazy(() => import('./views/Feed'));
-const Tasks = lazy(() => import('./views/Tasks'));
+const TasksTabs = lazy(() => import('./views/TasksTabs'));
 const News = lazy(() => import('./views/News'));
 const DocumentsTabs = lazy(() => import('./views/DocumentsTabs'));
-const Notebooks = lazy(() => import('./views/Notebooks'));
 const PlanUsage = lazy(() => import('./views/PlanUsage'));
-const Approvals = lazy(() => import('./views/Approvals'));
 const Childcare = lazy(() => import('./views/Childcare'));
 const Terminal = lazy(() => import('./views/Terminal'));
 import BottomNav from './components/BottomNav';
@@ -149,10 +145,10 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: '/', label: 'ダッシュボード', shortLabel: 'ダッシュ', icon: <GridIcon /> },
   { to: '/tasks', label: 'タスクボード', shortLabel: 'ボード', icon: <BoardIcon /> },
-  { to: '/approvals', label: '承認フロー', shortLabel: '承認', icon: <ApprovalIcon /> },
+  // 承認フローは独立ナビから外し、タスクボードページ内の「承認フロー」タブに統合した（/approvals は後方互換で残す）。
   // Vault は独立ナビから外し、ドキュメントページ内の「Vault」タブに統合した（/vault は後方互換で残す）。
+  // RAG は独立ナビから外し、ドキュメントページ内の「RAG」タブに統合した（/notebooks は後方互換で残す）。
   { to: '/deliverables', label: 'ドキュメント', shortLabel: 'ドキュ', icon: <DocumentsIcon /> },
-  { to: '/notebooks', label: 'RAG', shortLabel: 'RAG', icon: <SparkIcon /> },
   { to: '/childcare', label: '育児', shortLabel: '育児', icon: <BabyIcon /> },
   // 成長日記は独立ナビから外し、育児ページ内の「成長日記」タブに統合した（/baby-diary は後方互換で残す）。
   // ターミナル: iframe ホスト用 React ルートは /terminal-view。
@@ -160,7 +156,7 @@ const NAV: NavItem[] = [
   { to: '/terminal-view', label: 'ターミナル', shortLabel: '端末', icon: <TerminalIcon /> },
 ];
 
-/** ナビ項目の件数バッジ（0 なら非表示）。承認フロー（/approvals）で使う。 */
+/** ナビ項目の件数バッジ（0 なら非表示）。要承認件数をタスクボード（/tasks）に出す。 */
 function NavBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
@@ -387,7 +383,8 @@ export default function App() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const badges: Partial<Record<string, number>> = {
-    '/approvals': approvalCount,
+    // 承認フローはタスクボードページのタブに統合したため、要承認バッジはタスクボード項目（/tasks）に出す。
+    '/tasks': approvalCount,
     ...navBadges,
   };
 
@@ -478,12 +475,14 @@ export default function App() {
                 <Route path="/agents/:agentId" element={<Agents />} />
                 <Route path="/plan-usage" element={<PlanUsage />} />
               </Route>
-              <Route path="/tasks" element={<Tasks />} />
-              <Route path="/approvals" element={<Approvals />} />
+              <Route path="/tasks" element={<TasksTabs />} />
+              {/* 承認フローは「タスクボード」ページの承認フロータブへ統合（旧 /approvals は後方互換でタブ着地）。 */}
+              <Route path="/approvals" element={<TasksTabs initialTab="approvals" />} />
               {/* Vault は「ドキュメント」ページの Vault タブへ統合（旧 /vault は後方互換でタブ着地）。 */}
               <Route path="/vault" element={<DocumentsTabs initialTab="vault" />} />
               <Route path="/deliverables" element={<DocumentsTabs />} />
-              <Route path="/notebooks" element={<Notebooks />} />
+              {/* RAG は「ドキュメント」ページの RAG タブへ統合（旧 /notebooks は後方互換でタブ着地）。 */}
+              <Route path="/notebooks" element={<DocumentsTabs initialTab="rag" />} />
               <Route path="/childcare" element={<Childcare />} />
               {/* 旧 /baby-diary は育児ページの「成長日記」タブに着地（古いリンク/ブックマーク互換）。 */}
               <Route path="/baby-diary" element={<Childcare initialTab="diary" />} />
