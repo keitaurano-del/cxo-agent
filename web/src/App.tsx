@@ -14,7 +14,6 @@ import {
   GridIcon,
   ApprovalIcon,
   DotIcon,
-  VaultIcon,
   DocumentsIcon,
   SparkIcon,
   TerminalIcon,
@@ -33,8 +32,7 @@ const Activity = lazy(() => import('./views/Activity'));
 const Feed = lazy(() => import('./views/Feed'));
 const Tasks = lazy(() => import('./views/Tasks'));
 const News = lazy(() => import('./views/News'));
-const Vault = lazy(() => import('./views/Vault'));
-const Deliverables = lazy(() => import('./views/Deliverables'));
+const DocumentsTabs = lazy(() => import('./views/DocumentsTabs'));
 const Notebooks = lazy(() => import('./views/Notebooks'));
 const PlanUsage = lazy(() => import('./views/PlanUsage'));
 const Approvals = lazy(() => import('./views/Approvals'));
@@ -152,7 +150,7 @@ const NAV: NavItem[] = [
   { to: '/', label: 'ダッシュボード', shortLabel: 'ダッシュ', icon: <GridIcon /> },
   { to: '/tasks', label: 'タスクボード', shortLabel: 'ボード', icon: <BoardIcon /> },
   { to: '/approvals', label: '承認フロー', shortLabel: '承認', icon: <ApprovalIcon /> },
-  { to: '/vault', label: 'Vault', shortLabel: 'Vault', icon: <VaultIcon /> },
+  // Vault は独立ナビから外し、ドキュメントページ内の「Vault」タブに統合した（/vault は後方互換で残す）。
   { to: '/deliverables', label: 'ドキュメント', shortLabel: 'ドキュ', icon: <DocumentsIcon /> },
   { to: '/notebooks', label: 'RAG', shortLabel: 'RAG', icon: <SparkIcon /> },
   { to: '/childcare', label: '育児', shortLabel: '育児', icon: <BabyIcon /> },
@@ -482,8 +480,9 @@ export default function App() {
               </Route>
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/approvals" element={<Approvals />} />
-              <Route path="/vault" element={<Vault />} />
-              <Route path="/deliverables" element={<Deliverables />} />
+              {/* Vault は「ドキュメント」ページの Vault タブへ統合（旧 /vault は後方互換でタブ着地）。 */}
+              <Route path="/vault" element={<DocumentsTabs initialTab="vault" />} />
+              <Route path="/deliverables" element={<DocumentsTabs />} />
               <Route path="/notebooks" element={<Notebooks />} />
               <Route path="/childcare" element={<Childcare />} />
               {/* 旧 /baby-diary は育児ページの「成長日記」タブに着地（古いリンク/ブックマーク互換）。 */}
