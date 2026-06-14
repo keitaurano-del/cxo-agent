@@ -82,6 +82,7 @@ import { terminalHttpHandler, attachUpgrade } from './terminalProxy.js';
 import { startWatch } from './watch.js';
 import { chatRouter, agentMessageHandler, autonomousTickHandler } from './chatRouter.js';
 import { navOrderRouter } from './navOrderRouter.js';
+import { babyDiaryRouter } from './babyDiaryRouter.js';
 
 const HEALTHZ_PATH = '/api/healthz';
 
@@ -1222,6 +1223,13 @@ app.use('/api/chat', chatRouter(broadcast));
 // 保存先 data/nav-order.json（.gitignore 済み）。auth ミドルウェア配下＝Cookie 必須。
 // default 項目集合とのマージ（新項目末尾追加・削除項目ドロップ）はフロント側で行う。
 app.use('/api/nav-order', navOrderRouter());
+
+// ─── 成長日記（MC-233 Phase1）──────────────────────────────────
+// 子の成長記録を日付単位（1日1エントリ）で残し、写真/動画を添付するビュー。
+// GET=一覧 / POST entry=date upsert / DELETE entry/:date=論理削除 /
+// POST media=multipart アップロード / GET media/:id=実体配信 / DELETE media/:id=削除。
+// 保存先はすべて data/ 配下（.gitignore 済み）。auth ミドルウェア配下＝Cookie/Bearer 必須。
+app.use('/api/baby-diary', babyDiaryRouter());
 
 // ─── SSE（chokidar watch → broadcast に接続）──────────────────────
 

@@ -519,6 +519,18 @@ export function BabyIcon(props: IconProps) {
   );
 }
 
+// 成長日記（/baby-diary, MC-233）ナビ用。開いたノート＋しおりリボンで「日記」を表す。
+export function DiaryIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M5 4.5h11a1.5 1.5 0 0 1 1.5 1.5v13a1.5 1.5 0 0 1-1.5 1.5H5z" />
+      <path d="M5 4.5A1.5 1.5 0 0 0 3.5 6v13A1.5 1.5 0 0 0 5 20.5" />
+      <path d="M8.5 9h6M8.5 12.5h6M8.5 16h3.5" />
+      <path d="M15.5 4.5v6l1.75-1.3 1.75 1.3v-6z" />
+    </svg>
+  );
+}
+
 // 設定アイコン（MC-178 フォントサイズ等）
 export function SettingsIcon(props: IconProps) {
   return (

@@ -861,3 +861,36 @@ export const CHAT_CHANNELS_DIR = env('CHAT_CHANNELS_DIR', join(INBOX_DATA_DIR, '
 
 /** エージェント投稿エンドポイントの認証トークン（MC_TOKEN とは別）。 */
 export const AGENT_TOKEN = env('AGENT_TOKEN', '');
+
+// ─── 成長日記（MC-233 Phase1）──────────────────────────────────
+//
+// 子の成長記録を日付単位（1日1エントリ）で残し、写真/動画を添付するビュー。
+// ストレージはすべて data/ 配下（.gitignore 済み・ランタイムデータ）:
+//   data/baby-diary-entries.jsonl  : 日記エントリ（last-wins by date・論理削除は deleted フラグ）
+//   data/baby-diary-media.jsonl    : メディアメタ（append・削除は deleted フラグ）
+//   data/baby-diary-media/         : メディア実体（<id>-<safe-name> でフラット保存）
+
+/** 成長日記のデータディレクトリ（jsonl の置き場）。 */
+export const BABY_DIARY_DIR = env('BABY_DIARY_DIR', INBOX_DATA_DIR);
+
+/** 日記エントリの JSONL（last-wins by date）。 */
+export const BABY_DIARY_ENTRIES_FILE = join(BABY_DIARY_DIR, 'baby-diary-entries.jsonl');
+
+/** メディアメタの JSONL（append・論理削除）。 */
+export const BABY_DIARY_MEDIA_FILE = join(BABY_DIARY_DIR, 'baby-diary-media.jsonl');
+
+/** メディア実体の保存ディレクトリ（<id>-<safe-name> でフラット保存）。 */
+export const BABY_DIARY_MEDIA_DIR = env('BABY_DIARY_MEDIA_DIR', join(BABY_DIARY_DIR, 'baby-diary-media'));
+
+/**
+ * 成長日記メディア 1 ファイルあたりの最大バイト数（既定 1GB）。
+ * 動画添付を考慮して大きめ。multer diskStorage でストリーム保存するためメモリには載らない。
+ * env BABY_DIARY_MEDIA_MAX_BYTES で上書き可。
+ */
+export const BABY_DIARY_MEDIA_MAX_BYTES = envNum(
+  'BABY_DIARY_MEDIA_MAX_BYTES',
+  1024 * 1024 * 1024,
+);
+
+/** 成長日記メディアの 1 リクエストあたり最大ファイル数。 */
+export const BABY_DIARY_MEDIA_MAX_FILES = envNum('BABY_DIARY_MEDIA_MAX_FILES', 10);
