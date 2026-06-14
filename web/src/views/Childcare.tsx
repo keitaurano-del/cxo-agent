@@ -394,16 +394,27 @@ export default function Childcare() {
         fetchedAt={undefined}
       />
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
-        <div className="mx-auto flex max-w-3xl flex-col gap-4">
+        <div className="mx-auto flex max-w-5xl flex-col gap-4">
+          {/* ヘッダ → 成長タイムライン → いま来るもの を全幅で上部固定。 */}
           <BabyHeader now={now} />
-          <UpcomingSection now={now} />
-          <FatherMindsetSection />
           <GrowthSection now={now} />
-          <FatherSection />
-          <AdminSection now={now} />
-          <BunkyoSection />
-          <PerksSection />
-          <CheckupSection now={now} />
+          <UpcomingSection now={now} />
+          {/* PC（lg〜）は2分割（CSS マルチカラムのメイソンリー）、モバイルは1列。
+              各ラッパに break-inside-avoid を当て、カードが列をまたいで割れないようにする。 */}
+          <div className="columns-1 gap-4 lg:columns-2">
+            {[
+              <FatherMindsetSection key="mindset" />,
+              <FatherSection key="father" />,
+              <AdminSection key="admin" now={now} />,
+              <BunkyoSection key="bunkyo" />,
+              <PerksSection key="perks" />,
+              <CheckupSection key="checkup" now={now} />,
+            ].map((node) => (
+              <div key={node.key} className="mb-4 break-inside-avoid">
+                {node}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
