@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState } from '../components/ui';
 import {
+  CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CloseIcon,
@@ -15,6 +16,8 @@ import {
   LinkIcon,
   SettingsIcon,
   SparkIcon,
+  TrashIcon,
+  UploadIcon,
 } from '../components/icons';
 
 // ─── API 型（サーバ契約に対応。BabyDiary の対応型と同一）──────────
@@ -108,6 +111,29 @@ interface PlanEventInput {
   start: string | null;
   end: string | null;
   allDay: boolean;
+}
+
+// plan-apply の 1 ブロック入力（サーバ契約。reason は任意）。
+interface PlanApplyBlock {
+  taskId?: string;
+  title: string;
+  start: string;
+  end: string;
+  reason?: string;
+}
+
+// POST /calendar/plan-apply のレスポンス。
+interface PlanApplyResponse {
+  account: string;
+  created: number;
+  failed: number;
+  errors?: string[];
+}
+
+// POST /calendar/plan-clear のレスポンス。
+interface PlanClearResponse {
+  account: string;
+  removed: number;
 }
 
 // ─── ビュー種別 ─────────────────────────────────────────────
@@ -364,6 +390,23 @@ export default function Schedule() {
   const [plannerConfig, setPlannerConfig] = useState<PlannerConfig | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
+  // ── プランの Google カレンダー反映/削除（MC-245 P3）──
+  // 登録先アカウント（選択。既定＝先頭。複数接続時のみ select を出す）。
+  const [applyAccount, setApplyAccount] = useState<string>('');
+  // 接続アカウントが揃ったら、未選択 or もう存在しない選択を先頭に正す。
+  useEffect(() => {
+    if (accounts.length === 0) return;
+    setApplyAccount((cur) =>
+      cur && accounts.some((a) => a.email === cur) ? cur : accounts[0].email,
+    );
+  }, [accounts]);
+
+  const [applyLoading, setApplyLoading] = useState(false); // 登録/削除の直列処理中
+  const [applyError, setApplyError] = useState<string | null>(null);
+  // 完了メッセージ（created/failed/removed のトースト相当。inline で控えめに表示）。
+  const [applyNotice, setApplyNotice] = useState<string | null>(null);
+  const [applyDetail, setApplyDetail] = useState<string[]>([]); // errors の控えめ表示
+
   // 表示中のプランブロック（非表示トグル時は空）。
   const planBlocks = useMemo(
     () => (showPlan && plan ? plan.blocks : []),
@@ -440,6 +483,133 @@ export default function Schedule() {
       }
     }
   }, [plannerConfig]);
+
+  // 現在ビュー範囲の予定・タスクを再取得（apply/clear 後に📋反映を見せる）。
+  const reloadCalendar = useCallback(async () => {
+    if (!hasAccounts) return;
+    const { timeMin, timeMax } = rangeIso(mode, anchor);
+    const qs = `timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`;
+    try {
+      const [evRes, tkRes] = await Promise.all([
+        fetch(`/api/google/calendar/events?${qs}`),
+        fetch(`/api/google/tasks?${qs}`),
+      ]);
+      const evJson: CalendarEventsResponse = evRes.ok ? await evRes.json() : { events: [] };
+      const tkJson: TasksResponse = tkRes.ok ? await tkRes.json() : { tasks: [] };
+      setEvents(evJson.events ?? []);
+      setTasks(tkJson.tasks ?? []);
+    } catch {
+      // 再取得失敗は致命ではない（次のナビ/操作で復帰する）。
+    }
+  }, [hasAccounts, mode, anchor]);
+
+  // 「このプランでカレンダーに登録」: 確認 → 同 account を plan-clear（範囲）→ plan-apply。
+  // 登録先は選択アカウントの primary。重複防止のため再登録は置き換え（clear→apply）。
+  const applyPlan = useCallback(async () => {
+    if (!plan || plan.blocks.length === 0) return;
+    const account = applyAccount || accounts[0]?.email;
+    if (!account) return;
+    const count = plan.blocks.length;
+    const ok = window.confirm(
+      `Google カレンダー（${account} の primary）に ${count} 件のプラン予定を登録します。よろしいですか？\n\n` +
+        '※ 同じ時間帯の既存プラン予定（📋）はいったん削除してから登録します（置き換え・重複しません）。',
+    );
+    if (!ok) return;
+
+    setApplyLoading(true);
+    setApplyError(null);
+    setApplyNotice(null);
+    setApplyDetail([]);
+    try {
+      // plan-clear の範囲＝プラン最小start〜最大end。空なら now〜now+horizon。
+      const starts = plan.blocks.map((b) => b.start).filter(Boolean);
+      const ends = plan.blocks.map((b) => b.end).filter(Boolean);
+      let timeMin: string | undefined;
+      let timeMax: string | undefined;
+      if (starts.length > 0 && ends.length > 0) {
+        timeMin = starts.reduce((a, b) => (a < b ? a : b));
+        timeMax = ends.reduce((a, b) => (a > b ? a : b));
+      } else {
+        const horizon = plannerConfig?.horizonDays ?? 14;
+        const nowDate = new Date();
+        timeMin = nowDate.toISOString();
+        timeMax = new Date(nowDate.getTime() + horizon * 24 * 60 * 60 * 1000).toISOString();
+      }
+
+      // 1) 重複防止のため同 account の該当範囲を先にクリア。
+      const clearRes = await fetch('/api/google/calendar/plan-clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account, timeMin, timeMax }),
+      });
+      if (!clearRes.ok) {
+        throw new Error(`既存プランのクリアに失敗しました (HTTP ${clearRes.status})`);
+      }
+
+      // 2) plan-apply（blocks を最小形へ写像）。
+      const blocks: PlanApplyBlock[] = plan.blocks.map((b) => ({
+        taskId: b.taskId,
+        title: b.title,
+        start: b.start,
+        end: b.end,
+        reason: b.reason,
+      }));
+      const res = await fetch('/api/google/calendar/plan-apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account, blocks }),
+      });
+      if (!res.ok) throw new Error(`カレンダー登録に失敗しました (HTTP ${res.status})`);
+      const json = (await res.json()) as PlanApplyResponse;
+
+      setApplyNotice(
+        `${account} の primary に登録しました：成功 ${json.created} 件` +
+          (json.failed > 0 ? ` / 失敗 ${json.failed} 件` : ''),
+      );
+      setApplyDetail(json.errors ?? []);
+
+      // 3) 📋イベントが見えるよう現在ビューを再取得。
+      await reloadCalendar();
+    } catch (e) {
+      setApplyError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setApplyLoading(false);
+    }
+  }, [plan, applyAccount, accounts, plannerConfig, reloadCalendar]);
+
+  // 「カレンダーから削除（プランをクリア）」: 確認 → plan-clear（広め範囲）→ 再取得。
+  const clearPlan = useCallback(async () => {
+    const account = applyAccount || accounts[0]?.email;
+    if (!account) return;
+    const ok = window.confirm(
+      `Google カレンダー（${account} の primary）から、登録済みのプラン予定（📋）を削除します。よろしいですか？`,
+    );
+    if (!ok) return;
+
+    setApplyLoading(true);
+    setApplyError(null);
+    setApplyNotice(null);
+    setApplyDetail([]);
+    try {
+      // 広めの範囲（now-1日 〜 now+60日）で一括削除。
+      const nowDate = new Date();
+      const timeMin = new Date(nowDate.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString();
+      const timeMax = new Date(nowDate.getTime() + 60 * 24 * 60 * 60 * 1000).toISOString();
+      const res = await fetch('/api/google/calendar/plan-clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account, timeMin, timeMax }),
+      });
+      if (!res.ok) throw new Error(`カレンダーからの削除に失敗しました (HTTP ${res.status})`);
+      const json = (await res.json()) as PlanClearResponse;
+      setApplyNotice(`${account} の primary から ${json.removed} 件のプラン予定を削除しました。`);
+      await reloadCalendar();
+    } catch (e) {
+      setApplyError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setApplyLoading(false);
+    }
+  }, [applyAccount, accounts, reloadCalendar]);
 
   // 設定保存（部分更新）。保存後の最新 config を state に反映。
   const saveSettings = useCallback(async (patch: Partial<PlannerConfig>) => {
@@ -579,6 +749,88 @@ export default function Schedule() {
                 <SettingsIcon width={14} height={14} />
                 設定
               </button>
+            </div>
+          )}
+
+          {/* プラン → Google カレンダー 反映/削除（プランがある時のみ・接続済みのみ） */}
+          {hasAccounts && plan && (
+            <div className="flex flex-col gap-3 rounded-lg border border-accent/40 bg-accent/5 p-3 md:p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+                {/* 登録先アカウント選択（複数接続時のみ） */}
+                {accounts.length > 1 && (
+                  <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-text-muted">
+                    登録先
+                    <select
+                      value={applyAccount}
+                      onChange={(e) => setApplyAccount(e.target.value)}
+                      disabled={applyLoading}
+                      className="rounded-md border border-border bg-bg px-2 py-1 text-[12px] text-text disabled:opacity-60"
+                    >
+                      {accounts.map((a) => (
+                        <option key={a.email} value={a.email}>
+                          {a.email}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => void applyPlan()}
+                  disabled={applyLoading || plan.blocks.length === 0}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-accent bg-accent/10 px-3 py-1.5 text-[12px] font-semibold text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <UploadIcon width={14} height={14} />
+                  {applyLoading ? '処理中…' : 'このプランでカレンダーに登録'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void clearPlan()}
+                  disabled={applyLoading}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[12px] font-medium text-text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <TrashIcon width={14} height={14} />
+                  カレンダーから削除（プランをクリア）
+                </button>
+
+                {applyLoading && (
+                  <span className="text-[11px] text-text-muted">
+                    Google カレンダーへ反映中（数秒かかります）…
+                  </span>
+                )}
+              </div>
+
+              {/* 注記 */}
+              <p className="text-[11px] leading-relaxed text-text-faint">
+                登録先アカウントの primary に「📋」付きで登録され、いつでも「クリア」で削除できます。
+                登録は提示プランの置き換えです（再登録で重複しません）。
+              </p>
+
+              {/* 完了メッセージ（created/failed/removed） */}
+              {applyNotice && (
+                <div className="flex items-start gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-[11px] text-accent">
+                  <CheckIcon width={13} height={13} className="mt-px shrink-0" />
+                  <span>{applyNotice}</span>
+                </div>
+              )}
+              {/* errors の控えめ表示 */}
+              {applyDetail.length > 0 && (
+                <ul className="flex flex-col gap-0.5 rounded-md border border-blocked/40 bg-blocked/10 px-2.5 py-1.5">
+                  {applyDetail.map((msg, i) => (
+                    <li key={i} className="text-[10px] leading-tight text-text-muted">
+                      {msg}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {/* 反映エラー */}
+              {applyError && (
+                <div className="rounded-md border border-blocked/50 bg-blocked/10 px-2.5 py-1.5 text-[11px] text-blocked">
+                  {applyError}
+                </div>
+              )}
             </div>
           )}
 
