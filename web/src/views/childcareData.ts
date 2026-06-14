@@ -231,6 +231,18 @@ export interface CareBasic {
   emoji: string;
   title: string;
   detail: string;
+  /** YouTube 11文字ID（あれば詳細モーダルで埋め込み再生）。 */
+  videoId?: string;
+  /** 動画（または解説ページ）のタイトル。 */
+  videoTitle?: string;
+  /** 発信元（チャンネル名・機関名）。 */
+  source?: string;
+  /** 発信元の種別（例: メーカー公式 / 病院 / 公的機関）。 */
+  sourceType?: string;
+  /** 外部リンク。videoId が無い項目は「解説ページを開く」に使う。 */
+  watchUrl?: string;
+  /** 内容確認上の注意（任意・表示は控えめ）。 */
+  caveat?: string;
 }
 
 export const CARE_BASICS: CareBasic[] = [
@@ -239,28 +251,52 @@ export const CARE_BASICS: CareBasic[] = [
     title: '授乳・調乳',
     detail:
       '母乳は欲しがるだけ。粉ミルクは一度70℃以上のお湯で溶かし、流水等で人肌（約40℃）まで冷ましてから。飲み残しは破棄。授乳後はげっぷを。',
+    videoId: 'Cv599TddA1s',
+    videoTitle: '育児用ミルクの作り方',
+    source: '森永乳業 公式チャンネル',
+    sourceType: 'メーカー公式',
+    watchUrl: 'https://www.youtube.com/watch?v=Cv599TddA1s',
   },
   {
     emoji: '🛁',
     title: '沐浴',
     detail:
       '1日1回が目安。湯温38〜40℃、5分程度。へその緒が乾くまでは特に清潔に。',
+    videoId: 'EL-dgK8PxlI',
+    videoTitle: '沐浴の仕方（赤ちゃんの沐浴と保湿）',
+    source: '一宮西病院 産科',
+    sourceType: '病院',
+    watchUrl: 'https://www.youtube.com/watch?v=EL-dgK8PxlI',
   },
   {
     emoji: '🧷',
     title: 'おむつ替え',
     detail: '排尿・排便のたびに。やさしく拭いてかぶれ予防。',
+    videoId: 'hY0QmLqGzBE',
+    videoTitle: 'おむつ替えの手順（テープタイプ：基礎編）',
+    source: 'パンパース公式（P&G）',
+    sourceType: 'メーカー公式',
+    watchUrl: 'https://www.youtube.com/watch?v=hY0QmLqGzBE',
   },
   {
     emoji: '😴',
     title: '寝かせ方',
     detail:
       'あおむけ・硬めのマット・軽い掛け物。授乳→げっぷ→寝かしつけのリズム。',
+    videoTitle: 'SIDS 発症リスクをおさえるためにできること',
+    source: '政府広報オンライン（こども家庭庁）',
+    sourceType: '公的機関',
+    watchUrl: 'https://www.gov-online.go.jp/cfa/202502/video-293754.html',
   },
   {
     emoji: '🌡️',
     title: '体温・室温',
     detail: '暖めすぎ・厚着に注意。室温は大人が快適な程度に。',
+    videoId: '3WCHrasc1-g',
+    videoTitle: '赤ちゃんの正しい熱の測り方（院長監修）',
+    source: '葛飾赤十字産院',
+    sourceType: '病院',
+    watchUrl: 'https://www.youtube.com/watch?v=3WCHrasc1-g',
   },
 ];
 

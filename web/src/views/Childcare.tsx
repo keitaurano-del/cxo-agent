@@ -3,9 +3,10 @@
 // 行政手続き／健診・予防接種を静的 curated データから描画する。
 // 医療・制度情報は「目安／要確認」を徹底（断定しない）。AI/RAG 連携は後続フェーズ。
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { PageHeader } from '../components/PageHeader';
-import { BabyIcon, DiaryIcon } from '../components/icons';
+import { BabyIcon, CloseIcon, DiaryIcon } from '../components/icons';
 import BabyDiary from './BabyDiary';
 import {
   BIRTH_DATE,
@@ -50,7 +51,7 @@ import {
   VACCINE_SCHEDULE_SOURCE,
   VACCINE_SCHEDULE_URL,
 } from './childcareData';
-import type { AdminProcedure, CheckupItem } from './childcareData';
+import type { AdminProcedure, CareBasic, CheckupItem } from './childcareData';
 
 // ─── 締切の緊急度 → 表示色／ラベル ───────────────────────────
 // 超過: blocked（オレンジ・警告）。本日〜7日内: review（強調）。それ以降: 通常。
@@ -456,23 +457,169 @@ function CheckupSection({ now }: { now: Date }) {
 }
 
 // ─── セクション（新）: お世話の基本 ────────────────────────
+// 各項目をタップ可能（button）にし、選択項目を1つの詳細モーダル（CareBasicDetail）で表示。
+// 詳細では要点＋信頼できる発信元の解説動画（YouTube プライバシー強化埋め込み）を見せる。
 function CareBasicsSection() {
+  // 選択中の項目（null で閉じている状態）。
+  const [selected, setSelected] = useState<CareBasic | null>(null);
   return (
     <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
-      <SectionTitle hint="新生児期のお世話の一般的な目安です。">👶 お世話の基本</SectionTitle>
+      <SectionTitle hint="新生児期のお世話の一般的な目安です。タップで要点と解説動画が見られます。">
+        👶 お世話の基本
+      </SectionTitle>
       <ul className="flex flex-col gap-2">
-        {CARE_BASICS.map((c) => (
-          <li key={c.title} className="flex items-start gap-2.5 rounded-md border border-border bg-bg px-3 py-2.5">
-            <span aria-hidden className="text-lg leading-none">{c.emoji}</span>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-text">{c.title}</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-text-muted">{c.detail}</p>
-            </div>
-          </li>
-        ))}
+        {CARE_BASICS.map((c) => {
+          const hasVideo = Boolean(c.videoId);
+          return (
+            <li key={c.title}>
+              <button
+                type="button"
+                onClick={() => setSelected(c)}
+                aria-label={`${c.title}の詳細を開く（${hasVideo ? '解説動画あり' : '解説ページあり'}）`}
+                aria-haspopup="dialog"
+                className="flex w-full cursor-pointer items-start gap-2.5 rounded-md border border-border bg-bg px-3 py-2.5 text-left transition-colors hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-bg"
+              >
+                <span aria-hidden className="text-lg leading-none">{c.emoji}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-text">{c.title}</p>
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-bold leading-none text-accent">
+                      <span aria-hidden>▶</span>
+                      {hasVideo ? '動画' : '解説'}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs leading-relaxed text-text-muted">{c.detail}</p>
+                </div>
+              </button>
+            </li>
+          );
+        })}
       </ul>
       <Note>{CARE_BASICS_CAPTION}</Note>
+      <CareBasicDetail item={selected} onClose={() => setSelected(null)} />
     </section>
+  );
+}
+
+// ─── お世話の基本: 詳細モーダル ─────────────────────────────
+// BabyDiary の TaskDetail 作法に倣う: createPortal で body 直下、fixed inset-0 z-50、
+// 背面オーバーレイ button、Esc クローズ＋背面スクロールロック、上端 accent ボーダー。
+// item が null の間は何も描画しない（閉じている状態）。
+function CareBasicDetail({ item, onClose }: { item: CareBasic | null; onClose: () => void }) {
+  const open = item !== null;
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open, onClose]);
+
+  if (!item) return null;
+
+  const credit = item.sourceType ? `${item.source}（${item.sourceType}）` : item.source;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center md:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`お世話の基本: ${item.title}`}
+    >
+      {/* 背面オーバーレイ（クリックで閉じる） */}
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="閉じる"
+        className="absolute inset-0 bg-bg/70 backdrop-blur-sm"
+      />
+      {/* モーダル本体 */}
+      <div
+        className="relative flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-lg border border-border bg-bg shadow-xl md:rounded-lg"
+        style={{ borderTop: '3px solid var(--mc-accent)' }}
+      >
+        {/* ヘッダ */}
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border bg-bg/95 px-4 py-3 backdrop-blur">
+          <h2 className="mt-0.5 flex min-w-0 items-center gap-2 break-words text-[15px] font-bold leading-snug text-text">
+            <span aria-hidden className="text-lg leading-none">{item.emoji}</span>
+            {item.title}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="閉じる"
+            className="shrink-0 rounded-md p-1.5 text-text-muted hover:bg-surface-2 hover:text-text"
+          >
+            <CloseIcon width={18} height={18} />
+          </button>
+        </div>
+
+        {/* 本文（スクロール領域） */}
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          {/* 要点 */}
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-text">
+            {item.detail}
+          </p>
+
+          {/* 解説動画 / 解説ページ */}
+          <div className="mt-4">
+            <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-text-faint">
+              解説{item.videoId ? '動画' : 'ページ'}
+            </h3>
+            {item.videoId ? (
+              <div className="overflow-hidden rounded-md border border-border bg-surface-2">
+                <iframe
+                  className="aspect-video w-full"
+                  src={`https://www.youtube-nocookie.com/embed/${item.videoId}`}
+                  title={item.videoTitle ?? `${item.title}の解説動画`}
+                  loading="lazy"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              </div>
+            ) : (
+              item.watchUrl && (
+                <a
+                  href={item.watchUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-accent/50 bg-accent/10 px-3 py-2.5 text-sm font-bold text-accent transition-colors hover:bg-accent/20"
+                >
+                  {item.videoTitle ?? '解説ページ'}を開く ↗
+                </a>
+              )
+            )}
+            {item.videoTitle && item.videoId && (
+              <p className="mt-2 text-xs leading-relaxed text-text-muted">{item.videoTitle}</p>
+            )}
+          </div>
+
+          {/* 発信元クレジット */}
+          {credit && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-[11px] text-text-faint">発信元: {credit}</span>
+              {item.videoId && item.watchUrl && (
+                <ExternalLink href={item.watchUrl}>YouTube で開く ↗</ExternalLink>
+              )}
+            </div>
+          )}
+
+          {item.caveat && (
+            <p className="mt-2 text-[11px] leading-relaxed text-text-faint">{item.caveat}</p>
+          )}
+
+          <Note>※発信元の動画/ページです。内容は各発信元をご確認ください。</Note>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
