@@ -2881,7 +2881,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-243 |
 | タイトル | 日次詳細パネルの Google タスク行をタップ→詳細表示（予定と同じ操作性に揃える） |
 | 優先度 | P2 |
-| ステータス | IN_PROGRESS（2026-06-15 Son 駆動・実装を subagent に委譲）。Keita 要望「タスクも予定と同じようにタップしたら詳細みれるように」。予定(GoogleEvent)は htmlLink で Googleカレンダーへ遷移＝詳細到達。タスク(GoogleTask)は外部リンク無し→アプリ内詳細(モーダル)で タイトル全文・notes全文(現状は1行truncate)・期日・リスト・アカウント・状態 を表示。 |
+| ステータス | DONE（2026-06-15 Son 駆動・実装 subagent・自己検証→push fa79b3e）。Keita 要望「タスクも予定と同じようにタップしたら詳細みれるように」。予定(GoogleEvent)は htmlLink で Googleカレンダーへ遷移＝詳細到達。タスク(GoogleTask)は外部リンク無し→アプリ内ドロワー(createPortal・Esc/背面クリックで閉じる)で タイトル全文・notes全文(whitespace-pre-wrap・行は1行truncateのまま)・期日・リスト・アカウント・状態 を表示。**検証:** 全体 `tsc -b` EXIT0／ソラ未コミット(Childcare.tsx)を混ぜぬよう自分の2ファイルのみ commit fa79b3e→隔離 worktree(clean HEAD)で `vite build` EXIT0→dist バックアップ後 rsync 反映→mission-control restart→/api/healthz `{"ok":true}`→配信バンドルに新規文字列「タスクの詳細を開く」「タスクの詳細:」「期日なし」在を確認。**未実施:** 当セッションにブラウザツールが無くタップ→ドロワーの実画面動作は目視未確認（Keita 端末での確認 or 後追い Playwright 推奨）。 |
 | 担当 | Son（駆動・検証・反映）／実装 subagent（dev-apollo レーン） |
 | 詳細 | 対象 web/src/views/BabyDiary.tsx の TaskRow（現状 静的 <li>・notes truncate・クリックハンドラ無）。期日ありタスク(≈L1678)と期日なしタスク(≈L1714)の両 TaskRow 使用箇所に適用。予定行(≈L1644)が a[htmlLink] でタップ可能なのに対しタスクはハンドラ無し＝この差を解消。ソラが同ツリーで Childcare.tsx 改修中につき BabyDiary.tsx のみ改変・自分の変更だけコミット→隔離 worktree でビルド（MC-242 と同手順）。 |
 | 受け入れ条件（DoD） | タスク行タップで詳細(タイトル/notes全文/期日/リスト/アカウント/状態)が開く、期日なしタスクでも同様、build green＋実画面確認。 |
