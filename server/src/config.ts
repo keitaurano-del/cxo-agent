@@ -61,6 +61,20 @@ export const DELIVERABLE_UPLOAD_MAX_BYTES = envNum(
 export const DELIVERABLE_UPLOAD_MAX_FILES = envNum('DELIVERABLE_UPLOAD_MAX_FILES', 999);
 
 /**
+ * 成果物ゴミ箱（.trash）の自動パージ閾値（MC-234）。
+ * - 保持期間: deletedAt から DELIVERABLE_TRASH_RETENTION_DAYS 日を超えたバッチは自動削除。
+ *   既定 30 日。0 以下なら期間ベースのパージは無効。
+ * - 容量上限: ゴミ箱の総バイト数が DELIVERABLE_TRASH_MAX_BYTES を超えたら、
+ *   保持期間内であっても古い削除順から削って上限以下に収める。既定 2GB。0 以下なら容量ベースは無効。
+ * いずれも「保持期間内かつ容量内」のバッチは残す（誤って消さない）。
+ */
+export const DELIVERABLE_TRASH_RETENTION_DAYS = envNum('DELIVERABLE_TRASH_RETENTION_DAYS', 30);
+export const DELIVERABLE_TRASH_MAX_BYTES = envNum(
+  'DELIVERABLE_TRASH_MAX_BYTES',
+  2 * 1024 * 1024 * 1024,
+);
+
+/**
  * 成果物プレビュー用の変換キャッシュ（Office→PDF）の置き場。
  * data/ 配下なので .gitignore 済み。ソースの sha1+mtime+size をキーに PDF を保存する。
  */
@@ -894,3 +908,45 @@ export const BABY_DIARY_MEDIA_MAX_BYTES = envNum(
 
 /** 成長日記メディアの 1 リクエストあたり最大ファイル数。 */
 export const BABY_DIARY_MEDIA_MAX_FILES = envNum('BABY_DIARY_MEDIA_MAX_FILES', 10);
+
+// ─── Google 連携（成長日記 MC-233 Phase2/3）────────────────────
+//
+// 成長日記から Google Calendar（予定の読み書き）と Google Photos Picker（写真取り込み）を
+// 使うためのサーバ側 OAuth + API 連携。マルチアカウント（keita.urano + keita.urano2 等を
+// 順に接続）対応。クレデンシャル（CLIENT_ID/SECRET）が未設定でも既存機能は壊さず、
+// Google 系エンドポイントは「未設定」を返す（status は200で configured:false、他は503）。
+//
+// トークンは data/google-tokens.jsonl（.gitignore 済み・last-wins by email）に保存し、
+// access_token/refresh_token/secret はレスポンスに一切含めない（email/connectedAt/scope のみ公開）。
+
+/** Google OAuth クライアント ID（未設定なら Google 連携は「未設定」扱い）。 */
+export const GOOGLE_OAUTH_CLIENT_ID = env('GOOGLE_OAUTH_CLIENT_ID', '');
+
+/** Google OAuth クライアントシークレット（未設定なら Google 連携は「未設定」扱い）。 */
+export const GOOGLE_OAUTH_CLIENT_SECRET = env('GOOGLE_OAUTH_CLIENT_SECRET', '');
+
+/** Google OAuth リダイレクト URI（Google Cloud Console の承認済みリダイレクトと一致させる固定値）。 */
+export const GOOGLE_OAUTH_REDIRECT_URI = env(
+  'GOOGLE_OAUTH_REDIRECT_URI',
+  'https://apollomansion.com/api/google/oauth/callback',
+);
+
+/** Google 連携が設定済みか（client_id と secret が両方非空）。 */
+export function googleConfigured(): boolean {
+  return GOOGLE_OAUTH_CLIENT_ID.trim() !== '' && GOOGLE_OAUTH_CLIENT_SECRET.trim() !== '';
+}
+
+/**
+ * 要求する OAuth スコープ（スペース区切り）。
+ *  - openid email                                              : userinfo で email を取るため
+ *  - calendar.readonly / calendar.events                       : 予定の読み込み・終日イベント作成
+ *  - photospicker.mediaitems.readonly                          : Photos Picker で選択メディアを読む
+ */
+export const GOOGLE_OAUTH_SCOPE =
+  'openid email https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/photospicker.mediaitems.readonly';
+
+/** Google トークン台帳（last-wins by email）。data/ 配下なので .gitignore 済み。 */
+export const GOOGLE_TOKENS_FILE = join(BABY_DIARY_DIR, 'google-tokens.jsonl');
+
+/** Google API 呼び出しの HTTP タイムアウト（ミリ秒）。ネットワーク詰まりで Apollo を固めない。 */
+export const GOOGLE_HTTP_TIMEOUT_MS = envNum('GOOGLE_HTTP_TIMEOUT_MS', 15000);

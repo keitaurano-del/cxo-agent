@@ -14,6 +14,7 @@ import {
   mkdirSync,
   renameSync,
   rmSync,
+  cpSync,
   writeFileSync,
   readFileSync,
 } from 'node:fs';
@@ -52,11 +53,13 @@ import {
   resolveRenameTarget,
   resolveDeliverableDir,
   resolveMoveTarget,
+  resolveCopyTarget,
   trashRoot,
   resolveTrashPath,
   toTrashRelative,
   makeTrashTarget,
 } from './lib/deliverablePath.js';
+import { purgeTrashIfDue } from './lib/trashPurge.js';
 import {
   convertOfficeToPdf,
   isConvertibleToPdf,
@@ -83,6 +86,7 @@ import { startWatch } from './watch.js';
 import { chatRouter, agentMessageHandler, autonomousTickHandler } from './chatRouter.js';
 import { navOrderRouter } from './navOrderRouter.js';
 import { babyDiaryRouter } from './babyDiaryRouter.js';
+import { googleRouter } from './googleRouter.js';
 
 const HEALTHZ_PATH = '/api/healthz';
 
@@ -665,6 +669,8 @@ app.use('/api/deliverables', deliverableChunkRouter());
 
 app.get('/api/deliverables', (_req, res) => {
   try {
+    // MC-234: 一覧取得のタイミングでゴミ箱の自動パージを試行する（throttle 内蔵・例外は握りつぶす）。
+    purgeTrashIfDue();
     res.json({ generatedAt: new Date().toISOString(), files: listDeliverables() });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -1141,6 +1147,64 @@ app.post('/api/deliverables/move', (req, res) => {
   }
 });
 
+// ─── コピー / 複製（MC-235）──────────────────────────────────
+// POST /api/deliverables/copy — ファイル/フォルダを destDir 配下へコピーする（元は残す）。
+//  body: { path: string（コピー元、DELIVERABLES_DIR 相対）, destDir: string（コピー先フォルダ、相対 or ''＝ルート直下） }
+//  - path / destDir 解決は deliverablePath（realpath / traversal 防御）。範囲外/不正は SafePathError→400。
+//  - フォルダは cpSync で再帰コピー。再帰中もコピー先がルート外へ出ない（resolveCopyTarget が destAbs を検証）。
+//  - destDir 省略/'' はルート直下＝同一フォルダ複製にもなる。同名は「<name> のコピー[ n]」を自動付与。
+//  - フォルダを自分自身/子孫へコピーするのは resolveCopyTarget が拒否（無限再帰防止）→400。
+//  - README.md も複製は許可（削除/改名/移動のような破壊操作ではないため保護しない）。
+app.post('/api/deliverables/copy', (req, res) => {
+  try {
+    const relpath = String((req.body as Record<string, unknown>)?.path ?? '');
+    const destDirRaw = (req.body as Record<string, unknown>)?.destDir;
+    if (!relpath) { res.status(400).json({ error: 'path required' }); return; }
+
+    const srcAbs = resolveDeliverablePath(relpath); // traversal/範囲外→SafePathError
+    if (!existsSync(srcAbs)) { res.status(404).json({ error: 'deliverable not found' }); return; }
+
+    let st;
+    try {
+      st = statSync(srcAbs);
+    } catch {
+      res.status(404).json({ error: 'deliverable not found' });
+      return;
+    }
+    const isDir = st.isDirectory();
+    const isFile = st.isFile();
+    if (!isDir && !isFile) {
+      res.status(400).json({ error: 'only files and folders can be copied' });
+      return;
+    }
+
+    // コピー先フォルダ（'' or '/' はルート直下）。実在するディレクトリであること。
+    const destDirAbs = resolveDeliverableDir(destDirRaw);
+    if (!existsSync(destDirAbs)) { res.status(404).json({ error: 'destination folder not found' }); return; }
+    try {
+      if (!statSync(destDirAbs).isDirectory()) {
+        res.status(400).json({ error: 'destination is not a folder' });
+        return;
+      }
+    } catch {
+      res.status(404).json({ error: 'destination folder not found' });
+      return;
+    }
+
+    // 子孫へのコピー拒否・ルート外検証・衝突回避名の解決（SafePathError→400）。
+    const { destAbs, destRel } = resolveCopyTarget(srcAbs, destDirAbs, isDir);
+
+    // ファイルは単純コピー、フォルダは再帰コピー（cpSync recursive）。
+    // resolveCopyTarget が destAbs をルート配下に限定済みなので再帰先もルート外には出ない。
+    cpSync(srcAbs, destAbs, { recursive: isDir, errorOnExist: true, force: false });
+
+    res.json({ ok: true, relpath: destRel });
+  } catch (e) {
+    if (e instanceof SafePathError) { res.status(400).json({ error: e.message }); return; }
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
 // 成果物ディレクトリ作成（MC-154）。DELIVERABLES_DIR 配下に新フォルダを作る。
 //  - body: { name: string, parent?: string }
 //  - name は空白・FS禁止文字・ドット始まり・トラバーサルセグメント（..）を拒否。
@@ -1230,6 +1294,14 @@ app.use('/api/nav-order', navOrderRouter());
 // POST media=multipart アップロード / GET media/:id=実体配信 / DELETE media/:id=削除。
 // 保存先はすべて data/ 配下（.gitignore 済み）。auth ミドルウェア配下＝Cookie/Bearer 必須。
 app.use('/api/baby-diary', babyDiaryRouter());
+
+// ─── Google 連携（成長日記 MC-233 Phase2/3）──────────────────────
+// 成長日記から Google Calendar（予定の読み書き）・Google Photos Picker（写真取り込み）を
+// 使うためのサーバ側 OAuth + API 連携。マルチアカウント（keita.urano + keita.urano2 等）対応。
+// auth ミドルウェア配下＝Cookie/Bearer 必須（OAuth callback もユーザブラウザ Cookie で通る）。
+// クレデンシャル（GOOGLE_OAUTH_CLIENT_ID/_SECRET）未設定時は status が configured:false（200）、
+// 他のエンドポイントは 503 { error:'google-not-configured' }（callback は /baby-diary?google=error へ 302）。
+app.use('/api/google', googleRouter());
 
 // ─── SSE（chokidar watch → broadcast に接続）──────────────────────
 

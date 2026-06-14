@@ -393,3 +393,62 @@ export function resolveMoveTarget(
   }
   return { destAbs, destRel: toDeliverableRelative(destAbs) };
 }
+
+// ─── コピー / 複製（MC-235）────────────────────────────────
+//
+// move（rename で移動）と異なり、copy は元を残して destDir 配下に複製を作る。
+// 同名が在れば「<stem> のコピー[.ext]」「<stem> のコピー 2[.ext]」… を自動付与して衝突回避する。
+// 同一フォルダ内コピー（destDir == 元の親）＝複製。フォルダは呼び出し側が cpSync で再帰コピーする。
+
+/** 「コピー」サフィックスを付けた候補名を作る（n=1 は「のコピー」、n>=2 は「のコピー n」）。 */
+function copySuffixedName(baseName: string, isDir: boolean, n: number): string {
+  const ext = isDir ? '' : extname(baseName);
+  const stem = ext ? baseName.slice(0, -ext.length) : baseName;
+  const suffix = n === 1 ? ' のコピー' : ` のコピー ${n}`;
+  return `${stem}${suffix}${ext}`;
+}
+
+/**
+ * 既存の成果物（srcAbs）を destDirAbs 配下へコピーするための、衝突しない複製先を解決する（MC-235）。
+ *  - srcAbs / destDirAbs は検証済みの DELIVERABLES_DIR 配下絶対パス。
+ *  - destDirAbs が srcAbs（フォルダ）自身またはその子孫なら拒否（無限再帰コピー防止）。
+ *  - destDir 配下に元と同名が無ければ元の basename のまま、在れば「<name> のコピー[ n]」を付与。
+ *  - 複製先が DELIVERABLES_DIR 配下に留まることを再検証する。
+ * @param isDir srcAbs がフォルダか（サフィックス時に拡張子を付けないため）。
+ * @returns { destAbs, destRel } destRel は DELIVERABLES_DIR 相対（posix）。
+ * @throws SafePathError 子孫へのコピー / ルート外 / 衝突回避に失敗。
+ */
+export function resolveCopyTarget(
+  srcAbs: string,
+  destDirAbs: string,
+  isDir: boolean,
+): { destAbs: string; destRel: string } {
+  const root = deliverablesRoot();
+  // フォルダを自分自身/子孫の中へコピーするのは無限再帰になるので拒否。
+  if (isDir && (destDirAbs === srcAbs || isInside(srcAbs, destDirAbs))) {
+    throw new SafePathError('cannot copy a folder into itself or its descendant');
+  }
+
+  const original = basename(srcAbs);
+  // まず元の名前でコピーできるか（destDir が元の親と異なる＝別フォルダへのコピーで衝突しない場合）。
+  const asIs = join(destDirAbs, original);
+  if (!isInside(root, asIs)) {
+    throw new SafePathError('copy target escapes the deliverables root');
+  }
+  if (!existsSync(asIs)) {
+    return { destAbs: asIs, destRel: toDeliverableRelative(asIs) };
+  }
+
+  // 同名が在る（同一フォルダ複製 or 別フォルダで同名衝突）→「のコピー」サフィックスで回避。
+  for (let n = 1; n < 1000; n += 1) {
+    const candidateName = copySuffixedName(original, isDir, n);
+    const candidateAbs = join(destDirAbs, candidateName);
+    if (!isInside(root, candidateAbs)) {
+      throw new SafePathError('copy target escapes the deliverables root');
+    }
+    if (!existsSync(candidateAbs)) {
+      return { destAbs: candidateAbs, destRel: toDeliverableRelative(candidateAbs) };
+    }
+  }
+  throw new SafePathError('could not resolve a non-colliding copy name');
+}

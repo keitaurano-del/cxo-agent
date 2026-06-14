@@ -39,8 +39,11 @@ import {
   ClockIcon,
   CheckIcon,
   ChevronLeftIcon,
+  CopyIcon,
+  InfoIcon,
 } from '../components/icons';
 import { relativeTime } from '../lib/time';
+import { highlightCode, isHighlightable } from '../lib/codeHighlight';
 
 const IMG_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']);
 
@@ -173,6 +176,31 @@ async function moveDeliverable(
   }
 }
 
+// MC-235: コピー/複製。destDir が元の親と同じなら複製（サーバ側で「のコピー」サフィックス付与）。
+async function copyDeliverable(
+  relpath: string,
+  destDir: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetch('/api/deliverables/copy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: relpath, destDir }),
+    });
+    if (res.ok) return { ok: true };
+    let msg = `コピーに失敗しました（HTTP ${res.status}）。`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) msg = body.error;
+    } catch {
+      /* JSON でなければ既定メッセージ。 */
+    }
+    return { ok: false, error: msg };
+  } catch {
+    return { ok: false, error: 'ネットワークエラーでコピーに失敗しました。' };
+  }
+}
+
 /** relpath の親ディレクトリ（DELIVERABLES_DIR 相対、ルート直下は ''）。 */
 function parentDirOf(relpath: string): string {
   const idx = relpath.lastIndexOf('/');
@@ -247,6 +275,8 @@ interface ItemInteractions {
   // ドラッグ中の relpath（ドロップ先の自己無効化判定に使う）。
   draggingPath: string | null;
   setDraggingPath: (p: string | null) => void;
+  // MC-235: コピー/複製ダイアログを開く。
+  onCopyRequest: (f: DeliverableFile) => void;
 }
 
 /** リネーム API を叩く。成功で { ok:true }、失敗で { ok:false, error } を返す。 */
@@ -508,7 +538,12 @@ function FileViewerBody({ file }: { file: DeliverableFile }) {
   const previewSrc = `/api/deliverables/preview?path=${encodeURIComponent(file.relpath)}`;
   const isImage = file.kind === 'image' || IMG_EXTS.has(file.ext.toLowerCase());
   const isPdf = file.kind === 'pdf';
-  const isText = TEXT_KINDS.has(file.kind) || file.ext.toLowerCase() === '.csv';
+  // MC-236: テキスト系（既存の text/markdown/csv）に加え、コード拡張子（.ts/.py/.json 等）も
+  // テキストとして取得して表示＋シンタックスハイライトする（収集側 kind は 'other' でも拡張子で判定）。
+  const isText =
+    TEXT_KINDS.has(file.kind) ||
+    file.ext.toLowerCase() === '.csv' ||
+    isHighlightable(file.ext);
   const officePreviewable = isOfficePreviewable(file);
 
   const [text, setText] = useState<string | null>(null);
@@ -552,9 +587,11 @@ function FileViewerBody({ file }: { file: DeliverableFile }) {
     if (text === null) {
       return <p className="text-xs text-text-faint">読み込み中…</p>;
     }
+    // MC-236: コード/構造化テキストは拡張子判定で軽量シンタックスハイライト。
+    const highlightable = isHighlightable(file.ext);
     return (
-      <pre className="max-h-[80vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-surface p-3 text-xs text-text">
-        {text}
+      <pre className="max-h-[80vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-surface p-3 font-mono text-xs text-text">
+        {highlightable ? highlightCode(text, file.ext) : text}
       </pre>
     );
   }
@@ -566,13 +603,68 @@ function FileViewerBody({ file }: { file: DeliverableFile }) {
   );
 }
 
-function FileViewer({ file, onClose }: { file: DeliverableFile; onClose: () => void }) {
+// MC-236: ファイルがインラインプレビュー可能か（Quick Look / 矢印送りの対象判定）。
+function isPreviewable(file: DeliverableFile): boolean {
+  if (file.isDir) return false;
+  const isImage = file.kind === 'image' || IMG_EXTS.has(file.ext.toLowerCase());
+  const isPdf = file.kind === 'pdf';
+  const isText =
+    TEXT_KINDS.has(file.kind) || file.ext.toLowerCase() === CSV_EXT || isHighlightable(file.ext);
+  return isImage || isPdf || isText || isOfficePreviewable(file);
+}
+
+// MC-236: 選択中ファイルのメタ情報パネル（右ペイン詳細・モーダル詳細で共用）。
+function FileMetaPanel({ file }: { file: DeliverableFile }) {
+  const rows: Array<[string, string]> = [
+    ['種類', KIND_LABELS[file.kind] ?? file.kind],
+    ['サイズ', humanReadableSize(file.sizeBytes)],
+    ['更新', relativeTime(file.mtime)],
+    ['拡張子', file.ext || '—'],
+    ['パス', file.relpath],
+  ];
+  return (
+    <dl className="space-y-1.5 text-xs">
+      {rows.map(([k, v]) => (
+        <div key={k} className="flex gap-2">
+          <dt className="w-12 shrink-0 text-text-faint">{k}</dt>
+          <dd className="min-w-0 break-words text-text-muted">{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+// MC-236: Quick Look モーダル。矢印キー（←/→）で前後送り、Esc で閉じる。
+//  files は送り対象（プレビュー可能ファイルの表示順）、onNavigate で対象を差し替える。
+function FileViewer({
+  file, files, onNavigate, onClose,
+}: {
+  file: DeliverableFile;
+  files: DeliverableFile[];
+  onNavigate: (f: DeliverableFile) => void;
+  onClose: () => void;
+}) {
   const downloadHref = `/api/deliverables/file?path=${encodeURIComponent(file.relpath)}`;
+  const idx = files.findIndex((f) => f.relpath === file.relpath);
+  const hasPrev = idx > 0;
+  const hasNext = idx >= 0 && idx < files.length - 1;
+
+  const goPrev = useCallback(() => {
+    if (idx > 0) onNavigate(files[idx - 1]);
+  }, [idx, files, onNavigate]);
+  const goNext = useCallback(() => {
+    if (idx >= 0 && idx < files.length - 1) onNavigate(files[idx + 1]);
+  }, [idx, files, onNavigate]);
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev(); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); goNext(); }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, goPrev, goNext]);
 
   return (
     <div
@@ -582,9 +674,36 @@ function FileViewer({ file, onClose }: { file: DeliverableFile; onClose: () => v
       aria-label={`${file.name} プレビュー`}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="truncate text-sm font-medium text-text" title={file.name}>
-          {file.name}
-        </span>
+        <div className="flex min-w-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={goPrev}
+            disabled={!hasPrev}
+            className="shrink-0 rounded p-1 text-text-faint transition-colors hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-30"
+            aria-label="前のファイル"
+            title="前のファイル（←）"
+          >
+            <ChevronLeftIcon width={18} height={18} />
+          </button>
+          <button
+            type="button"
+            onClick={goNext}
+            disabled={!hasNext}
+            className="shrink-0 rounded p-1 text-text-faint transition-colors hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-30"
+            aria-label="次のファイル"
+            title="次のファイル（→）"
+          >
+            <ChevronRightIcon width={18} height={18} />
+          </button>
+          <span className="truncate text-sm font-medium text-text" title={file.name}>
+            {file.name}
+          </span>
+          {idx >= 0 && files.length > 1 && (
+            <span className="shrink-0 text-xs text-text-faint">
+              {idx + 1} / {files.length}
+            </span>
+          )}
+        </div>
         <div className="flex shrink-0 items-center gap-1">
           <a
             href={downloadHref}
@@ -627,7 +746,8 @@ function FileCard({
     file.kind === 'image' || IMG_EXTS.has(file.ext.toLowerCase());
   const isPdf = file.kind === 'pdf';
   const officePreviewable = isOfficePreviewable(file);
-  const isText = TEXT_KINDS.has(file.kind) || file.ext.toLowerCase() === CSV_EXT;
+  const isText =
+    TEXT_KINDS.has(file.kind) || file.ext.toLowerCase() === CSV_EXT || isHighlightable(file.ext);
   const viewable = isImage || isPdf || officePreviewable || isText;
   const downloadHref = `/api/deliverables/file?path=${encodeURIComponent(file.relpath)}`;
   const selected = interactions.selectedPaths.has(file.relpath);
@@ -728,6 +848,14 @@ function FileCard({
             aria-label={`${file.name} を移動`}
           >
             <MoveIcon width={16} height={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => interactions.onCopyRequest(file)}
+            className="rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
+            aria-label={`${file.name} をコピー`}
+          >
+            <CopyIcon width={16} height={16} />
           </button>
           <a
             href={downloadHref}
@@ -834,7 +962,8 @@ function FileRow({
   const selected = interactions.selectedPaths.has(file.relpath);
 
   const isImage = file.kind === 'image' || IMG_EXTS.has(file.ext.toLowerCase());
-  const isText = TEXT_KINDS.has(file.kind) || file.ext.toLowerCase() === CSV_EXT;
+  const isText =
+    TEXT_KINDS.has(file.kind) || file.ext.toLowerCase() === CSV_EXT || isHighlightable(file.ext);
   const viewable = isImage || file.kind === 'pdf' || isOfficePreviewable(file) || isText;
 
   const commitRename = useCallback(async (value: string) => {
@@ -928,6 +1057,14 @@ function FileRow({
           aria-label={`${file.name} を移動`}
         >
           <MoveIcon width={14} height={14} />
+        </button>
+        <button
+          type="button"
+          onClick={() => interactions.onCopyRequest(file)}
+          className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text"
+          aria-label={`${file.name} をコピー`}
+        >
+          <CopyIcon width={14} height={14} />
         </button>
         <a
           href={downloadHref}
@@ -1119,6 +1256,14 @@ function FolderNodeView({
               aria-label={`${node.name} を移動`}
             >
               <MoveIcon width={14} height={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => interactions.onCopyRequest(folderAsFile)}
+              className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text"
+              aria-label={`${node.name} をコピー`}
+            >
+              <CopyIcon width={14} height={14} />
             </button>
             <button
               type="button"
@@ -1694,13 +1839,132 @@ function MoveDialog({
   );
 }
 
+// ─── コピー / 複製ダイアログ（MC-235）──────────────────────────────
+// コピー対象（複数可）を受けてコピー先フォルダを選ばせ、確定で copy を実行する。
+// move と違い「現在の親フォルダ」も選べる（同一フォルダ複製＝「のコピー」サフィックスが付く）。
+// フォルダを自分自身/子孫へコピーするのは無効化（無限再帰防止）。
+function CopyDialog({
+  items, tree, onDone, onCancel,
+}: {
+  items: DeliverableFile[];
+  tree: TreeNode;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const [destDir, setDestDir] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const choices = collectFolderChoices(tree);
+
+  // コピー不可な移動先（フォルダ自身・その子孫）だけを無効化する。
+  // move と違い、現在の親へのコピー（複製）は許可するので親は無効化しない。
+  const isDisabled = (choicePath: string): boolean => {
+    for (const it of items) {
+      if (it.isDir) {
+        if (choicePath === it.relpath) return true;
+        if (choicePath.startsWith(it.relpath + '/')) return true;
+      }
+    }
+    return false;
+  };
+
+  const handleConfirm = useCallback(async () => {
+    if (destDir === null) return;
+    setBusy(true);
+    setError(null);
+    const failed: string[] = [];
+    for (const it of items) {
+      const result = await copyDeliverable(it.relpath, destDir);
+      if (!result.ok) failed.push(`${it.name}: ${result.error}`);
+    }
+    setBusy(false);
+    if (failed.length > 0) {
+      setError(failed.join(' / '));
+      return;
+    }
+    onDone();
+  }, [destDir, items, onDone]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-bg/60 p-4 backdrop-blur"
+      onClick={onCancel}
+      role="dialog"
+      aria-modal
+      aria-label="コピー先を選ぶ"
+    >
+      <div
+        className="flex max-h-[80vh] w-full max-w-sm flex-col rounded-xl border border-border bg-surface p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="mb-1 text-sm font-semibold text-text">コピー先を選ぶ</h2>
+        <p className="mb-3 truncate text-xs text-text-faint">
+          {items.length === 1 ? items[0].name : `${items.length} 件のアイテム`}{' '}
+          のコピー先フォルダ（同じフォルダを選ぶと複製します）
+        </p>
+        <div className="mb-3 flex-1 overflow-y-auto rounded-lg border border-border bg-surface-2">
+          {choices.map((c) => {
+            const disabled = isDisabled(c.path);
+            const selected = destDir === c.path;
+            return (
+              <button
+                key={c.path || '__root__'}
+                type="button"
+                disabled={disabled}
+                onClick={() => setDestDir(c.path)}
+                style={{ paddingLeft: `${8 + c.depth * 16}px` }}
+                className={`flex w-full items-center gap-1.5 py-1.5 pr-2 text-left text-xs transition-colors ${
+                  selected
+                    ? 'bg-accent text-bg font-semibold'
+                    : disabled
+                      ? 'cursor-not-allowed text-text-faint opacity-50'
+                      : 'text-text-muted hover:bg-surface-3 hover:text-text'
+                }`}
+              >
+                <span className="shrink-0">
+                  <FolderIcon width={14} height={14} />
+                </span>
+                <span className="truncate">{c.name}</span>
+              </button>
+            );
+          })}
+        </div>
+        {error && (
+          <p className="mb-2 text-xs" style={{ color: 'var(--mc-stalled)' }}>{error}</p>
+        )}
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-full px-3 py-1 text-xs text-text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
+          >
+            キャンセル
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={busy || destDir === null}
+            className="inline-flex items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-bg transition-opacity disabled:opacity-50"
+          >
+            <CopyIcon width={13} height={13} />
+            {busy ? 'コピー中…' : 'ここへコピー'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── 一括操作ツールバー（MC-229）──────────────────────────────────
 // 選択中のみ表示する文脈ツールバー。選択数バッジ＋一括削除/移動/ダウンロード。
 function SelectionToolbar({
-  count, onMove, onDelete, onDownload, onClear,
+  count, onMove, onCopy, onDelete, onDownload, onClear,
 }: {
   count: number;
   onMove: () => void;
+  onCopy: () => void;
   onDelete: () => void;
   onDownload: () => void;
   onClear: () => void;
@@ -1718,6 +1982,14 @@ function SelectionToolbar({
       >
         <MoveIcon width={13} height={13} />
         移動
+      </button>
+      <button
+        type="button"
+        onClick={onCopy}
+        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs font-semibold text-text-muted transition-colors hover:bg-surface-3 hover:text-text"
+      >
+        <CopyIcon width={13} height={13} />
+        コピー
       </button>
       <button
         type="button"
@@ -1886,6 +2158,8 @@ export default function Deliverables() {
   // MC-228: D&D 中のパス・「移動先を選ぶ」ダイアログ対象。
   const [draggingPath, setDraggingPath] = useState<string | null>(null);
   const [moveTargets, setMoveTargets] = useState<DeliverableFile[] | null>(null);
+  // MC-235: 「コピー先を選ぶ」ダイアログ対象。
+  const [copyTargets, setCopyTargets] = useState<DeliverableFile[] | null>(null);
   const [rootDropActive, setRootDropActive] = useState(false);
   // MC-232: 現在地・ナビ履歴（戻る/進む）・最近使った項目。
   const [currentDir, setCurrentDir] = useState('');
@@ -1946,6 +2220,11 @@ export default function Deliverables() {
   // MC-229: 現在表示中のアイテム（フォルダ＋ファイル）の表示順 relpath 列。
   // Shift 連続選択の範囲計算に使う。レンダリングのたびに ref を更新する。
   const visiblePathsRef = useRef<string[]>([]);
+  // MC-236: Space キー Quick Look 用の最新状態（候補ファイルとモーダル占有状態）。
+  const quickLookRef = useRef<{ candidate: DeliverableFile | null; busy: boolean }>({
+    candidate: null,
+    busy: false,
+  });
 
   // MC-229: モディファイア付きクリックで選択をトグルする。
   //  - meta/ctrl: 個別トグル（アンカー更新）。
@@ -2070,6 +2349,25 @@ export default function Deliverables() {
     return () => window.removeEventListener('deliverables:uploaded', handler);
   }, [refetch]);
 
+  // MC-236: Space キーで選択中ファイルを Quick Look（macOS Finder の挙動に倣う）。
+  // 入力欄/テキストエリア/編集中要素にフォーカスがある時、既にモーダル表示中の時は無視。
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== ' ' && e.code !== 'Space') return;
+      const t = e.target as HTMLElement | null;
+      if (t) {
+        const tag = t.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable) return;
+      }
+      const { candidate, busy } = quickLookRef.current;
+      if (busy || !candidate) return;
+      e.preventDefault();
+      setSelectedViewFile(candidate);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // files が更新されたら、アップロード直後フラグが立っていれば新規ファイルを recent に記録。
   useEffect(() => {
     const current = data?.files ?? [];
@@ -2183,6 +2481,26 @@ export default function Deliverables() {
   }
   visiblePathsRef.current = orderedVisible;
 
+  // MC-236: Quick Look の前後送り対象＝表示順のプレビュー可能ファイル列（フォルダ・非対応は除外）。
+  const previewableSiblings: DeliverableFile[] = orderedVisible
+    .map((p) => allByPath.get(p))
+    .filter((f): f is DeliverableFile => !!f && isPreviewable(f));
+
+  // MC-236: Space キーで「現在の対象」を Quick Look。対象＝単一選択 or 最後にトグルしたアンカー。
+  // 入力欄フォーカス中・モーダル表示中は無視。最新状態を ref 越しにハンドラへ渡す。
+  let detailFile: DeliverableFile | null = null;
+  if (selectedPaths.size === 1) {
+    const only = allByPath.get([...selectedPaths][0]);
+    if (only && isPreviewable(only)) detailFile = only;
+  } else if (selectionAnchor) {
+    const anchored = allByPath.get(selectionAnchor);
+    if (anchored && isPreviewable(anchored)) detailFile = anchored;
+  }
+  quickLookRef.current = {
+    candidate: detailFile,
+    busy: !!(selectedViewFile || moveTargets || copyTargets),
+  };
+
   // MC-228/229: 子コンポーネントへ渡す共通インタラクション束。
   const interactions: ItemInteractions = {
     selectedPaths,
@@ -2190,6 +2508,7 @@ export default function Deliverables() {
     onDropMove: handleDropMove,
     draggingPath,
     setDraggingPath,
+    onCopyRequest: (f) => setCopyTargets([f]),
   };
 
   const canBack = navIndex > 0;
@@ -2230,7 +2549,8 @@ export default function Deliverables() {
         <UploadPanel />
         <ResourceState loading={loading} error={error} hasData={!!data}>
           {data && (
-            <>
+            <div className="flex gap-4">
+              <div className="min-w-0 flex-1">
               {/* ツールバー: ビュー切り替え + 種別フィルタ（リストビュー時） + 新規フォルダ */}
               <div className="mb-4 flex flex-wrap items-center gap-2">
                 {/* ビュー切り替えボタン */}
@@ -2324,6 +2644,7 @@ export default function Deliverables() {
                 <SelectionToolbar
                   count={selectedItems.length}
                   onMove={() => setMoveTargets(selectedItems)}
+                  onCopy={() => setCopyTargets(selectedItems)}
                   onDelete={() => handleBulkDelete(selectedItems)}
                   onDownload={() => handleBulkDownload(selectedItems)}
                   onClear={clearSelection}
@@ -2422,7 +2743,43 @@ export default function Deliverables() {
                   </div>
                 )
               )}
-            </>
+              </div>
+
+              {/* MC-236: 右ペイン詳細（選択中ファイルのメタ＋プレビュー）。
+                  広い画面（xl 以上）でのみ常時表示。狭い画面（〜390px 含む）では非表示にし、
+                  Space / プレビューボタンの Quick Look モーダルにフォールバックする。 */}
+              <aside className="hidden w-72 shrink-0 xl:block">
+                <div className="sticky top-0 rounded-lg border border-border bg-surface p-3">
+                  <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-text-muted">
+                    <InfoIcon width={14} height={14} />
+                    詳細
+                  </div>
+                  {detailFile ? (
+                    <div className="space-y-3">
+                      <div className="truncate text-sm font-medium text-text" title={detailFile.name}>
+                        {detailFile.name}
+                      </div>
+                      <div className="max-h-72 overflow-auto rounded-lg border border-border bg-surface-2">
+                        <FileViewerBody file={detailFile} />
+                      </div>
+                      <FileMetaPanel file={detailFile} />
+                      <button
+                        type="button"
+                        onClick={() => openView(detailFile)}
+                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text-muted transition-colors hover:bg-surface-3 hover:text-text"
+                      >
+                        <EyeIcon width={13} height={13} />
+                        大きく表示（Space）
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-text-faint">
+                      ファイルを 1 件選択すると、ここに詳細とプレビューが表示されます。
+                    </p>
+                  )}
+                </div>
+              </aside>
+            </div>
           )}
         </ResourceState>
       </div>
@@ -2434,8 +2791,21 @@ export default function Deliverables() {
           onDone={() => { setMoveTargets(null); clearSelection(); refetch(); }}
         />
       )}
+      {copyTargets && (
+        <CopyDialog
+          items={copyTargets}
+          tree={tree}
+          onCancel={() => setCopyTargets(null)}
+          onDone={() => { setCopyTargets(null); clearSelection(); refetch(); }}
+        />
+      )}
       {selectedViewFile && (
-        <FileViewer file={selectedViewFile} onClose={() => setSelectedViewFile(null)} />
+        <FileViewer
+          file={selectedViewFile}
+          files={previewableSiblings}
+          onNavigate={setSelectedViewFile}
+          onClose={() => setSelectedViewFile(null)}
+        />
       )}
       {pendingUndo && (
         <UndoToast
