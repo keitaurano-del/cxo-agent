@@ -2857,3 +2857,19 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 依存 | MC-236（詳細ペイン）、MC-231（ソート拡張は任意）。 |
 | 備考 | NO_PUSH。collector に作成日フィールド追加＝server側も変更。MC-235/236 と同ファイル群のため次スライスで実施。<br>【実装/検証 2026-06-14 ソラ・commit 602d87d（ローカルのみ・未push）】collector に `created` 追加（`createdIso`＝birthtime→ctime→mtime フォールバックで「不明」回避、`server/src/collectors/deliverables.ts`）、型(`server/.../deliverables.ts`＋`web/src/lib/types.ts`)へ反映。UI で更新日/作成日を区別表示（右ペイン `FileMetaPanel`＋カードのメタ行、ツールチップで `absoluteTime` 絶対日時）。MC-231 ソートに「作成日」追加（SortControl/sortFiles/MC-239 列ヘッダ）。検証＝server tsc0/web build0/restart healthz200、API `/api/deliverables` が `created`（birthtime）を返すことを curl 確認、Playwright で リスト列ヘッダ「作成日」表示を確認。 |
 | 更新日 | 2026-06-14 |
+
+---
+
+### MC-242 — Vault を「ドキュメント」ページ内タブに統合
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-242 |
+| タイトル | サイドバーの独立「Vault」項目を廃止し、ドキュメントページに〔ドキュメント｜Vault〕タブを新設 |
+| 優先度 | P2 |
+| ステータス | DONE（2026-06-14 Son 駆動・自己検証→push c01b08a）。Keita 要望「Vaultはドキュメントの別タブにして」。**ソラがDeliverables.tsxをMC-236〜241で活発改修中のため本体は無改変**＝新規 `web/src/views/DocumentsTabs.tsx`（Deliverables/Vault を遅延ロードで切替える薄いタブ・ラッパ、各ビューは自前ヘッダ保持）を作成。App.tsx の NAV から独立Vault項目を削除・`/deliverables`→`<DocumentsTabs/>`・`/vault`→`<DocumentsTabs initialTab="vault"/>`（後方互換・URL同期）。VaultIcon/Vault/Deliverables の不要 import 整理。**共有ツリーがソラの未コミットで web build 不可のため、私の分(App.tsx＋DocumentsTabs.tsx)だけコミット→隔離worktree(HEAD正常版)でビルド→dist本番反映→restart**でライブ化(ソラ無干渉)。Playwright実画面: サイドバーVault消失/ドキュメント残・タブ両表示・/vaultでVault内容・コンソールエラー無。 |
+| 担当 | Son（駆動・実装・検証） |
+| 詳細 | 成長日記→育児タブ(MC-233)と同じ統合方針。ただし Deliverables.tsx はソラ作業中につき**ラッパ方式で本体非改変**。注: コード内コメントの「MC-236」は採番衝突前の暫定で、正は本タスク MC-242。 |
+| 受け入れ条件（DoD） | サイドバーから独立Vault消失、ドキュメントページでタブ切替可、/vault は Vault タブ着地、build green＋実画面確認。 |
+| 依存 | web/src/App.tsx, 新規 web/src/views/DocumentsTabs.tsx。Deliverables.tsx/Vault.tsx 本体は無改変。関連 MC-233(同方式)。 |
+| 更新日 | 2026-06-14 |
