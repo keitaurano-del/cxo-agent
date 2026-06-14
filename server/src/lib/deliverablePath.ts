@@ -346,3 +346,50 @@ export function makeTrashTarget(srcRel: string): {
   const destAbs = join(trashRoot(), batchId, cleaned);
   return { batchId, destAbs, originalRel: cleaned };
 }
+
+// ─── 移動（MC-228）: 別フォルダへの移動先を解決する ──────────────────────
+//
+// rename（同一親内）と異なり、move は親フォルダを変える。destDir（移動先フォルダ、
+// DELIVERABLES_DIR 相対 or ''＝ルート直下）配下に「元の basename」で置く。
+// 親→子の循環移動（フォルダを自分自身/子孫の中へ入れる）を弾く。
+
+/**
+ * 移動先ディレクトリ（destDir）を検証し、安全な絶対パスを返す（MC-228）。
+ * 空文字 / '/' はルート直下を意味する。実在するディレクトリでなければならない判定は
+ * 呼び出し側で行う（ここはパス検証のみ）。
+ * @throws SafePathError 不正・ルート外・禁止セグメント。
+ */
+export function resolveDeliverableDir(destDir: unknown): string {
+  // 空 or ルート指定はルート直下。
+  if (destDir === '' || destDir === '/' || destDir === undefined || destDir === null) {
+    return deliverablesRoot();
+  }
+  // 文字列でルート相対のディレクトリパスを解決（resolveDeliverablePath と同じ防御）。
+  return resolveDeliverablePath(destDir);
+}
+
+/**
+ * 既存の成果物（srcAbs）を destDirAbs 配下へ移動するための移動先絶対パスを解決する（MC-228）。
+ *  - srcAbs / destDirAbs は検証済みの DELIVERABLES_DIR 配下絶対パス。
+ *  - 移動後の basename は元と同じ（リネームは MC-227 の別 API）。
+ *  - 親→子の循環移動を防ぐ: destDirAbs が srcAbs 自身 or その子孫なら拒否。
+ *  - 移動先が DELIVERABLES_DIR 配下に留まることを再検証する。
+ * @returns { destAbs, destRel } destRel は DELIVERABLES_DIR 相対（posix）。
+ * @throws SafePathError 循環移動 / ルート外。
+ */
+export function resolveMoveTarget(
+  srcAbs: string,
+  destDirAbs: string,
+): { destAbs: string; destRel: string } {
+  const root = deliverablesRoot();
+  // 循環移動防止: 移動先ディレクトリが移動元（フォルダ）自身またはその子孫なら拒否。
+  // isInside(srcAbs, destDirAbs) === true は destDirAbs が srcAbs 配下＝循環。
+  if (destDirAbs === srcAbs || isInside(srcAbs, destDirAbs)) {
+    throw new SafePathError('cannot move a folder into itself or its descendant');
+  }
+  const destAbs = join(destDirAbs, basename(srcAbs));
+  if (!isInside(root, destAbs)) {
+    throw new SafePathError('move target escapes the deliverables root');
+  }
+  return { destAbs, destRel: toDeliverableRelative(destAbs) };
+}

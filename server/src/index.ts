@@ -50,6 +50,8 @@ import {
   toDeliverableRelative,
   validateRenameName,
   resolveRenameTarget,
+  resolveDeliverableDir,
+  resolveMoveTarget,
   trashRoot,
   resolveTrashPath,
   toTrashRelative,
@@ -1064,6 +1066,70 @@ app.post('/api/deliverables/rename', (req, res) => {
       if (st.isFile()) deleteOfficePdfCache(srcAbs);
     } catch {
       /* キャッシュ掃除失敗は改名を妨げない。 */
+    }
+
+    renameSync(srcAbs, destAbs);
+    res.json({ ok: true, relpath: destRel });
+  } catch (e) {
+    if (e instanceof SafePathError) { res.status(400).json({ error: e.message }); return; }
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+// ─── 移動（MC-228）──────────────────────────────────────
+// POST /api/deliverables/move — ファイル/フォルダを別フォルダへ移動する。
+//  body: { path: string（移動元、DELIVERABLES_DIR 相対）, destDir: string（移動先フォルダ、相対 or ''＝ルート直下） }
+//  - path / destDir 解決は deliverablePath（realpath / traversal 防御）。範囲外/不正は SafePathError→400。
+//  - README.md は保護（移動拒否＝403）。
+//  - 親→子の循環移動（フォルダを自分自身/子孫の中へ）は resolveMoveTarget が SafePathError→400。
+//  - 移動先に同名が既に在れば 409（衝突拒否）。移動元/移動先フォルダが無ければ 404。
+app.post('/api/deliverables/move', (req, res) => {
+  try {
+    const relpath = String((req.body as Record<string, unknown>)?.path ?? '');
+    const destDirRaw = (req.body as Record<string, unknown>)?.destDir;
+    if (!relpath) { res.status(400).json({ error: 'path required' }); return; }
+
+    const srcAbs = resolveDeliverablePath(relpath); // traversal/範囲外→SafePathError
+    if (!existsSync(srcAbs)) { res.status(404).json({ error: 'deliverable not found' }); return; }
+
+    // README.md（ビューの説明用）は保護。
+    if (basename(srcAbs).toLowerCase() === 'readme.md') {
+      res.status(403).json({ error: 'this file is protected and cannot be moved' });
+      return;
+    }
+
+    // 移動先フォルダ（'' or '/' はルート直下）。実在するディレクトリであること。
+    const destDirAbs = resolveDeliverableDir(destDirRaw);
+    if (!existsSync(destDirAbs)) { res.status(404).json({ error: 'destination folder not found' }); return; }
+    try {
+      if (!statSync(destDirAbs).isDirectory()) {
+        res.status(400).json({ error: 'destination is not a folder' });
+        return;
+      }
+    } catch {
+      res.status(404).json({ error: 'destination folder not found' });
+      return;
+    }
+
+    // 循環移動防止・ルート外検証は resolveMoveTarget が担う（SafePathError→400）。
+    const { destAbs, destRel } = resolveMoveTarget(srcAbs, destDirAbs);
+
+    // 移動先が移動元と同一（既にそのフォルダ直下に在る）なら no-op として成功扱い。
+    if (destAbs === srcAbs) {
+      res.json({ ok: true, relpath: toDeliverableRelative(srcAbs) });
+      return;
+    }
+    if (existsSync(destAbs)) {
+      res.status(409).json({ error: '移動先に同名のファイルまたはフォルダが既に存在します。' });
+      return;
+    }
+
+    // 変換キャッシュは旧パス基準で残るため、ファイル移動時は旧キャッシュを掃除しておく。
+    try {
+      const st = statSync(srcAbs);
+      if (st.isFile()) deleteOfficePdfCache(srcAbs);
+    } catch {
+      /* キャッシュ掃除失敗は移動を妨げない。 */
     }
 
     renameSync(srcAbs, destAbs);

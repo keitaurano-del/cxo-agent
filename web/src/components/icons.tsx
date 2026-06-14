@@ -577,3 +577,42 @@ export function RestoreIcon(props: IconProps) {
     </svg>
   );
 }
+
+// 移動アイコン（MC-228 別フォルダへ移動）
+export function MoveIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-7.5l-2-2H4a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1Z" />
+      <path d="M9 13h6" />
+      <path d="M12 10l3 3-3 3" />
+    </svg>
+  );
+}
+
+// 時計アイコン（MC-232 最近使った項目）
+export function ClockIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+// チェックアイコン（MC-229 選択中マーカー）
+export function CheckIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M5 12l4.5 4.5L19 7" />
+    </svg>
+  );
+}
+
+// 左シェブロン（MC-232 戻る）
+export function ChevronLeftIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
+  );
+}
