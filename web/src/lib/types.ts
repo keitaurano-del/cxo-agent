@@ -358,7 +358,8 @@ export interface DeliverableFile {
   name: string;
   relpath: string; // DELIVERABLES_DIR 相対（posix 区切り）
   sizeBytes: number;
-  mtime: string; // ISO
+  mtime: string; // ISO（更新日）
+  created: string; // ISO（作成日。MC-241）
   ext: string;
   kind: DeliverableKind;
   isDir?: boolean; // 空ディレクトリのエントリ

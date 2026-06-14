@@ -42,7 +42,7 @@ import {
   CopyIcon,
   InfoIcon,
 } from '../components/icons';
-import { relativeTime } from '../lib/time';
+import { relativeTime, absoluteTime } from '../lib/time';
 import { highlightCode, isHighlightable } from '../lib/codeHighlight';
 
 const IMG_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']);
@@ -84,7 +84,7 @@ function humanReadableSize(bytes: number): string {
 // ─── 並び替え（MC-231）──────────────────────────────────────
 // 名前 / 更新日 / サイズ × 昇順 / 降順。選択中ソートは localStorage に永続化する。
 
-type SortKey = 'name' | 'mtime' | 'size';
+type SortKey = 'name' | 'mtime' | 'created' | 'size';
 type SortDir = 'asc' | 'desc';
 
 interface SortPref {
@@ -98,6 +98,7 @@ const DEFAULT_SORT: SortPref = { key: 'mtime', dir: 'desc' };
 const SORT_KEY_LABELS: Record<SortKey, string> = {
   name: '名前',
   mtime: '更新日',
+  created: '作成日',
   size: 'サイズ',
 };
 
@@ -107,7 +108,7 @@ function loadSortPref(): SortPref {
     if (!raw) return DEFAULT_SORT;
     const parsed = JSON.parse(raw) as Partial<SortPref>;
     const key: SortKey =
-      parsed.key === 'name' || parsed.key === 'mtime' || parsed.key === 'size'
+      parsed.key === 'name' || parsed.key === 'mtime' || parsed.key === 'created' || parsed.key === 'size'
         ? parsed.key
         : DEFAULT_SORT.key;
     const dir: SortDir = parsed.dir === 'asc' || parsed.dir === 'desc' ? parsed.dir : DEFAULT_SORT.dir;
@@ -135,6 +136,8 @@ function sortFiles(files: DeliverableFile[], pref: SortPref): DeliverableFile[] 
       cmp = a.name.localeCompare(b.name, 'ja', { numeric: true, sensitivity: 'base' });
     } else if (pref.key === 'size') {
       cmp = a.sizeBytes - b.sizeBytes;
+    } else if (pref.key === 'created') {
+      cmp = Date.parse(a.created ?? a.mtime) - Date.parse(b.created ?? b.mtime);
     } else {
       cmp = Date.parse(a.mtime) - Date.parse(b.mtime);
     }
@@ -613,21 +616,23 @@ function isPreviewable(file: DeliverableFile): boolean {
   return isImage || isPdf || isText || isOfficePreviewable(file);
 }
 
-// MC-236: 選択中ファイルのメタ情報パネル（右ペイン詳細・モーダル詳細で共用）。
+// MC-236 / MC-241: 選択中ファイルのメタ情報パネル（右ペイン詳細・モーダル詳細で共用）。
+// 更新日・作成日（MC-241）は区別して表示し、ツールチップで絶対日時を出す。
 function FileMetaPanel({ file }: { file: DeliverableFile }) {
-  const rows: Array<[string, string]> = [
-    ['種類', KIND_LABELS[file.kind] ?? file.kind],
-    ['サイズ', humanReadableSize(file.sizeBytes)],
-    ['更新', relativeTime(file.mtime)],
-    ['拡張子', file.ext || '—'],
-    ['パス', file.relpath],
+  // [ラベル, 表示値, ツールチップ（絶対日時。無ければ空）]
+  const rows: Array<[string, string, string]> = [
+    ['種類', KIND_LABELS[file.kind] ?? file.kind, ''],
+    ['サイズ', humanReadableSize(file.sizeBytes), ''],
+    ['更新日', relativeTime(file.mtime), absoluteTime(file.mtime)],
+    ['作成日', relativeTime(file.created), absoluteTime(file.created)],
+    ['拡張子', file.ext || '—', ''],
   ];
   return (
     <dl className="space-y-1.5 text-xs">
-      {rows.map(([k, v]) => (
+      {rows.map(([k, v, tip]) => (
         <div key={k} className="flex gap-2">
           <dt className="w-12 shrink-0 text-text-faint">{k}</dt>
-          <dd className="min-w-0 break-words text-text-muted">{v}</dd>
+          <dd className="min-w-0 break-words text-text-muted" title={tip || undefined}>{v}</dd>
         </div>
       ))}
     </dl>
@@ -875,9 +880,10 @@ function FileCard({
           </button>
         </div>
       </div>
-      <div className="mt-2 flex items-center gap-3 text-xs text-text-faint">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-text-faint">
         <span>{humanReadableSize(file.sizeBytes)}</span>
-        <span>{relativeTime(file.mtime)}</span>
+        <span title={`更新日: ${absoluteTime(file.mtime)}`}>更新 {relativeTime(file.mtime)}</span>
+        <span title={`作成日: ${absoluteTime(file.created)}`}>作成 {relativeTime(file.created)}</span>
       </div>
       {isImage && (
         <button
@@ -1114,6 +1120,7 @@ function FolderNodeView({
     relpath: node.path,
     sizeBytes: 0,
     mtime: new Date().toISOString(),
+    created: new Date().toISOString(),
     ext: '',
     kind: 'folder',
     isDir: true,
@@ -1659,7 +1666,7 @@ function TrashView({ onChanged, onClose }: { onChanged: () => void; onClose: () 
 
 // ─── 並び替えコントロール（MC-231）────────────────────────────────
 function SortControl({ sort, onChange }: { sort: SortPref; onChange: (s: SortPref) => void }) {
-  const keys: SortKey[] = ['name', 'mtime', 'size'];
+  const keys: SortKey[] = ['name', 'mtime', 'created', 'size'];
   return (
     <div className="flex items-center gap-1.5">
       <span className="text-text-faint">
@@ -2452,7 +2459,8 @@ export default function Deliverables() {
     for (const sub of node.subdirs.values()) {
       folderByPath.set(sub.path, {
         name: sub.name, relpath: sub.path, sizeBytes: 0,
-        mtime: new Date().toISOString(), ext: '', kind: 'folder', isDir: true,
+        mtime: new Date().toISOString(), created: new Date().toISOString(),
+        ext: '', kind: 'folder', isDir: true,
       });
       walkFolders(sub);
     }

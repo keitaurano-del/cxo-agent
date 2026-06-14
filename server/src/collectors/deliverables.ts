@@ -30,7 +30,8 @@ export interface DeliverableFile {
   name: string; // ファイル名（basename）
   relpath: string; // DELIVERABLES_DIR 相対（posix 区切り）
   sizeBytes: number;
-  mtime: string; // ISO
+  mtime: string; // ISO（更新日）
+  created: string; // ISO（作成日。MC-241。birthtime→ctime→mtime の順でフォールバック）
   ext: string; // 拡張子（'.xlsx' 等、小文字）
   kind: DeliverableKind;
   isDir?: true; // 空ディレクトリのエントリ
@@ -92,6 +93,22 @@ export function kindForExt(ext: string): DeliverableKind {
   return KIND_BY_EXT[ext.toLowerCase()] ?? 'other';
 }
 
+// ─── 作成日（MC-241）────────────────────────────────────
+// fs.stat の birthtime（作成時刻）を ISO で返す。このFS=ext4 は statx で birthtime を取得できるが、
+// 取得できない/0/無効な環境では ctime → mtime の順でフォールバックし「作成日不明」を避ける。
+function createdIso(st: import('node:fs').Stats): string {
+  const birthMs = st.birthtimeMs;
+  // 0 / NaN / mtime より未来の異常値は無効扱いにしてフォールバックする。
+  if (typeof birthMs === 'number' && birthMs > 0 && Number.isFinite(birthMs)) {
+    return new Date(birthMs).toISOString();
+  }
+  const ctimeMs = st.ctimeMs;
+  if (typeof ctimeMs === 'number' && ctimeMs > 0 && Number.isFinite(ctimeMs)) {
+    return new Date(ctimeMs).toISOString();
+  }
+  return st.mtime.toISOString();
+}
+
 export function contentTypeForExt(ext: string): string {
   return CONTENT_TYPES[ext.toLowerCase()] ?? 'application/octet-stream';
 }
@@ -143,6 +160,7 @@ export function listDeliverables(): DeliverableFile[] {
             relpath: toDeliverableRelative(abs),
             sizeBytes: 0,
             mtime: (st?.mtime ?? new Date()).toISOString(),
+            created: st ? createdIso(st) : new Date().toISOString(),
             ext: '',
             kind: 'folder' as DeliverableKind,
             isDir: true,
@@ -164,6 +182,7 @@ export function listDeliverables(): DeliverableFile[] {
           relpath: toDeliverableRelative(abs),
           sizeBytes: st.size,
           mtime: st.mtime.toISOString(),
+          created: createdIso(st),
           ext,
           kind: kindForExt(ext),
         });
