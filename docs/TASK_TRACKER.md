@@ -2612,7 +2612,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-227 |
 | タイトル | ドキュメント(Deliverables)でファイル・フォルダをリネームできるようにする |
 | 優先度 | P1 |
-| ステータス | REVIEW |
+| ステータス | DONE（2026-06-14 Phase1, ソラ実装+自己検証）。POST /api/deliverables/rename（index.ts:946-993）＋validateRenameName/resolveRenameTarget（deliverablePath.ts:222-275）。UIインライン名前編集。curl全ケース（衝突409/トラバーサル400/dot400/README403）＋Playwright実画面で改名→反映。commit 4a55cad、origin/main同期済み（並行pushに同梱）・:4317ライブ。 |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Apolloドキュメント機能を「普通のPCフォルダ並み」に育てる Phase 1（リサーチ: obsidian-vault/20-Knowledge/apollo-documents-improvement-research.md）。現状リネームAPI/UIが無い。`server/src/index.ts` に rename API（POST /api/deliverables/rename、path＋newName、`data/deliverables` 配下に閉じたパス検証必須=トラバーサル防止）を追加し、`web/src/views/Deliverables.tsx` の FileCard/FolderNodeView にインライン名前編集（F2/Enter or 右クリック→名前変更、同名衝突チェック）を実装。 |
 | 受け入れ条件（DoD） | ファイル・フォルダ両方をUI上で改名でき、リロード後も反映。`data/deliverables` 外への書込み不可。同名衝突は拒否しエラー表示。server tsc0 / web build0 / mission-control restart 後に実画面で改名→反映を確認。 |
@@ -2629,7 +2629,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-228 |
 | タイトル | ドキュメント(Deliverables)でファイル・フォルダを別フォルダへ移動できるようにする |
 | 優先度 | P1 |
-| ステータス | REVIEW |
+| ステータス | DONE（2026-06-14 Phase1, ソラ実装+自己検証）。POST /api/deliverables/move（index.ts:1077-1148）＋resolveDeliverableDir/resolveMoveTarget（deliverablePath.ts:350-413）。D&Dドロップ先ハイライト＋MoveDialog両対応。curl（衝突409/循環400/トラバーサル400/README403/404）＋Playwright実画面。commit 5f40fd7、origin同期済み・:4317ライブ。 |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 1。現状ツリーは表示専用で移動不可。POST /api/deliverables/move（srcPath→destDir、パス検証・同名衝突チェック）を追加。UIは (1)ドラッグ&ドロップでフォルダへドロップ（ドロップ先ハイライト必須）と (2)「移動先を選ぶ」メニュー（深い階層用の確実な導線）の両対応。 |
 | 受け入れ条件（DoD） | D&Dとメニューの両方でファイル/フォルダを移動でき、ツリーに反映。`data/deliverables` 外不可。循環移動（親を子へ）防止。server tsc0 / web build0 / restart 後 実画面で移動→反映を確認。 |
@@ -2646,7 +2646,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-229 |
 | タイトル | ドキュメント(Deliverables)で複数選択して一括削除/移動/ダウンロードできるようにする |
 | 優先度 | P1 |
-| ステータス | REVIEW |
+| ステータス | DONE（2026-06-14 Phase1, ソラ実装+自己検証）。Shift連続/Ctrl個別選択＋選択時SelectionToolbar（一括移動/DL/削除）。一括削除はゴミ箱経由（物理削除せず復元可）。Playwright実画面（選択→一括削除→ゴミ箱→復元）。commit 5f40fd7、origin同期済み・:4317ライブ。 |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 1。現状は1個ずつ操作。Shift連続選択・Ctrl/Cmd個別選択を実装し、選択時のみ「文脈ツールバー」（選択数バッジ＋一括削除/一括移動/一括DL）を表示。一括DLはzipまとめ or 連続DL。バックエンドは既存のdelete/move（MC-228）をループ or バッチAPI化。 |
 | 受け入れ条件（DoD） | 複数選択→一括削除・一括移動・一括DLが動作。選択時のみツールバー表示・通常時はクリーン。server tsc0 / web build0 / restart 後 実画面で確認。 |
@@ -2663,7 +2663,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-230 |
 | タイトル | ドキュメント(Deliverables)の削除をゴミ箱方式にし復元・Undoできるようにする |
 | 優先度 | P1 |
-| ステータス | REVIEW |
+| ステータス | DONE（2026-06-14 Phase1, ソラ実装+自己検証）。DELETEを.trash/退避化（index.ts:781-958）＋.trashinfo.json、Undoトースト＋ゴミ箱ビュー（復元/完全削除/空にする）。makeTrashTarget/resolveTrashPath（deliverablePath.ts:277-393）。一覧・検索に非リーク確認。commit 4a55cad、origin同期済み・:4317ライブ。残: 自動パージ（期間/容量）は後続。 |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 1。現状 DELETE は物理削除で戻せない（破壊操作の安全網が無い）。削除を `data/deliverables/.trash/`（コレクタ走査から除外）への退避に変更し、(1)削除直後の Undo トースト（数秒以内なら即戻す）、(2)ゴミ箱ビューからの復元/完全削除を実装。.trash は一定期間/容量でパージ。 |
 | 受け入れ条件（DoD） | 削除→ゴミ箱退避→Undoトーストで復帰、ゴミ箱ビューから復元・完全削除が可能。.trash は一覧/検索に出ない。server tsc0 / web build0 / restart 後 実画面で削除→復元を確認。 |
@@ -2680,7 +2680,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-231 |
 | タイトル | ドキュメント(Deliverables)で名前/更新日/サイズの昇降ソートを切り替えられるようにする |
 | 優先度 | P1 |
-| ステータス | REVIEW |
+| ステータス | DONE（2026-06-14 Phase1, ソラ実装+自己検証）。名前/更新日/サイズ×昇降のクライアントソート、両ビュー適用、localStorage(apollo.deliverables.sort)永続。Playwright実画面（昇降反転・リロード永続）。列ヘッダはカードグリッドで無いためツールバーで代替。commit 4a55cad、origin同期済み・:4317ライブ。 |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 1。現状は mtime 降順固定（collectors/deliverables.ts）で UI から変えられない。フロントに並び替えコントロール（名前/更新日/サイズ × 昇順/降順）を追加し、フォルダビュー・リストビュー両方に適用。リストビューは列ヘッダクリックでソート。選択中ソートは localStorage 永続化。 |
 | 受け入れ条件（DoD） | 名前/更新日/サイズの昇降ソートが切替でき、両ビューに反映、リロード後も維持。web build0 / restart 後 実画面で確認（サーバ変更は基本不要、クライアントソートで可）。 |
@@ -2697,7 +2697,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-232 |
 | タイトル | ドキュメント(Deliverables)にパンくず・戻る/進む・最近使った項目のナビを追加 |
 | 優先度 | P2 |
-| ステータス | REVIEW |
+| ステータス | DONE（2026-06-14 Phase1, ソラ実装+自己検証）。フォルダビューのcurrentDirスコープ化＋クリック可能パンくず＋navHistory式戻る/進む＋最近項目RecentStrip（localStorage）。Playwright実画面（ジャンプ・戻る進む・descend）。commit 5f40fd7、origin同期済み・:4317ライブ。 |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 1。現状フォルダ階層の現在地ナビが弱い。(1)クリック可能なパンくず（各階層へジャンプ）、(2)戻る/進む（ナビ履歴）、(3)最近開いた/アップロードした項目の自動リスト（localStorage or mtime ベース）を追加し、深い階層で迷子にならないようにする。 |
 | 受け入れ条件（DoD） | パンくずで各階層へジャンプ可、戻る/進むが履歴通り動作、最近使った項目が表示される。web build0 / restart 後 実画面で確認。 |
