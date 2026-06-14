@@ -2887,3 +2887,17 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 受け入れ条件（DoD） | タスク行タップで詳細(タイトル/notes全文/期日/リスト/アカウント/状態)が開く、期日なしタスクでも同様、build green＋実画面確認。 |
 | 依存 | web/src/views/BabyDiary.tsx。関連 MC-233(タスク表示)。 |
 | 更新日 | 2026-06-15 |
+
+### MC-244 — 成長日記メモを自動保存＋編集ボタン化
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-244 |
+| タイトル | 成長日記の日記メモを自動保存に変更／既存メモは「編集」ボタンから編集 |
+| 優先度 | P2 |
+| ステータス | DONE（2026-06-15 Son 駆動・実装 subagent＋Son レビュー修正・自己検証→push cd0536c）。Keita 要望「メモは自動保存・あとから編集するときは編集ボタンから」。DiaryForm を手動「保存」ボタン廃止→**デバウンス自動保存(800ms/blur で flush)**。メモ有り=読み取り表示＋「編集」ボタン、メモ無し=即編集。保存中/保存しました表示・失敗時は次入力で再保存。日付/エントリ切替・アンマウントで保留保存を flush。**Son レビューで日付切替レースを1件修正**＝prefill 直前の flush が dateRef(描画時に新日付へ前進)経由で“出ていく日付の編集を新日付へ”誤保存する不具合を、保存対象(date,value)を pendingRef に退避して flush する方式に変更。saveSeq/date ガードで順序乱れレスポンスの副作用抑止。**検証:** `tsc -b`＋`vite build` EXIT0→restart→/api/healthz ok→配信バンドル(Childcare-7DDaBcgG.js)に「保存しました/編集/保存中」在を確認。POST /api/baby-diary/entry は既存 last-wins upsert を流用(サーバ変更なし)。**未実施:** ブラウザツール無で実画面の自動保存/編集トグル動作は目視未確認(Keita 端末で確認推奨)。 |
+| 担当 | Son（駆動・検証・反映）／実装 subagent（dev-apollo レーン） |
+| 詳細 | 対象 web/src/views/BabyDiary.tsx の DiaryForm（≈L2010）。POST /api/baby-diary/entry {date,memo} は既存 last-wins upsert を流用。手動「保存」ボタン廃止。 |
+| 受け入れ条件（DoD） | 入力が自動保存される（明示ボタン不要）、既存メモは既定で読み取り表示＋「編集」ボタンで編集開始、日付切替で取りこぼし無し、build green＋実画面確認。 |
+| 依存 | web/src/views/BabyDiary.tsx。関連 MC-233/MC-243。 |
+| 更新日 | 2026-06-15 |
