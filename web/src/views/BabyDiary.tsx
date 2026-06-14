@@ -2018,67 +2018,209 @@ function DiaryForm({
   onSaved: () => Promise<void> | void;
 }) {
   const [memo, setMemo] = useState('');
+  // 既存メモがあれば閲覧（VIEW）から始め、無ければ即編集（EDIT）。
+  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
 
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // 直近にサーバへ保存した値。これと一致する間は保存を発火しない（初期 prefill 含む）。
+  const lastSavedRef = useRef('');
+  // 進行中のデバウンスタイマー。日付切替・blur・完了・アンマウントで flush/クリアする。
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // flush から最新の memo / date を参照するための ref（古いクロージャ書き込みを防ぐ）。
+  const memoRef = useRef('');
+  const dateRef = useRef(date);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 保存の世代カウンタ。古い（順序が乱れた）レスポンスの flash を無視するために使う。
+  const saveSeqRef = useRef(0);
+  // 保留中のデバウンス保存がキャプチャした (date, value)。flush 時はここから読むことで、
+  // 日付切替後に dateRef が新日付へ進んでいても“出ていく日付”に正しく保存する。
+  const pendingRef = useRef<{ date: string; value: string } | null>(null);
+
+  memoRef.current = memo;
+  dateRef.current = date;
+
+  // 実際の保存処理。保存時点の date / memo をキャプチャし、レスポンス到着時に
+  // 表示中の date が変わっていれば flash 等の副作用は適用しない（レース対策）。
+  const persist = useCallback(
+    async (saveDate: string, value: string): Promise<void> => {
+      if (value === lastSavedRef.current) return;
+      const seq = ++saveSeqRef.current;
+      lastSavedRef.current = value;
+      setSaving(true);
+      setSaveError(null);
+      try {
+        const res = await fetch('/api/baby-diary/entry', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: saveDate, memo: value }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        await onSaved();
+        // 表示が別日に切り替わっていたら UI 副作用は出さない。
+        if (saveSeqRef.current !== seq || dateRef.current !== saveDate) return;
+        setSavedFlash(true);
+        if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+        flashTimerRef.current = setTimeout(() => setSavedFlash(false), 1800);
+      } catch (err) {
+        // 失敗したら次回 keystroke で再保存されるよう lastSaved を巻き戻す。
+        lastSavedRef.current = ' __force_resave__';
+        if (saveSeqRef.current === seq && dateRef.current === saveDate) {
+          setSaveError(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        if (saveSeqRef.current === seq) setSaving(false);
+      }
+    },
+    [onSaved],
+  );
+
+  // 保留中のデバウンス保存を即時に流し込む（キャンセルして同期的に persist 起動）。
+  const flush = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    if (pendingRef.current) {
+      const { date: d, value: v } = pendingRef.current;
+      pendingRef.current = null;
+      void persist(d, v);
+    }
+  }, [persist]);
+
   // 選択日 / 既存エントリが変わったら prefill しなおす。
+  // 切替の前に、出ていく日付の未保存編集を flush してから状態を入れ替える。
   useEffect(() => {
-    setMemo(entry?.memo ?? '');
+    // (a) 出ていく日付の保留中編集を確定させる（pendingRef が出ていく日付を保持）。
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    if (pendingRef.current) {
+      const { date: d, value: v } = pendingRef.current;
+      pendingRef.current = null;
+      void persist(d, v);
+    }
+    // (b) 新しい日付の状態に reset。
+    const next = entry?.memo ?? '';
+    setMemo(next);
+    memoRef.current = next;
+    lastSavedRef.current = next;
+    setEditing(next.trim() === '');
     setSaveError(null);
     setSavedFlash(false);
-  }, [date, entry]);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const body: Record<string, unknown> = { date, memo };
-      const res = await fetch('/api/baby-diary/entry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      await onSaved();
-      setSavedFlash(true);
-      setTimeout(() => setSavedFlash(false), 1800);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
+    if (flashTimerRef.current) {
+      clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = null;
     }
+    // date を依存に含めるため eslint 警告回避用に明示。entry が変わると memo も再評価。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, entry, persist]);
+
+  // アンマウント時に保留中の保存を flush し、タイマーを片付ける。
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      if (pendingRef.current) {
+        const { date: d, value: v } = pendingRef.current;
+        pendingRef.current = null;
+        void persist(d, v);
+      }
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    };
+  }, [persist]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setMemo(value);
+    memoRef.current = value;
+    const saveDate = dateRef.current;
+    pendingRef.current = { date: saveDate, value };
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      pendingRef.current = null;
+      void persist(saveDate, value);
+    }, 800);
   };
 
+  const handleBlur = () => {
+    flush();
+  };
+
+  const enterEdit = () => {
+    setEditing(true);
+    // 描画後に textarea へフォーカス。
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  };
+
+  const leaveEdit = () => {
+    flush();
+    setEditing(false);
+  };
+
+  const hasMemo = memo.trim() !== '';
+
   return (
-    <form onSubmit={submit} className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3">
       <h3 className="text-sm font-bold text-text">日記</h3>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-text-muted">メモ</span>
-        <textarea
-          value={memo}
-          onChange={(e) => setMemo(e.target.value)}
-          rows={3}
-          placeholder="今日のようす・気づきなど"
-          className="w-full resize-y rounded-md border border-border bg-bg px-2.5 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
-        />
-      </label>
+      {!editing && hasMemo ? (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-text-muted">メモ</span>
+          <p className="w-full whitespace-pre-wrap break-words rounded-md border border-border bg-bg px-2.5 py-2 text-sm text-text">
+            {memo}
+          </p>
+        </div>
+      ) : (
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-text-muted">メモ</span>
+          <textarea
+            ref={textareaRef}
+            value={memo}
+            onChange={handleChange}
+            onBlur={handleBlur}
+            rows={3}
+            placeholder="今日のようす・気づきなど"
+            className="w-full resize-y rounded-md border border-border bg-bg px-2.5 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
+          />
+        </label>
+      )}
 
       {saveError && <p className="text-xs text-blocked">保存に失敗しました: {saveError}</p>}
 
       <div className="flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-md bg-accent px-4 py-2 text-sm font-bold text-bg transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
-          {saving ? '保存中…' : '保存'}
-        </button>
-        {savedFlash && <span className="text-xs font-medium text-accent">保存しました</span>}
+        {!editing && hasMemo ? (
+          <button
+            type="button"
+            onClick={enterEdit}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-4 py-2 text-sm font-bold text-text transition-colors hover:bg-surface-2"
+          >
+            編集
+          </button>
+        ) : (
+          hasMemo && (
+            <button
+              type="button"
+              onClick={leaveEdit}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-4 py-2 text-sm font-bold text-text transition-colors hover:bg-surface-2"
+            >
+              完了
+            </button>
+          )
+        )}
+        {saving ? (
+          <span className="text-xs font-medium text-text-muted">保存中…</span>
+        ) : (
+          savedFlash && <span className="text-xs font-medium text-accent">保存しました</span>
+        )}
       </div>
-    </form>
+    </div>
   );
 }
 
