@@ -109,6 +109,18 @@ async function googlePostJson<T>(url: string, accessToken: string, body: unknown
   return (await res.json()) as T;
 }
 
+/** Bearer 付き DELETE。204/200 を成功扱い・404（既に無い）も成功扱い。それ以外は throw。 */
+async function googleDelete(url: string, accessToken: string): Promise<void> {
+  const res = await fetchWithTimeout(url, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  // 204 No Content が通常。200 / 404（既に削除済み）も成功扱い。
+  if (res.ok || res.status === 404) return;
+  const text = await res.text().catch(() => '');
+  throw new Error(`DELETE ${url} → HTTP ${res.status} ${text.slice(0, 300)}`);
+}
+
 /** 未設定ガード。設定済みなら true、未設定なら 503 を送って false。 */
 function requireConfigured(res: Response): boolean {
   if (googleConfigured()) return true;
@@ -402,6 +414,213 @@ async function handleCalendarCreate(req: Request, res: Response): Promise<void> 
   } catch (e) {
     res.status(502).json({ error: e instanceof Error ? e.message : String(e) });
   }
+}
+
+// ─── 6-b. オートプランナー → Google カレンダー書き戻し（MC-245 P3）─────
+//
+// オートプランナーが組んだ時間ブロックを、指定アカウントの primary に「時間指定イベント」として
+// 書き戻す / 後から一括削除する。プラン由来のイベントは extendedProperties.private.plannerManaged='1'
+// で識別し、plan-clear はそのタグの付いたイベントだけを範囲内で全削除する（手動予定は触らない）。
+//
+// 書き込み先は各アカウントの primary（既存スコープ calendar.events の範囲内・新規カレンダーは作らない）。
+// 部分劣化: 1 件失敗しても全体は 500 にせず、可能な範囲で作成/削除し件数を返す。
+
+/** プラン由来イベントを識別する extendedProperties.private のキー。 */
+const PLANNER_MANAGED_KEY = 'plannerManaged';
+const PLANNER_MANAGED_VALUE = '1';
+/** プラン由来 taskId を保持する extendedProperties.private のキー。 */
+const PLANNER_TASK_ID_KEY = 'plannerTaskId';
+/** プランで作成するイベントの固定色（既定の予定と見分けるため・5=バナナ/黄）。 */
+const PLANNER_COLOR_ID = '5';
+
+interface PlanBlock {
+  taskId?: string;
+  title: string;
+  start: string;
+  end: string;
+  reason?: string;
+}
+
+/** ISO 文字列として妥当（Date.parse 可能）か。 */
+function isValidIso(v: unknown): v is string {
+  return typeof v === 'string' && v.length > 0 && Number.isFinite(Date.parse(v));
+}
+
+/** POST /calendar/plan-apply — プランの各 block を primary に時間指定イベントとして作成。 */
+async function handlePlanApply(req: Request, res: Response): Promise<void> {
+  if (!requireConfigured(res)) return;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+
+  const account = typeof body.account === 'string' ? body.account : '';
+  const rawBlocks = body.blocks;
+
+  if (!account) {
+    res.status(400).json({ error: 'account is required' });
+    return;
+  }
+  if (!Array.isArray(rawBlocks)) {
+    res.status(400).json({ error: 'blocks must be an array' });
+    return;
+  }
+
+  // 各 block を検証して正規化。1 件でも不正なら 400（事前検証）。
+  const blocks: PlanBlock[] = [];
+  for (let i = 0; i < rawBlocks.length; i++) {
+    const b = (rawBlocks[i] ?? {}) as Record<string, unknown>;
+    const title = typeof b.title === 'string' ? b.title : '';
+    const start = b.start;
+    const end = b.end;
+    if (!title) {
+      res.status(400).json({ error: `blocks[${i}].title is required` });
+      return;
+    }
+    if (!isValidIso(start)) {
+      res.status(400).json({ error: `blocks[${i}].start must be a valid ISO datetime` });
+      return;
+    }
+    if (!isValidIso(end)) {
+      res.status(400).json({ error: `blocks[${i}].end must be a valid ISO datetime` });
+      return;
+    }
+    if (Date.parse(end) <= Date.parse(start)) {
+      res.status(400).json({ error: `blocks[${i}].end must be after start` });
+      return;
+    }
+    blocks.push({
+      title,
+      start,
+      end,
+      ...(typeof b.taskId === 'string' && b.taskId ? { taskId: b.taskId } : {}),
+      ...(typeof b.reason === 'string' && b.reason ? { reason: b.reason } : {}),
+    });
+  }
+
+  // トークン取得自体が失敗した場合は全件作成不能なので 502。
+  let accessToken: string;
+  try {
+    accessToken = await getValidAccessToken(account);
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : String(e) });
+    return;
+  }
+
+  let created = 0;
+  let failed = 0;
+  const errors: string[] = [];
+
+  // 1 件ずつ作成。例外は握って失敗カウントへ（部分劣化）。
+  for (const block of blocks) {
+    try {
+      const description =
+        (block.reason ? `自動プラン: ${block.reason}\n` : '') + '(自動プランで作成)';
+      await googlePostJson<GCalEvent>(
+        'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+        accessToken,
+        {
+          summary: `📋 ${block.title}`,
+          description,
+          start: { dateTime: block.start, timeZone: 'Asia/Tokyo' },
+          end: { dateTime: block.end, timeZone: 'Asia/Tokyo' },
+          colorId: PLANNER_COLOR_ID,
+          extendedProperties: {
+            private: {
+              [PLANNER_MANAGED_KEY]: PLANNER_MANAGED_VALUE,
+              ...(block.taskId ? { [PLANNER_TASK_ID_KEY]: block.taskId } : {}),
+            },
+          },
+        },
+      );
+      created++;
+    } catch (e) {
+      failed++;
+      errors.push(`${block.title}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  res.json({ account, created, failed, ...(errors.length > 0 ? { errors } : {}) });
+}
+
+// ─── 6-c. POST /calendar/plan-clear ──────────────────────
+// plannerManaged='1' の付いたイベントだけを範囲内で列挙して全削除する。
+
+const PLAN_CLEAR_DEFAULT_PAST_MS = 1 * 24 * 60 * 60 * 1000; // now-1日
+const PLAN_CLEAR_DEFAULT_FUTURE_MS = 60 * 24 * 60 * 60 * 1000; // now+60日
+
+/** POST /calendar/plan-clear — plannerManaged のイベントを範囲内で全削除。 */
+async function handlePlanClear(req: Request, res: Response): Promise<void> {
+  if (!requireConfigured(res)) return;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+
+  const account = typeof body.account === 'string' ? body.account : '';
+  if (!account) {
+    res.status(400).json({ error: 'account is required' });
+    return;
+  }
+
+  const now = Date.now();
+  const timeMin = isValidIso(body.timeMin)
+    ? body.timeMin
+    : new Date(now - PLAN_CLEAR_DEFAULT_PAST_MS).toISOString();
+  const timeMax = isValidIso(body.timeMax)
+    ? body.timeMax
+    : new Date(now + PLAN_CLEAR_DEFAULT_FUTURE_MS).toISOString();
+
+  let accessToken: string;
+  try {
+    accessToken = await getValidAccessToken(account);
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : String(e) });
+    return;
+  }
+
+  // plannerManaged=1 のイベントだけを列挙（ページング対応）。
+  const eventIds: string[] = [];
+  try {
+    let pageToken: string | undefined;
+    do {
+      const params = new URLSearchParams({
+        singleEvents: 'true',
+        showDeleted: 'false',
+        maxResults: '250',
+        timeMin,
+        timeMax,
+        // privateExtendedProperty は 'key=value' 形式。URLSearchParams が '=' をエンコードする。
+        privateExtendedProperty: `${PLANNER_MANAGED_KEY}=${PLANNER_MANAGED_VALUE}`,
+      });
+      if (pageToken) params.set('pageToken', pageToken);
+      const data = await googleGet<GCalListResponse & { nextPageToken?: string }>(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`,
+        accessToken,
+      );
+      for (const ev of data.items ?? []) {
+        if (ev.id) eventIds.push(ev.id);
+      }
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+  } catch (e) {
+    // 列挙に失敗したら何も消せていないので 502。
+    res.status(502).json({ error: e instanceof Error ? e.message : String(e) });
+    return;
+  }
+
+  // 1 件ずつ削除。例外は握って removed に反映（部分劣化）。
+  let removed = 0;
+  for (const id of eventIds) {
+    try {
+      await googleDelete(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(id)}`,
+        accessToken,
+      );
+      removed++;
+    } catch (e) {
+      console.warn(
+        `[google plan-clear] delete failed ${id}:`,
+        e instanceof Error ? e.message : String(e),
+      );
+    }
+  }
+
+  res.json({ account, removed });
 }
 
 // ─── 7. Photos Picker（Phase3）──────────────────────────────
@@ -996,6 +1215,8 @@ export function googleRouter(): Router {
 
   router.get('/calendar/events', (req, res) => void handleCalendarList(req, res));
   router.post('/calendar/events', (req, res) => void handleCalendarCreate(req, res));
+  router.post('/calendar/plan-apply', (req, res) => void handlePlanApply(req, res));
+  router.post('/calendar/plan-clear', (req, res) => void handlePlanClear(req, res));
 
   router.post('/photos/picker/session', (req, res) => void handlePickerCreate(req, res));
   router.get('/photos/picker/session/:sessionId', (req, res) => void handlePickerPoll(req, res));
