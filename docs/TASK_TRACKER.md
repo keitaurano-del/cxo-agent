@@ -2958,3 +2958,17 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 受け入れ条件（DoD） | プラン生成API稼働・空き時間に締切順守で配置・未配置明示・週/日に重ね表示・設定変更可・build green。（実画面目視は Keita 確認） |
 | 依存 | MC-245/MC-247。サーバ: claude CLI(NOTEBOOK_CLAUDE_BIN)。P3=Googleカレンダー書き戻し。 |
 | 更新日 | 2026-06-15 |
+
+### MC-249 — MC-245 P3: プランを Google カレンダーへ書き戻し/クリア
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-249 |
+| タイトル | 提示プランを承認して Google カレンダーに登録／一括クリア（primary・管理タグ） |
+| 優先度 | P2 |
+| ステータス | DONE（2026-06-15 Son 駆動・backend/frontend subagent・自己検証→push）。**バックエンド**(googleRouter.ts): `POST /api/google/calendar/plan-apply`(各ブロックを指定アカウント primary に時間指定イベント作成・📋接頭辞・colorId固定・`extendedProperties.private.plannerManaged=1`＋plannerTaskId・TZ Asia/Tokyo・部分劣化で created/failed)／`POST .../plan-clear`(plannerManaged=1 のみ範囲内列挙→一括削除→removed)。googleDelete ヘルパ追加。**新規カレンダーは作らず既存 calendar.events スコープで完結＝再同意不要**(広いスコープが要る専用カレンダーは将来オプション)。**フロント**(Schedule.tsx): プラン提示の下に「このプランでカレンダーに登録」「カレンダーから削除」。登録先アカウント選択(複数時)・**確認ダイアログ必須**・重複防止に clear→apply で置き換え・完了後に予定再取得で📋可視化。**検証:** server `tsc`0／web build0→restart→health ok。**ラウンドトリップ疎通**: keita.urano に2099年テスト1件 apply→created:1→clear→removed:1(実カレンダーに残骸なし)・サーバ存続。配信に Schedule-CcWAKNYJ.js(「カレンダーに登録」在)。**未実施:** ブラウザ無で実画面の登録/削除ボタン・確認・再描画は目視未確認(Keita 端末で確認推奨)。**残(将来)**: ドラッグ調整・完了連携・専用カレンダー(要再同意)。 |
+| 担当 | Son（駆動・検証・反映）／backend・frontend subagent |
+| 詳細 | server/src/googleRouter.ts に plan-apply/plan-clear＋googleDelete。web/src/views/Schedule.tsx に登録/クリアUI。書き込み先は選択1アカウントの primary に集約。 |
+| 受け入れ条件（DoD） | プランをカレンダーに登録/削除でき、重複しない(置き換え)、確認を挟む、build green＋疎通。（実画面目視は Keita 確認） |
+| 依存 | MC-248。Google calendar.events スコープ。 |
+| 更新日 | 2026-06-15 |
