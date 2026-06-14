@@ -75,6 +75,16 @@ export const DELIVERABLE_TRASH_MAX_BYTES = envNum(
 );
 
 /**
+ * 成果物メタデータ（スター/タグ/色ラベル）のサイドカー store（MC-238）。
+ * 実体はファイルなので、relpath をキーに { starred, tags[], color } を JSON で保持する。
+ * data/ 配下なので .gitignore 済み。rename/move/copy/delete 時にキーを追従させる。
+ */
+export const DELIVERABLES_META_FILE = env(
+  'DELIVERABLES_META_FILE',
+  join(INBOX_DATA_DIR, 'deliverables-meta.json'),
+);
+
+/**
  * 成果物プレビュー用の変換キャッシュ（Office→PDF）の置き場。
  * data/ 配下なので .gitignore 済み。ソースの sha1+mtime+size をキーに PDF を保存する。
  */

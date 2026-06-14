@@ -61,6 +61,15 @@ import {
 } from './lib/deliverablePath.js';
 import { purgeTrashIfDue } from './lib/trashPurge.js';
 import {
+  getAllMeta,
+  setMeta,
+  moveMeta,
+  copyMeta,
+  trashMeta,
+  restoreMeta,
+  purgeTrashMeta,
+} from './lib/deliverableMeta.js';
+import {
   convertOfficeToPdf,
   isConvertibleToPdf,
   deleteOfficePdfCache,
@@ -679,6 +688,41 @@ app.get('/api/deliverables', (_req, res) => {
   }
 });
 
+// ─── 成果物メタ（スター/タグ/色ラベル）（MC-238）─────────────────────
+// サイドカー store（data/deliverables-meta.json）を relpath キーで読み書きする。
+// GET: 全メタを { meta: { relpath: {starred,tags,color} } } で返す。
+// PUT: 1 アイテムのメタを設定する（body: { path, starred?, tags?, color? }）。
+//      path は deliverablePath で範囲検証（data/deliverables 外不可）。
+app.get('/api/deliverables/meta', (_req, res) => {
+  try {
+    res.json({ generatedAt: new Date().toISOString(), meta: getAllMeta() });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('[deliverables meta list error]', message);
+    res.status(200).json({ error: message, generatedAt: new Date().toISOString(), meta: {} });
+  }
+});
+
+app.put('/api/deliverables/meta', (req, res) => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const relpath = String(body.path ?? '');
+    if (!relpath) { res.status(400).json({ error: 'path required' }); return; }
+    // 範囲検証（traversal/範囲外→SafePathError）。実在チェックはしない（フォルダにも付与可）。
+    const abs = resolveDeliverablePath(relpath);
+    const safeRel = toDeliverableRelative(abs);
+    const meta = setMeta(safeRel, {
+      starred: body.starred,
+      tags: body.tags,
+      color: body.color,
+    });
+    res.json({ ok: true, relpath: safeRel, meta });
+  } catch (e) {
+    if (e instanceof SafePathError) { res.status(400).json({ error: e.message }); return; }
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
 // ファイル名を RFC5987（filename*）でエンコードする（日本語ファイル名対応）。
 function contentDisposition(name: string, inline: boolean): string {
   const disp = inline ? 'inline' : 'attachment';
@@ -866,6 +910,9 @@ app.delete('/api/deliverables/file', (req, res) => {
       /* メタ記録失敗は退避自体を妨げない（復元時に originalRel をパスから推定可能）。 */
     }
 
+    // MC-238: サイドカーメタ（スター/タグ/色）を trashId 配下へ退避（復元で再付与・パージで破棄）。
+    try { trashMeta(relpath, batchId); } catch { /* メタ退避失敗は本体退避を妨げない。 */ }
+
     res.json({ ok: true, deleted: relpath, trashId: batchId });
   } catch (e) {
     if (e instanceof SafePathError) {
@@ -991,7 +1038,11 @@ app.post('/api/deliverables/trash/restore', (req, res) => {
     // 退避バッチ（空になったフォルダ＋メタ）を物理削除する。
     try { rmSync(join(trashRoot(), trashId), { recursive: true, force: true }); } catch { /* best-effort */ }
 
-    res.json({ ok: true, restored: toDeliverableRelative(destAbs) });
+    const restoredRel = toDeliverableRelative(destAbs);
+    // MC-238: 退避していたメタを復元先パスへ再付与（衝突回避でリネームされていても追従）。
+    try { restoreMeta(trashId, meta.originalRel, restoredRel); } catch { /* メタ復元失敗は本体復元を妨げない。 */ }
+
+    res.json({ ok: true, restored: restoredRel });
   } catch (e) {
     if (e instanceof SafePathError) { res.status(400).json({ error: e.message }); return; }
     res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
@@ -1014,6 +1065,8 @@ app.delete('/api/deliverables/trash', (req, res) => {
       }
       if (!existsSync(batchAbs)) { res.status(404).json({ error: 'trash entry not found' }); return; }
       rmSync(batchAbs, { recursive: true, force: true });
+      // MC-238: 退避メタも破棄。
+      try { purgeTrashMeta(trashId); } catch { /* best-effort */ }
       res.json({ ok: true, purged: trashId });
       return;
     }
@@ -1025,6 +1078,8 @@ app.delete('/api/deliverables/trash', (req, res) => {
         }
       }
     }
+    // MC-238: 退避メタを全破棄。
+    try { purgeTrashMeta(); } catch { /* best-effort */ }
     res.json({ ok: true, purged: 'all' });
   } catch (e) {
     if (e instanceof SafePathError) { res.status(400).json({ error: e.message }); return; }
@@ -1075,7 +1130,10 @@ app.post('/api/deliverables/rename', (req, res) => {
       /* キャッシュ掃除失敗は改名を妨げない。 */
     }
 
+    const oldRel = toDeliverableRelative(srcAbs);
     renameSync(srcAbs, destAbs);
+    // MC-238: メタのキーを追従移行（フォルダは配下キーも移行）。
+    try { moveMeta(oldRel, destRel); } catch { /* メタ移行失敗は改名を妨げない。 */ }
     res.json({ ok: true, relpath: destRel });
   } catch (e) {
     if (e instanceof SafePathError) { res.status(400).json({ error: e.message }); return; }
@@ -1139,7 +1197,10 @@ app.post('/api/deliverables/move', (req, res) => {
       /* キャッシュ掃除失敗は移動を妨げない。 */
     }
 
+    const oldRel = toDeliverableRelative(srcAbs);
     renameSync(srcAbs, destAbs);
+    // MC-238: メタのキーを追従移行（フォルダは配下キーも移行）。
+    try { moveMeta(oldRel, destRel); } catch { /* メタ移行失敗は移動を妨げない。 */ }
     res.json({ ok: true, relpath: destRel });
   } catch (e) {
     if (e instanceof SafePathError) { res.status(400).json({ error: e.message }); return; }
@@ -1197,6 +1258,9 @@ app.post('/api/deliverables/copy', (req, res) => {
     // ファイルは単純コピー、フォルダは再帰コピー（cpSync recursive）。
     // resolveCopyTarget が destAbs をルート配下に限定済みなので再帰先もルート外には出ない。
     cpSync(srcAbs, destAbs, { recursive: isDir, errorOnExist: true, force: false });
+
+    // MC-238: メタも複製（フォルダは配下キーも複製）。元は残るので src 側はそのまま。
+    try { copyMeta(toDeliverableRelative(srcAbs), destRel); } catch { /* メタ複製失敗はコピーを妨げない。 */ }
 
     res.json({ ok: true, relpath: destRel });
   } catch (e) {
