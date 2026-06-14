@@ -29,6 +29,23 @@ import {
   ADMIN_CAPTION,
   CHECKUP_ITEMS,
   CHECKUP_CAPTION,
+  nextMilestoneProgress,
+  CARE_BASICS,
+  CARE_BASICS_CAPTION,
+  DAILY_RHYTHM,
+  DAILY_RHYTHM_CAPTION,
+  NIGHT_CRYING,
+  WHEN_TO_SEE_DOCTOR,
+  EMERGENCY_PHONES,
+  WHEN_TO_SEE_DOCTOR_SOURCE,
+  WHEN_TO_SEE_DOCTOR_CAPTION,
+  SIDS_PREVENTION,
+  SIDS_SOURCE,
+  SIDS_URL,
+  VACCINE_SCHEDULE,
+  VACCINE_SCHEDULE_CAPTION,
+  VACCINE_SCHEDULE_SOURCE,
+  VACCINE_SCHEDULE_URL,
 } from './childcareData';
 import type { AdminProcedure, CheckupItem } from './childcareData';
 
@@ -119,6 +136,43 @@ function BabyHeader({ now }: { now: Date }) {
   );
 }
 
+// ─── セクション（新）: 次の節目までの進捗 ───────────────────
+function NextMilestoneSection({ now }: { now: Date }) {
+  const { next, daysLeft, percent } = nextMilestoneProgress(now);
+  return (
+    <section className="rounded-lg border border-accent/40 bg-surface p-4 md:p-5">
+      {next ? (
+        <>
+          <p className="text-sm text-text-muted">
+            次は <span className="font-bold text-text">「{next.label}」</span> まで
+            <span className="ml-1 text-lg font-bold text-accent">あと{daysLeft}日</span>
+          </p>
+          <div
+            className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-surface-2"
+            role="progressbar"
+            aria-valuenow={percent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`${next.label}までの進捗 ${percent}%`}
+          >
+            <div
+              className="h-full rounded-full bg-accent transition-all"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-[11px] text-text-faint">
+            目安の生後日数からの算出値です（{percent}%）。日程は自治体・医療機関でご確認ください。
+          </p>
+        </>
+      ) : (
+        <p className="text-sm text-text-muted">
+          主要な節目（1か月健診・予防接種スタート・3–4か月健診）の目安時期を過ぎました。以降の予定は下部の各セクションをご確認ください。
+        </p>
+      )}
+    </section>
+  );
+}
+
 // ─── セクション①: いま来るもの ─────────────────────────────
 function UpcomingSection({ now }: { now: Date }) {
   // 締切が近い順に上位5件。
@@ -126,7 +180,7 @@ function UpcomingSection({ now }: { now: Date }) {
   return (
     <section className="rounded-lg border border-accent/40 bg-surface p-4 md:p-5">
       <SectionTitle hint="締切・予定日が近い順。期限超過は「期限注意」、本日〜数日内は強調表示します。">
-        いま来るもの（直近の締切・予定）
+        ⏰ いま来るもの（直近の締切・予定）
       </SectionTitle>
       <ul className="flex flex-col gap-2">
         {items.map((it) => {
@@ -157,38 +211,53 @@ function UpcomingSection({ now }: { now: Date }) {
   );
 }
 
-// ─── セクション②: 成長タイムライン ─────────────────────────
+// ─── セクション②: 成長タイムライン（縦ステップ表示） ──────
 function GrowthSection({ now }: { now: Date }) {
   const months = ageInMonths(now);
   return (
     <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
-      <SectionTitle hint="現在の月齢に該当する帯をハイライトしています。">
-        成長タイムライン（発達の目安）
+      <SectionTitle hint="現在の月齢のノードを「いまここ」として塗り、過去は淡色・未来は枠線のみで表示します。">
+        📈 成長タイムライン（発達の目安）
       </SectionTitle>
-      <ul className="flex flex-col gap-2">
-        {GROWTH_STAGES.map((stage) => {
+      <ol className="flex flex-col">
+        {GROWTH_STAGES.map((stage, idx) => {
           const active =
             months >= stage.fromMonth && (stage.toMonth === null || months < stage.toMonth);
+          const past = stage.toMonth !== null && months >= stage.toMonth;
+          const isLast = idx === GROWTH_STAGES.length - 1;
+          // ノードの見た目: いまここ=塗り(accent)、過去=淡色塗り、未来=枠線のみ。
+          const node = active
+            ? 'border-accent bg-accent'
+            : past
+              ? 'border-accent/30 bg-accent/30'
+              : 'border-border bg-transparent';
+          const line = past || active ? 'bg-accent/30' : 'bg-border';
           return (
-            <li
-              key={stage.label}
-              className={`rounded-md border px-3 py-2.5 ${
-                active ? 'border-accent/60 bg-accent/10' : 'border-border bg-bg'
-              }`}
-            >
-              <p className={`text-sm font-semibold ${active ? 'text-accent' : 'text-text'}`}>
-                {stage.label}
-                {active && <span className="ml-2 text-[11px] font-bold text-accent">いまここ</span>}
-              </p>
-              <ul className="mt-1 list-disc pl-5 text-xs leading-relaxed text-text-muted">
-                {stage.points.map((p, i) => (
-                  <li key={i}>{p}</li>
-                ))}
-              </ul>
+            <li key={stage.label} className="flex gap-3">
+              {/* 左: 丸ノード＋縦線 */}
+              <div className="flex flex-col items-center">
+                <span
+                  aria-hidden
+                  className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${node}`}
+                />
+                {!isLast && <span aria-hidden className={`w-0.5 flex-1 ${line}`} />}
+              </div>
+              {/* 右: 内容 */}
+              <div className={`min-w-0 flex-1 ${isLast ? 'pb-0' : 'pb-4'}`}>
+                <p className={`text-sm font-semibold ${active ? 'text-accent' : past ? 'text-text-muted' : 'text-text'}`}>
+                  {stage.label}
+                  {active && <span className="ml-2 text-[11px] font-bold text-accent">いまここ</span>}
+                </p>
+                <ul className="mt-1 list-disc pl-5 text-xs leading-relaxed text-text-muted">
+                  {stage.points.map((p, i) => (
+                    <li key={i}>{p}</li>
+                  ))}
+                </ul>
+              </div>
             </li>
           );
         })}
-      </ul>
+      </ol>
       <Note>{GROWTH_DISCLAIMER}</Note>
     </section>
   );
@@ -199,7 +268,7 @@ function FatherSection() {
   return (
     <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
       <SectionTitle hint="産後すぐ〜産褥期に夫が担いたい役割のチェックリストです。">
-        父親（夫）としてやること
+        👨‍🍼 父親（夫）としてやること
       </SectionTitle>
       <ul className="flex flex-col gap-2">
         {FATHER_TASKS.map((t) => (
@@ -227,7 +296,7 @@ function FatherMindsetSection() {
   return (
     <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
       <SectionTitle hint="パートナーと協力して育児に向き合うための、父親（夫）の心構えの目安です。">
-        父親としてのマインドセット
+        🧭 父親としてのマインドセット
       </SectionTitle>
       <ul className="flex flex-col gap-2">
         {FATHER_MINDSET.map((m) => (
@@ -294,7 +363,7 @@ function AdminSection({ now }: { now: Date }) {
   return (
     <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
       <SectionTitle hint="日付で決まるものは誕生日から算出しています（算出値は要確認）。">
-        行政手続き（締切付き・先回り）
+        📋 行政手続き（締切付き・先回り）
       </SectionTitle>
       <ul className="flex flex-col gap-2">
         {ADMIN_PROCEDURES.map((p) => (
@@ -310,7 +379,7 @@ function AdminSection({ now }: { now: Date }) {
 function BunkyoSection() {
   return (
     <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
-      <SectionTitle hint={BUNKYO_CAPTION}>{RESIDENCE}独自の手続き・サービス</SectionTitle>
+      <SectionTitle hint={BUNKYO_CAPTION}>🏛️ {RESIDENCE}独自の手続き・サービス</SectionTitle>
       <ul className="flex flex-col gap-2">
         {BUNKYO_SERVICES.map((s) => (
           <li key={s.title} className="rounded-md border border-border bg-bg px-3 py-3">
@@ -332,7 +401,7 @@ function BunkyoSection() {
 function PerksSection() {
   return (
     <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
-      <SectionTitle hint={PERKS_CAPTION}>知っておくとお得・特典（役所＋民間）</SectionTitle>
+      <SectionTitle hint={PERKS_CAPTION}>💰 知っておくとお得・特典（役所＋民間）</SectionTitle>
 
       <h3 className="mb-2 text-sm font-bold text-text">役所・公的</h3>
       <ul className="flex flex-col gap-2">
@@ -371,7 +440,7 @@ function CheckupSection({ now }: { now: Date }) {
   return (
     <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
       <SectionTitle hint="日程は自治体・医療機関で確認を。予防接種は同時接種が標準です。">
-        健診・予防接種（先回り）
+        🩺 健診・予防接種（先回り）
       </SectionTitle>
       <ul className="flex flex-col gap-2">
         {CHECKUP_ITEMS.map((c) => (
@@ -379,6 +448,177 @@ function CheckupSection({ now }: { now: Date }) {
         ))}
       </ul>
       <Note>{CHECKUP_CAPTION}</Note>
+    </section>
+  );
+}
+
+// ─── セクション（新）: お世話の基本 ────────────────────────
+function CareBasicsSection() {
+  return (
+    <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+      <SectionTitle hint="新生児期のお世話の一般的な目安です。">👶 お世話の基本</SectionTitle>
+      <ul className="flex flex-col gap-2">
+        {CARE_BASICS.map((c) => (
+          <li key={c.title} className="flex items-start gap-2.5 rounded-md border border-border bg-bg px-3 py-2.5">
+            <span aria-hidden className="text-lg leading-none">{c.emoji}</span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-text">{c.title}</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-text-muted">{c.detail}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <Note>{CARE_BASICS_CAPTION}</Note>
+    </section>
+  );
+}
+
+// ─── セクション（新）: 新生児の1日のリズム（ビジュアル） ────
+function DailyRhythmSection() {
+  return (
+    <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+      <SectionTitle hint="新生児期のおおよその1日のリズムの目安です。">
+        🕒 新生児の1日のリズム（目安）
+      </SectionTitle>
+      <ul className="flex flex-col gap-2.5">
+        {DAILY_RHYTHM.map((r) => (
+          <li key={r.label} className="rounded-md border border-border bg-bg px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <span aria-hidden className="text-base leading-none">{r.icon}</span>
+              <p className="text-sm font-semibold text-text">{r.label}</p>
+              <p className="ml-auto text-xs text-text-muted">{r.value}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <Note>{DAILY_RHYTHM_CAPTION}</Note>
+    </section>
+  );
+}
+
+// ─── セクション（新）: 夜泣き・ぐずり対応 ──────────────────
+function NightCryingSection() {
+  return (
+    <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+      <SectionTitle hint="泣き止まないときの一般的な対応の目安です。">🌙 夜泣き・ぐずり対応</SectionTitle>
+      <ul className="flex flex-col gap-2">
+        {NIGHT_CRYING.map((n) => (
+          <li key={n.title} className="rounded-md border border-border bg-bg px-3 py-2.5">
+            <p className="text-sm font-semibold text-text">{n.title}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-text-muted">{n.detail}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// ─── セクション（新）: 受診の目安・困ったとき ＋ 緊急電話 ──
+function WhenToSeeDoctorSection() {
+  return (
+    <section className="rounded-lg border border-blocked/40 bg-surface p-4 md:p-5">
+      <SectionTitle hint="迷ったら電話相談・医療機関へ。一般的な目安です。">
+        🚨 受診の目安・困ったとき
+      </SectionTitle>
+      <ul className="flex flex-col gap-2">
+        {WHEN_TO_SEE_DOCTOR.map((w) => (
+          <li key={w.title} className="rounded-md border border-border bg-bg px-3 py-2.5">
+            <p className="text-sm font-semibold text-text">{w.title}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-text-muted">{w.detail}</p>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {EMERGENCY_PHONES.map((p) => (
+          <a
+            key={p.label}
+            href={`tel:${p.tel}`}
+            className="inline-flex items-center gap-1.5 rounded-full border border-blocked/50 bg-blocked-bg px-3 py-1.5 text-xs font-bold text-blocked"
+          >
+            <span aria-hidden>📞</span>
+            {p.label} {p.number}
+          </a>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] text-text-faint">{WHEN_TO_SEE_DOCTOR_SOURCE}</p>
+      <Note>{WHEN_TO_SEE_DOCTOR_CAPTION}</Note>
+    </section>
+  );
+}
+
+// ─── セクション（新）: SIDS 予防（厚労省3か条） ─────────────
+function SidsSection() {
+  return (
+    <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+      <SectionTitle hint="厚生労働省の3か条。リスクを減らすためのポイントです。">
+        🛏️ 乳幼児突然死症候群（SIDS）予防
+      </SectionTitle>
+      <ul className="flex flex-col gap-2">
+        {SIDS_PREVENTION.map((s, i) => (
+          <li key={s.title} className="flex items-start gap-2.5 rounded-md border border-border bg-bg px-3 py-2.5">
+            <span
+              aria-hidden
+              className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-bold text-accent"
+            >
+              {i + 1}
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-text">{s.title}</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-text-muted">{s.detail}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <ExternalLink href={SIDS_URL}>政府広報オンライン ↗</ExternalLink>
+        <span className="text-[11px] text-text-faint">{SIDS_SOURCE}</span>
+      </div>
+    </section>
+  );
+}
+
+// ─── セクション（新）: 予防接種スケジュール（タイムライン） ─
+function VaccineScheduleSection({ now }: { now: Date }) {
+  const months = ageInMonths(now);
+  return (
+    <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+      <SectionTitle hint="現在の月齢の列をハイライトしています。同時接種が標準です。">
+        💉 予防接種スケジュール（標準）
+      </SectionTitle>
+      {/* PC: 横並びタイムライン / モバイル: 縦並び。 */}
+      <ol className="flex flex-col gap-3 md:flex-row md:items-stretch md:gap-2">
+        {VACCINE_SCHEDULE.map((m) => {
+          const active = months >= m.fromMonth && (m.toMonth === null || months < m.toMonth);
+          return (
+            <li
+              key={m.label}
+              className={`flex-1 rounded-md border px-3 py-3 ${
+                active ? 'border-accent/60 bg-accent/10' : 'border-border bg-bg'
+              }`}
+            >
+              <p className={`text-sm font-bold ${active ? 'text-accent' : 'text-text'}`}>
+                {m.label}
+                {active && <span className="ml-2 text-[11px] font-bold text-accent">いまここ</span>}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {m.vaccines.map((v) => (
+                  <span
+                    key={v}
+                    className="inline-flex items-center rounded-full border border-border bg-surface-2 px-2 py-0.5 text-[11px] leading-none text-text-muted"
+                  >
+                    {v}
+                  </span>
+                ))}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <ExternalLink href={VACCINE_SCHEDULE_URL}>厚生労働省（予防接種） ↗</ExternalLink>
+        <span className="text-[11px] text-text-faint">{VACCINE_SCHEDULE_SOURCE}</span>
+      </div>
+      <Note>{VACCINE_SCHEDULE_CAPTION}</Note>
     </section>
   );
 }
@@ -395,16 +635,22 @@ export default function Childcare() {
       />
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
         <div className="mx-auto flex max-w-5xl flex-col gap-4">
-          {/* ヘッダ → 成長タイムライン → いま来るもの を全幅で上部固定。 */}
+          {/* ヘッダ → 次の節目 → 成長タイムライン → いま来るもの を全幅で上部固定。 */}
           <BabyHeader now={now} />
+          <NextMilestoneSection now={now} />
           <GrowthSection now={now} />
           <UpcomingSection now={now} />
           {/* PC（lg〜）は2分割（CSS マルチカラムのメイソンリー）、モバイルは1列。
               各ラッパに break-inside-avoid を当て、カードが列をまたいで割れないようにする。 */}
           <div className="columns-1 gap-4 lg:columns-2">
             {[
+              <CareBasicsSection key="care" />,
+              <DailyRhythmSection key="rhythm" />,
+              <NightCryingSection key="night" />,
               <FatherMindsetSection key="mindset" />,
               <FatherSection key="father" />,
+              <WhenToSeeDoctorSection key="doctor" />,
+              <SidsSection key="sids" />,
               <AdminSection key="admin" now={now} />,
               <BunkyoSection key="bunkyo" />,
               <PerksSection key="perks" />,
@@ -415,6 +661,8 @@ export default function Childcare() {
               </div>
             ))}
           </div>
+          {/* 全幅・下部: 予防接種スケジュールのビジュアル・タイムライン。 */}
+          <VaccineScheduleSection now={now} />
         </div>
       </div>
     </div>

@@ -162,6 +162,297 @@ export const GROWTH_DISCLAIMER =
   '発達には個人差が大きく、ここに挙げたのはあくまで目安です。心配なことは健診やかかりつけ医にご相談ください。';
 
 // ───────────────────────────────────────────────────────────
+// セクション（新）: 次の節目までの進捗（NextMilestoneSection）
+// 誕生日からの生後日数を使い、次の主要マイルストーンまでの残日数と
+// プログレス（%）を算出する。日付・節目はハードコードせず BIRTH_DATE 起点。
+// ───────────────────────────────────────────────────────────
+
+export interface Milestone {
+  /** 表示名。 */
+  label: string;
+  /** 生後日数（目安）。daysSinceBirth と同じ「誕生日=1日目」換算。 */
+  dayOffset: number;
+}
+
+/** 主要マイルストーンの目安（生後日数）。算出値の注記は UI 側で行う。 */
+export const MILESTONES: Milestone[] = [
+  { label: '1か月健診', dayOffset: 30 },
+  { label: '予防接種スタート', dayOffset: 60 },
+  { label: '3–4か月健診', dayOffset: 100 },
+];
+
+export interface NextMilestoneProgress {
+  /** 直近の未到達マイルストーン（すべて到達済みなら null）。 */
+  next: Milestone | null;
+  /** 直前（基準）のマイルストーン day（無ければ 0＝誕生）。 */
+  fromDay: number;
+  /** 現在の生後日数。 */
+  currentDay: number;
+  /** 次の節目までの残日数（到達済みは 0）。 */
+  daysLeft: number;
+  /** fromDay→next.dayOffset 間の進捗（0–100）。next が null なら 100。 */
+  percent: number;
+}
+
+/**
+ * 次の主要マイルストーンまでの残日数・進捗を算出する。
+ * 「まだ来ていない直近」のマイルストーンを次の目標とし、
+ * その一つ前の節目（無ければ誕生）からの進捗を % で返す。
+ */
+export function nextMilestoneProgress(now: Date = new Date()): NextMilestoneProgress {
+  const currentDay = daysSinceBirth(now);
+  const sorted = MILESTONES.slice().sort((a, b) => a.dayOffset - b.dayOffset);
+  const nextIdx = sorted.findIndex((m) => currentDay < m.dayOffset);
+  if (nextIdx === -1) {
+    // すべて到達済み。
+    return {
+      next: null,
+      fromDay: sorted.length ? sorted[sorted.length - 1].dayOffset : 0,
+      currentDay,
+      daysLeft: 0,
+      percent: 100,
+    };
+  }
+  const next = sorted[nextIdx];
+  const fromDay = nextIdx > 0 ? sorted[nextIdx - 1].dayOffset : 0;
+  const span = Math.max(1, next.dayOffset - fromDay);
+  const done = Math.min(span, Math.max(0, currentDay - fromDay));
+  const percent = Math.round((done / span) * 100);
+  const daysLeft = Math.max(0, next.dayOffset - currentDay);
+  return { next, fromDay, currentDay, daysLeft, percent };
+}
+
+// ───────────────────────────────────────────────────────────
+// セクション（新）: お世話の基本（CARE_BASICS）
+// 一般的な目安。医療判断ではない旨を UI 側で注記する。
+// ───────────────────────────────────────────────────────────
+
+export interface CareBasic {
+  emoji: string;
+  title: string;
+  detail: string;
+}
+
+export const CARE_BASICS: CareBasic[] = [
+  {
+    emoji: '🍼',
+    title: '授乳・調乳',
+    detail:
+      '母乳は欲しがるだけ。粉ミルクは一度70℃以上のお湯で溶かし、流水等で人肌（約40℃）まで冷ましてから。飲み残しは破棄。授乳後はげっぷを。',
+  },
+  {
+    emoji: '🛁',
+    title: '沐浴',
+    detail:
+      '1日1回が目安。湯温38〜40℃、5分程度。へその緒が乾くまでは特に清潔に。',
+  },
+  {
+    emoji: '🧷',
+    title: 'おむつ替え',
+    detail: '排尿・排便のたびに。やさしく拭いてかぶれ予防。',
+  },
+  {
+    emoji: '😴',
+    title: '寝かせ方',
+    detail:
+      'あおむけ・硬めのマット・軽い掛け物。授乳→げっぷ→寝かしつけのリズム。',
+  },
+  {
+    emoji: '🌡️',
+    title: '体温・室温',
+    detail: '暖めすぎ・厚着に注意。室温は大人が快適な程度に。',
+  },
+];
+
+export const CARE_BASICS_CAPTION = '一般的な目安です。';
+
+// ───────────────────────────────────────────────────────────
+// セクション（新）: 新生児の1日のリズムの目安（DAILY_RHYTHM）
+// 横バー/アイコン付きで視覚化する想定。
+// ───────────────────────────────────────────────────────────
+
+export interface DailyRhythmItem {
+  icon: string;
+  label: string;
+  value: string;
+}
+
+export const DAILY_RHYTHM: DailyRhythmItem[] = [
+  { icon: '🍼', label: '授乳', value: '2〜3時間ごと（1日8〜12回）' },
+  { icon: '😴', label: '睡眠', value: '1日合計16〜18時間（昼夜問わずこま切れ）' },
+  { icon: '🧷', label: 'おむつ', value: '1日10回前後' },
+];
+
+export const DAILY_RHYTHM_CAPTION = '昼夜の区別はまだ。少しずつ整います。';
+
+// ───────────────────────────────────────────────────────────
+// セクション（新）: 夜泣き・ぐずり対応（NIGHT_CRYING）
+// ───────────────────────────────────────────────────────────
+
+export interface NightCryingItem {
+  title: string;
+  detail: string;
+}
+
+export const NIGHT_CRYING: NightCryingItem[] = [
+  {
+    title: '黄昏泣き（コリック）',
+    detail:
+      '夕方〜夜に理由なく泣くことがある。生後数週〜3・4か月で落ち着くことが多い。',
+  },
+  {
+    title: '順に試す',
+    detail:
+      'おむつ→授乳→抱っこ（縦抱き）→室温・服→おくるみ→環境音（ホワイトノイズ）→外気・散歩。',
+  },
+  {
+    title: '親のケア',
+    detail:
+      'どうしても泣き止まず限界のときは、安全な場所に寝かせて少し離れ深呼吸を。絶対に揺さぶらない（揺さぶられっ子症候群）。',
+  },
+  {
+    title: 'つらいときは相談を',
+    detail: 'つらいときは #8000 や自治体の相談窓口へ。',
+  },
+];
+
+// ───────────────────────────────────────────────────────────
+// セクション（新）: 受診の目安・困ったとき（WHEN_TO_SEE_DOCTOR）＋緊急電話
+// 「一般的な目安。最終判断は医療機関へ」を徹底する。
+// ───────────────────────────────────────────────────────────
+
+export interface WhenToSeeDoctorItem {
+  title: string;
+  detail: string;
+}
+
+export const WHEN_TO_SEE_DOCTOR: WhenToSeeDoctorItem[] = [
+  {
+    title: '生後3か月未満は要注意',
+    detail:
+      '37.5℃以上は機嫌がよくてもかかりつけに相談、38℃以上はすぐ受診。',
+  },
+  {
+    title: 'すぐ受診・救急',
+    detail:
+      'ぐったり／授乳が極端に減る／繰り返す嘔吐／けいれん／呼吸が苦しそう／顔色が悪い／反応が鈍い。',
+  },
+  {
+    title: '迷ったら電話相談',
+    detail:
+      '小児救急電話相談 #8000、救急相談センター #7119。',
+  },
+];
+
+export interface EmergencyPhone {
+  label: string;
+  number: string;
+  /** tel: リンク用（記号は除いた数字）。 */
+  tel: string;
+}
+
+export const EMERGENCY_PHONES: EmergencyPhone[] = [
+  { label: '小児救急電話相談', number: '#8000', tel: '#8000' },
+  { label: '救急相談センター', number: '#7119', tel: '#7119' },
+];
+
+export const WHEN_TO_SEE_DOCTOR_SOURCE = '出典: 厚生労働省／自治体・#8000';
+export const WHEN_TO_SEE_DOCTOR_CAPTION =
+  '一般的な目安です。最終判断は医療機関へ。';
+
+// ───────────────────────────────────────────────────────────
+// セクション（新）: 乳幼児突然死症候群（SIDS）予防（SIDS_PREVENTION）
+// 厚労省3か条。出典: 政府広報オンライン。
+// ───────────────────────────────────────────────────────────
+
+export interface SidsItem {
+  title: string;
+  detail: string;
+}
+
+export const SIDS_PREVENTION: SidsItem[] = [
+  {
+    title: '1歳まではあおむけ寝',
+    detail:
+      '硬めのマット・軽い掛け布団。暖めすぎ・厚着に注意。',
+  },
+  {
+    title: '周囲でたばこを吸わない',
+    detail: '妊娠中・赤ちゃんの周囲では喫煙しない。',
+  },
+  {
+    title: 'できるだけ母乳で育てる',
+    detail: '可能な範囲で母乳育児を。',
+  },
+];
+
+export const SIDS_SOURCE = '出典: 政府広報オンライン（厚生労働省）';
+export const SIDS_URL =
+  'https://www.gov-online.go.jp/article/201710/entry-8129.html';
+
+// ───────────────────────────────────────────────────────────
+// セクション（新）: 予防接種スケジュール（VACCINE_SCHEDULE）
+// 月齢→ワクチン配列。標準的なスケジュール。出典: 厚生労働省。
+// 健診の締切（CHECKUP_ITEMS）とは役割が異なる（ワクチン一覧）。
+// ───────────────────────────────────────────────────────────
+
+export interface VaccineMonth {
+  /** 表示ラベル（例: '2か月'）。 */
+  label: string;
+  /** ハイライト判定用の月齢下限（含む）。 */
+  fromMonth: number;
+  /** ハイライト判定用の月齢上限（含まない）。最後は null。 */
+  toMonth: number | null;
+  /** この月齢で受けるワクチン（チップ表示）。 */
+  vaccines: string[];
+}
+
+export const VACCINE_SCHEDULE: VaccineMonth[] = [
+  {
+    label: '2か月',
+    fromMonth: 2,
+    toMonth: 3,
+    vaccines: ['ロタ①', 'B型肝炎①', '小児用肺炎球菌①', '五種混合①'],
+  },
+  {
+    label: '3か月',
+    fromMonth: 3,
+    toMonth: 4,
+    vaccines: ['ロタ②', 'B型肝炎②', '小児用肺炎球菌②', '五種混合②'],
+  },
+  {
+    label: '4か月',
+    fromMonth: 4,
+    toMonth: 5,
+    vaccines: ['ロタ③（ロタテックのみ）', '小児用肺炎球菌③', '五種混合③'],
+  },
+  {
+    label: '5〜8か月',
+    fromMonth: 5,
+    toMonth: 9,
+    vaccines: ['BCG', 'B型肝炎③（7〜8か月）'],
+  },
+  {
+    label: '1歳',
+    fromMonth: 12,
+    toMonth: null,
+    vaccines: [
+      'MR（麻しん風しん）①',
+      '水痘①',
+      'おたふくかぜ',
+      '小児用肺炎球菌④',
+      '五種混合④（追加）',
+    ],
+  },
+];
+
+export const VACCINE_SCHEDULE_CAPTION =
+  'ロタは初回を生後14週6日までに開始。同時接種が標準。スケジュールは自治体・かかりつけ医で確認を。';
+export const VACCINE_SCHEDULE_SOURCE = '出典: 厚生労働省';
+export const VACCINE_SCHEDULE_URL =
+  'https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/kenkou_iryou/kenkou/kekkaku-kansenshou/yobou-sesshu/vaccine/months-2.html';
+
+// ───────────────────────────────────────────────────────────
 // セクション③: 父親（夫）としてやること（産後すぐ〜産褥期）
 // 「医療判断ではなく一般的な役割分担。異常時は専門家へ」を明記。
 // ───────────────────────────────────────────────────────────
