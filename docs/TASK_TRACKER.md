@@ -2602,3 +2602,105 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 依存 | 新規（NAV/Routes/views 既存パターン流用）。設計は Son が Phase 詳細を詰める。 |
 | 備考 | Keita 要望（2026-06-14 音声）。個人用ダッシュボードのため対象は単一児（男児・6/10）でよい。手続きは制度・締切の正確性が肝＝出典付きで curate。実装後の検証に林は入れない（2026-06-08 Keita 指示）。Son 自己検証→push 可。 |
 | 更新日 | 2026-06-14 |
+
+---
+
+### MC-227 — ドキュメント: ファイル/フォルダのリネーム
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-227 |
+| タイトル | ドキュメント(Deliverables)でファイル・フォルダをリネームできるようにする |
+| 優先度 | P1 |
+| ステータス | REVIEW |
+| 担当 | ソラ（dev-apollo） |
+| 詳細 | Apolloドキュメント機能を「普通のPCフォルダ並み」に育てる Phase 1（リサーチ: obsidian-vault/20-Knowledge/apollo-documents-improvement-research.md）。現状リネームAPI/UIが無い。`server/src/index.ts` に rename API（POST /api/deliverables/rename、path＋newName、`data/deliverables` 配下に閉じたパス検証必須=トラバーサル防止）を追加し、`web/src/views/Deliverables.tsx` の FileCard/FolderNodeView にインライン名前編集（F2/Enter or 右クリック→名前変更、同名衝突チェック）を実装。 |
+| 受け入れ条件（DoD） | ファイル・フォルダ両方をUI上で改名でき、リロード後も反映。`data/deliverables` 外への書込み不可。同名衝突は拒否しエラー表示。server tsc0 / web build0 / mission-control restart 後に実画面で改名→反映を確認。 |
+| 依存 | 既存 Deliverables 構造（collectors/deliverables.ts の relpath 表現）。 |
+| 備考 | 林リサーチ→Keita 承認「まず普通のフォルダ並み・ドキュメントだけ先に」（2026-06-14）。実装は NO_PUSH（push/deployゲートは別途）。検証に林は入れない（2026-06-08 Keita）。<br>【実装/検証 2026-06-14 ソラ・commit 4a55cad（ローカルのみ・未push）】POST /api/deliverables/rename を追加（`server/src/index.ts:946-993`）、検証ヘルパ validateRenameName/resolveRenameTarget（`server/src/lib/deliverablePath.ts:222-275`）。UI は FileCard/FileRow/FolderNodeView にインライン名前編集（編集ボタン＋ダブルクリック、`web/src/views/Deliverables.tsx` InlineRenameInput）。server tsc --noEmit EXIT0 / web build EXIT0 → systemctl restart → healthz200。curl: 改名成功(JSON)・同名衝突409・newName/path トラバーサル400・ドット始まり400・README 403 を確認。Playwright で実画面の改名→反映（旧名消失）・JSエラーなし・390px 横溢れなしを確認。 |
+| 更新日 | 2026-06-14 |
+
+---
+
+### MC-228 — ドキュメント: ファイル/フォルダの移動
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-228 |
+| タイトル | ドキュメント(Deliverables)でファイル・フォルダを別フォルダへ移動できるようにする |
+| 優先度 | P1 |
+| ステータス | TODO |
+| 担当 | ソラ（dev-apollo） |
+| 詳細 | Phase 1。現状ツリーは表示専用で移動不可。POST /api/deliverables/move（srcPath→destDir、パス検証・同名衝突チェック）を追加。UIは (1)ドラッグ&ドロップでフォルダへドロップ（ドロップ先ハイライト必須）と (2)「移動先を選ぶ」メニュー（深い階層用の確実な導線）の両対応。 |
+| 受け入れ条件（DoD） | D&Dとメニューの両方でファイル/フォルダを移動でき、ツリーに反映。`data/deliverables` 外不可。循環移動（親を子へ）防止。server tsc0 / web build0 / restart 後 実画面で移動→反映を確認。 |
+| 依存 | MC-227（パス検証ヘルパを共用すると効率的）。 |
+| 備考 | NO_PUSH。検証に林は入れない。 |
+| 更新日 | 2026-06-14 |
+
+---
+
+### MC-229 — ドキュメント: 複数選択＋一括操作
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-229 |
+| タイトル | ドキュメント(Deliverables)で複数選択して一括削除/移動/ダウンロードできるようにする |
+| 優先度 | P1 |
+| ステータス | TODO |
+| 担当 | ソラ（dev-apollo） |
+| 詳細 | Phase 1。現状は1個ずつ操作。Shift連続選択・Ctrl/Cmd個別選択を実装し、選択時のみ「文脈ツールバー」（選択数バッジ＋一括削除/一括移動/一括DL）を表示。一括DLはzipまとめ or 連続DL。バックエンドは既存のdelete/move（MC-228）をループ or バッチAPI化。 |
+| 受け入れ条件（DoD） | 複数選択→一括削除・一括移動・一括DLが動作。選択時のみツールバー表示・通常時はクリーン。server tsc0 / web build0 / restart 後 実画面で確認。 |
+| 依存 | MC-228（move）、MC-230（削除はゴミ箱経由が望ましい）。 |
+| 備考 | NO_PUSH。検証に林は入れない。 |
+| 更新日 | 2026-06-14 |
+
+---
+
+### MC-230 — ドキュメント: ゴミ箱＋復元＋Undo
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-230 |
+| タイトル | ドキュメント(Deliverables)の削除をゴミ箱方式にし復元・Undoできるようにする |
+| 優先度 | P1 |
+| ステータス | REVIEW |
+| 担当 | ソラ（dev-apollo） |
+| 詳細 | Phase 1。現状 DELETE は物理削除で戻せない（破壊操作の安全網が無い）。削除を `data/deliverables/.trash/`（コレクタ走査から除外）への退避に変更し、(1)削除直後の Undo トースト（数秒以内なら即戻す）、(2)ゴミ箱ビューからの復元/完全削除を実装。.trash は一定期間/容量でパージ。 |
+| 受け入れ条件（DoD） | 削除→ゴミ箱退避→Undoトーストで復帰、ゴミ箱ビューから復元・完全削除が可能。.trash は一覧/検索に出ない。server tsc0 / web build0 / restart 後 実画面で削除→復元を確認。 |
+| 依存 | 既存 DELETE /api/deliverables/file の置換。MC-229 の一括削除もゴミ箱経由に。 |
+| 備考 | NO_PUSH。検証に林は入れない。最優先級（安全網のため）。<br>【実装/検証 2026-06-14 ソラ・commit 4a55cad（ローカルのみ・未push）】DELETE /api/deliverables/file を物理削除→.trash 退避に変更（`server/src/index.ts:781-846`）。GET/POST/DELETE の trash 系（一覧・restore・purge）= `server/src/index.ts:848-958`。退避先解決ヘルパ makeTrashTarget/resolveTrashPath/trashRoot（`server/src/lib/deliverablePath.ts:277-393`）。.trash 除外は既存（`collectors/deliverables.ts:102` EXCLUDED_DIRS / `lib/deliverablePath.ts:20` FORBIDDEN_SEGMENTS）。UI は UndoToast＋TrashView（`web/src/views/Deliverables.tsx`）。server tsc0 / web build0 → restart → healthz200。curl: 削除→.trash退避→一覧JSON→restore（元位置復元・同名は -2 サフィックス）→個別purge→全purge を確認、main 一覧に .trash がリークしないことも確認。Playwright で削除→Undoトースト「ゴミ箱に移動しました/元に戻す」表示→復元、JSエラーなしを実画面確認。フォルダ削除→退避→完全削除も確認。.trash の自動パージ（期間/容量）は未実装＝後続課題。 |
+| 更新日 | 2026-06-14 |
+
+---
+
+### MC-231 — ドキュメント: 並び替え切替（名前/日付/サイズ）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-231 |
+| タイトル | ドキュメント(Deliverables)で名前/更新日/サイズの昇降ソートを切り替えられるようにする |
+| 優先度 | P1 |
+| ステータス | REVIEW |
+| 担当 | ソラ（dev-apollo） |
+| 詳細 | Phase 1。現状は mtime 降順固定（collectors/deliverables.ts）で UI から変えられない。フロントに並び替えコントロール（名前/更新日/サイズ × 昇順/降順）を追加し、フォルダビュー・リストビュー両方に適用。リストビューは列ヘッダクリックでソート。選択中ソートは localStorage 永続化。 |
+| 受け入れ条件（DoD） | 名前/更新日/サイズの昇降ソートが切替でき、両ビューに反映、リロード後も維持。web build0 / restart 後 実画面で確認（サーバ変更は基本不要、クライアントソートで可）。 |
+| 依存 | なし（クライアント側で完結可能）。 |
+| 備考 | NO_PUSH。着手しやすい独立タスク。<br>【実装/検証 2026-06-14 ソラ・commit 4a55cad（ローカルのみ・未push）】SortControl＋sortFiles/loadSortPref/saveSortPref（`web/src/views/Deliverables.tsx`）。名前/更新日/サイズ × 昇順/降順をクライアント側でソートし、フォルダ/リスト両ビューに適用。日本語ロケール・数値順・同値は名前で安定化。localStorage キー `apollo.deliverables.sort` で永続化。サーバ変更なし。SVG アイコン SortIcon/ArrowUpIcon/ArrowDownIcon を追加（`web/src/components/icons.tsx`）。web build EXIT0 → restart。Playwright で名前昇順↔降順の DOM 順序反転・リロード後 localStorage 永続化（`{"key":"name","dir":"desc"}`）・JSエラーなし・390px 横溢れなしを実画面確認。注: 「列ヘッダクリックでソート」はリストがカードグリッドのため列ヘッダ自体が無く、ツールバーの並び替えコントロールで代替（DoD の昇降切替・両ビュー反映・永続化は満たす）。 |
+| 更新日 | 2026-06-14 |
+
+---
+
+### MC-232 — ドキュメント: パンくず＋戻る/進む＋最近使った
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-232 |
+| タイトル | ドキュメント(Deliverables)にパンくず・戻る/進む・最近使った項目のナビを追加 |
+| 優先度 | P2 |
+| ステータス | TODO |
+| 担当 | ソラ（dev-apollo） |
+| 詳細 | Phase 1。現状フォルダ階層の現在地ナビが弱い。(1)クリック可能なパンくず（各階層へジャンプ）、(2)戻る/進む（ナビ履歴）、(3)最近開いた/アップロードした項目の自動リスト（localStorage or mtime ベース）を追加し、深い階層で迷子にならないようにする。 |
+| 受け入れ条件（DoD） | パンくずで各階層へジャンプ可、戻る/進むが履歴通り動作、最近使った項目が表示される。web build0 / restart 後 実画面で確認。 |
+| 依存 | なし（主にクライアント側）。 |
+| 備考 | NO_PUSH。Phase 1 の中では優先度やや低（P2）。 |
+| 更新日 | 2026-06-14 |
