@@ -2782,12 +2782,12 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-237 |
 | タイトル | ドキュメント(Deliverables)にファイル名インクリメンタル検索＋フィルタチップ＋スコープ切替を追加 |
 | 優先度 | P2 |
-| ステータス | TODO |
+| ステータス | REVIEW |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 2。現状の種別フィルタを発展させ、(1)ドキュメント内のインクリメンタルなファイル名検索ボックス、(2)フィルタチップ（種類/更新日レンジ/タグ ※タグはMC-238後）、(3)検索スコープ切替（現在フォルダ配下のみ / ドキュメント全体）。 |
 | 受け入れ条件（DoD） | 打鍵ごとに絞り込み、チップ複合適用、スコープ切替が効く。web build0 / restart 後 実画面確認。 |
 | 依存 | 既存 FilterKind（Deliverables.tsx）。タグチップは MC-238 完了後に有効化。 |
-| 備考 | NO_PUSH。 |
+| 備考 | NO_PUSH。<br>【実装/検証 2026-06-14 ソラ・commit a86e0bb（ローカルのみ・未push）】`SearchFilterBar`（`web/src/views/Deliverables.tsx`）＝検索ボックス（ファイル名インクリメンタル）＋スコープ切替（このフォルダ/全体）＋種類チップ＋更新日レンジチップ（7/30/90日）＋タグチップ（MC-238 のタグ。タグ存在時のみ表示）。複合 predicate `matchesAllFilters`（種類∧名前∧更新日∧スコープ∧タグ AND）。検索/フィルタ有効時はフォルダビューもツリーでなくフラット結果表示に切替（`searchActive`）。SearchIcon 流用。web tsc0/build EXIT0→restart→healthz200。Playwright(1400px) で 検索ボックス/スコープ/更新日チップ表示・「sample」入力で sample.ts 絞り込み＋非該当 data.json が消える・JSエラー0、390px 横溢れ0 を実画面確認。 |
 | 更新日 | 2026-06-14 |
 
 ---
@@ -2799,12 +2799,12 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-238 |
 | タイトル | ドキュメント(Deliverables)にスター(お気に入り)・複数タグ・色ラベルを付与できるようにする |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | REVIEW |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 2。ファイル/フォルダにメタデータを付与。実体はファイルなので、サイドカーstore（例 `data/deliverables-meta.json`、relpath をキーに {starred, tags[], color} を保持）を新設。rename/move/delete/copy 時にキーを追従更新（MC-227/228/230/235 の操作にフック）。UIはスタートグル・タグ入力（自動補完）・色ラベル選択、一覧でのバッジ表示。 |
 | 受け入れ条件（DoD） | スター/タグ/色を付与・編集・削除でき永続。リネーム/移動/削除/コピーでメタが正しく追従（迷子・取り違えなし）。一覧にバッジ表示。server tsc0 / web build0 / restart 後 実画面確認。 |
 | 依存 | MC-227/228/230（操作時のメタ追従フックが要る）。 |
-| 備考 | NO_PUSH。サイドカーstoreの整合性が肝＝設計を丁寧に。MC-237 のタグチップ・将来のスマートフォルダ(Phase3)の土台にもなる。 |
+| 備考 | NO_PUSH。サイドカーstoreの整合性が肝＝設計を丁寧に。MC-237 のタグチップ・将来のスマートフォルダ(Phase3)の土台にもなる。<br>【実装/検証 2026-06-14 ソラ・commit eb7c856(server)＋a86e0bb(web)（ローカルのみ・未push）】サイドカー store `server/src/lib/deliverableMeta.ts`（`data/deliverables-meta.json`、relpath キー → {starred,tags[],color}、atomic write、色/タグ正規化・空メタは削除）。API GET/PUT `/api/deliverables/meta`（`server/src/index.ts`、パスは deliverablePath で範囲検証＝traversal 400）。**メタ追従**: rename(`moveMeta`)・move(`moveMeta`)・copy(`copyMeta`)・delete=ゴミ箱(`trashMeta`→_trash退避)・restore(`restoreMeta`再付与・衝突回避リネーム追従)・purge(`purgeTrashMeta`破棄) の各ルートにフック。フォルダは配下キーもプレフィックス置換で移行。UI（`web/src/views/Deliverables.tsx`）＝詳細ペイン `MetaEditor`（スター/タグ自動補完入力/色ラベル7色）＋カード/行/フォルダのスター即トグル＋`MetaBadges`（色ドット/スター/タグ）。楽観更新→PUT→`refetchAll`（ファイル＋メタ同時再取得でキー追従反映）。StarIcon 追加。検証＝server tsc0/web build0/restart healthz200。**メタ追従フロー実機 API 確認**: set(star+tags+color)→rename a→b でキー移行→move でキー移行→copy で複製（両キーに付与）→trash で items から外れ _trash 退避→restore で復元先へ再付与、を curl で全段確認（迷子・取り違えなし）。traversal 400・色"neon"→null・空/重複タグ正規化も確認。Playwright(1400px) で 詳細ペインのスター/タグ入力表示・UI でタグ追加→API 反映を確認、390px は詳細ペイン非表示・横溢れ0・JSエラー0。 |
 | 更新日 | 2026-06-14 |
 
 ---
@@ -2816,12 +2816,12 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-239 |
 | タイトル | ドキュメント(Deliverables)に属性列付きリスト・列幅永続化・画像向けギャラリービューを追加 |
 | 優先度 | P2 |
-| ステータス | TODO |
+| ステータス | REVIEW |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 2。(1)リストビューを名前/更新日/サイズ/種類の属性列付きテーブルにし列ヘッダクリックでソート（MC-231 のソート流用、列ヘッダ起点を実現）、(2)列幅ドラッグ調整＋localStorage永続、(3)画像が多いフォルダ向けギャラリービュー（大サムネ＋フィルムストリップ送り）。 |
 | 受け入れ条件（DoD） | 属性列テーブル＋列ヘッダソート、列幅調整が永続、ギャラリービュー切替が動作。390px で崩れない。web build0 / restart 後 実画面確認。 |
 | 依存 | MC-231（ソート）、既存ビュー切替（viewMode）。 |
-| 備考 | NO_PUSH。 |
+| 備考 | NO_PUSH。<br>【実装/検証 2026-06-14 ソラ・commit a86e0bb（ローカルのみ・未push）】リストビューを属性列テーブル `AttributeTable`/`AttributeTableRow`（名前/更新日/作成日/サイズ/種類、`web/src/views/Deliverables.tsx`）に置換。**列ヘッダクリックでソート**（`sortByColumn`＝MC-231 の SortPref 流用、同キー昇降反転・別キー既定方向、kind 列はソート対象外）。**列幅ドラッグ**（境界 pointer ドラッグ、60〜360px クランプ）＋localStorage `apollo.deliverables.colWidths` 永続。**ギャラリービュー** `GalleryView`（viewMode に 'gallery' 追加、大プレビュー＋フィルムストリップ送り＋大サムネグリッド、画像のみ対象）。FileCard は属性テーブルへ置換し削除。web tsc0/build EXIT0→restart→healthz200。Playwright(1400px) で 列ヘッダ「作成日」「種類」表示・名前ヘッダソート・列幅ドラッグ→localStorage 永続（mtime 130→167）・ギャラリー切替を確認、390px で list/gallery 横溢れ0・JSエラー0。 |
 | 更新日 | 2026-06-14 |
 
 ---
@@ -2833,12 +2833,12 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-240 |
 | タイトル | ドキュメント(Deliverables)でファイル・フォルダのパスを表示しコピーできるようにする |
 | 優先度 | P2 |
-| ステータス | TODO |
+| ステータス | REVIEW |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 2（Keita要望 2026-06-14）。各ファイル/フォルダのパスを見られる＆クリップボードにコピーできるようにする。最低限 deliverables ルート起点の相対パス（既存 relpath）を表示・コピー。必要に応じて絶対パスも（data/deliverables 配下の実パス）。置き場所は MC-236 で作る右ペイン詳細＋右クリック/メニューの「パスをコピー」。一覧の各行/カードからもコピー可。 |
 | 受け入れ条件（DoD） | 選択ファイル/フォルダのパスが詳細に表示され、ボタンでクリップボードにコピーできる。相対パスは必須、絶対パスは任意で併記。web build0 / restart 後 実画面でコピー動作を確認。 |
 | 依存 | MC-236（右ペイン詳細の置き場）。relpath は collectors/deliverables.ts に既存。 |
-| 備考 | NO_PUSH。MC-236 と同じ Deliverables.tsx を触るため、第一スライス（MC-235/236）完了後の次スライスで実施（並行回避）。 |
+| 備考 | NO_PUSH。MC-236 と同じ Deliverables.tsx を触るため、第一スライス（MC-235/236）完了後の次スライスで実施（並行回避）。<br>【実装/検証 2026-06-14 ソラ・commit a86e0bb（ローカルのみ・未push）】右ペイン詳細に `PathRow`（相対パス relpath 表示＋「パスをコピー」ボタン、コピー後「コピーしました」フィードバック）。各行/カード/フォルダに `CopyPathButton`（アイコン、`web/src/views/Deliverables.tsx`）。クリップボードは `copyToClipboard`（navigator.clipboard＋execCommand フォールバック）。LinkIcon 流用。web build0→restart→healthz200。Playwright(1400px) で 詳細ペインに「パスをコピー」表示を確認、390px 横溢れ0・JSエラー0。 |
 | 更新日 | 2026-06-14 |
 
 ---
@@ -2850,10 +2850,10 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-241 |
 | タイトル | ドキュメント(Deliverables)で作成日を更新日と並べて表示する |
 | 優先度 | P2 |
-| ステータス | TODO |
+| ステータス | REVIEW |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 2（Keita要望 2026-06-14）。現状は更新日(mtime)のみ表示。collector（collectors/deliverables.ts）に作成日を追加（fs.stat の birthtime。このFS=ext4 statx で取得可を確認済み。取れない環境では ctime か mtime にフォールバックし「作成日不明」を避ける）。UIで「更新日」「作成日」を区別して表示（右ペイン詳細＋一覧のメタ、ツールチップで絶対日時）。MC-231 のソートにも「作成日」を追加できると尚良い。 |
 | 受け入れ条件（DoD） | 各ファイル/フォルダで作成日と更新日が区別して見える。birthtime 取得不可時も破綻しない。web/server build0 / restart 後 実画面で両日付表示を確認。 |
 | 依存 | MC-236（詳細ペイン）、MC-231（ソート拡張は任意）。 |
-| 備考 | NO_PUSH。collector に作成日フィールド追加＝server側も変更。MC-235/236 と同ファイル群のため次スライスで実施。 |
+| 備考 | NO_PUSH。collector に作成日フィールド追加＝server側も変更。MC-235/236 と同ファイル群のため次スライスで実施。<br>【実装/検証 2026-06-14 ソラ・commit 602d87d（ローカルのみ・未push）】collector に `created` 追加（`createdIso`＝birthtime→ctime→mtime フォールバックで「不明」回避、`server/src/collectors/deliverables.ts`）、型(`server/.../deliverables.ts`＋`web/src/lib/types.ts`)へ反映。UI で更新日/作成日を区別表示（右ペイン `FileMetaPanel`＋カードのメタ行、ツールチップで `absoluteTime` 絶対日時）。MC-231 ソートに「作成日」追加（SortControl/sortFiles/MC-239 列ヘッダ）。検証＝server tsc0/web build0/restart healthz200、API `/api/deliverables` が `created`（birthtime）を返すことを curl 確認、Playwright で リスト列ヘッダ「作成日」表示を確認。 |
 | 更新日 | 2026-06-14 |
