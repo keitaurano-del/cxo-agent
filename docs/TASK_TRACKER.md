@@ -2731,7 +2731,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-234 |
 | タイトル | ドキュメント(Deliverables)のゴミ箱(.trash)を期間/容量で自動パージ |
 | 優先度 | P2 |
-| ステータス | REVIEW |
+| ステータス | DONE（2026-06-14 Phase2, ソラ実装+自己検証→origin push・:4317ライブ）。.trash自動パージ trashPurge.ts（保持30日/容量2GB env化、deletedAt順、誤削除なし疑似検証）。commit 2ce6f7e。 |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 1 積み残し（MC-230 でゴミ箱・復元・手動「空にする」は実装済み、自動パージのみ未）。`data/deliverables/.trash/<batchId>/` の `.trashinfo.json` の削除時刻を見て、一定期間（例: 30日）超過 or 総容量（例: 上限超）で古いバッチから自動パージ。コレクタ走査時 or 軽量cronで実行。閾値は config 化。 |
 | 受け入れ条件（DoD） | 期間/容量超過のゴミ箱バッチが自動削除され、残存は復元可能なまま。閾値が config（env）で変更可。誤って保持期間内のものを消さない。server tsc0、restart 後に動作確認（短い閾値で疑似検証）。 |
@@ -2748,7 +2748,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-235 |
 | タイトル | ドキュメント(Deliverables)でファイル・フォルダをコピー/複製できるようにする |
 | 優先度 | P2 |
-| ステータス | REVIEW |
+| ステータス | DONE（2026-06-14 Phase2, ソラ実装+自己検証→origin push・:4317ライブ）。POST /api/deliverables/copy（再帰・同名「のコピー」・自身/子孫拒否）＋一括コピー/ダイアログ。curl＋Playwright。commit 2ce6f7e。 |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 2。`POST /api/deliverables/copy`（srcPath→destDir、deliverablePath.ts の検証ヘルパ流用、フォルダは再帰コピー、同名は「コピー」サフィックス自動付与）。UIは右クリック/メニューから「コピー」、複数選択の一括コピー（MC-229 の選択基盤流用）。同一フォルダ内コピー=複製。 |
 | 受け入れ条件（DoD） | ファイル/フォルダのコピー・複製ができ、同名は自動リネーム。data/deliverables外不可。フォルダ再帰コピー可。server tsc0 / web build0 / restart 後 実画面で確認。 |
@@ -2765,7 +2765,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-236 |
 | タイトル | ドキュメント(Deliverables)のプレビューを強化（Space=Quick Look・コードのハイライト・右ペイン詳細） |
 | 優先度 | P1 |
-| ステータス | REVIEW |
+| ステータス | DONE（2026-06-14 Phase2, ソラ実装+自己検証→origin push・:4317ライブ）。Space=Quick Look＋矢印送り、軽量シンタックスハイライト（依存追加なし）、xl以上で右ペイン詳細。390pxフォールバック。commit 2ce6f7e。 |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 2。現状プレビューは PDF/画像/テキスト/markdown/Office 変換のみ。(1)スペースキーで選択中ファイルを即プレビュー（Quick Look モーダル、矢印キーで前後送り）、(2)コード/テキストのシンタックスハイライト（拡張子判定）、(3)右ペインに選択中ファイルの詳細（メタデータ＋プレビュー）を常時表示するレイアウト。 |
 | 受け入れ条件（DoD） | Spaceでプレビューモーダル開閉・矢印で送り、コードがハイライト表示、右ペイン詳細が選択追従。390px ではモーダル/単一ペインにフォールバック。web build0 / restart 後 実画面確認。 |
@@ -2782,7 +2782,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-237 |
 | タイトル | ドキュメント(Deliverables)にファイル名インクリメンタル検索＋フィルタチップ＋スコープ切替を追加 |
 | 優先度 | P2 |
-| ステータス | REVIEW |
+| ステータス | DONE（2026-06-14 Phase2, ソラ実装+自己検証→origin push・:4317ライブ）。SearchFilterBar＝インクリメンタル名前検索＋スコープ切替＋種類/更新日/タグチップ（複合AND）。commit a86e0bb。 |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 2。現状の種別フィルタを発展させ、(1)ドキュメント内のインクリメンタルなファイル名検索ボックス、(2)フィルタチップ（種類/更新日レンジ/タグ ※タグはMC-238後）、(3)検索スコープ切替（現在フォルダ配下のみ / ドキュメント全体）。 |
 | 受け入れ条件（DoD） | 打鍵ごとに絞り込み、チップ複合適用、スコープ切替が効く。web build0 / restart 後 実画面確認。 |
@@ -2799,7 +2799,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-238 |
 | タイトル | ドキュメント(Deliverables)にスター(お気に入り)・複数タグ・色ラベルを付与できるようにする |
 | 優先度 | P1 |
-| ステータス | REVIEW |
+| ステータス | DONE（2026-06-14 Phase2, ソラ実装+自己検証→origin push・:4317ライブ）。サイドカーstore deliverableMeta.ts（スター/タグ/色）＋GET/PUT /api/deliverables/meta、rename/move/copy/trash/restore/purge 全操作でメタ追従を実機検証（迷子なし）。commit eb7c856+a86e0bb。 |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 2。ファイル/フォルダにメタデータを付与。実体はファイルなので、サイドカーstore（例 `data/deliverables-meta.json`、relpath をキーに {starred, tags[], color} を保持）を新設。rename/move/delete/copy 時にキーを追従更新（MC-227/228/230/235 の操作にフック）。UIはスタートグル・タグ入力（自動補完）・色ラベル選択、一覧でのバッジ表示。 |
 | 受け入れ条件（DoD） | スター/タグ/色を付与・編集・削除でき永続。リネーム/移動/削除/コピーでメタが正しく追従（迷子・取り違えなし）。一覧にバッジ表示。server tsc0 / web build0 / restart 後 実画面確認。 |
@@ -2816,7 +2816,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-239 |
 | タイトル | ドキュメント(Deliverables)に属性列付きリスト・列幅永続化・画像向けギャラリービューを追加 |
 | 優先度 | P2 |
-| ステータス | REVIEW |
+| ステータス | DONE（2026-06-14 Phase2, ソラ実装+自己検証→origin push・:4317ライブ）。属性列テーブル（名前/更新日/作成日/サイズ/種類・列ヘッダソート・列幅localStorage永続）＋ギャラリービュー。commit a86e0bb。 |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 2。(1)リストビューを名前/更新日/サイズ/種類の属性列付きテーブルにし列ヘッダクリックでソート（MC-231 のソート流用、列ヘッダ起点を実現）、(2)列幅ドラッグ調整＋localStorage永続、(3)画像が多いフォルダ向けギャラリービュー（大サムネ＋フィルムストリップ送り）。 |
 | 受け入れ条件（DoD） | 属性列テーブル＋列ヘッダソート、列幅調整が永続、ギャラリービュー切替が動作。390px で崩れない。web build0 / restart 後 実画面確認。 |
@@ -2833,7 +2833,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-240 |
 | タイトル | ドキュメント(Deliverables)でファイル・フォルダのパスを表示しコピーできるようにする |
 | 優先度 | P2 |
-| ステータス | REVIEW |
+| ステータス | DONE（2026-06-14 Phase2, ソラ実装+自己検証→origin push・:4317ライブ）。相対パス表示＋「パスをコピー」（詳細ペイン＋各行/カード/フォルダ、clipboard fallback付）。commit a86e0bb。 |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 2（Keita要望 2026-06-14）。各ファイル/フォルダのパスを見られる＆クリップボードにコピーできるようにする。最低限 deliverables ルート起点の相対パス（既存 relpath）を表示・コピー。必要に応じて絶対パスも（data/deliverables 配下の実パス）。置き場所は MC-236 で作る右ペイン詳細＋右クリック/メニューの「パスをコピー」。一覧の各行/カードからもコピー可。 |
 | 受け入れ条件（DoD） | 選択ファイル/フォルダのパスが詳細に表示され、ボタンでクリップボードにコピーできる。相対パスは必須、絶対パスは任意で併記。web build0 / restart 後 実画面でコピー動作を確認。 |
@@ -2850,7 +2850,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-241 |
 | タイトル | ドキュメント(Deliverables)で作成日を更新日と並べて表示する |
 | 優先度 | P2 |
-| ステータス | REVIEW |
+| ステータス | DONE（2026-06-14 Phase2, ソラ実装+自己検証→origin push・:4317ライブ）。collector に created 追加（birthtime→ctime→mtime）、更新日と区別表示・ソート追加。commit 602d87d。 |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 2（Keita要望 2026-06-14）。現状は更新日(mtime)のみ表示。collector（collectors/deliverables.ts）に作成日を追加（fs.stat の birthtime。このFS=ext4 statx で取得可を確認済み。取れない環境では ctime か mtime にフォールバックし「作成日不明」を避ける）。UIで「更新日」「作成日」を区別して表示（右ペイン詳細＋一覧のメタ、ツールチップで絶対日時）。MC-231 のソートにも「作成日」を追加できると尚良い。 |
 | 受け入れ条件（DoD） | 各ファイル/フォルダで作成日と更新日が区別して見える。birthtime 取得不可時も破綻しない。web/server build0 / restart 後 実画面で両日付表示を確認。 |
