@@ -1467,6 +1467,24 @@ function CalendarSection({
   );
 }
 
+// タスクを Google Tasks のリスト（listTitle）ごとにまとめる。リストの出現順を保ち、
+// 各リスト内は渡された並び（タイトル昇順）のまま。
+function groupTasksByList(tasks: GoogleTask[]): { listTitle: string; tasks: GoogleTask[] }[] {
+  const groups: { listTitle: string; tasks: GoogleTask[] }[] = [];
+  const index = new Map<string, GoogleTask[]>();
+  for (const t of tasks) {
+    const key = t.listTitle || '(無題リスト)';
+    let arr = index.get(key);
+    if (!arr) {
+      arr = [];
+      index.set(key, arr);
+      groups.push({ listTitle: key, tasks: arr });
+    }
+    arr.push(t);
+  }
+  return groups;
+}
+
 // ─── Google タスク 1 行（期日あり・期日なし共通）──────────────────
 function TaskRow({
   task,
@@ -1647,15 +1665,32 @@ function DayDetailSection({
         </div>
       )}
 
-      {/* 期日なしの Google タスク（接続時のみ・あれば）。日付に紐づかないので選択日に関わらず常に表示。 */}
+      {/* 期日なしの Google タスク（接続時のみ・あれば）。日付に紐づかないので選択日に関わらず常に表示。
+          Google Tasks のリスト（listTitle）ごとに見出しを付けて分ける。 */}
       {accountsConnected && noDueTasks.length > 0 && (
         <div>
           <h3 className="mb-1.5 text-sm font-bold text-text">Googleタスク（期日なし）</h3>
-          <ul className="flex flex-col gap-1.5">
-            {noDueTasks.map((task) => (
-              <TaskRow key={`${task.account}:${task.id}`} task={task} accountColors={accountColors} />
+          <div className="flex flex-col gap-3">
+            {groupTasksByList(noDueTasks).map(({ listTitle, tasks }) => (
+              <div key={listTitle}>
+                <h4 className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-text-muted">
+                  {listTitle}
+                  <span className="rounded-full bg-surface-2 px-1.5 text-[10px] font-semibold text-text-faint">
+                    {tasks.length}
+                  </span>
+                </h4>
+                <ul className="flex flex-col gap-1.5">
+                  {tasks.map((task) => (
+                    <TaskRow
+                      key={`${task.account}:${task.id}`}
+                      task={task}
+                      accountColors={accountColors}
+                    />
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       )}
 
