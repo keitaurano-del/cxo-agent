@@ -133,6 +133,27 @@ function diaryDaysSince(iso: string): number {
 
 const BIRTH_MMDD = BIRTH_DATE.slice(5); // 'MM-DD'
 
+// ─── アカウント識別色（接続順に循環する CSS 変数トークン）──────────
+// 複数アカウントを重ねて表示しても見分けられるよう、接続済みアカウントの
+// 並び順に応じて識別色を割り当てる（凡例代わりの色ドット／左ボーダーに使う）。
+const ACCOUNT_COLOR_VARS = [
+  'var(--mc-accent)',
+  'var(--mc-review)',
+  'var(--mc-blocked)',
+  'var(--mc-active)',
+  'var(--mc-idle)',
+  'var(--mc-stalled)',
+] as const;
+
+/** 接続済みアカウントのメール → 識別色 の対応（並び順で循環）。 */
+function buildAccountColors(emails: string[]): Map<string, string> {
+  const m = new Map<string, string>();
+  emails.forEach((email, i) => {
+    m.set(email, ACCOUNT_COLOR_VARS[i % ACCOUNT_COLOR_VARS.length]);
+  });
+  return m;
+}
+
 // ─── メディア URL ───────────────────────────────────────────
 function mediaUrl(id: string): string {
   return `/api/baby-diary/media/${id}`;
@@ -245,16 +266,59 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
 
   // ── Google 連携状態 ──
   const [gstatus, setGstatus] = useState<GoogleStatus | null>(null);
-  // 選択中アカウント（複数接続時の Picker / 書き出し対象。既定=先頭）。
-  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
+  // カレンダーに重ねて表示する対象アカウントの集合（既定＝接続済み全アカウント）。
+  // 「閲覧は複数重ね」を担う。取り込み/書き出しの対象は別途 importTarget で1つ指定する。
+  const [visibleAccounts, setVisibleAccounts] = useState<Set<string>>(new Set());
+  // 取り込み(Picter)/ToDo書き出しの対象アカウント（visible の中の1つ。未指定なら先頭）。
+  const [importTarget, setImportTarget] = useState<string | null>(null);
 
   const accounts = gstatus?.accounts ?? [];
   const hasAccounts = accounts.length > 0;
-  // 実効アカウント（選択が未設定/失効していれば先頭にフォールバック）。
-  const activeAccount = useMemo(() => {
-    if (selectedAccount && accounts.some((a) => a.email === selectedAccount)) return selectedAccount;
-    return accounts[0]?.email ?? null;
-  }, [selectedAccount, accounts]);
+
+  // 接続済みアカウント → 識別色。並び順で循環。
+  const accountColors = useMemo(
+    () => buildAccountColors(accounts.map((a) => a.email)),
+    [accounts],
+  );
+
+  // status 取得後、接続アカウントを visible に同期する。
+  // 既存の選択は維持しつつ、新規接続が増えたら自動で visible に含める
+  // （切断されたアカウントは visible から取り除く）。
+  const knownAccountsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const current = new Set(accounts.map((a) => a.email));
+    const known = knownAccountsRef.current;
+    setVisibleAccounts((prev) => {
+      const next = new Set<string>();
+      for (const email of current) {
+        // 既知アカウントは従来の表示状態を尊重。新規は自動で visible に含める。
+        if (!known.has(email) || prev.has(email)) next.add(email);
+      }
+      return next;
+    });
+    knownAccountsRef.current = current;
+  }, [accounts]);
+
+  // visible の集合に含まれる接続済みアカウントのメール一覧（接続順）。
+  const visibleEmails = useMemo(
+    () => accounts.map((a) => a.email).filter((e) => visibleAccounts.has(e)),
+    [accounts, visibleAccounts],
+  );
+
+  // 取り込み/書き出しの実効対象（指定が未設定/非visibleなら先頭の visible にフォールバック）。
+  const activeImportAccount = useMemo(() => {
+    if (importTarget && visibleEmails.includes(importTarget)) return importTarget;
+    return visibleEmails[0] ?? null;
+  }, [importTarget, visibleEmails]);
+
+  const toggleVisibleAccount = useCallback((email: string) => {
+    setVisibleAccounts((prev) => {
+      const next = new Set(prev);
+      if (next.has(email)) next.delete(email);
+      else next.add(email);
+      return next;
+    });
+  }, []);
 
   const fetchGoogleStatus = useCallback(async () => {
     try {
@@ -316,10 +380,11 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
     };
   }, [hasAccounts, view.year, view.month]);
 
-  // date → Google 予定配列 の索引。
+  // date → Google 予定配列 の索引。チェック中(visible)のアカウントの予定のみを重ねる。
   const eventsByDate = useMemo(() => {
     const m = new Map<string, GoogleCalendarEvent[]>();
     for (const ev of gEvents) {
+      if (!visibleAccounts.has(ev.account)) continue;
       const iso = eventDateIso(ev.start);
       if (!iso) continue;
       const arr = m.get(iso) ?? [];
@@ -327,7 +392,7 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
       m.set(iso, arr);
     }
     return m;
-  }, [gEvents]);
+  }, [gEvents, visibleAccounts]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -381,8 +446,9 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
 
       <GoogleConnectPanel
         status={gstatus}
-        activeAccount={activeAccount}
-        onSelectAccount={setSelectedAccount}
+        visibleAccounts={visibleAccounts}
+        accountColors={accountColors}
+        onToggleAccount={toggleVisibleAccount}
         onRefresh={fetchGoogleStatus}
         pushToast={pushToast}
       />
@@ -397,6 +463,7 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
             entryByDate={entryByDate}
             mediaByDate={mediaByDate}
             eventsByDate={eventsByDate}
+            accountColors={accountColors}
             onPrev={goPrevMonth}
             onNext={goNextMonth}
             onToday={goToday}
@@ -407,7 +474,10 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
             entry={entryByDate.get(selected)}
             media={mediaByDate.get(selected) ?? []}
             googleEvents={eventsByDate.get(selected) ?? []}
-            activeAccount={activeAccount}
+            accountColors={accountColors}
+            visibleEmails={visibleEmails}
+            importTarget={activeImportAccount}
+            onSelectImportTarget={setImportTarget}
             accountsConnected={hasAccounts}
             onChanged={fetchData}
             pushToast={pushToast}
@@ -463,14 +533,16 @@ function DiaryHeader({ now }: { now: Date }) {
 // ─── Google 連携パネル ───────────────────────────────────────
 function GoogleConnectPanel({
   status,
-  activeAccount,
-  onSelectAccount,
+  visibleAccounts,
+  accountColors,
+  onToggleAccount,
   onRefresh,
   pushToast,
 }: {
   status: GoogleStatus | null;
-  activeAccount: string | null;
-  onSelectAccount: (email: string) => void;
+  visibleAccounts: Set<string>;
+  accountColors: Map<string, string>;
+  onToggleAccount: (email: string) => void;
   onRefresh: () => Promise<void> | void;
   pushToast: (kind: ToastKind, text: string) => void;
 }) {
@@ -528,48 +600,43 @@ function GoogleConnectPanel({
         <div className="flex flex-col gap-3">
           <p className="text-xs text-text-muted">
             カレンダーの予定表示・ToDoの書き出し・Google
-            Photosからの写真取り込みに使います。
+            Photosからの写真取り込みに使います。チェックしたアカウントの予定をすべて重ねて表示します。
           </p>
 
-          {/* 接続済みアカウント一覧 */}
+          {/* 接続済みアカウント一覧（チェックボックスで複数選択＝重ね表示） */}
           {accounts.length > 0 && (
             <ul className="flex flex-col gap-2">
               {accounts.map((a) => {
-                const isActive = a.email === activeAccount;
+                const isVisible = visibleAccounts.has(a.email);
+                const color = accountColors.get(a.email) ?? 'var(--mc-accent)';
                 return (
                   <li
                     key={a.email}
                     className={`flex items-center gap-2 rounded-md border px-3 py-2 ${
-                      isActive ? 'border-accent/50 bg-accent/5' : 'border-border bg-bg'
+                      isVisible ? 'border-border bg-surface-2/60' : 'border-border bg-bg'
                     }`}
                   >
-                    <button
-                      type="button"
-                      onClick={() => onSelectAccount(a.email)}
-                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                      aria-pressed={isActive}
-                      title="このアカウントを操作対象にする"
-                    >
+                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={isVisible}
+                        onChange={() => onToggleAccount(a.email)}
+                        className="h-4 w-4 shrink-0 accent-accent"
+                        title="カレンダーに重ねて表示する"
+                      />
+                      {/* 識別色ドット（凡例代わり） */}
                       <span
-                        className={`inline-block h-2 w-2 shrink-0 rounded-full ${
-                          isActive ? 'bg-accent' : 'bg-border'
-                        }`}
+                        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ background: color }}
                         aria-hidden
                       />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs font-medium text-text">{a.email}</span>
-                        {a.connectedAt && (
-                          <span className="block text-[10px] text-text-faint">
-                            接続日: {a.connectedAt.slice(0, 10)}
-                          </span>
-                        )}
-                      </span>
-                      {isActive && accounts.length > 1 && (
-                        <span className="shrink-0 rounded-full bg-accent/15 px-1.5 py-0.5 text-[9px] font-bold text-accent">
-                          選択中
+                        <span className="block text-[10px] text-text-faint">
+                          接続済み{a.connectedAt ? `・接続日: ${a.connectedAt.slice(0, 10)}` : ''}
                         </span>
-                      )}
-                    </button>
+                      </span>
+                    </label>
                     <button
                       type="button"
                       onClick={() => void disconnect(a.email)}
@@ -613,6 +680,7 @@ function CalendarSection({
   entryByDate,
   mediaByDate,
   eventsByDate,
+  accountColors,
   onPrev,
   onNext,
   onToday,
@@ -624,6 +692,7 @@ function CalendarSection({
   entryByDate: Map<string, DiaryEntry>;
   mediaByDate: Map<string, MediaMeta[]>;
   eventsByDate: Map<string, GoogleCalendarEvent[]>;
+  accountColors: Map<string, string>;
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
@@ -773,10 +842,18 @@ function CalendarSection({
                 )}
                 {gEvents.length > 0 && (
                   <span
-                    className="inline-flex items-center gap-0.5 rounded-full bg-idle-bg px-1 text-[8px] font-bold leading-tight text-idle"
-                    title={gEvents.map((e) => e.title).join('・')}
+                    className="inline-flex items-center gap-0.5 rounded-full bg-surface-2 px-1 text-[8px] font-bold leading-tight text-text-muted"
+                    title={gEvents.map((e) => `${e.title}（${e.account}）`).join('・')}
                   >
-                    <span aria-hidden className="inline-block h-1 w-1 rounded-full bg-idle" />
+                    {/* 取得元アカウントごとの識別色ドット（重なっても見分けられる） */}
+                    {Array.from(new Set(gEvents.map((e) => e.account))).map((acc) => (
+                      <span
+                        key={acc}
+                        aria-hidden
+                        className="inline-block h-1.5 w-1.5 rounded-full"
+                        style={{ background: accountColors.get(acc) ?? 'var(--mc-idle)' }}
+                      />
+                    ))}
                     {gEvents.length}
                   </span>
                 )}
@@ -800,7 +877,7 @@ function CalendarSection({
           <span className="rounded-full bg-review-bg px-1 text-[8px] font-bold text-review">締切</span> やること
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-idle" aria-hidden /> Google予定
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-text-muted" aria-hidden /> Google予定（色＝アカウント）
         </span>
         <span className="inline-flex items-center gap-1">
           <span aria-hidden>🎂</span> 誕生日
@@ -816,7 +893,10 @@ function DayDetailSection({
   entry,
   media,
   googleEvents,
-  activeAccount,
+  accountColors,
+  visibleEmails,
+  importTarget,
+  onSelectImportTarget,
   accountsConnected,
   onChanged,
   pushToast,
@@ -825,18 +905,34 @@ function DayDetailSection({
   entry: DiaryEntry | undefined;
   media: MediaMeta[];
   googleEvents: GoogleCalendarEvent[];
-  activeAccount: string | null;
+  accountColors: Map<string, string>;
+  visibleEmails: string[];
+  importTarget: string | null;
+  onSelectImportTarget: (email: string) => void;
   accountsConnected: boolean;
   onChanged: () => Promise<void> | void;
   pushToast: (kind: ToastKind, text: string) => void;
 }) {
   const todos = todosForDate(date);
+  // 取り込み/書き出しの対象（visible が0なら null）。visible が1つなら自動的にそれ。
+  const activeAccount = accountsConnected ? importTarget : null;
 
   return (
     <section className="flex flex-col gap-4 rounded-lg border border-accent/40 bg-surface p-4 md:p-5">
-      <div>
-        <h2 className="text-base font-bold text-text">{formatJpDate(date)}</h2>
-        <p className="mt-0.5 text-xs text-text-muted">生後 {diaryDaysSince(date)} 日</p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-base font-bold text-text">{formatJpDate(date)}</h2>
+          <p className="mt-0.5 text-xs text-text-muted">生後 {diaryDaysSince(date)} 日</p>
+        </div>
+        {/* 取り込み/書き出しの対象アカウント。visible が2つ以上のときだけ選ばせる。 */}
+        {visibleEmails.length > 1 && (
+          <ImportTargetSelect
+            visibleEmails={visibleEmails}
+            value={activeAccount}
+            accountColors={accountColors}
+            onChange={onSelectImportTarget}
+          />
+        )}
       </div>
 
       {/* やること（締切 ToDo） */}
@@ -864,31 +960,46 @@ function DayDetailSection({
         <div>
           <h3 className="mb-1.5 text-sm font-bold text-text">Googleカレンダーの予定</h3>
           <ul className="flex flex-col gap-1.5">
-            {googleEvents.map((ev) => (
-              <li
-                key={`${ev.account}:${ev.id}`}
-                className="flex items-start gap-2 rounded-md border border-idle/40 bg-bg px-2.5 py-1.5"
-              >
-                <span className="inline-flex shrink-0 items-center rounded-full bg-idle-bg px-1.5 py-0.5 text-[10px] font-bold leading-none text-idle">
-                  {eventTimeLabel(ev)}
-                </span>
-                <span className="min-w-0 flex-1">
-                  {ev.htmlLink ? (
-                    <a
-                      href={ev.htmlLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-medium text-accent hover:underline"
-                    >
-                      {ev.title || '(無題の予定)'}
-                    </a>
-                  ) : (
-                    <span className="text-xs font-medium text-text">{ev.title || '(無題の予定)'}</span>
-                  )}
-                  <span className="block truncate text-[10px] text-text-faint">{ev.account}</span>
-                </span>
-              </li>
-            ))}
+            {googleEvents.map((ev) => {
+              const color = accountColors.get(ev.account) ?? 'var(--mc-idle)';
+              return (
+                <li
+                  key={`${ev.account}:${ev.id}`}
+                  // 取得元アカウントの識別色を左ボーダーに（重なっても見分けられる）。
+                  className="flex items-start gap-2 rounded-md border border-border bg-bg px-2.5 py-1.5"
+                  style={{ borderLeftColor: color, borderLeftWidth: 3 }}
+                >
+                  <span
+                    className="inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none text-bg"
+                    style={{ background: color }}
+                  >
+                    {eventTimeLabel(ev)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    {ev.htmlLink ? (
+                      <a
+                        href={ev.htmlLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-medium text-accent hover:underline"
+                      >
+                        {ev.title || '(無題の予定)'}
+                      </a>
+                    ) : (
+                      <span className="text-xs font-medium text-text">{ev.title || '(無題の予定)'}</span>
+                    )}
+                    <span className="flex items-center gap-1 truncate text-[10px] text-text-faint">
+                      <span
+                        className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+                        style={{ background: color }}
+                        aria-hidden
+                      />
+                      {ev.account}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
@@ -903,6 +1014,44 @@ function DayDetailSection({
         pushToast={pushToast}
       />
     </section>
+  );
+}
+
+// ─── 取り込み/書き出しの対象アカウント選択（visible が複数のとき）──────
+// 「閲覧は複数重ね・取り込み/書き出しは対象を1つ指定」を両立するための小さなドロップダウン。
+function ImportTargetSelect({
+  visibleEmails,
+  value,
+  accountColors,
+  onChange,
+}: {
+  visibleEmails: string[];
+  value: string | null;
+  accountColors: Map<string, string>;
+  onChange: (email: string) => void;
+}) {
+  const color = value ? accountColors.get(value) ?? 'var(--mc-accent)' : 'var(--mc-border)';
+  return (
+    <label className="flex items-center gap-1.5 rounded-md border border-border bg-bg px-2 py-1">
+      <span
+        className="inline-block h-2 w-2 shrink-0 rounded-full"
+        style={{ background: color }}
+        aria-hidden
+      />
+      <span className="text-[10px] font-medium text-text-muted">取り込み/書き出し先</span>
+      <select
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        title="写真取り込み・ToDo書き出しの対象アカウント"
+        className="max-w-[10rem] truncate bg-transparent text-[11px] font-medium text-text focus:outline-none"
+      >
+        {visibleEmails.map((email) => (
+          <option key={email} value={email}>
+            {email}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
