@@ -1661,6 +1661,24 @@ function TaskDetail({
             </div>
           </dl>
         </div>
+
+        {/* フッタ: Google タスクの実画面を開く。Google Tasks API は個別タスクの URL を
+            返さない（予定の htmlLink に相当する物が無い）ため、当該アカウントのタスク
+            一覧を開く。authuser でアカウント指定を試みる（Google が無視した場合は既定
+            アカウントのタスクが開く）。 */}
+        <div className="border-t border-border px-4 py-3">
+          <a
+            href={`https://tasks.google.com/?authuser=${encodeURIComponent(task.account)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md bg-accent px-4 py-2 text-sm font-bold text-bg transition-opacity hover:opacity-90"
+          >
+            Google タスクで開く ↗
+          </a>
+          <p className="mt-1.5 text-[11px] text-text-faint">
+            Google タスクは個別タスクのリンクを持たないため、このアカウントのタスク一覧が開きます。
+          </p>
+        </div>
       </div>
     </div>,
     document.body,
