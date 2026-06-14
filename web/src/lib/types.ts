@@ -370,6 +370,24 @@ export interface DeliverablesResponse {
   error?: string;
 }
 
+// ─── ゴミ箱（MC-230 / GET /api/deliverables/trash）────────────────
+// server/src/index.ts の TrashEntryMeta と一致させる。
+
+export interface TrashEntry {
+  trashId: string;
+  name: string;
+  originalRel: string;
+  isDir: boolean;
+  deletedAt: string;
+  sizeBytes: number;
+}
+
+export interface TrashResponse {
+  generatedAt: string;
+  entries: TrashEntry[];
+  error?: string;
+}
+
 // ─── 横断検索（MC-73 / GET /api/search）──────────────────────
 // server/src/collectors/search.ts のレスポンス形と一致させる。
 

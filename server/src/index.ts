@@ -6,8 +6,18 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import compression from 'compression';
 import cors from 'cors';
-import { existsSync, statSync, unlinkSync, readdirSync, mkdirSync } from 'node:fs';
-import { basename, dirname, join, resolve, sep } from 'node:path';
+import {
+  existsSync,
+  statSync,
+  unlinkSync,
+  readdirSync,
+  mkdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+  readFileSync,
+} from 'node:fs';
+import { basename, dirname, join, resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
@@ -35,7 +45,16 @@ import {
 } from './collectors/vault.js';
 import { SafePathError } from './lib/vaultPath.js';
 import { listDeliverables, resolveDeliverable } from './collectors/deliverables.js';
-import { resolveDeliverablePath, toDeliverableRelative } from './lib/deliverablePath.js';
+import {
+  resolveDeliverablePath,
+  toDeliverableRelative,
+  validateRenameName,
+  resolveRenameTarget,
+  trashRoot,
+  resolveTrashPath,
+  toTrashRelative,
+  makeTrashTarget,
+} from './lib/deliverablePath.js';
 import {
   convertOfficeToPdf,
   isConvertibleToPdf,
@@ -771,12 +790,14 @@ app.get('/api/deliverables/preview', async (req, res) => {
   }
 });
 
-// 成果物の削除（MC-125）。?path=<相対パス> のファイルを DELIVERABLES_DIR 配下から消す。
+// 成果物の削除（MC-125 → MC-230 でゴミ箱方式に変更）。
+//  ?path=<相対パス> のファイル/フォルダを DELIVERABLES_DIR/.trash/ へ退避する（物理削除しない）。
 //  - パス解決は deliverablePath（realpath / traversal 防御）を流用。範囲外/不正は SafePathError→400。
 //  - README.md は一覧の説明用なので保護（削除拒否＝403）。
-//  - ディレクトリは不可、ファイルのみ削除可（ディレクトリ指定は 400）。
+//  - ファイル・フォルダ両方を退避できる（フォルダは中身ごと .trash へ move）。
 //  - 実体が無ければ 404。
 //  - 対応する変換キャッシュ（.deliverables-cache の PDF）があれば併せて消す（残骸防止、無ければ無視）。
+//  - 応答 { ok, deleted, trashId }。trashId は Undo（即時復元）に使う退避バッチ ID。
 app.delete('/api/deliverables/file', (req, res) => {
   try {
     const abs = resolveDeliverablePath(String(req.query.path ?? '')); // traversal/範囲外→SafePathError
@@ -799,27 +820,256 @@ app.delete('/api/deliverables/file', (req, res) => {
       res.status(404).json({ error: 'deliverable not found' });
       return;
     }
-    if (!st.isFile()) {
-      // ディレクトリ・symlink 先非ファイル等。ファイルのみ削除可。
-      res.status(400).json({ error: 'only files can be deleted' });
+    const isDir = st.isDirectory();
+    const isFile = st.isFile();
+    if (!isDir && !isFile) {
+      // symlink 先非ファイル/非ディレクトリ等は対象外。
+      res.status(400).json({ error: 'only files and folders can be deleted' });
       return;
     }
 
-    // 変換キャッシュは「ソース実体がまだ在る間」にキーを算出して消す（unlink より前）。
-    try {
-      deleteOfficePdfCache(abs);
-    } catch {
-      /* キャッシュ削除失敗は本体削除を妨げない（残骸防止はベストエフォート）。 */
+    // 変換キャッシュは「ソース実体がまだ在る間」にキーを算出して消す（move より前）。
+    if (isFile) {
+      try {
+        deleteOfficePdfCache(abs);
+      } catch {
+        /* キャッシュ削除失敗は本体退避を妨げない（残骸防止はベストエフォート）。 */
+      }
     }
 
-    unlinkSync(abs);
-    res.json({ ok: true, deleted: relpath });
+    // ゴミ箱へ退避（物理削除しない）。退避先 <trash>/<batchId>/<元の相対パス>。
+    const { batchId, destAbs, originalRel } = makeTrashTarget(relpath);
+    mkdirSync(dirname(destAbs), { recursive: true });
+    renameSync(abs, destAbs);
+    // メタ情報（復元先・元名・削除時刻）を退避バッチ直下に記録する。
+    try {
+      writeFileSync(
+        join(trashRoot(), batchId, '.trashinfo.json'),
+        JSON.stringify({
+          originalRel,
+          name: basename(originalRel),
+          isDir,
+          deletedAt: new Date().toISOString(),
+        }),
+        'utf-8',
+      );
+    } catch {
+      /* メタ記録失敗は退避自体を妨げない（復元時に originalRel をパスから推定可能）。 */
+    }
+
+    res.json({ ok: true, deleted: relpath, trashId: batchId });
   } catch (e) {
     if (e instanceof SafePathError) {
       // 範囲外・不正パス・禁止セグメント。空 path は 'path is required'。
       res.status(400).json({ error: e.message });
       return;
     }
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+// ─── ゴミ箱（MC-230）一覧・復元・完全削除 ───────────────────────────
+// 退避バッチ（<trash>/<batchId>/）を列挙し、各バッチの .trashinfo.json を読んで
+// originalRel / name / deletedAt を返す。復元は元の場所へ戻し、完全削除は物理 rm する。
+
+interface TrashEntryMeta {
+  trashId: string;
+  name: string;
+  originalRel: string;
+  isDir: boolean;
+  deletedAt: string;
+  sizeBytes: number;
+}
+
+/** 退避バッチ内の実体（.trashinfo.json を除いた最初のエントリ）の絶対パスを返す。 */
+function trashBatchPayloadAbs(batchId: string, originalRel: string): string {
+  return join(trashRoot(), batchId, originalRel);
+}
+
+/** 退避バッチ 1 件のメタを読む。壊れていれば null。 */
+function readTrashBatch(batchId: string): TrashEntryMeta | null {
+  const infoPath = join(trashRoot(), batchId, '.trashinfo.json');
+  try {
+    const raw = JSON.parse(readFileSync(infoPath, 'utf-8')) as {
+      originalRel?: unknown;
+      name?: unknown;
+      isDir?: unknown;
+      deletedAt?: unknown;
+    };
+    const originalRel = typeof raw.originalRel === 'string' ? raw.originalRel : '';
+    if (!originalRel) return null;
+    const payloadAbs = trashBatchPayloadAbs(batchId, originalRel);
+    let sizeBytes = 0;
+    try {
+      const st = statSync(payloadAbs);
+      sizeBytes = st.isFile() ? st.size : 0;
+    } catch {
+      /* 実体が消えていてもメタは返す（破損ケース）。 */
+    }
+    return {
+      trashId: batchId,
+      name: typeof raw.name === 'string' ? raw.name : basename(originalRel),
+      originalRel,
+      isDir: raw.isDir === true,
+      deletedAt: typeof raw.deletedAt === 'string' ? raw.deletedAt : '',
+      sizeBytes,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// GET /api/deliverables/trash — ゴミ箱の一覧（新しい削除順）。
+app.get('/api/deliverables/trash', (_req, res) => {
+  try {
+    const root = trashRoot();
+    if (!existsSync(root)) {
+      res.json({ generatedAt: new Date().toISOString(), entries: [] });
+      return;
+    }
+    const batches = readdirSync(root, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => readTrashBatch(d.name))
+      .filter((e): e is TrashEntryMeta => e !== null)
+      .sort((a, b) => Date.parse(b.deletedAt || '0') - Date.parse(a.deletedAt || '0'));
+    res.json({ generatedAt: new Date().toISOString(), entries: batches });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('[deliverables trash list error]', message);
+    res.status(200).json({ error: message, generatedAt: new Date().toISOString(), entries: [] });
+  }
+});
+
+// POST /api/deliverables/trash/restore — 退避バッチを元の場所へ戻す（Undo / ゴミ箱からの復元）。
+//  body: { trashId: string }。元の場所に同名が在れば衝突回避サフィックスを付けて戻す。
+app.post('/api/deliverables/trash/restore', (req, res) => {
+  try {
+    const trashId = String((req.body as Record<string, unknown>)?.trashId ?? '');
+    if (!trashId) { res.status(400).json({ error: 'trashId required' }); return; }
+    const meta = readTrashBatch(trashId);
+    if (!meta) { res.status(404).json({ error: 'trash entry not found' }); return; }
+
+    // 退避実体（バッチ内パス）と復元先（DELIVERABLES_DIR 内パス）の双方を厳格検証。
+    const srcAbs = resolveTrashPath(join(trashId, meta.originalRel));
+    if (!existsSync(srcAbs)) { res.status(404).json({ error: 'trash payload missing' }); return; }
+
+    // 復元先: 元の相対パス。同名が在れば衝突回避（-2, -3 …）。
+    let destRel = meta.originalRel;
+    let destAbs = resolveDeliverablePath(destRel);
+    if (existsSync(destAbs)) {
+      const ext = extname(meta.name);
+      const stem = ext ? meta.name.slice(0, -ext.length) : meta.name;
+      const parentRel = meta.originalRel.includes('/')
+        ? meta.originalRel.slice(0, meta.originalRel.lastIndexOf('/'))
+        : '';
+      let resolved = false;
+      for (let n = 2; n < 1000; n += 1) {
+        const candidateName = meta.isDir ? `${meta.name}-${n}` : `${stem}-${n}${ext}`;
+        const candidateRel = parentRel ? `${parentRel}/${candidateName}` : candidateName;
+        const candidateAbs = resolveDeliverablePath(candidateRel);
+        if (!existsSync(candidateAbs)) {
+          destRel = candidateRel;
+          destAbs = candidateAbs;
+          resolved = true;
+          break;
+        }
+      }
+      if (!resolved) { res.status(409).json({ error: 'restore target is occupied' }); return; }
+    }
+
+    mkdirSync(dirname(destAbs), { recursive: true });
+    renameSync(srcAbs, destAbs);
+    // 退避バッチ（空になったフォルダ＋メタ）を物理削除する。
+    try { rmSync(join(trashRoot(), trashId), { recursive: true, force: true }); } catch { /* best-effort */ }
+
+    res.json({ ok: true, restored: toDeliverableRelative(destAbs) });
+  } catch (e) {
+    if (e instanceof SafePathError) { res.status(400).json({ error: e.message }); return; }
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+// DELETE /api/deliverables/trash?trashId=<id> — ゴミ箱から完全削除（物理）。
+//  trashId 省略時は全削除（ゴミ箱を空にする）。
+app.delete('/api/deliverables/trash', (req, res) => {
+  try {
+    const root = trashRoot();
+    const trashId = String(req.query.trashId ?? '');
+    if (trashId) {
+      // バッチフォルダを trashRoot 配下に限定検証してから物理削除。
+      const batchAbs = resolveTrashPath(trashId);
+      // バッチ直下（trashId 単体）であることを確認（中の実体パスではなくフォルダを指す）。
+      if (toTrashRelative(batchAbs).includes('/')) {
+        res.status(400).json({ error: 'invalid trashId' });
+        return;
+      }
+      if (!existsSync(batchAbs)) { res.status(404).json({ error: 'trash entry not found' }); return; }
+      rmSync(batchAbs, { recursive: true, force: true });
+      res.json({ ok: true, purged: trashId });
+      return;
+    }
+    // 全削除: trashRoot 配下の各バッチを物理削除（trashRoot 自体は残す）。
+    if (existsSync(root)) {
+      for (const d of readdirSync(root, { withFileTypes: true })) {
+        if (d.isDirectory()) {
+          try { rmSync(join(root, d.name), { recursive: true, force: true }); } catch { /* best-effort */ }
+        }
+      }
+    }
+    res.json({ ok: true, purged: 'all' });
+  } catch (e) {
+    if (e instanceof SafePathError) { res.status(400).json({ error: e.message }); return; }
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+// ─── リネーム（MC-227）──────────────────────────────────────
+// POST /api/deliverables/rename — ファイル/フォルダを同じ親内で改名する。
+//  body: { path: string（DELIVERABLES_DIR 相対）, newName: string（basename のみ） }
+//  - path 解決は deliverablePath（realpath / traversal 防御）。範囲外/不正は SafePathError→400。
+//  - newName は validateRenameName で basename 限定・ドット始まり/FS禁止文字拒否。
+//  - README.md は保護（改名拒否＝403）。
+//  - 改名先に同名が既に在れば 409（衝突拒否）。実体が無ければ 404。
+app.post('/api/deliverables/rename', (req, res) => {
+  try {
+    const relpath = String((req.body as Record<string, unknown>)?.path ?? '');
+    const newNameRaw = (req.body as Record<string, unknown>)?.newName;
+    if (!relpath) { res.status(400).json({ error: 'path required' }); return; }
+
+    const srcAbs = resolveDeliverablePath(relpath); // traversal/範囲外→SafePathError
+    if (!existsSync(srcAbs)) { res.status(404).json({ error: 'deliverable not found' }); return; }
+
+    // README.md（ビューの説明用）は保護。
+    if (basename(srcAbs).toLowerCase() === 'readme.md') {
+      res.status(403).json({ error: 'this file is protected and cannot be renamed' });
+      return;
+    }
+
+    const safeName = validateRenameName(newNameRaw); // 不正名→SafePathError(400)
+    const { destAbs, destRel } = resolveRenameTarget(srcAbs, safeName);
+
+    // 改名先が同一実体（大文字小文字のみ違い等）なら no-op として成功扱い。
+    if (destAbs === srcAbs) {
+      res.json({ ok: true, relpath: toDeliverableRelative(srcAbs) });
+      return;
+    }
+    if (existsSync(destAbs)) {
+      res.status(409).json({ error: '同名のファイルまたはフォルダが既に存在します。' });
+      return;
+    }
+
+    // 変換キャッシュは旧パス基準で残るため、ファイル改名時は旧キャッシュを掃除しておく。
+    try {
+      const st = statSync(srcAbs);
+      if (st.isFile()) deleteOfficePdfCache(srcAbs);
+    } catch {
+      /* キャッシュ掃除失敗は改名を妨げない。 */
+    }
+
+    renameSync(srcAbs, destAbs);
+    res.json({ ok: true, relpath: destRel });
+  } catch (e) {
+    if (e instanceof SafePathError) { res.status(400).json({ error: e.message }); return; }
     res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
   }
 });

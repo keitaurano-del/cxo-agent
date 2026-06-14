@@ -535,3 +535,45 @@ export function SettingsIcon(props: IconProps) {
     </svg>
   );
 }
+
+// 並び替えアイコン（MC-231 ソート切替）
+export function SortIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M7 5v14" />
+      <path d="M4 8l3-3 3 3" />
+      <path d="M17 19V5" />
+      <path d="M20 16l-3 3-3-3" />
+    </svg>
+  );
+}
+
+// 昇順アイコン（小→大）
+export function ArrowUpIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 19V5" />
+      <path d="M6 11l6-6 6 6" />
+    </svg>
+  );
+}
+
+// 降順アイコン（大→小）
+export function ArrowDownIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 5v14" />
+      <path d="M6 13l6 6 6-6" />
+    </svg>
+  );
+}
+
+// 復元アイコン（MC-230 ゴミ箱からの復元）
+export function RestoreIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <path d="M3 4v4h4" />
+    </svg>
+  );
+}

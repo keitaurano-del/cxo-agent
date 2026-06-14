@@ -218,3 +218,131 @@ export function resolveUploadTarget(
   const abs = join(baseAbs, `${stem}-${rand}${ext}`);
   return { absPath: abs, relpath: toDeliverableRelative(abs) };
 }
+
+// ─── リネーム（MC-227）用: 表示名サニタイズ + 同一親内の改名先解決 ─────────────
+
+/**
+ * リネーム後の新しい表示名（ファイル名 or フォルダ名）を検証する（MC-227）。
+ * mkdir 側（index.ts のフォルダ名チェック）と同じ厳密ポリシーで、
+ * パス区切り・ドット始まり・FS禁止文字・トラバーサルセグメントを拒否する。
+ * 返り値は trim 済みの安全な名前。不正なら SafePathError を throw。
+ */
+export function validateRenameName(name: unknown): string {
+  if (typeof name !== 'string') {
+    throw new SafePathError('new name is required');
+  }
+  const trimmed = name.trim();
+  if (trimmed === '') {
+    throw new SafePathError('new name is required');
+  }
+  // パス区切り・FS禁止記号・制御文字を拒否（basename のみを許す）。
+  // eslint-disable-next-line no-control-regex
+  if (/[/\\<>:"|?*\x00-\x1f]/.test(trimmed)) {
+    throw new SafePathError('invalid characters in name');
+  }
+  // ドット始まり（隠しファイル化）・`.`/`..`（トラバーサル）を拒否。
+  if (trimmed === '.' || trimmed === '..' || trimmed.startsWith('.')) {
+    throw new SafePathError('name cannot start with a dot');
+  }
+  return trimmed;
+}
+
+/**
+ * 既存の成果物（ファイル/フォルダ）を「同じ親ディレクトリ内」で新名に改名するための
+ * 改名先絶対パスを解決する（MC-227）。実際の rename は呼び出し側が行う。
+ *  - srcAbs は resolveDeliverablePath で検証済みの実在パス（DELIVERABLES_DIR 配下）。
+ *  - 新名は validateRenameName 済みの安全な basename。
+ *  - 親ディレクトリは変えない（移動は MC-228 の別 API）。
+ *  - 改名先が DELIVERABLES_DIR 配下に留まることを再検証する。
+ * @returns { destAbs, destRel } destRel は DELIVERABLES_DIR 相対（posix）。
+ * @throws SafePathError 改名先がルート外になる場合。
+ */
+export function resolveRenameTarget(
+  srcAbs: string,
+  safeName: string,
+): { destAbs: string; destRel: string } {
+  const parent = resolve(srcAbs, '..');
+  const destAbs = join(parent, safeName);
+  const root = deliverablesRoot();
+  if (!isInside(root, destAbs)) {
+    throw new SafePathError('rename target escapes the deliverables root');
+  }
+  return { destAbs, destRel: toDeliverableRelative(destAbs) };
+}
+
+// ─── ゴミ箱（MC-230）: 物理削除をやめ .trash/ へ退避し、復元/完全削除を可能にする ────
+//
+// 退避先は `<DELIVERABLES_DIR>/.trash/<timestamp>-<rand>/<元の相対パス>`。
+// .trash は collectors/deliverables.ts の EXCLUDED_DIRS と本ファイル FORBIDDEN_SEGMENTS で
+// 一覧・検索・通常パス解決から除外済み。ゴミ箱専用のパス解決はここに閉じる（通常 API からは
+// .trash 配下を触れない＝復元/完全削除はこの専用ヘルパ経由のみ）。
+
+/** ゴミ箱ディレクトリ名（DELIVERABLES_DIR 直下）。 */
+export const TRASH_DIRNAME = '.trash';
+
+/** ゴミ箱ルートの絶対パス（realpath 化された DELIVERABLES_DIR 配下）。 */
+export function trashRoot(): string {
+  return join(deliverablesRoot(), TRASH_DIRNAME);
+}
+
+/**
+ * ゴミ箱内の相対パス（trashRoot 相対、posix）を検証し安全な絶対パスを返す（MC-230）。
+ * resolveDeliverablePath と同じ防御（絶対パス拒否・`..` 脱出拒否・制御文字拒否・
+ * symlink 越え再検証）を trashRoot に対して適用する。.trash 自身は許容セグメント。
+ * @throws SafePathError 不正・trashRoot 外・型不正。
+ */
+export function resolveTrashPath(rel: unknown): string {
+  if (typeof rel !== 'string' || rel.trim() === '') {
+    throw new SafePathError('trash path is required');
+  }
+  if (/%2e|%2f|%5c/i.test(rel)) {
+    throw new SafePathError('encoded path separators are not allowed');
+  }
+  if (isAbsolute(rel)) {
+    throw new SafePathError('absolute paths are not allowed');
+  }
+  const cleaned = rel.replace(/\\/g, '/').replace(/^\/+/, '');
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f]/.test(cleaned)) {
+    throw new SafePathError('invalid characters in path');
+  }
+  const root = trashRoot();
+  const abs = resolve(root, cleaned);
+  if (!isInside(root, abs)) {
+    throw new SafePathError('path escapes the trash root');
+  }
+  try {
+    const real = realpathSync(abs);
+    if (!isInside(root, real)) {
+      throw new SafePathError('path resolves outside the trash root');
+    }
+    return real;
+  } catch (e) {
+    if (e instanceof SafePathError) throw e;
+    return abs;
+  }
+}
+
+/** 絶対パス → ゴミ箱ルート相対パス（posix 区切り）。 */
+export function toTrashRelative(abs: string): string {
+  return relative(trashRoot(), abs).split(sep).join('/');
+}
+
+/**
+ * 削除対象（DELIVERABLES_DIR 配下の検証済み絶対パス）を退避するゴミ箱内の保存先を作る（MC-230）。
+ * 1 削除 = 1 退避フォルダ `<trashRoot>/<ts>-<rand>/` を作り、その中に「元の DELIVERABLES_DIR 相対
+ * パス」をそのまま再現した位置へ move する。これにより復元時に元の場所へ戻せる。
+ * @param srcRel 削除対象の DELIVERABLES_DIR 相対パス（posix、表示用にも使う元パス）。
+ * @returns { batchId, destAbs, originalRel } batchId は退避フォルダ名（復元 API のキー）。
+ */
+export function makeTrashTarget(srcRel: string): {
+  batchId: string;
+  destAbs: string;
+  originalRel: string;
+} {
+  const batchId = `${Date.now()}-${randomBytes(4).toString('hex')}`;
+  // srcRel は toDeliverableRelative 由来で安全（posix・ルート相対）だが、念のため正規化。
+  const cleaned = srcRel.replace(/\\/g, '/').replace(/^\/+/, '');
+  const destAbs = join(trashRoot(), batchId, cleaned);
+  return { batchId, destAbs, originalRel: cleaned };
+}
