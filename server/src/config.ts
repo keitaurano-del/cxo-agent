@@ -991,3 +991,36 @@ export const GOOGLE_DRIVE_IMPORTED_FILE = join(BABY_DIARY_DIR, 'google-drive-imp
 
 /** Google API 呼び出しの HTTP タイムアウト（ミリ秒）。ネットワーク詰まりで Apollo を固めない。 */
 export const GOOGLE_HTTP_TIMEOUT_MS = envNum('GOOGLE_HTTP_TIMEOUT_MS', 15000);
+
+// ─── オートプランナー（MC-245 Phase2）──────────────────────────
+//
+// 「やること（Google Tasks）」を空き時間ブロックへ自動配置する。方針は
+// 「AI で “見積り”、決定的ロジックで “配置”」（docs/MC-245-auto-scheduler-design.md）。
+// LLM は所要時間/優先度/最適時間帯の見積りだけを担当し、配置はサーバ側の決定的アルゴリズムが
+// 重複ゼロ・締切順守で行う。AI が使えない/失敗時はヒューリスティック見積りにフォールバックする。
+// 永続データはすべて data/ 配下（.gitignore 済み・ランタイムデータ）:
+//   data/planner-config.json          : プランナー設定（last-wins・部分更新マージ）
+//   data/planner-task-meta.jsonl      : タスク手動上書きメタ（last-wins by account:taskId）
+//   data/planner-estimate-cache.jsonl : AI 見積りキャッシュ（last-wins by hash key）
+
+/** プランナー設定ファイル（単一 JSON・部分更新マージで last-wins 保存）。 */
+export const PLANNER_CONFIG_FILE = join(INBOX_DATA_DIR, 'planner-config.json');
+
+/** タスク手動上書きメタの JSONL（last-wins by account:taskId）。 */
+export const PLANNER_TASK_META_FILE = join(INBOX_DATA_DIR, 'planner-task-meta.jsonl');
+
+/** AI 見積りキャッシュの JSONL（last-wins by key＝account:taskId + 内容ハッシュ）。 */
+export const PLANNER_ESTIMATE_CACHE_FILE = join(INBOX_DATA_DIR, 'planner-estimate-cache.jsonl');
+
+/** AI 見積りに使うモデル（haiku で安く。mood と同じ流儀。env で差し替え可）。 */
+export const PLANNER_ESTIMATE_MODEL = env('PLANNER_ESTIMATE_MODEL', AGENT_MOOD_MODEL);
+
+/** AI 見積り claude のタイムアウト（ミリ秒、既定 60s）。バッチ 1 回ぶん。 */
+export const PLANNER_ESTIMATE_TIMEOUT_MS = envNum('PLANNER_ESTIMATE_TIMEOUT_MS', 60_000);
+
+/**
+ * 1 回の AI 見積りバッチで送るタスクの最大件数。
+ * 多すぎるとプロンプトが膨らみ haiku の応答品質/速度が落ちるため上限を設ける。
+ * 上限超過分はヒューリスティックにフォールバックする（落とさない）。
+ */
+export const PLANNER_ESTIMATE_MAX_TASKS = envNum('PLANNER_ESTIMATE_MAX_TASKS', 40);

@@ -96,6 +96,7 @@ import { chatRouter, agentMessageHandler, autonomousTickHandler } from './chatRo
 import { navOrderRouter } from './navOrderRouter.js';
 import { babyDiaryRouter } from './babyDiaryRouter.js';
 import { googleRouter } from './googleRouter.js';
+import { plannerRouter } from './plannerRouter.js';
 
 const HEALTHZ_PATH = '/api/healthz';
 
@@ -1366,6 +1367,15 @@ app.use('/api/baby-diary', babyDiaryRouter());
 // クレデンシャル（GOOGLE_OAUTH_CLIENT_ID/_SECRET）未設定時は status が configured:false（200）、
 // 他のエンドポイントは 503 { error:'google-not-configured' }（callback は /baby-diary?google=error へ 302）。
 app.use('/api/google', googleRouter());
+
+// ─── オートプランナー（MC-245 Phase2）──────────────────────────
+// 「やること（Google Tasks）」を空き時間ブロックへ自動配置する。方針は
+// 「AI で “見積り”、決定的ロジックで “配置”」（docs/MC-245-auto-scheduler-design.md）。
+// GET/PUT config（設定）・GET/PUT task-meta（手動上書き）・POST plan（見積り統合 → 決定的配置）。
+// クライアントが Google から取得済みの tasks/events を /plan に渡す（サーバは Google を再取得しない）。
+// AI 見積りは claude haiku をバッチ 1 回（mood と同流儀）・キャッシュ・失敗時はヒューリスティックに
+// フォールバックする（必ず 200）。auth ミドルウェア配下＝Cookie/Bearer 必須。保存先は data/ 配下。
+app.use('/api/planner', plannerRouter());
 
 // ─── SSE（chokidar watch → broadcast に接続）──────────────────────
 
