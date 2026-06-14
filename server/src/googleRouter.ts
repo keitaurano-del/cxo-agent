@@ -1,0 +1,591 @@
+// googleRouter — 成長日記（MC-233 Phase2/3）の Google 連携 REST API。
+//
+// index.ts で `app.use('/api/google', googleRouter())` を auth ミドルウェアより後に登録する。
+// マルチアカウント（keita.urano + keita.urano2 等を順に接続）に対応する。
+//
+// クレデンシャル（GOOGLE_OAUTH_CLIENT_ID / _SECRET）未設定時の挙動:
+//   - GET /api/google/status        : 200 で { configured:false, accounts:[] }（UI が状態表示できる）
+//   - その他（callback 除く）        : 503 { error:'google-not-configured' }
+//   - GET /api/google/oauth/callback : 設定不備でも /baby-diary?google=error に 302（ブラウザ遷移のため）
+//
+// 機能:
+//   1. GET    /status                          接続状態 + アカウント一覧（トークンは出さない）
+//   2. GET    /oauth/start                      Google 同意画面へ 302（state を in-memory に保持し CSRF 検証）
+//   3. GET    /oauth/callback                   code 交換 → email 取得 → saveTokens → /baby-diary?google=connected
+//   4. DELETE /accounts/:email                  アカウント切断
+//   5. GET    /calendar/events                  全接続アカウント横断で primary の予定取得（部分劣化）
+//   6. POST   /calendar/events                  指定アカウントの primary に終日イベント作成
+//   7. POST   /photos/picker/session            Picker セッション作成 → { sessionId, pickerUri, account }
+//      GET    /photos/picker/session/:sessionId 選択完了ポーリング → { mediaItemsSet }
+//      POST   /photos/picker/import             選択メディアを取得して babyDiaryStore へ保存
+//
+// HTTP はすべて標準 fetch（googleapis 等の重い依存は足さない）。外部呼び出しは全てタイムアウト付き。
+// access_token / refresh_token / secret はレスポンスに一切含めない。
+
+import { randomUUID } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { Router, type Request, type Response } from 'express';
+
+import {
+  googleConfigured,
+  GOOGLE_OAUTH_CLIENT_ID,
+  GOOGLE_OAUTH_CLIENT_SECRET,
+  GOOGLE_OAUTH_REDIRECT_URI,
+  GOOGLE_OAUTH_SCOPE,
+  GOOGLE_HTTP_TIMEOUT_MS,
+  BABY_DIARY_MEDIA_DIR,
+} from './config.js';
+import {
+  listAccounts,
+  saveTokens,
+  removeAccount,
+  getValidAccessToken,
+  type GoogleTokenRecord,
+} from './lib/googleTokenStore.js';
+import { sanitizeFilename } from './lib/inboxPath.js';
+import { appendMedia, type MediaMeta } from './lib/babyDiaryStore.js';
+
+// ─── 共通ヘルパ ───────────────────────────────────────────
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function isValidDate(v: unknown): v is string {
+  return typeof v === 'string' && DATE_RE.test(v);
+}
+
+/** タイムアウト付き fetch。 */
+async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<globalThis.Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), GOOGLE_HTTP_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error(`Google API タイムアウト（${GOOGLE_HTTP_TIMEOUT_MS}ms）`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Bearer 付き GET → JSON。失敗は throw。 */
+async function googleGet<T>(url: string, accessToken: string): Promise<T> {
+  const res = await fetchWithTimeout(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`GET ${url} → HTTP ${res.status} ${body.slice(0, 300)}`);
+  }
+  return (await res.json()) as T;
+}
+
+/** Bearer 付き POST(JSON) → JSON。失敗は throw。 */
+async function googlePostJson<T>(url: string, accessToken: string, body: unknown): Promise<T> {
+  const res = await fetchWithTimeout(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`POST ${url} → HTTP ${res.status} ${text.slice(0, 300)}`);
+  }
+  return (await res.json()) as T;
+}
+
+/** 未設定ガード。設定済みなら true、未設定なら 503 を送って false。 */
+function requireConfigured(res: Response): boolean {
+  if (googleConfigured()) return true;
+  res.status(503).json({ error: 'google-not-configured' });
+  return false;
+}
+
+// ─── OAuth state（CSRF 対策・in-memory）──────────────────────
+// start で発番した state を保持し、callback で照合する。
+// 10 分 TTL で自動失効させ、メモリリークを防ぐ。
+
+interface StateEntry {
+  createdAt: number;
+}
+const pendingStates = new Map<string, StateEntry>();
+const STATE_TTL_MS = 10 * 60 * 1000;
+
+function issueState(): string {
+  const state = randomUUID();
+  pendingStates.set(state, { createdAt: Date.now() });
+  // 古い state を掃除（TTL 超過）。
+  const now = Date.now();
+  for (const [k, v] of pendingStates) {
+    if (now - v.createdAt > STATE_TTL_MS) pendingStates.delete(k);
+  }
+  return state;
+}
+
+/** state を消費（一致 & 未失効なら true、消費済みにする）。 */
+function consumeState(state: string | undefined): boolean {
+  if (!state) return false;
+  const entry = pendingStates.get(state);
+  if (!entry) return false;
+  pendingStates.delete(state);
+  return Date.now() - entry.createdAt <= STATE_TTL_MS;
+}
+
+// ─── 1. GET /status ──────────────────────────────────────
+// 未設定でも 200 で configured:false を返す（UI が状態表示できるように）。
+// accounts はトークンを含まない公開形（email / connectedAt / scope）。
+
+function handleStatus(_req: Request, res: Response): void {
+  res.json({
+    configured: googleConfigured(),
+    accounts: googleConfigured() ? listAccounts() : [],
+  });
+}
+
+// ─── 2. GET /oauth/start ─────────────────────────────────
+// Google 同意画面へ 302。複数アカウント接続のため prompt='consent select_account'。
+
+function handleOAuthStart(_req: Request, res: Response): void {
+  if (!requireConfigured(res)) return;
+  const state = issueState();
+  const params = new URLSearchParams({
+    client_id: GOOGLE_OAUTH_CLIENT_ID,
+    redirect_uri: GOOGLE_OAUTH_REDIRECT_URI,
+    response_type: 'code',
+    scope: GOOGLE_OAUTH_SCOPE,
+    access_type: 'offline',
+    prompt: 'consent select_account',
+    include_granted_scopes: 'true',
+    state,
+  });
+  res.redirect(302, `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+}
+
+// ─── 3. GET /oauth/callback ──────────────────────────────
+// Google からのリダイレクト（ユーザブラウザ = mc_token Cookie あり = auth 通過）。
+// code を交換 → userinfo で email 取得 → saveTokens → /baby-diary?google=connected。
+// 設定不備 / state 不一致 / Google error は /baby-diary?google=error へ 302。
+
+interface TokenExchangeResponse {
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+  scope?: string;
+  error?: string;
+  error_description?: string;
+}
+interface UserInfoResponse {
+  email?: string;
+  sub?: string;
+}
+
+async function handleOAuthCallback(req: Request, res: Response): Promise<void> {
+  // callback はブラウザ遷移なので、未設定/エラーでも JSON でなく /baby-diary?google=error へ戻す。
+  if (!googleConfigured()) {
+    res.redirect(302, '/baby-diary?google=error');
+    return;
+  }
+
+  const code = typeof req.query.code === 'string' ? req.query.code : undefined;
+  const state = typeof req.query.state === 'string' ? req.query.state : undefined;
+  const oauthError = typeof req.query.error === 'string' ? req.query.error : undefined;
+
+  if (oauthError || !code || !consumeState(state)) {
+    res.redirect(302, '/baby-diary?google=error');
+    return;
+  }
+
+  try {
+    // code → token 交換。
+    const tokenBody = new URLSearchParams({
+      code,
+      client_id: GOOGLE_OAUTH_CLIENT_ID,
+      client_secret: GOOGLE_OAUTH_CLIENT_SECRET,
+      redirect_uri: GOOGLE_OAUTH_REDIRECT_URI,
+      grant_type: 'authorization_code',
+    });
+    const tokenRes = await fetchWithTimeout('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: tokenBody.toString(),
+    });
+    const tok = (await tokenRes.json().catch(() => ({}))) as TokenExchangeResponse;
+    if (!tokenRes.ok || !tok.access_token) {
+      throw new Error(tok.error_description || tok.error || `token exchange HTTP ${tokenRes.status}`);
+    }
+
+    // email を userinfo で取得。
+    const info = await googleGet<UserInfoResponse>(
+      'https://www.googleapis.com/oauth2/v3/userinfo',
+      tok.access_token,
+    );
+    const email = info.email;
+    if (!email) {
+      throw new Error('userinfo did not return email');
+    }
+
+    const expiresIn = typeof tok.expires_in === 'number' ? tok.expires_in : 3600;
+    const rec: GoogleTokenRecord = {
+      email,
+      accessToken: tok.access_token,
+      refreshToken: tok.refresh_token || '',
+      expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+      scope: tok.scope || GOOGLE_OAUTH_SCOPE,
+      connectedAt: new Date().toISOString(),
+    };
+    saveTokens(rec);
+
+    res.redirect(302, '/baby-diary?google=connected');
+  } catch (e) {
+    console.error('[google oauth callback]', e instanceof Error ? e.message : String(e));
+    res.redirect(302, '/baby-diary?google=error');
+  }
+}
+
+// ─── 4. DELETE /accounts/:email ──────────────────────────
+
+function handleRemoveAccount(req: Request, res: Response): void {
+  if (!requireConfigured(res)) return;
+  const email = String(req.params.email ?? '');
+  if (!email) {
+    res.status(400).json({ error: 'email required' });
+    return;
+  }
+  removeAccount(email);
+  res.json({ ok: true });
+}
+
+// ─── 5. GET /calendar/events ─────────────────────────────
+// 接続済み全アカウント横断で primary の予定を取得（1 アカウント失敗しても others は返す）。
+
+interface GCalEvent {
+  id?: string;
+  summary?: string;
+  htmlLink?: string;
+  start?: { date?: string; dateTime?: string };
+  end?: { date?: string; dateTime?: string };
+}
+interface GCalListResponse {
+  items?: GCalEvent[];
+}
+
+interface NormalizedEvent {
+  id: string;
+  account: string;
+  title: string;
+  start: string | null;
+  end: string | null;
+  allDay: boolean;
+  htmlLink: string | null;
+}
+
+function normalizeEvent(ev: GCalEvent, account: string): NormalizedEvent {
+  const allDay = Boolean(ev.start?.date && !ev.start?.dateTime);
+  return {
+    id: ev.id ?? '',
+    account,
+    title: ev.summary ?? '(無題)',
+    start: ev.start?.dateTime ?? ev.start?.date ?? null,
+    end: ev.end?.dateTime ?? ev.end?.date ?? null,
+    allDay,
+    htmlLink: ev.htmlLink ?? null,
+  };
+}
+
+async function handleCalendarList(req: Request, res: Response): Promise<void> {
+  if (!requireConfigured(res)) return;
+
+  const timeMin = typeof req.query.timeMin === 'string' ? req.query.timeMin : undefined;
+  const timeMax = typeof req.query.timeMax === 'string' ? req.query.timeMax : undefined;
+
+  const accounts = listAccounts();
+  const events: NormalizedEvent[] = [];
+  const errors: { account: string; error: string }[] = [];
+
+  // アカウントごとに並行取得。1 つの失敗は errors に畳んで others は返す（部分劣化）。
+  await Promise.all(
+    accounts.map(async (acc) => {
+      try {
+        const accessToken = await getValidAccessToken(acc.email);
+        const params = new URLSearchParams({
+          singleEvents: 'true',
+          orderBy: 'startTime',
+          maxResults: '250',
+        });
+        if (timeMin) params.set('timeMin', timeMin);
+        if (timeMax) params.set('timeMax', timeMax);
+        const data = await googleGet<GCalListResponse>(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`,
+          accessToken,
+        );
+        for (const ev of data.items ?? []) {
+          events.push(normalizeEvent(ev, acc.email));
+        }
+      } catch (e) {
+        errors.push({ account: acc.email, error: e instanceof Error ? e.message : String(e) });
+      }
+    }),
+  );
+
+  // 開始時刻で全アカウント混在ソート（null は末尾）。
+  events.sort((a, b) => {
+    if (a.start === b.start) return 0;
+    if (a.start === null) return 1;
+    if (b.start === null) return -1;
+    return a.start.localeCompare(b.start);
+  });
+
+  res.json({ events, ...(errors.length > 0 ? { errors } : {}) });
+}
+
+// ─── 6. POST /calendar/events ────────────────────────────
+// 指定アカウントの primary に終日イベントを作成する（start.date / end.date）。
+
+async function handleCalendarCreate(req: Request, res: Response): Promise<void> {
+  if (!requireConfigured(res)) return;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+
+  const account = typeof body.account === 'string' ? body.account : '';
+  const summary = typeof body.summary === 'string' ? body.summary : '';
+  const date = body.date;
+  const description = typeof body.description === 'string' ? body.description : undefined;
+
+  if (!account) {
+    res.status(400).json({ error: 'account is required' });
+    return;
+  }
+  if (!summary) {
+    res.status(400).json({ error: 'summary is required' });
+    return;
+  }
+  if (!isValidDate(date)) {
+    res.status(400).json({ error: 'date is required and must be YYYY-MM-DD' });
+    return;
+  }
+
+  // 終日イベントの end.date は排他的なので翌日にする。
+  const endDate = new Date(`${date}T00:00:00Z`);
+  endDate.setUTCDate(endDate.getUTCDate() + 1);
+  const endStr = endDate.toISOString().slice(0, 10);
+
+  try {
+    const accessToken = await getValidAccessToken(account);
+    const created = await googlePostJson<GCalEvent>(
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+      accessToken,
+      {
+        summary,
+        ...(description !== undefined ? { description } : {}),
+        start: { date },
+        end: { date: endStr },
+      },
+    );
+    res.status(201).json({
+      account,
+      event: normalizeEvent(created, account),
+    });
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+// ─── 7. Photos Picker（Phase3）──────────────────────────────
+
+interface PickerSession {
+  id?: string;
+  pickerUri?: string;
+  mediaItemsSet?: boolean;
+}
+
+/** POST /photos/picker/session — Picker セッション作成。 */
+async function handlePickerCreate(req: Request, res: Response): Promise<void> {
+  if (!requireConfigured(res)) return;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const account = typeof body.account === 'string' ? body.account : '';
+  if (!account) {
+    res.status(400).json({ error: 'account is required' });
+    return;
+  }
+  try {
+    const accessToken = await getValidAccessToken(account);
+    const session = await googlePostJson<PickerSession>(
+      'https://photospicker.googleapis.com/v1/sessions',
+      accessToken,
+      {},
+    );
+    res.json({ sessionId: session.id, pickerUri: session.pickerUri, account });
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/** GET /photos/picker/session/:sessionId — 選択完了ポーリング。 */
+async function handlePickerPoll(req: Request, res: Response): Promise<void> {
+  if (!requireConfigured(res)) return;
+  const sessionId = String(req.params.sessionId ?? '');
+  const account = typeof req.query.account === 'string' ? req.query.account : '';
+  if (!sessionId || !account) {
+    res.status(400).json({ error: 'sessionId and account are required' });
+    return;
+  }
+  try {
+    const accessToken = await getValidAccessToken(account);
+    const session = await googleGet<PickerSession>(
+      `https://photospicker.googleapis.com/v1/sessions/${encodeURIComponent(sessionId)}`,
+      accessToken,
+    );
+    res.json({ mediaItemsSet: Boolean(session.mediaItemsSet) });
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+// 取り込み: Picker mediaItems の列挙レスポンス。
+interface PickerMediaFile {
+  baseUrl?: string;
+  mimeType?: string;
+  filename?: string;
+}
+interface PickerMediaItem {
+  id?: string;
+  type?: string;
+  mediaFile?: PickerMediaFile;
+}
+interface PickerMediaListResponse {
+  mediaItems?: PickerMediaItem[];
+  nextPageToken?: string;
+}
+
+/** mimeType から kind を判定（image/video）。判定不能は image 扱い。 */
+function kindFromMime(mime: string): 'image' | 'video' {
+  return mime.toLowerCase().startsWith('video/') ? 'video' : 'image';
+}
+
+/** mimeType から拡張子を推測（保存名用・無くても致命的でない）。 */
+function extFromMime(mime: string): string {
+  const m = mime.toLowerCase().split(';')[0].trim();
+  const map: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+    'image/gif': '.gif',
+    'image/heic': '.heic',
+    'video/mp4': '.mp4',
+    'video/quicktime': '.mov',
+    'video/webm': '.webm',
+  };
+  return map[m] ?? '';
+}
+
+/** POST /photos/picker/import — 選択メディアを取得して babyDiaryStore へ保存。 */
+async function handlePickerImport(req: Request, res: Response): Promise<void> {
+  if (!requireConfigured(res)) return;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const account = typeof body.account === 'string' ? body.account : '';
+  const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
+  const date = body.date;
+
+  if (!account) {
+    res.status(400).json({ error: 'account is required' });
+    return;
+  }
+  if (!sessionId) {
+    res.status(400).json({ error: 'sessionId is required' });
+    return;
+  }
+  if (!isValidDate(date)) {
+    res.status(400).json({ error: 'date is required and must be YYYY-MM-DD' });
+    return;
+  }
+
+  try {
+    const accessToken = await getValidAccessToken(account);
+
+    // 選択メディアを列挙（ページネーション対応）。
+    const items: PickerMediaItem[] = [];
+    let pageToken: string | undefined;
+    do {
+      const params = new URLSearchParams({ sessionId, pageSize: '100' });
+      if (pageToken) params.set('pageToken', pageToken);
+      const page = await googleGet<PickerMediaListResponse>(
+        `https://photospicker.googleapis.com/v1/mediaItems?${params.toString()}`,
+        accessToken,
+      );
+      for (const it of page.mediaItems ?? []) items.push(it);
+      pageToken = page.nextPageToken;
+    } while (pageToken);
+
+    mkdirSync(BABY_DIARY_MEDIA_DIR, { recursive: true });
+
+    const imported: MediaMeta[] = [];
+    for (const item of items) {
+      const file = item.mediaFile;
+      if (!file?.baseUrl) continue;
+      try {
+        const mime = file.mimeType || 'application/octet-stream';
+        const kind = kindFromMime(mime);
+        // Picker のバイト取得は baseUrl に '=d'（ダウンロード）を付け、Bearer 付きで fetch する。
+        const dl = await fetchWithTimeout(`${file.baseUrl}=d`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!dl.ok) {
+          console.warn(`[google photos import] skip (HTTP ${dl.status}): ${file.filename ?? item.id}`);
+          continue;
+        }
+        const bytes = Buffer.from(await dl.arrayBuffer());
+
+        const id = randomUUID();
+        const originalName = file.filename || `photo${extFromMime(mime)}`;
+        const safe = sanitizeFilename(originalName);
+        const filename = `${id}-${safe}`;
+        writeFileSync(join(BABY_DIARY_MEDIA_DIR, filename), bytes);
+
+        const meta = appendMedia({
+          id,
+          date,
+          filename,
+          originalName,
+          mime,
+          kind,
+          size: bytes.length,
+          createdAt: new Date().toISOString(),
+        });
+        imported.push(meta);
+      } catch (fileErr) {
+        console.warn(
+          `[google photos import] skip ${item.id}:`,
+          fileErr instanceof Error ? fileErr.message : String(fileErr),
+        );
+      }
+    }
+
+    res.json({ imported });
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+// ─── Router 組み立て ─────────────────────────────────────
+
+/** /api/google 配下のルータを返す。index.ts で auth ミドルウェア配下に mount する。 */
+export function googleRouter(): Router {
+  const router = Router();
+
+  router.get('/status', handleStatus);
+  router.get('/oauth/start', handleOAuthStart);
+  router.get('/oauth/callback', (req, res) => void handleOAuthCallback(req, res));
+  router.delete('/accounts/:email', handleRemoveAccount);
+
+  router.get('/calendar/events', (req, res) => void handleCalendarList(req, res));
+  router.post('/calendar/events', (req, res) => void handleCalendarCreate(req, res));
+
+  router.post('/photos/picker/session', (req, res) => void handlePickerCreate(req, res));
+  router.get('/photos/picker/session/:sessionId', (req, res) => void handlePickerPoll(req, res));
+  router.post('/photos/picker/import', (req, res) => void handlePickerImport(req, res));
+
+  return router;
+}

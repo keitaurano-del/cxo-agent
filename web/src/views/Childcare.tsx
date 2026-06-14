@@ -3,7 +3,10 @@
 // 行政手続き／健診・予防接種を静的 curated データから描画する。
 // 医療・制度情報は「目安／要確認」を徹底（断定しない）。AI/RAG 連携は後続フェーズ。
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { PageHeader } from '../components/PageHeader';
+import { BabyIcon, DiaryIcon } from '../components/icons';
+import BabyDiary from './BabyDiary';
 import {
   BIRTH_DATE,
   BABY_SEX_LABEL,
@@ -623,47 +626,111 @@ function VaccineScheduleSection({ now }: { now: Date }) {
   );
 }
 
-export default function Childcare() {
+// ─── 育児ガイド本体（従来の /childcare の中身。タブシェル配下に描画）──
+function ChildcareGuide() {
   // クライアントの現在日を基準に算出（マウント時に固定）。
   const now = new Date();
+  return (
+    <div className="mx-auto flex max-w-5xl flex-col gap-4">
+      {/* ヘッダ → 次の節目 → 成長タイムライン → いま来るもの を全幅で上部固定。 */}
+      <BabyHeader now={now} />
+      <NextMilestoneSection now={now} />
+      <GrowthSection now={now} />
+      <UpcomingSection now={now} />
+      {/* PC（lg〜）は2分割（CSS マルチカラムのメイソンリー）、モバイルは1列。
+          各ラッパに break-inside-avoid を当て、カードが列をまたいで割れないようにする。 */}
+      <div className="columns-1 gap-4 lg:columns-2">
+        {[
+          <CareBasicsSection key="care" />,
+          <DailyRhythmSection key="rhythm" />,
+          <NightCryingSection key="night" />,
+          <FatherMindsetSection key="mindset" />,
+          <FatherSection key="father" />,
+          <WhenToSeeDoctorSection key="doctor" />,
+          <SidsSection key="sids" />,
+          <AdminSection key="admin" now={now} />,
+          <BunkyoSection key="bunkyo" />,
+          <PerksSection key="perks" />,
+          <CheckupSection key="checkup" now={now} />,
+        ].map((node) => (
+          <div key={node.key} className="mb-4 break-inside-avoid">
+            {node}
+          </div>
+        ))}
+      </div>
+      {/* 全幅・下部: 予防接種スケジュールのビジュアル・タイムライン。 */}
+      <VaccineScheduleSection now={now} />
+    </div>
+  );
+}
+
+type ChildcareTab = 'guide' | 'diary';
+
+/** 初期タブ判定: prop 優先。なければ URL（/baby-diary or ?tab=diary）から 'diary' を導く。 */
+function resolveInitialTab(initialTab?: ChildcareTab): ChildcareTab {
+  if (initialTab) return initialTab;
+  if (typeof window !== 'undefined') {
+    const { pathname, search } = window.location;
+    if (pathname === '/baby-diary') return 'diary';
+    if (new URLSearchParams(search).get('tab') === 'diary') return 'diary';
+  }
+  return 'guide';
+}
+
+// ─── タブバー（育児ガイド / 成長日記）。既存の下線アクティブ流儀に合わせる ──
+function ChildcareTabBar({ tab, onChange }: { tab: ChildcareTab; onChange: (t: ChildcareTab) => void }) {
+  const tabs: { id: ChildcareTab; label: string; icon: ReactNode }[] = [
+    { id: 'guide', label: '育児ガイド', icon: <BabyIcon width={16} height={16} /> },
+    { id: 'diary', label: '成長日記', icon: <DiaryIcon width={16} height={16} /> },
+  ];
+  return (
+    <div className="flex border-b border-border px-4 md:px-6" role="tablist" aria-label="育児ページのタブ">
+      {tabs.map((t) => {
+        const active = tab === t.id;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(t.id)}
+            className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm transition-colors ${
+              active
+                ? 'border-accent font-semibold text-text'
+                : 'border-transparent text-text-muted hover:text-text'
+            }`}
+          >
+            <span aria-hidden>{t.icon}</span>
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function Childcare({ initialTab }: { initialTab?: ChildcareTab } = {}) {
+  const [tab, setTab] = useState<ChildcareTab>(() => resolveInitialTab(initialTab));
+
+  const changeTab = (next: ChildcareTab) => {
+    setTab(next);
+    // URL をタブに同期（リロードでタブ維持・履歴は汚さない）。
+    if (typeof window !== 'undefined') {
+      const url = next === 'diary' ? '/childcare?tab=diary' : '/childcare';
+      window.history.replaceState(null, '', url);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="育児"
-        subtitle="第一子（男の子）の生後経過と、いま来る手続き・健診・育児の目安をまとめます。"
+        subtitle="第一子（男の子）の生後経過・手続き・健診の目安と、毎日の成長日記をまとめます。"
         fetchedAt={undefined}
       />
+      <ChildcareTabBar tab={tab} onChange={changeTab} />
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
-        <div className="mx-auto flex max-w-5xl flex-col gap-4">
-          {/* ヘッダ → 次の節目 → 成長タイムライン → いま来るもの を全幅で上部固定。 */}
-          <BabyHeader now={now} />
-          <NextMilestoneSection now={now} />
-          <GrowthSection now={now} />
-          <UpcomingSection now={now} />
-          {/* PC（lg〜）は2分割（CSS マルチカラムのメイソンリー）、モバイルは1列。
-              各ラッパに break-inside-avoid を当て、カードが列をまたいで割れないようにする。 */}
-          <div className="columns-1 gap-4 lg:columns-2">
-            {[
-              <CareBasicsSection key="care" />,
-              <DailyRhythmSection key="rhythm" />,
-              <NightCryingSection key="night" />,
-              <FatherMindsetSection key="mindset" />,
-              <FatherSection key="father" />,
-              <WhenToSeeDoctorSection key="doctor" />,
-              <SidsSection key="sids" />,
-              <AdminSection key="admin" now={now} />,
-              <BunkyoSection key="bunkyo" />,
-              <PerksSection key="perks" />,
-              <CheckupSection key="checkup" now={now} />,
-            ].map((node) => (
-              <div key={node.key} className="mb-4 break-inside-avoid">
-                {node}
-              </div>
-            ))}
-          </div>
-          {/* 全幅・下部: 予防接種スケジュールのビジュアル・タイムライン。 */}
-          <VaccineScheduleSection now={now} />
-        </div>
+        {tab === 'guide' ? <ChildcareGuide /> : <BabyDiary embedded />}
       </div>
     </div>
   );

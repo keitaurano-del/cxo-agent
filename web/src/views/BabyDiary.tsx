@@ -12,6 +12,9 @@ import {
   TrashIcon,
   ImageFileIcon,
   VideoFileIcon,
+  LinkIcon,
+  PlusIcon,
+  CloseIcon,
 } from '../components/icons';
 import {
   BIRTH_DATE,
@@ -49,6 +52,39 @@ interface DiaryResponse {
   generatedAt: string;
   entries: DiaryEntry[];
   media: MediaMeta[];
+}
+
+// ─── Google 連携 API 型（MC-233 Phase2/3 サーバ契約に対応）─────────
+interface GoogleAccount {
+  email: string;
+  connectedAt?: string;
+  scope?: string;
+}
+
+interface GoogleStatus {
+  configured: boolean;
+  accounts: GoogleAccount[];
+}
+
+// Google カレンダーの予定。start/end は Google 形式（{date} か {dateTime}）。
+interface GoogleEventTime {
+  date?: string; // YYYY-MM-DD（終日）
+  dateTime?: string; // RFC3339
+}
+
+interface GoogleCalendarEvent {
+  id: string;
+  account: string;
+  title: string;
+  start: GoogleEventTime;
+  end: GoogleEventTime;
+  allDay: boolean;
+  htmlLink?: string;
+}
+
+interface CalendarEventsResponse {
+  events: GoogleCalendarEvent[];
+  errors?: unknown[];
 }
 
 // ─── ToDo（締切）ソース: 行政手続き＋健診を {id,title,dueIso} に正規化 ──
@@ -102,10 +138,98 @@ function mediaUrl(id: string): string {
   return `/api/baby-diary/media/${id}`;
 }
 
+// ─── Google 連携ユーティリティ ──────────────────────────────
+/** Google イベント start の表示用ローカル YYYY-MM-DD（カレンダーセルへの割り当て用）。 */
+function eventDateIso(t: GoogleEventTime): string {
+  if (t.date) return t.date; // 終日
+  if (t.dateTime) {
+    const d = new Date(t.dateTime);
+    // JST 表示（ブラウザロケール依存を避け、ローカル日付の YYYY-MM-DD を組む）。
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  return '';
+}
+
+/** 時刻なし終日 or 'HH:MM' の短い表示文字列。 */
+function eventTimeLabel(ev: GoogleCalendarEvent): string {
+  if (ev.allDay || ev.start.date) return '終日';
+  if (ev.start.dateTime) {
+    const d = new Date(ev.start.dateTime);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+  }
+  return '';
+}
+
+/** 表示中の月の [timeMin, timeMax)（ローカル境界の ISO 文字列）。 */
+function monthRangeIso(year: number, month: number): { timeMin: string; timeMax: string } {
+  const start = new Date(year, month, 1, 0, 0, 0, 0);
+  const end = new Date(year, month + 1, 1, 0, 0, 0, 0);
+  return { timeMin: start.toISOString(), timeMax: end.toISOString() };
+}
+
+// ─── 軽量トースト（自己完結・3秒で自動消去）──────────────────
+type ToastKind = 'success' | 'error';
+interface ToastMsg {
+  id: number;
+  kind: ToastKind;
+  text: string;
+}
+
+function useToasts() {
+  const [toasts, setToasts] = useState<ToastMsg[]>([]);
+  const idRef = useRef(0);
+  const push = useCallback((kind: ToastKind, text: string) => {
+    const id = ++idRef.current;
+    setToasts((t) => [...t, { id, kind, text }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
+  }, []);
+  const dismiss = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), []);
+  return { toasts, push, dismiss };
+}
+
+function ToastStack({ toasts, onDismiss }: { toasts: ToastMsg[]; onDismiss: (id: number) => void }) {
+  if (toasts.length === 0) return null;
+  return (
+    <div className="fixed bottom-20 right-4 z-50 flex w-72 flex-col gap-2 md:bottom-6" aria-live="polite">
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          role={t.kind === 'error' ? 'alert' : 'status'}
+          className="flex items-start gap-2 rounded-xl border border-border bg-surface p-3 shadow-lg"
+        >
+          <p
+            className="min-w-0 flex-1 text-xs font-medium"
+            style={{ color: t.kind === 'error' ? 'var(--mc-stalled)' : 'var(--mc-active)' }}
+          >
+            {t.text}
+          </p>
+          <button
+            type="button"
+            onClick={() => onDismiss(t.id)}
+            aria-label="閉じる"
+            className="shrink-0 rounded p-0.5 text-text-faint hover:bg-surface-2 hover:text-text"
+          >
+            <CloseIcon width={14} height={14} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── ルート ─────────────────────────────────────────────────
-export default function BabyDiary() {
+// embedded=true のとき: 育児ページのタブシェル配下に流す前提で、
+// 自前の PageHeader と最外の flex/overflow ラッパを描かず、中身（max-w コンテナ）だけを返す。
+export default function BabyDiary({ embedded = false }: { embedded?: boolean } = {}) {
   const now = useMemo(() => new Date(), []);
   const today = useMemo(() => todayIso(now), [now]);
+
+  const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
 
   const [data, setData] = useState<DiaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,6 +242,92 @@ export default function BabyDiary() {
   });
   // 選択中の日（詳細パネル対象）。既定は今日。
   const [selected, setSelected] = useState<string>(today);
+
+  // ── Google 連携状態 ──
+  const [gstatus, setGstatus] = useState<GoogleStatus | null>(null);
+  // 選択中アカウント（複数接続時の Picker / 書き出し対象。既定=先頭）。
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
+
+  const accounts = gstatus?.accounts ?? [];
+  const hasAccounts = accounts.length > 0;
+  // 実効アカウント（選択が未設定/失効していれば先頭にフォールバック）。
+  const activeAccount = useMemo(() => {
+    if (selectedAccount && accounts.some((a) => a.email === selectedAccount)) return selectedAccount;
+    return accounts[0]?.email ?? null;
+  }, [selectedAccount, accounts]);
+
+  const fetchGoogleStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/google/status');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = (await res.json()) as GoogleStatus;
+      setGstatus(json);
+    } catch {
+      // 取得失敗時は未設定扱い（Phase1 を壊さない）。
+      setGstatus({ configured: false, accounts: [] });
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchGoogleStatus();
+  }, [fetchGoogleStatus]);
+
+  // OAuth 戻り（?google=connected|error）の検出 → トースト → クエリ除去 → status 再取得。
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const g = params.get('google');
+    if (g !== 'connected' && g !== 'error') return;
+    if (g === 'connected') pushToast('success', 'Googleアカウントを接続しました');
+    else pushToast('error', 'Google接続に失敗しました。もう一度お試しください。');
+    params.delete('google');
+    const qs = params.toString();
+    const url = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash;
+    window.history.replaceState(null, '', url);
+    void fetchGoogleStatus();
+  }, [pushToast, fetchGoogleStatus]);
+
+  // ── 表示中の月の Google 予定（接続済みアカウントがあるときのみ）──
+  const [gEvents, setGEvents] = useState<GoogleCalendarEvent[]>([]);
+
+  useEffect(() => {
+    if (!hasAccounts) {
+      setGEvents([]);
+      return;
+    }
+    let cancelled = false;
+    const { timeMin, timeMax } = monthRangeIso(view.year, view.month);
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/google/calendar/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`,
+        );
+        if (!res.ok) {
+          if (!cancelled) setGEvents([]);
+          return;
+        }
+        const json = (await res.json()) as CalendarEventsResponse;
+        if (!cancelled) setGEvents(json.events ?? []);
+      } catch {
+        if (!cancelled) setGEvents([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasAccounts, view.year, view.month]);
+
+  // date → Google 予定配列 の索引。
+  const eventsByDate = useMemo(() => {
+    const m = new Map<string, GoogleCalendarEvent[]>();
+    for (const ev of gEvents) {
+      const iso = eventDateIso(ev.start);
+      if (!iso) continue;
+      const arr = m.get(iso) ?? [];
+      arr.push(ev);
+      m.set(iso, arr);
+    }
+    return m;
+  }, [gEvents]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -164,6 +374,62 @@ export default function BabyDiary() {
     setSelected(today);
   };
 
+  // 中身（max-w コンテナ）。embedded/通常 どちらでも共通で使う。
+  const inner = (
+    <div className="mx-auto flex max-w-5xl flex-col gap-4">
+      <DiaryHeader now={now} />
+
+      <GoogleConnectPanel
+        status={gstatus}
+        activeAccount={activeAccount}
+        onSelectAccount={setSelectedAccount}
+        onRefresh={fetchGoogleStatus}
+        pushToast={pushToast}
+      />
+
+      <ResourceState loading={loading} error={error} hasData={!!data}>
+        {/* PC: 2カラム（カレンダー｜詳細）、モバイル: 1列（カレンダー → 詳細）。 */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <CalendarSection
+            view={view}
+            today={today}
+            selected={selected}
+            entryByDate={entryByDate}
+            mediaByDate={mediaByDate}
+            eventsByDate={eventsByDate}
+            onPrev={goPrevMonth}
+            onNext={goNextMonth}
+            onToday={goToday}
+            onSelect={setSelected}
+          />
+          <DayDetailSection
+            date={selected}
+            entry={entryByDate.get(selected)}
+            media={mediaByDate.get(selected) ?? []}
+            googleEvents={eventsByDate.get(selected) ?? []}
+            activeAccount={activeAccount}
+            accountsConnected={hasAccounts}
+            onChanged={fetchData}
+            pushToast={pushToast}
+          />
+        </div>
+
+        <GrowthChartSection entries={data?.entries ?? []} />
+      </ResourceState>
+    </div>
+  );
+
+  // 育児タブ配下（embedded）: 親シェルが PageHeader と overflow 領域を持つので中身だけ返す。
+  // ToastStack は fixed なので並置してよい。
+  if (embedded) {
+    return (
+      <>
+        {inner}
+        <ToastStack toasts={toasts} onDismiss={dismissToast} />
+      </>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader
@@ -171,36 +437,9 @@ export default function BabyDiary() {
         subtitle="毎日の記録・写真／動画・成長グラフをまとめます。手続きや健診の目安は育児タブをどうぞ。"
         fetchedAt={data?.generatedAt}
       />
-      <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
-        <div className="mx-auto flex max-w-5xl flex-col gap-4">
-          <DiaryHeader now={now} />
+      <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">{inner}</div>
 
-          <ResourceState loading={loading} error={error} hasData={!!data}>
-            {/* PC: 2カラム（カレンダー｜詳細）、モバイル: 1列（カレンダー → 詳細）。 */}
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <CalendarSection
-                view={view}
-                today={today}
-                selected={selected}
-                entryByDate={entryByDate}
-                mediaByDate={mediaByDate}
-                onPrev={goPrevMonth}
-                onNext={goNextMonth}
-                onToday={goToday}
-                onSelect={setSelected}
-              />
-              <DayDetailSection
-                date={selected}
-                entry={entryByDate.get(selected)}
-                media={mediaByDate.get(selected) ?? []}
-                onChanged={fetchData}
-              />
-            </div>
-
-            <GrowthChartSection entries={data?.entries ?? []} />
-          </ResourceState>
-        </div>
-      </div>
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -221,6 +460,151 @@ function DiaryHeader({ now }: { now: Date }) {
   );
 }
 
+// ─── Google 連携パネル ───────────────────────────────────────
+function GoogleConnectPanel({
+  status,
+  activeAccount,
+  onSelectAccount,
+  onRefresh,
+  pushToast,
+}: {
+  status: GoogleStatus | null;
+  activeAccount: string | null;
+  onSelectAccount: (email: string) => void;
+  onRefresh: () => Promise<void> | void;
+  pushToast: (kind: ToastKind, text: string) => void;
+}) {
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
+
+  // status 取得前は静かに何も出さない（Phase1 を邪魔しない）。
+  if (!status) return null;
+
+  const accounts = status.accounts ?? [];
+
+  const startConnect = () => {
+    // fetch ではなくブラウザ遷移で OAuth を開始する。
+    window.location.href = '/api/google/oauth/start';
+  };
+
+  const disconnect = async (email: string) => {
+    setDisconnecting(email);
+    try {
+      const res = await fetch(`/api/google/accounts/${encodeURIComponent(email)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      pushToast('success', `${email} を切断しました`);
+      await onRefresh();
+    } catch (err) {
+      pushToast('error', `切断に失敗しました: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setDisconnecting(null);
+    }
+  };
+
+  return (
+    <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-text-muted">
+          <LinkIcon width={16} height={16} />
+        </span>
+        <h2 className="text-base font-bold text-text">Google連携</h2>
+      </div>
+
+      {!status.configured ? (
+        // 未設定: グレー表示・ボタン無効。
+        <div className="rounded-md border border-dashed border-border bg-bg px-3 py-3">
+          <p className="text-xs text-text-faint">
+            Google連携は設定準備中です（管理者がクレデンシャル設定後に有効化されます）。
+          </p>
+          <button
+            type="button"
+            disabled
+            className="mt-2 inline-flex cursor-not-allowed items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text-faint opacity-60"
+          >
+            <LinkIcon width={14} height={14} />
+            Googleアカウントを接続
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-xs text-text-muted">
+            カレンダーの予定表示・ToDoの書き出し・Google
+            Photosからの写真取り込みに使います。
+          </p>
+
+          {/* 接続済みアカウント一覧 */}
+          {accounts.length > 0 && (
+            <ul className="flex flex-col gap-2">
+              {accounts.map((a) => {
+                const isActive = a.email === activeAccount;
+                return (
+                  <li
+                    key={a.email}
+                    className={`flex items-center gap-2 rounded-md border px-3 py-2 ${
+                      isActive ? 'border-accent/50 bg-accent/5' : 'border-border bg-bg'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onSelectAccount(a.email)}
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      aria-pressed={isActive}
+                      title="このアカウントを操作対象にする"
+                    >
+                      <span
+                        className={`inline-block h-2 w-2 shrink-0 rounded-full ${
+                          isActive ? 'bg-accent' : 'bg-border'
+                        }`}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-medium text-text">{a.email}</span>
+                        {a.connectedAt && (
+                          <span className="block text-[10px] text-text-faint">
+                            接続日: {a.connectedAt.slice(0, 10)}
+                          </span>
+                        )}
+                      </span>
+                      {isActive && accounts.length > 1 && (
+                        <span className="shrink-0 rounded-full bg-accent/15 px-1.5 py-0.5 text-[9px] font-bold text-accent">
+                          選択中
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void disconnect(a.email)}
+                      disabled={disconnecting === a.email}
+                      className="shrink-0 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-text-muted hover:bg-surface-2 hover:text-blocked disabled:opacity-50"
+                    >
+                      {disconnecting === a.email ? '切断中…' : '切断'}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={startConnect}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-2 hover:text-text"
+            >
+              <PlusIcon width={14} height={14} />
+              {accounts.length > 0 ? 'アカウントを追加' : 'Googleアカウントを接続'}
+            </button>
+            {accounts.length > 0 && (
+              <span className="text-[11px] text-text-faint">
+                追加時は Google の画面で別アカウントを選べます。
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ─── 月カレンダー（自作グリッド）─────────────────────────────
 function CalendarSection({
   view,
@@ -228,6 +612,7 @@ function CalendarSection({
   selected,
   entryByDate,
   mediaByDate,
+  eventsByDate,
   onPrev,
   onNext,
   onToday,
@@ -238,6 +623,7 @@ function CalendarSection({
   selected: string;
   entryByDate: Map<string, DiaryEntry>;
   mediaByDate: Map<string, MediaMeta[]>;
+  eventsByDate: Map<string, GoogleCalendarEvent[]>;
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
@@ -312,6 +698,7 @@ function CalendarSection({
           const media = mediaByDate.get(iso) ?? [];
           const firstImage = media.find((m) => m.kind === 'image');
           const todos = todosForDate(iso);
+          const gEvents = eventsByDate.get(iso) ?? [];
           const weekday = (lead + day - 1) % 7;
 
           return (
@@ -384,6 +771,15 @@ function CalendarSection({
                     title="記録あり"
                   />
                 )}
+                {gEvents.length > 0 && (
+                  <span
+                    className="inline-flex items-center gap-0.5 rounded-full bg-idle-bg px-1 text-[8px] font-bold leading-tight text-idle"
+                    title={gEvents.map((e) => e.title).join('・')}
+                  >
+                    <span aria-hidden className="inline-block h-1 w-1 rounded-full bg-idle" />
+                    {gEvents.length}
+                  </span>
+                )}
                 {!firstImage && media.length > 0 && (
                   <span className="text-[8px] font-bold leading-tight text-text-muted">
                     🎞{media.length}
@@ -404,6 +800,9 @@ function CalendarSection({
           <span className="rounded-full bg-review-bg px-1 text-[8px] font-bold text-review">締切</span> やること
         </span>
         <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-idle" aria-hidden /> Google予定
+        </span>
+        <span className="inline-flex items-center gap-1">
           <span aria-hidden>🎂</span> 誕生日
         </span>
       </div>
@@ -416,12 +815,20 @@ function DayDetailSection({
   date,
   entry,
   media,
+  googleEvents,
+  activeAccount,
+  accountsConnected,
   onChanged,
+  pushToast,
 }: {
   date: string;
   entry: DiaryEntry | undefined;
   media: MediaMeta[];
+  googleEvents: GoogleCalendarEvent[];
+  activeAccount: string | null;
+  accountsConnected: boolean;
   onChanged: () => Promise<void> | void;
+  pushToast: (kind: ToastKind, text: string) => void;
 }) {
   const todos = todosForDate(date);
 
@@ -440,24 +847,123 @@ function DayDetailSection({
         ) : (
           <ul className="flex flex-col gap-1.5">
             {todos.map((t) => (
-              <li
+              <TodoRow
                 key={t.id}
-                className="flex items-center gap-2 rounded-md border border-review/40 bg-bg px-2.5 py-1.5"
-              >
-                <span className="inline-flex shrink-0 items-center rounded-full bg-review-bg px-1.5 py-0.5 text-[10px] font-bold leading-none text-review">
-                  {t.kind === 'admin' ? '行政' : '健診'}
-                </span>
-                <span className="text-xs font-medium text-text">{t.title}</span>
-              </li>
+                todo={t}
+                date={date}
+                activeAccount={accountsConnected ? activeAccount : null}
+                pushToast={pushToast}
+              />
             ))}
           </ul>
         )}
       </div>
 
+      {/* Googleカレンダーの予定（接続時のみ・予定があれば） */}
+      {accountsConnected && googleEvents.length > 0 && (
+        <div>
+          <h3 className="mb-1.5 text-sm font-bold text-text">Googleカレンダーの予定</h3>
+          <ul className="flex flex-col gap-1.5">
+            {googleEvents.map((ev) => (
+              <li
+                key={`${ev.account}:${ev.id}`}
+                className="flex items-start gap-2 rounded-md border border-idle/40 bg-bg px-2.5 py-1.5"
+              >
+                <span className="inline-flex shrink-0 items-center rounded-full bg-idle-bg px-1.5 py-0.5 text-[10px] font-bold leading-none text-idle">
+                  {eventTimeLabel(ev)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  {ev.htmlLink ? (
+                    <a
+                      href={ev.htmlLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-medium text-accent hover:underline"
+                    >
+                      {ev.title || '(無題の予定)'}
+                    </a>
+                  ) : (
+                    <span className="text-xs font-medium text-text">{ev.title || '(無題の予定)'}</span>
+                  )}
+                  <span className="block truncate text-[10px] text-text-faint">{ev.account}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <DiaryForm date={date} entry={entry} onSaved={onChanged} />
 
-      <MediaSection date={date} media={media} onChanged={onChanged} />
+      <MediaSection
+        date={date}
+        media={media}
+        activeAccount={accountsConnected ? activeAccount : null}
+        onChanged={onChanged}
+        pushToast={pushToast}
+      />
     </section>
+  );
+}
+
+// ─── ToDo 行（Googleカレンダーへ書き出しボタン付き）─────────────
+function TodoRow({
+  todo,
+  date,
+  activeAccount,
+  pushToast,
+}: {
+  todo: DueTodo;
+  date: string;
+  activeAccount: string | null;
+  pushToast: (kind: ToastKind, text: string) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState(false);
+
+  const addToCalendar = async () => {
+    if (!activeAccount) return;
+    setAdding(true);
+    try {
+      const res = await fetch('/api/google/calendar/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account: activeAccount,
+          summary: todo.title,
+          date: todo.dueIso,
+          description: todo.kind === 'admin' ? '行政手続き（成長日記）' : '健診（成長日記）',
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setAdded(true);
+      pushToast('success', `「${todo.title}」をGoogleカレンダーに追加しました`);
+    } catch (err) {
+      pushToast('error', `カレンダー追加に失敗しました: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  return (
+    <li className="flex items-center gap-2 rounded-md border border-review/40 bg-bg px-2.5 py-1.5">
+      <span className="inline-flex shrink-0 items-center rounded-full bg-review-bg px-1.5 py-0.5 text-[10px] font-bold leading-none text-review">
+        {todo.kind === 'admin' ? '行政' : '健診'}
+      </span>
+      <span className="min-w-0 flex-1 text-xs font-medium text-text">{todo.title}</span>
+      {/* 締切が選択日と一致するときのみ表示（todosForDate で保証済み）。アカウント未接続なら非表示。 */}
+      {activeAccount && (
+        <button
+          type="button"
+          onClick={() => void addToCalendar()}
+          disabled={adding || added}
+          title={`${date} の予定としてGoogleカレンダーに追加`}
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] font-medium text-text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
+        >
+          {added ? '追加済み' : adding ? '追加中…' : 'Googleカレンダーへ追加'}
+        </button>
+      )}
+    </li>
   );
 }
 
@@ -588,17 +1094,110 @@ function DiaryForm({
 function MediaSection({
   date,
   media,
+  activeAccount,
   onChanged,
+  pushToast,
 }: {
   date: string;
   media: MediaMeta[];
+  activeAccount: string | null;
   onChanged: () => Promise<void> | void;
+  pushToast: (kind: ToastKind, text: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  // ── Google Photos Picker 状態 ──
+  // 'idle' | 'waiting'（ユーザーが Picker で選択中・ポーリング） | 'importing'
+  const [pickerState, setPickerState] = useState<'idle' | 'waiting' | 'importing'>('idle');
+  const pickerStopRef = useRef<{ stopped: boolean }>({ stopped: false });
+
   const onPick = () => inputRef.current?.click();
+
+  // 選択日が変わったら進行中の Picker を止める。
+  useEffect(() => {
+    return () => {
+      pickerStopRef.current.stopped = true;
+    };
+  }, [date]);
+
+  const sleep = (ms: number) =>
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, ms);
+    });
+
+  const stopPicker = () => {
+    pickerStopRef.current.stopped = true;
+    setPickerState('idle');
+  };
+
+  const startGooglePhotos = async () => {
+    if (!activeAccount || pickerState !== 'idle') return;
+    const stopState = { stopped: false };
+    pickerStopRef.current = stopState;
+    setPickerState('waiting');
+    try {
+      // 1) Picker セッション作成。
+      const sres = await fetch('/api/google/photos/picker/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: activeAccount }),
+      });
+      if (!sres.ok) throw new Error(`HTTP ${sres.status}`);
+      const { sessionId, pickerUri } = (await sres.json()) as {
+        sessionId: string;
+        pickerUri: string;
+        account: string;
+      };
+
+      // 2) 新規タブで Picker を開く。
+      window.open(pickerUri, '_blank', 'noopener,noreferrer');
+
+      // 3) mediaItemsSet になるまで 3 秒間隔でポーリング（最大 ~2 分）。
+      const maxAttempts = 40; // 40 * 3s = 120s
+      let set = false;
+      for (let i = 0; i < maxAttempts; i++) {
+        if (stopState.stopped) return;
+        await sleep(3000);
+        if (stopState.stopped) return;
+        const pres = await fetch(
+          `/api/google/photos/picker/session/${encodeURIComponent(sessionId)}?account=${encodeURIComponent(activeAccount)}`,
+        );
+        if (!pres.ok) continue;
+        const pj = (await pres.json()) as { mediaItemsSet?: boolean };
+        if (pj.mediaItemsSet) {
+          set = true;
+          break;
+        }
+      }
+
+      if (stopState.stopped) return;
+      if (!set) {
+        pushToast('error', 'Google Photosの選択がタイムアウトしました。もう一度お試しください。');
+        setPickerState('idle');
+        return;
+      }
+
+      // 4) 取り込み。
+      setPickerState('importing');
+      const ires = await fetch('/api/google/photos/picker/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: activeAccount, sessionId, date }),
+      });
+      if (!ires.ok) throw new Error(`HTTP ${ires.status}`);
+      const { imported } = (await ires.json()) as { imported: unknown[] };
+      await onChanged();
+      pushToast('success', `Google Photosから ${imported?.length ?? 0} 件取り込みました`);
+    } catch (err) {
+      if (!pickerStopRef.current.stopped) {
+        pushToast('error', `Google Photos取り込みに失敗しました: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } finally {
+      setPickerState('idle');
+    }
+  };
 
   const onFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -640,17 +1239,34 @@ function MediaSection({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-text">写真・動画</h3>
-        <button
-          type="button"
-          onClick={onPick}
-          disabled={uploading}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
-        >
-          <UploadIcon width={14} height={14} />
-          {uploading ? 'アップロード中…' : '追加'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {activeAccount && (
+            <button
+              type="button"
+              onClick={() => void startGooglePhotos()}
+              disabled={pickerState !== 'idle'}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
+            >
+              <LinkIcon width={14} height={14} />
+              {pickerState === 'importing'
+                ? '取り込み中…'
+                : pickerState === 'waiting'
+                  ? '選択待ち…'
+                  : 'Google Photosから追加'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onPick}
+            disabled={uploading}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
+          >
+            <UploadIcon width={14} height={14} />
+            {uploading ? 'アップロード中…' : '追加'}
+          </button>
+        </div>
         <input
           ref={inputRef}
           type="file"
@@ -660,6 +1276,25 @@ function MediaSection({
           onChange={(e) => void onFiles(e.target.files)}
         />
       </div>
+
+      {pickerState !== 'idle' && (
+        <div className="flex items-center justify-between gap-2 rounded-md border border-idle/40 bg-idle-bg px-2.5 py-1.5">
+          <p className="text-xs text-idle">
+            {pickerState === 'importing'
+              ? '選択した写真を取り込んでいます…'
+              : '新しいタブのGoogle Photosで写真を選んでください…（最大2分）'}
+          </p>
+          {pickerState === 'waiting' && (
+            <button
+              type="button"
+              onClick={stopPicker}
+              className="shrink-0 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-text-muted hover:bg-surface-2 hover:text-text"
+            >
+              停止
+            </button>
+          )}
+        </div>
+      )}
 
       {uploadError && <p className="text-xs text-blocked">{uploadError}</p>}
 
