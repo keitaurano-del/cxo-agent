@@ -666,22 +666,23 @@ function ChildcareGuide() {
 
 type ChildcareTab = 'guide' | 'diary';
 
-/** 初期タブ判定: prop 優先。なければ URL（/baby-diary or ?tab=diary）から 'diary' を導く。 */
+/** 初期タブ判定: prop 優先。既定は 'diary'（成長日記）。?tab=guide のときだけ 'guide'。 */
 function resolveInitialTab(initialTab?: ChildcareTab): ChildcareTab {
   if (initialTab) return initialTab;
   if (typeof window !== 'undefined') {
-    const { pathname, search } = window.location;
-    if (pathname === '/baby-diary') return 'diary';
-    if (new URLSearchParams(search).get('tab') === 'diary') return 'diary';
+    const { search } = window.location;
+    if (new URLSearchParams(search).get('tab') === 'guide') return 'guide';
   }
-  return 'guide';
+  // 育児メニュータップ（/childcare）・/baby-diary とも成長日記を先に出す。
+  return 'diary';
 }
 
 // ─── タブバー（育児ガイド / 成長日記）。既存の下線アクティブ流儀に合わせる ──
 function ChildcareTabBar({ tab, onChange }: { tab: ChildcareTab; onChange: (t: ChildcareTab) => void }) {
+  // 成長日記を先頭に（育児メニュータップで成長日記が先に来るよう、タブ順も先頭に揃える）。
   const tabs: { id: ChildcareTab; label: string; icon: ReactNode }[] = [
-    { id: 'guide', label: '育児ガイド', icon: <BabyIcon width={16} height={16} /> },
     { id: 'diary', label: '成長日記', icon: <DiaryIcon width={16} height={16} /> },
+    { id: 'guide', label: '育児ガイド', icon: <BabyIcon width={16} height={16} /> },
   ];
   return (
     <div className="flex border-b border-border px-4 md:px-6" role="tablist" aria-label="育児ページのタブ">
@@ -714,9 +715,9 @@ export default function Childcare({ initialTab }: { initialTab?: ChildcareTab } 
 
   const changeTab = (next: ChildcareTab) => {
     setTab(next);
-    // URL をタブに同期（リロードでタブ維持・履歴は汚さない）。
+    // URL をタブに同期（リロードでタブ維持・履歴は汚さない）。成長日記が既定なので guide だけ ?tab=guide。
     if (typeof window !== 'undefined') {
-      const url = next === 'diary' ? '/childcare?tab=diary' : '/childcare';
+      const url = next === 'guide' ? '/childcare?tab=guide' : '/childcare';
       window.history.replaceState(null, '', url);
     }
   };
