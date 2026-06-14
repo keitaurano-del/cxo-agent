@@ -2873,3 +2873,17 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 受け入れ条件（DoD） | サイドバーから独立Vault消失、ドキュメントページでタブ切替可、/vault は Vault タブ着地、build green＋実画面確認。 |
 | 依存 | web/src/App.tsx, 新規 web/src/views/DocumentsTabs.tsx。Deliverables.tsx/Vault.tsx 本体は無改変。関連 MC-233(同方式)。 |
 | 更新日 | 2026-06-14 |
+
+### MC-243 — タスクをタップで詳細表示（予定と同様）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-243 |
+| タイトル | 日次詳細パネルの Google タスク行をタップ→詳細表示（予定と同じ操作性に揃える） |
+| 優先度 | P2 |
+| ステータス | IN_PROGRESS（2026-06-15 Son 駆動・実装を subagent に委譲）。Keita 要望「タスクも予定と同じようにタップしたら詳細みれるように」。予定(GoogleEvent)は htmlLink で Googleカレンダーへ遷移＝詳細到達。タスク(GoogleTask)は外部リンク無し→アプリ内詳細(モーダル)で タイトル全文・notes全文(現状は1行truncate)・期日・リスト・アカウント・状態 を表示。 |
+| 担当 | Son（駆動・検証・反映）／実装 subagent（dev-apollo レーン） |
+| 詳細 | 対象 web/src/views/BabyDiary.tsx の TaskRow（現状 静的 <li>・notes truncate・クリックハンドラ無）。期日ありタスク(≈L1678)と期日なしタスク(≈L1714)の両 TaskRow 使用箇所に適用。予定行(≈L1644)が a[htmlLink] でタップ可能なのに対しタスクはハンドラ無し＝この差を解消。ソラが同ツリーで Childcare.tsx 改修中につき BabyDiary.tsx のみ改変・自分の変更だけコミット→隔離 worktree でビルド（MC-242 と同手順）。 |
+| 受け入れ条件（DoD） | タスク行タップで詳細(タイトル/notes全文/期日/リスト/アカウント/状態)が開く、期日なしタスクでも同様、build green＋実画面確認。 |
+| 依存 | web/src/views/BabyDiary.tsx。関連 MC-233(タスク表示)。 |
+| 更新日 | 2026-06-15 |

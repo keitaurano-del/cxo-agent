@@ -3,6 +3,7 @@
 // 成長グラフ（自作SVG）を、サーバ API（同一オリジン・Cookie 認証）に対して描画する。
 // カレンダー・グラフは外部ライブラリを足さず React/SVG で自作する（依存を増やさない）。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState } from '../components/ui';
 import {
@@ -1487,48 +1488,182 @@ function groupTasksByList(tasks: GoogleTask[]): { listTitle: string; tasks: Goog
     .map(({ listTitle, tasks }) => ({ listTitle, tasks }));
 }
 
+// status → 状態ラベル（未完了/完了）。未知値は素のまま返さず未完了扱い（未完了のみ来る想定）。
+function taskStatusLabel(status: string): string {
+  return status === 'completed' ? '完了' : '未完了';
+}
+
 // ─── Google タスク 1 行（期日あり・期日なし共通）──────────────────
+// タップ/Enter/Space で詳細（TaskDetail）を開く。予定（イベント）が htmlLink で
+// 外部詳細に飛べるのに対し、タスクは外部リンクを持たないのでアプリ内詳細を出す。
 function TaskRow({
   task,
   accountColors,
+  onOpen,
 }: {
   task: GoogleTask;
   accountColors: Map<string, string>;
+  onOpen: (task: GoogleTask) => void;
 }) {
   const color = accountColors.get(task.account) ?? 'var(--mc-idle)';
   const done = task.status === 'completed';
   return (
-    <li
-      className="flex items-start gap-2 rounded-md border border-border bg-bg px-2.5 py-1.5"
-      style={{ borderLeftColor: color, borderLeftWidth: 3 }}
-    >
-      {/* 完了/未完了を□/☑で示す（未完了のみ来る想定）。 */}
-      <span
-        aria-hidden
-        className="mt-px shrink-0 text-sm font-bold leading-none"
-        style={{ color }}
-        title={done ? '完了' : '未完了'}
+    <li>
+      <button
+        type="button"
+        onClick={() => onOpen(task)}
+        aria-label={`タスクの詳細を開く: ${task.title || '無題のタスク'}`}
+        className="flex w-full items-start gap-2 rounded-md border border-border bg-bg px-2.5 py-1.5 text-left transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        style={{ borderLeftColor: color, borderLeftWidth: 3 }}
       >
-        {done ? '☑' : '□'}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className={`text-xs font-medium text-text ${done ? 'line-through opacity-60' : ''}`}>
-          {task.title || '(無題のタスク)'}
+        {/* 完了/未完了を□/☑で示す（未完了のみ来る想定）。 */}
+        <span
+          aria-hidden
+          className="mt-px shrink-0 text-sm font-bold leading-none"
+          style={{ color }}
+          title={done ? '完了' : '未完了'}
+        >
+          {done ? '☑' : '□'}
         </span>
-        {task.notes && (
-          <span className="block truncate text-[10px] text-text-muted">{task.notes}</span>
-        )}
-        <span className="flex items-center gap-1 truncate text-[10px] text-text-faint">
+        <span className="min-w-0 flex-1">
           <span
-            className="inline-block h-1.5 w-1.5 shrink-0 rounded-[1px]"
-            style={{ background: color }}
-            aria-hidden
-          />
-          {task.listTitle ? `${task.listTitle}・` : ''}
-          {task.account}
+            className={`text-xs font-medium text-text ${done ? 'line-through opacity-60' : ''}`}
+          >
+            {task.title || '(無題のタスク)'}
+          </span>
+          {task.notes && (
+            <span className="block truncate text-[10px] text-text-muted">{task.notes}</span>
+          )}
+          <span className="flex items-center gap-1 truncate text-[10px] text-text-faint">
+            <span
+              className="inline-block h-1.5 w-1.5 shrink-0 rounded-[1px]"
+              style={{ background: color }}
+              aria-hidden
+            />
+            {task.listTitle ? `${task.listTitle}・` : ''}
+            {task.account}
+          </span>
         </span>
-      </span>
+      </button>
     </li>
+  );
+}
+
+// ─── Google タスクの詳細（アプリ内ドロワー）──────────────────────
+// TileDetail のドロワー作法に倣う: createPortal で body 直下、fixed inset-0 z-50、
+// 右スライド、背面オーバーレイ button、Esc クローズ＋背面スクロールロック、上端 accent ボーダー。
+// task が null の間は何も描画しない（閉じている状態）。
+function TaskDetail({
+  task,
+  accountColors,
+  onClose,
+}: {
+  task: GoogleTask | null;
+  accountColors: Map<string, string>;
+  onClose: () => void;
+}) {
+  const open = task !== null;
+  // Esc クローズ + 背面スクロールロック（TileDetail と同じ作法）。
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open, onClose]);
+
+  if (!task) return null;
+
+  const color = accountColors.get(task.account) ?? 'var(--mc-idle)';
+  const dueLabel = task.due ? formatJpDate(task.due) : '期日なし';
+  const rows: { key: string; label: string; value: string }[] = [
+    { key: 'due', label: '期日', value: dueLabel },
+    { key: 'list', label: 'リスト', value: task.listTitle || '（リストなし）' },
+    { key: 'account', label: 'アカウント', value: task.account },
+    { key: 'status', label: '状態', value: taskStatusLabel(task.status) },
+  ];
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex justify-end"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`タスクの詳細: ${task.title || '無題のタスク'}`}
+    >
+      {/* 背面オーバーレイ（クリックで閉じる） */}
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="閉じる"
+        className="absolute inset-0 bg-bg/70 backdrop-blur-sm"
+      />
+      {/* ドロワー本体: モバイルは全幅、md 以上は右スライドのパネル */}
+      <div
+        className="relative flex h-full w-full max-w-full flex-col border-l border-border bg-bg shadow-xl md:w-[34rem]"
+        style={{ borderTop: `3px solid ${color}` }}
+      >
+        {/* ヘッダ */}
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border bg-bg/95 px-4 py-3 backdrop-blur">
+          <div className="min-w-0">
+            <span
+              className="inline-flex items-center gap-2 text-[11px] text-text-faint"
+              role="status"
+              aria-label="種別: Googleタスク"
+            >
+              <span
+                className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+                style={{ background: color }}
+                aria-hidden
+              />
+              Googleタスク
+            </span>
+            <h2 className="mt-1 break-words text-[15px] font-bold leading-snug text-text">
+              {task.title || '(無題のタスク)'}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="閉じる"
+            className="shrink-0 rounded-md p-1.5 text-text-muted hover:bg-surface-2 hover:text-text"
+          >
+            <CloseIcon width={18} height={18} />
+          </button>
+        </div>
+
+        {/* 本文（スクロール領域） */}
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          <dl className="flex flex-col gap-3">
+            {rows.map((r) => (
+              <div key={r.key}>
+                <dt className="text-[11px] font-bold uppercase tracking-wide text-text-faint">
+                  {r.label}
+                </dt>
+                <dd className="mt-0.5 break-words text-[13px] leading-snug text-text">{r.value}</dd>
+              </div>
+            ))}
+            <div>
+              <dt className="text-[11px] font-bold uppercase tracking-wide text-text-faint">メモ</dt>
+              <dd className="mt-0.5 break-words text-[13px] leading-relaxed text-text">
+                {task.notes ? (
+                  // メモは改行を保持して全文表示（行では1行に省略していた）。
+                  <span className="whitespace-pre-wrap">{task.notes}</span>
+                ) : (
+                  <span className="text-text-faint">メモなし</span>
+                )}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1571,6 +1706,8 @@ function DayDetailSection({
   // 期日なしタスクのリスト折りたたみ。既定は「今日やる」だけ開き、他は閉じる。
   // ユーザがクリックした分だけ override に記録し、既定からの差分として扱う。
   const [listOpenOverride, setListOpenOverride] = useState<Map<string, boolean>>(() => new Map());
+  // タップされたタスクの詳細（アプリ内ドロワー）。両方の TaskRow リストで 1 つのモーダルを共有。
+  const [detailTask, setDetailTask] = useState<GoogleTask | null>(null);
   const isListOpen = (listTitle: string) =>
     listOpenOverride.has(listTitle)
       ? (listOpenOverride.get(listTitle) as boolean)
@@ -1675,7 +1812,12 @@ function DayDetailSection({
           <h3 className="mb-1.5 text-sm font-bold text-text">Googleタスク</h3>
           <ul className="flex flex-col gap-1.5">
             {googleTasks.map((task) => (
-              <TaskRow key={`${task.account}:${task.id}`} task={task} accountColors={accountColors} />
+              <TaskRow
+                key={`${task.account}:${task.id}`}
+                task={task}
+                accountColors={accountColors}
+                onOpen={setDetailTask}
+              />
             ))}
           </ul>
         </div>
@@ -1715,6 +1857,7 @@ function DayDetailSection({
                           key={`${task.account}:${task.id}`}
                           task={task}
                           accountColors={accountColors}
+                          onOpen={setDetailTask}
                         />
                       ))}
                     </ul>
@@ -1753,6 +1896,13 @@ function DayDetailSection({
         activeAccount={accountsConnected ? activeAccount : null}
         onChanged={onChanged}
         pushToast={pushToast}
+      />
+
+      {/* タスク詳細ドロワー（期日あり/なし 両リスト共通の 1 インスタンス）。 */}
+      <TaskDetail
+        task={detailTask}
+        accountColors={accountColors}
+        onClose={() => setDetailTask(null)}
       />
     </section>
   );
