@@ -3,7 +3,8 @@
 //  GET    /api/baby-diary               : { generatedAt, entries[], media[] }（date 昇順）
 //  POST   /api/baby-diary/entry         : JSON { date, memo?, milestone?, heightCm?, weightKg? } で upsert
 //  DELETE /api/baby-diary/entry/:date   : 該当 date のエントリを論理削除
-//  POST   /api/baby-diary/media         : multipart files[]（最大10）+ body.date でメディア追加
+//  POST   /api/baby-diary/media         : multipart files[]（最大10）+ body.date でメディア追加（重複自動スキップ・撮影日へ自動振り分け）
+//  POST   /api/baby-diary/media/maintenance : 既存データの一括クリーンアップ（hash 補完・重複削除・撮影日へ再配置）
 //  GET    /api/baby-diary/media/:id     : メディア実体をストリーム配信（mime をメタから）
 //  DELETE /api/baby-diary/media/:id     : 実体ファイル削除 ＋ メタ論理削除
 //
@@ -11,8 +12,8 @@
 // approvalRequestStore.ts（JSONL last-wins）に倣う。保存先はすべて data/ 配下（.gitignore 済み）。
 // パストラバーサルは「id でメタ検索 → 保存名で BABY_DIARY_MEDIA_DIR 内に解決 → realpath 確認」で防ぐ。
 
-import { randomUUID } from 'node:crypto';
-import { createReadStream, mkdirSync, realpathSync, statSync, unlinkSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { createReadStream, mkdirSync, readFileSync, realpathSync, statSync, unlinkSync } from 'node:fs';
 import { join, relative, resolve, sep, isAbsolute } from 'node:path';
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
@@ -25,9 +26,11 @@ import {
 import { sanitizeFilename } from './lib/inboxPath.js';
 import {
   appendMedia,
+  decideMediaDate,
   deleteEntry,
   deleteMedia,
   getMedia,
+  hashExists,
   listEntries,
   listMedia,
   upsertEntry,
@@ -158,6 +161,20 @@ function resolveMediaPath(filename: string): string | null {
   }
 }
 
+/**
+ * ファイル内容の sha256（16進）を同期計算する。
+ * readFileSync で 1 ファイルずつ読むため、逐次呼び出しでも大量件数でメモリは累積しない
+ * （1 ファイル分のみ常駐）。読めなければ null。
+ */
+function sha256File(abs: string): string | null {
+  try {
+    const buf = readFileSync(abs);
+    return createHash('sha256').update(buf).digest('hex');
+  } catch {
+    return null;
+  }
+}
+
 // ─── ハンドラ ───────────────────────────────────────────
 
 /** GET /api/baby-diary — エントリ＋メディアの一覧。 */
@@ -252,6 +269,9 @@ async function handleUploadMedia(req: Request, res: Response): Promise<void> {
 
   const now = new Date().toISOString();
   const saved: MediaMeta[] = [];
+  let skipped = 0;
+  // 同一リクエスト内の重複も弾くため、確定した hash を覚えておく。
+  const seenHashes = new Set<string>();
   for (const f of files) {
     const kind = kindOf(f.mimetype);
     // fileFilter で gate 済みだが念のため二重チェック。NG なら片付けて 400。
@@ -261,23 +281,40 @@ async function handleUploadMedia(req: Request, res: Response): Promise<void> {
       res.status(400).json({ error: `unsupported media type: ${f.mimetype}` });
       return;
     }
+
+    const abs = f.path ?? join(BABY_DIARY_MEDIA_DIR, f.filename);
+    const hash = sha256File(abs);
+
+    // 重複自動スキップ: 既存メディア or 同リクエスト内に同一内容があれば、
+    // 保存済みファイルを unlink して meta を append しない。
+    if (hash && (seenHashes.has(hash) || hashExists(hash))) {
+      try { unlinkSync(abs); } catch { /* 無視 */ }
+      skipped++;
+      continue;
+    }
+    if (hash) seenHashes.add(hash);
+
+    // 撮影日へ自動振り分け（推定できなければ body.date にフォールバック）。
+    const mediaDate = decideMediaDate(f.originalname, date);
+
     // filename から発番 id を引く（filename コールバックで採番済み）。
     const entry = idBag.find((e) => e.filename === f.filename);
     const id = entry?.id ?? randomUUID();
     const meta = appendMedia({
       id,
-      date,
+      date: mediaDate,
       filename: f.filename,
       originalName: f.originalname,
       mime: f.mimetype,
       kind,
       size: f.size,
+      ...(hash ? { hash } : {}),
       createdAt: now,
     });
     saved.push(meta);
   }
 
-  res.status(201).json({ media: saved });
+  res.status(201).json({ media: saved, skipped });
 }
 
 /** GET /api/baby-diary/media/:id — 実体ストリーム配信。 */
@@ -358,6 +395,99 @@ function handleDeleteMedia(req: Request, res: Response): void {
   res.json({ ok: true, id });
 }
 
+/**
+ * POST /api/baby-diary/media/maintenance — 既存データの一括クリーンアップ。
+ *
+ * 生きている全メディアを 1 件ずつ逐次処理する（112 件規模でも 1 ファイル分のみ常駐）:
+ *   - hash 補完: 未設定なら実体の sha256 を計算して meta に補完。
+ *   - 重複削除: 同一 hash のグループで createdAt 最古の 1 件を残し、他は実体 unlink ＋ 論理削除。
+ *   - 再配置: 残った各メディアの date を decideMediaDate(originalName, 現在の date) で更新。
+ *
+ * すべて last-wins 追記 / tombstone で表現するためべき等（再実行で害なし）。
+ */
+function handleMaintenance(_req: Request, res: Response): void {
+  const all = listMedia(); // 生きているメディア（date/createdAt 昇順）。
+  let scanned = 0;
+  let removedDuplicates = 0;
+  let redated = 0;
+  const errors: string[] = [];
+
+  // 1) hash 補完（未設定のみ計算）。以降の重複判定に使う実効 hash を確定する。
+  //    abs パスも引いておく（重複削除の unlink に再利用）。
+  interface Work {
+    meta: MediaMeta;
+    hash: string | undefined;
+    abs: string | null;
+  }
+  const work: Work[] = [];
+  for (const meta of all) {
+    scanned++;
+    const abs = resolveMediaPath(meta.filename);
+    let hash = meta.hash;
+    if (!hash) {
+      if (abs) {
+        const h = sha256File(abs);
+        if (h) hash = h;
+        else errors.push(`hash failed: ${meta.id}`);
+      } else {
+        errors.push(`file missing: ${meta.id}`);
+      }
+    }
+    work.push({ meta, hash, abs });
+  }
+
+  // 2) 重複削除。hash ごとにグループ化し、createdAt 最古の 1 件を残す。
+  //    残す 1 件は hash 補完を反映して append（last-wins で hash を永続化）。
+  //    他は実体 unlink ＋ 論理削除。
+  const byHash = new Map<string, Work[]>();
+  const noHash: Work[] = [];
+  for (const w of work) {
+    if (w.hash) {
+      const arr = byHash.get(w.hash) ?? [];
+      arr.push(w);
+      byHash.set(w.hash, arr);
+    } else {
+      noHash.push(w);
+    }
+  }
+
+  // 生き残り（再配置対象）の確定 meta と「元の hash」を集める。
+  // 元 hash と確定 hash を比較して、補完が必要かを O(1) で判定する。
+  const survivors: { meta: MediaMeta; origHash: string | undefined }[] = [];
+
+  for (const [hash, group] of byHash) {
+    // createdAt 最古を keeper に（同値は id で安定化）。
+    group.sort((a, b) =>
+      a.meta.createdAt.localeCompare(b.meta.createdAt) || a.meta.id.localeCompare(b.meta.id),
+    );
+    const [keeper, ...dups] = group;
+    survivors.push({ meta: { ...keeper.meta, hash }, origHash: keeper.meta.hash });
+    for (const dup of dups) {
+      if (dup.abs) {
+        try { unlinkSync(dup.abs); } catch { /* 既に無い場合は無視 */ }
+      }
+      deleteMedia(dup.meta.id);
+      removedDuplicates++;
+    }
+  }
+  // hash を確定できなかったものは重複判定の対象外。再配置のみ行う。
+  for (const w of noHash) {
+    survivors.push({ meta: { ...w.meta }, origHash: w.meta.hash });
+  }
+
+  // 3) 再配置 ＋ hash 補完の永続化。date が変わる、または hash が新たに付く場合に append。
+  for (const { meta, origHash } of survivors) {
+    const newDate = decideMediaDate(meta.originalName, meta.date);
+    const hashChanged = meta.hash !== origHash;
+    if (newDate !== meta.date || hashChanged) {
+      appendMedia({ ...meta, date: newDate });
+      if (newDate !== meta.date) redated++;
+    }
+  }
+
+  res.json({ scanned, removedDuplicates, redated, errors });
+}
+
 // ─── Router 組み立て ─────────────────────────────────────
 
 /** /api/baby-diary 配下のルータを返す。index.ts で auth ミドルウェア配下に mount する。 */
@@ -367,6 +497,7 @@ export function babyDiaryRouter(): Router {
   router.post('/entry', handleUpsertEntry);
   router.delete('/entry/:date', handleDeleteEntry);
   router.post('/media', (req, res) => void handleUploadMedia(req, res));
+  router.post('/media/maintenance', handleMaintenance);
   router.get('/media/:id', handleStreamMedia);
   router.delete('/media/:id', handleDeleteMedia);
   return router;

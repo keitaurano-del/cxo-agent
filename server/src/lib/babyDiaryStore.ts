@@ -54,6 +54,8 @@ export interface MediaMeta {
   kind: 'image' | 'video';
   /** バイトサイズ。 */
   size: number;
+  /** ファイル内容の sha256（16進）。重複検出に使う（任意・既存データは未設定の場合あり）。 */
+  hash?: string;
   /** 作成日時（ISO8601）。 */
   createdAt: string;
   /** 論理削除フラグ（true なら GET から除外）。永続用の内部フラグ。 */
@@ -199,4 +201,96 @@ export function listMedia(): MediaMeta[] {
 function stripMedia(rec: MediaMeta): MediaMeta {
   const { deleted: _deleted, ...pub } = rec;
   return pub;
+}
+
+/**
+ * 生きているメディアの中に同一 hash が既に存在するか。
+ * （アップロード時の重複自動スキップ判定に使う。空 hash は常に false。）
+ */
+export function hashExists(hash: string): boolean {
+  if (!hash) return false;
+  const map = readAll<MediaMeta>(BABY_DIARY_MEDIA_FILE, (r) => r.id);
+  for (const rec of map.values()) {
+    if (rec.deleted) continue;
+    if (rec.hash === hash) return true;
+  }
+  return false;
+}
+
+// ─── 撮影日決定ロジック ───────────────────────────────────
+// ファイル名から撮影日時を推定して JST の YYYY-MM-DD を返す。
+//
+// 優先順:
+//   1) PXL_YYYYMMDD_HHMMSS … Google Pixel。タイムスタンプは UTC なので +9h して JST 日付に。
+//   2) (IMG_|VID_)?YYYYMMDD_HHMMSS … Samsung 等。端末ローカル(≒JST)なので YYYYMMDD をそのまま採用。
+//   3) いずれも妥当な日時にマッチしなければ fallbackDate（呼び出し側の従来の選択日）。
+//
+// PXL_ を最優先で判定するのは UTC→JST 換算が必要なため（2 のパターンにも YYYYMMDD_HHMMSS は含まれる）。
+
+/** YYYY-MM-DD の素朴な妥当性（年範囲・月 1-12・日 1-31）。 */
+function isPlausibleYmd(y: number, mo: number, d: number): boolean {
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return false;
+  if (y < 1970 || y > 2100) return false;
+  if (mo < 1 || mo > 12) return false;
+  if (d < 1 || d > 31) return false;
+  return true;
+}
+
+/** 時分秒の素朴な妥当性（0-23 / 0-59 / 0-59）。 */
+function isPlausibleHms(h: number, mi: number, s: number): boolean {
+  return h >= 0 && h <= 23 && mi >= 0 && mi <= 59 && s >= 0 && s <= 59;
+}
+
+/** 2桁ゼロ埋め。 */
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+const PXL_RE = /PXL_(\d{8})_(\d{6})/;
+const GENERIC_DT_RE = /(?:IMG_|VID_)?(\d{8})_(\d{6})/;
+
+/**
+ * ファイル名から撮影日（JST の YYYY-MM-DD）を決定する。
+ * 推定できない場合は fallbackDate を返す。
+ */
+export function decideMediaDate(originalName: string, fallbackDate: string): string {
+  const name = originalName || '';
+
+  // 1) PXL_（UTC）→ +9h で JST 日付。
+  const pxl = PXL_RE.exec(name);
+  if (pxl) {
+    const ymd = pxl[1];
+    const hms = pxl[2];
+    const y = Number(ymd.slice(0, 4));
+    const mo = Number(ymd.slice(4, 6));
+    const d = Number(ymd.slice(6, 8));
+    const h = Number(hms.slice(0, 2));
+    const mi = Number(hms.slice(2, 4));
+    const s = Number(hms.slice(4, 6));
+    if (isPlausibleYmd(y, mo, d) && isPlausibleHms(h, mi, s)) {
+      // UTC として解釈し +9h。Date の UTC 演算で日付繰り上がりを正しく扱う。
+      const utc = new Date(Date.UTC(y, mo - 1, d, h, mi, s));
+      const jst = new Date(utc.getTime() + 9 * 60 * 60 * 1000);
+      return `${jst.getUTCFullYear()}-${pad2(jst.getUTCMonth() + 1)}-${pad2(jst.getUTCDate())}`;
+    }
+  }
+
+  // 2) 端末ローカル(≒JST) の YYYYMMDD_HHMMSS → YYYYMMDD をそのまま。
+  const gen = GENERIC_DT_RE.exec(name);
+  if (gen) {
+    const ymd = gen[1];
+    const hms = gen[2];
+    const y = Number(ymd.slice(0, 4));
+    const mo = Number(ymd.slice(4, 6));
+    const d = Number(ymd.slice(6, 8));
+    const h = Number(hms.slice(0, 2));
+    const mi = Number(hms.slice(2, 4));
+    const s = Number(hms.slice(4, 6));
+    if (isPlausibleYmd(y, mo, d) && isPlausibleHms(h, mi, s)) {
+      return `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;
+    }
+  }
+
+  // 3) フォールバック（従来の選択日）。
+  return fallbackDate;
 }

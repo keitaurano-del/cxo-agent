@@ -20,6 +20,7 @@ import {
 import {
   BIRTH_DATE,
   daysSinceBirth,
+  weeksAndDays,
   formatJpDate,
   parseIsoDate,
   todayIso,
@@ -31,9 +32,6 @@ import {
 interface DiaryEntry {
   date: string; // YYYY-MM-DD
   memo?: string;
-  milestone?: string;
-  heightCm?: number;
-  weightKg?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -521,8 +519,6 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
             pushToast={pushToast}
           />
         </div>
-
-        <GrowthChartSection entries={data?.entries ?? []} />
       </ResourceState>
     </div>
   );
@@ -555,27 +551,29 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
 // ─── ヘッダ（生後 N 日 ＋ 右上の設定ギア）─────────────────────
 function DiaryHeader({ now, onOpenSettings }: { now: Date; onOpenSettings: () => void }) {
   const days = daysSinceBirth(now);
+  const { weeks, days: remDays } = weeksAndDays(now);
   return (
-    <div className="rounded-lg border border-border bg-surface p-4 md:p-5">
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-xs text-text-muted">{formatJpDate(BIRTH_DATE)} 誕生</p>
+    <div className="rounded-lg border border-border bg-surface px-4 py-2.5 md:px-5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <p className="text-base font-bold text-text md:text-lg">
+            生後 <span className="text-accent">{days}</span> 日
+          </p>
+          <span className="text-[11px] text-text-faint">
+            {weeks > 0 ? `${weeks}週${remDays}日` : `${remDays}日`}・{formatJpDate(BIRTH_DATE)} 誕生
+          </span>
+        </div>
         {/* 右上の設定ギア。Google連携・Drive取り込みをモーダルにまとめる入口。 */}
         <button
           type="button"
           onClick={onOpenSettings}
           aria-label="成長日記の設定"
           title="成長日記の設定"
-          className="-mr-1 -mt-1 shrink-0 rounded-md border border-border p-1.5 text-text-muted hover:bg-surface-2 hover:text-text"
+          className="-mr-1 shrink-0 rounded-md border border-border p-1.5 text-text-muted hover:bg-surface-2 hover:text-text"
         >
           <SettingsIcon width={18} height={18} />
         </button>
       </div>
-      <p className="mt-1 text-2xl font-bold text-text md:text-3xl">
-        生後 <span className="text-accent">{days}</span> 日
-      </p>
-      <p className="mt-1 text-xs text-text-muted">
-        日付をタップすると、その日の記録・写真・やることを編集できます。
-      </p>
     </div>
   );
 }
@@ -1563,7 +1561,7 @@ function TodoRow({
   );
 }
 
-// ─── 日記フォーム（memo / milestone / 身長 / 体重）──────────
+// ─── 日記フォーム（memo のみ）──────────
 function DiaryForm({
   date,
   entry,
@@ -1574,9 +1572,6 @@ function DiaryForm({
   onSaved: () => Promise<void> | void;
 }) {
   const [memo, setMemo] = useState('');
-  const [milestone, setMilestone] = useState('');
-  const [height, setHeight] = useState('');
-  const [weight, setWeight] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -1584,9 +1579,6 @@ function DiaryForm({
   // 選択日 / 既存エントリが変わったら prefill しなおす。
   useEffect(() => {
     setMemo(entry?.memo ?? '');
-    setMilestone(entry?.milestone ?? '');
-    setHeight(entry?.heightCm != null ? String(entry.heightCm) : '');
-    setWeight(entry?.weightKg != null ? String(entry.weightKg) : '');
     setSaveError(null);
     setSavedFlash(false);
   }, [date, entry]);
@@ -1596,9 +1588,7 @@ function DiaryForm({
     setSaving(true);
     setSaveError(null);
     try {
-      const body: Record<string, unknown> = { date, memo, milestone };
-      if (height.trim() !== '') body.heightCm = Number(height);
-      if (weight.trim() !== '') body.weightKg = Number(weight);
+      const body: Record<string, unknown> = { date, memo };
       const res = await fetch('/api/baby-diary/entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1629,46 +1619,6 @@ function DiaryForm({
           className="w-full resize-y rounded-md border border-border bg-bg px-2.5 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
         />
       </label>
-
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-text-muted">できたこと（マイルストーン）</span>
-        <input
-          type="text"
-          value={milestone}
-          onChange={(e) => setMilestone(e.target.value)}
-          placeholder="例: 初めて笑った"
-          className="w-full rounded-md border border-border bg-bg px-2.5 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
-        />
-      </label>
-
-      <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-text-muted">身長 (cm)</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            step="0.1"
-            min="0"
-            value={height}
-            onChange={(e) => setHeight(e.target.value)}
-            placeholder="例: 50.5"
-            className="w-full rounded-md border border-border bg-bg px-2.5 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-text-muted">体重 (kg)</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min="0"
-            value={weight}
-            onChange={(e) => setWeight(e.target.value)}
-            placeholder="例: 3.25"
-            className="w-full rounded-md border border-border bg-bg px-2.5 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
-          />
-        </label>
-      </div>
 
       {saveError && <p className="text-xs text-blocked">保存に失敗しました: {saveError}</p>}
 
@@ -1814,7 +1764,22 @@ function MediaSection({
         }
         throw new Error(msg);
       }
+      // サーバは { media: [...], skipped } を返す。追加・重複スキップ件数をトーストで知らせる。
+      let added: number | undefined;
+      let skipped: number | undefined;
+      try {
+        const j = (await res.json()) as { media?: unknown[]; skipped?: number };
+        if (Array.isArray(j.media)) added = j.media.length;
+        if (typeof j.skipped === 'number') skipped = j.skipped;
+      } catch {
+        /* レスポンス本文が無い/JSONでない場合は件数表示を省く */
+      }
       await onChanged();
+      if (added != null && skipped != null && skipped > 0) {
+        pushToast('success', `${added}件追加・${skipped}件は重複でスキップしました`);
+      } else if (added != null) {
+        pushToast('success', `${added}件追加しました`);
+      }
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1935,178 +1900,6 @@ function MediaSection({
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-// ─── 成長グラフ（自作SVG・身長／体重の折れ線）──────────────
-function GrowthChartSection({ entries }: { entries: DiaryEntry[] }) {
-  // heightCm / weightKg のいずれかを持つエントリを date 昇順で。
-  const points = useMemo(() => {
-    return entries
-      .filter((e) => e.heightCm != null || e.weightKg != null)
-      .slice()
-      .sort((a, b) => a.date.localeCompare(b.date));
-  }, [entries]);
-
-  const heightPts = points.filter((p) => p.heightCm != null);
-  const weightPts = points.filter((p) => p.weightKg != null);
-
-  // 2点未満（身長・体重とも）ならプレースホルダ。
-  if (heightPts.length < 2 && weightPts.length < 2) {
-    return (
-      <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
-        <h2 className="mb-1 text-base font-bold text-text">📈 成長グラフ</h2>
-        <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-text-faint">
-          身長・体重の記録が増えるとグラフが表示されます（各2点以上で折れ線になります）。
-        </p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
-      <h2 className="mb-3 text-base font-bold text-text">📈 成長グラフ</h2>
-      <LineChart points={points} heightPts={heightPts} weightPts={weightPts} />
-    </section>
-  );
-}
-
-const HEIGHT_COLOR = 'var(--mc-accent)';
-const WEIGHT_COLOR = 'var(--mc-review)';
-
-function LineChart({
-  points,
-  heightPts,
-  weightPts,
-}: {
-  points: DiaryEntry[];
-  heightPts: DiaryEntry[];
-  weightPts: DiaryEntry[];
-}) {
-  // viewBox 座標系（レスポンシブは width=100% で伸縮）。
-  const W = 600;
-  const H = 260;
-  const padL = 40;
-  const padR = 40;
-  const padT = 16;
-  const padB = 40;
-  const plotW = W - padL - padR;
-  const plotH = H - padT - padB;
-
-  // X 軸: 生後日数（最小〜最大）。
-  const xs = points.map((p) => diaryDaysSince(p.date));
-  const xMin = Math.min(...xs);
-  const xMax = Math.max(...xs);
-  const xSpan = Math.max(1, xMax - xMin);
-  const xOf = (iso: string) => padL + ((diaryDaysSince(iso) - xMin) / xSpan) * plotW;
-
-  // 各系列の Y スケール（独立軸）。少し余白を足す。
-  function scale(vals: number[]) {
-    const min = Math.min(...vals);
-    const max = Math.max(...vals);
-    const pad = (max - min) * 0.1 || Math.max(0.5, max * 0.05);
-    const lo = min - pad;
-    const hi = max + pad;
-    const span = Math.max(0.001, hi - lo);
-    return { lo, hi, span };
-  }
-
-  const hVals = heightPts.map((p) => p.heightCm!);
-  const wVals = weightPts.map((p) => p.weightKg!);
-  const hScale = hVals.length ? scale(hVals) : null;
-  const wScale = wVals.length ? scale(wVals) : null;
-
-  const yOfHeight = (v: number) =>
-    hScale ? padT + plotH - ((v - hScale.lo) / hScale.span) * plotH : 0;
-  const yOfWeight = (v: number) =>
-    wScale ? padT + plotH - ((v - wScale.lo) / wScale.span) * plotH : 0;
-
-  const linePath = (pts: DiaryEntry[], pick: (e: DiaryEntry) => number, yFn: (v: number) => number) =>
-    pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xOf(p.date).toFixed(1)} ${yFn(pick(p)).toFixed(1)}`).join(' ');
-
-  // 横グリッド（4分割）と左右の目盛りラベル。
-  const gridRows = [0, 0.25, 0.5, 0.75, 1];
-
-  return (
-    <div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="身長・体重の成長グラフ">
-        {/* 横グリッド */}
-        {gridRows.map((r) => {
-          const y = padT + plotH * r;
-          return (
-            <line
-              key={r}
-              x1={padL}
-              y1={y}
-              x2={W - padR}
-              y2={y}
-              stroke="var(--mc-border)"
-              strokeWidth={1}
-            />
-          );
-        })}
-
-        {/* 左目盛り（身長） */}
-        {hScale &&
-          gridRows.map((r) => {
-            const v = hScale.hi - hScale.span * r;
-            const y = padT + plotH * r;
-            return (
-              <text key={`hl${r}`} x={padL - 4} y={y + 3} textAnchor="end" fontSize="9" fill={HEIGHT_COLOR}>
-                {v.toFixed(0)}
-              </text>
-            );
-          })}
-
-        {/* 右目盛り（体重） */}
-        {wScale &&
-          gridRows.map((r) => {
-            const v = wScale.hi - wScale.span * r;
-            const y = padT + plotH * r;
-            return (
-              <text key={`wl${r}`} x={W - padR + 4} y={y + 3} textAnchor="start" fontSize="9" fill={WEIGHT_COLOR}>
-                {v.toFixed(1)}
-              </text>
-            );
-          })}
-
-        {/* X 軸ラベル（最小・最大の生後日数） */}
-        <text x={padL} y={H - padB + 16} textAnchor="start" fontSize="9" fill="var(--mc-text-faint)">
-          生後{xMin}日
-        </text>
-        <text x={W - padR} y={H - padB + 16} textAnchor="end" fontSize="9" fill="var(--mc-text-faint)">
-          生後{xMax}日
-        </text>
-
-        {/* 身長の折れ線 */}
-        {heightPts.length >= 2 && (
-          <path d={linePath(heightPts, (e) => e.heightCm!, yOfHeight)} fill="none" stroke={HEIGHT_COLOR} strokeWidth={2} />
-        )}
-        {heightPts.map((p) => (
-          <circle key={`hp${p.date}`} cx={xOf(p.date)} cy={yOfHeight(p.heightCm!)} r={2.5} fill={HEIGHT_COLOR} />
-        ))}
-
-        {/* 体重の折れ線 */}
-        {weightPts.length >= 2 && (
-          <path d={linePath(weightPts, (e) => e.weightKg!, yOfWeight)} fill="none" stroke={WEIGHT_COLOR} strokeWidth={2} />
-        )}
-        {weightPts.map((p) => (
-          <circle key={`wp${p.date}`} cx={xOf(p.date)} cy={yOfWeight(p.weightKg!)} r={2.5} fill={WEIGHT_COLOR} />
-        ))}
-      </svg>
-
-      {/* 凡例 */}
-      <div className="mt-2 flex flex-wrap items-center gap-4 text-xs">
-        <span className="inline-flex items-center gap-1.5 text-text-muted">
-          <span className="inline-block h-2.5 w-4 rounded-full" style={{ background: HEIGHT_COLOR }} aria-hidden />
-          身長 (cm)・左軸
-        </span>
-        <span className="inline-flex items-center gap-1.5 text-text-muted">
-          <span className="inline-block h-2.5 w-4 rounded-full" style={{ background: WEIGHT_COLOR }} aria-hidden />
-          体重 (kg)・右軸
-        </span>
-      </div>
     </div>
   );
 }
