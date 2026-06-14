@@ -15,6 +15,7 @@ import {
   LinkIcon,
   PlusIcon,
   CloseIcon,
+  SettingsIcon,
 } from '../components/icons';
 import {
   BIRTH_DATE,
@@ -283,6 +284,9 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
   // 選択中の日（詳細パネル対象）。既定は今日。
   const [selected, setSelected] = useState<string>(today);
 
+  // 設定モーダル（Google連携・Drive取り込みをまとめて格納）の開閉。
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   // ── Google 連携状態 ──
   const [gstatus, setGstatus] = useState<GoogleStatus | null>(null);
   // カレンダーに重ねて表示する対象アカウントの集合（既定＝接続済み全アカウント）。
@@ -461,24 +465,31 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
   // 中身（max-w コンテナ）。embedded/通常 どちらでも共通で使う。
   const inner = (
     <div className="mx-auto flex max-w-5xl flex-col gap-4">
-      <DiaryHeader now={now} />
+      <DiaryHeader now={now} onOpenSettings={() => setSettingsOpen(true)} />
 
-      <GoogleConnectPanel
-        status={gstatus}
-        visibleAccounts={visibleAccounts}
-        accountColors={accountColors}
-        onToggleAccount={toggleVisibleAccount}
-        onRefresh={fetchGoogleStatus}
-        pushToast={pushToast}
-      />
+      {/* Google Drive の自動取り込みは設定モーダルの開閉に依存せず常時動かす
+          （接続アカウントがあるときだけマウントし、UI は描かない）。 */}
+      {hasAccounts && <DriveAutoImport onImported={fetchData} />}
 
-      {hasAccounts && (
-        <GoogleDriveImportPanel
+      {/* 設定モーダル: Google連携・Drive取り込みをまとめて格納。 */}
+      <DiarySettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)}>
+        <GoogleConnectPanel
+          status={gstatus}
+          visibleAccounts={visibleAccounts}
           accountColors={accountColors}
-          onImported={fetchData}
+          onToggleAccount={toggleVisibleAccount}
+          onRefresh={fetchGoogleStatus}
           pushToast={pushToast}
         />
-      )}
+
+        {hasAccounts && (
+          <GoogleDriveImportPanel
+            accountColors={accountColors}
+            onImported={fetchData}
+            pushToast={pushToast}
+          />
+        )}
+      </DiarySettingsModal>
 
       <ResourceState loading={loading} error={error} hasData={!!data}>
         {/* PC: 2カラム（カレンダー｜詳細）、モバイル: 1列（カレンダー → 詳細）。 */}
@@ -541,12 +552,24 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
   );
 }
 
-// ─── ヘッダ（生後 N 日）──────────────────────────────────────
-function DiaryHeader({ now }: { now: Date }) {
+// ─── ヘッダ（生後 N 日 ＋ 右上の設定ギア）─────────────────────
+function DiaryHeader({ now, onOpenSettings }: { now: Date; onOpenSettings: () => void }) {
   const days = daysSinceBirth(now);
   return (
     <div className="rounded-lg border border-border bg-surface p-4 md:p-5">
-      <p className="text-xs text-text-muted">{formatJpDate(BIRTH_DATE)} 誕生</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs text-text-muted">{formatJpDate(BIRTH_DATE)} 誕生</p>
+        {/* 右上の設定ギア。Google連携・Drive取り込みをモーダルにまとめる入口。 */}
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          aria-label="成長日記の設定"
+          title="成長日記の設定"
+          className="-mr-1 -mt-1 shrink-0 rounded-md border border-border p-1.5 text-text-muted hover:bg-surface-2 hover:text-text"
+        >
+          <SettingsIcon width={18} height={18} />
+        </button>
+      </div>
       <p className="mt-1 text-2xl font-bold text-text md:text-3xl">
         生後 <span className="text-accent">{days}</span> 日
       </p>
@@ -555,6 +578,120 @@ function DiaryHeader({ now }: { now: Date }) {
       </p>
     </div>
   );
+}
+
+// ─── 設定モーダル（Google連携・Drive取り込みの格納先）──────────
+// VaultAddSheet と同じ作法: fixed inset-0・半透明オーバーレイ・中央カード・
+// 縦長は overflow-y-auto。オーバーレイクリック / Esc で閉じる。閉じている間は
+// children を描画しない（連携パネルの fetch は開いたときだけ走る）。
+function DiarySettingsModal({
+  open,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  // open 中は Esc で閉じ、背景スクロールを止める。
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 flex items-end justify-center md:items-center"
+      style={{ zIndex: 55 }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="成長日記の設定"
+    >
+      <button type="button" aria-label="閉じる" className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative max-h-[88dvh] w-full overflow-y-auto rounded-t-2xl border border-border bg-surface p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-xl md:max-h-[85dvh] md:w-[34rem] md:rounded-2xl md:pb-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-bold text-text">成長日記の設定</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="閉じる"
+            className="rounded-md p-1 text-text-muted hover:bg-surface-2 hover:text-text"
+          >
+            <CloseIcon width={18} height={18} />
+          </button>
+        </div>
+        <div className="flex flex-col gap-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Google Drive 自動取り込みランナー（UI なし・常時マウント）──
+// 設定モーダルの開閉に依存せず、ページ表示時に1回だけ
+// autoImport=true かつ configured かつ granted のアカウントを取り込む。
+// 旧 GoogleDriveImportPanel 内にあった自動取り込みをここへ分離し、
+// モーダルを開かなくても自動取り込みが効くようにする。
+function DriveAutoImport({ onImported }: { onImported: () => Promise<void> | void }) {
+  const autoRanRef = useRef(false);
+  const inFlightRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (autoRanRef.current) return;
+    autoRanRef.current = true;
+    let cancelled = false;
+    (async () => {
+      let status: DriveStatusResponse;
+      try {
+        const res = await fetch('/api/google/drive/status');
+        if (!res.ok) return;
+        status = (await res.json()) as DriveStatusResponse;
+      } catch {
+        return; // 自動取り込みは静かに失敗（手動取り込みで補える）。
+      }
+      if (cancelled) return;
+      const targets = status.accounts.filter(
+        (a) => a.autoImport && a.configured && a.driveScopeGranted,
+      );
+      if (targets.length === 0) return;
+      let imported = false;
+      for (const t of targets) {
+        if (inFlightRef.current.has(t.account)) continue;
+        inFlightRef.current.add(t.account);
+        try {
+          const res = await fetch('/api/google/drive/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account: t.account }),
+          });
+          if (res.ok) {
+            const j = (await res.json()) as { imported: number };
+            if ((j.imported ?? 0) > 0) imported = true;
+          }
+        } catch {
+          /* 静かに失敗 */
+        } finally {
+          inFlightRef.current.delete(t.account);
+        }
+      }
+      if (imported && !cancelled) await onImported();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [onImported]);
+
+  return null;
 }
 
 // ─── Google 連携パネル ───────────────────────────────────────
@@ -730,46 +867,8 @@ function GoogleDriveImportPanel({
     void fetchDriveStatus();
   }, [fetchDriveStatus]);
 
-  // ── 自動取り込み（任意・軽量）──
-  // mount 時、autoImport=true かつ configured かつ granted のアカウントを
-  // バックグラウンドで1回だけ取り込み、成功したら baby-diary を再取得する。
-  // 多重実行防止に in-flight ガード（アカウント単位）を張る。
-  const autoRanRef = useRef(false);
-  const inFlightRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (!driveStatus || autoRanRef.current) return;
-    const targets = driveStatus.accounts.filter(
-      (a) => a.autoImport && a.configured && a.driveScopeGranted,
-    );
-    if (targets.length === 0) return;
-    autoRanRef.current = true;
-    let imported = false;
-    (async () => {
-      for (const t of targets) {
-        if (inFlightRef.current.has(t.account)) continue;
-        inFlightRef.current.add(t.account);
-        try {
-          const res = await fetch('/api/google/drive/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ account: t.account }),
-          });
-          if (res.ok) {
-            const j = (await res.json()) as { imported: number };
-            if ((j.imported ?? 0) > 0) imported = true;
-          }
-        } catch {
-          /* 自動取り込みは静かに失敗（手動取り込みで補える） */
-        } finally {
-          inFlightRef.current.delete(t.account);
-        }
-      }
-      if (imported) {
-        await onImported();
-        await fetchDriveStatus();
-      }
-    })();
-  }, [driveStatus, onImported, fetchDriveStatus]);
+  // 自動取り込みは DriveAutoImport（常時マウント・UIなし）が担う。
+  // ここではモーダル内の設定 UI（フォルダ選択・トグル・手動取り込み）だけを描く。
 
   if (!driveStatus || driveStatus.accounts.length === 0) return null;
 

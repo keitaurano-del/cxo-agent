@@ -292,23 +292,52 @@ function handleStreamMedia(req: Request, res: Response): void {
     res.status(404).json({ error: 'media file not found' });
     return;
   }
+  let total = 0;
   try {
     const st = statSync(abs);
     if (!st.isFile()) {
       res.status(404).json({ error: 'media file not found' });
       return;
     }
+    total = st.size;
   } catch {
     res.status(404).json({ error: 'media file not found' });
     return;
   }
   res.type(meta.mime);
   res.set('Cache-Control', 'private, max-age=300');
+  // 動画の再生・シーク（特に iOS/Safari）には HTTP Range（206 部分配信）が必須。
+  res.set('Accept-Ranges', 'bytes');
+
+  const onErr = (stream: ReturnType<typeof createReadStream>) =>
+    stream.on('error', () => {
+      if (!res.headersSent) res.status(500).json({ error: 'failed to read media' });
+      else res.destroy();
+    });
+
+  const range = req.headers.range;
+  const m = typeof range === 'string' ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null;
+  if (m && total > 0) {
+    let start = m[1] === '' ? 0 : Number(m[1]);
+    let end = m[2] === '' ? total - 1 : Number(m[2]);
+    if (!Number.isFinite(start) || start < 0) start = 0;
+    if (!Number.isFinite(end) || end >= total) end = total - 1;
+    if (start > end || start >= total) {
+      res.status(416).set('Content-Range', `bytes */${total}`).end();
+      return;
+    }
+    res.status(206);
+    res.set('Content-Range', `bytes ${start}-${end}/${total}`);
+    res.set('Content-Length', String(end - start + 1));
+    const stream = createReadStream(abs, { start, end });
+    onErr(stream);
+    stream.pipe(res);
+    return;
+  }
+
+  res.set('Content-Length', String(total));
   const stream = createReadStream(abs);
-  stream.on('error', () => {
-    if (!res.headersSent) res.status(500).json({ error: 'failed to read media' });
-    else res.destroy();
-  });
+  onErr(stream);
   stream.pipe(res);
 }
 
