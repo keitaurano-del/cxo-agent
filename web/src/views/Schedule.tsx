@@ -4,9 +4,18 @@
 // データ取得・型・アカウント識別色は BabyDiary の流儀を踏襲（BabyDiary 自体は編集しない）。
 // 日付計算は自前（date-fns 等の新規依存は足さない）。JST 前提で 'YYYY-MM-DD' 文字列演算を使う。
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState } from '../components/ui';
-import { ChevronLeftIcon, ChevronRightIcon, LinkIcon } from '../components/icons';
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  EyeIcon,
+  LinkIcon,
+  SettingsIcon,
+  SparkIcon,
+} from '../components/icons';
 
 // ─── API 型（サーバ契約に対応。BabyDiary の対応型と同一）──────────
 interface GoogleAccount {
@@ -51,6 +60,54 @@ interface GoogleTask {
 interface TasksResponse {
   tasks: GoogleTask[];
   errors?: unknown[];
+}
+
+// ─── オートプランナー API 型（/api/planner。サーバ契約と同一）──────
+interface PlannerConfig {
+  workdayStart: string; // 'HH:MM'
+  workdayEnd: string; // 'HH:MM'
+  blackout: { start: string; end: string }[];
+  dailyMaxMinutes: number;
+  bufferMinutes: number;
+  horizonDays: number;
+  defaultTaskMinutes: number;
+  targetLists: string[] | null;
+}
+
+// プランの 1 ブロック（提示のみ・Google 未反映）。start/end は ISO(RFC3339)。
+interface PlanBlock {
+  taskId: string;
+  account: string;
+  title: string;
+  start: string;
+  end: string;
+  estMinutes: number;
+  reason: string;
+}
+
+// 配置できなかった 1 件（理由つき・黙って落とさない）。
+interface UnplacedItem {
+  taskId: string;
+  account: string;
+  title: string;
+  reason: string;
+}
+
+interface PlanResponse {
+  blocks: PlanBlock[];
+  unplaced: UnplacedItem[];
+  usedAi: boolean;
+  generatedAt: string;
+}
+
+// プラン作成時に POST /plan へ渡す events の最小形（NormalizedEvent）。
+interface PlanEventInput {
+  id: string;
+  account: string;
+  title: string;
+  start: string | null;
+  end: string | null;
+  allDay: boolean;
 }
 
 // ─── ビュー種別 ─────────────────────────────────────────────
@@ -299,6 +356,102 @@ export default function Schedule() {
     return m;
   }, [tasks]);
 
+  // ── オートプランナー（提示のみ。Google 書き戻しは P3 で別途）──
+  const [plan, setPlan] = useState<PlanResponse | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [showPlan, setShowPlan] = useState(true);
+  const [plannerConfig, setPlannerConfig] = useState<PlannerConfig | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+
+  // 表示中のプランブロック（非表示トグル時は空）。
+  const planBlocks = useMemo(
+    () => (showPlan && plan ? plan.blocks : []),
+    [showPlan, plan],
+  );
+  const planByDate = useMemo(() => groupPlanByDay(planBlocks), [planBlocks]);
+
+  // 「プランを作成」: config 取得 → [now, now+horizon] の events/tasks を取得 → POST /plan。
+  const createPlan = useCallback(async () => {
+    setPlanLoading(true);
+    setPlanError(null);
+    try {
+      // config（horizonDays を使う。取得済みなら再利用）。
+      let cfg = plannerConfig;
+      if (!cfg) {
+        const cRes = await fetch('/api/planner/config');
+        if (!cRes.ok) throw new Error(`設定の取得に失敗しました (HTTP ${cRes.status})`);
+        cfg = (await cRes.json()) as PlannerConfig;
+        setPlannerConfig(cfg);
+      }
+      const nowDate = new Date();
+      const fromIso = nowDate.toISOString();
+      const toIso2 = new Date(nowDate.getTime() + cfg.horizonDays * 24 * 60 * 60 * 1000).toISOString();
+
+      // 期間 [from,to] の events/tasks を取得（既存の取得経路を期間指定で再利用）。
+      const qs = `timeMin=${encodeURIComponent(fromIso)}&timeMax=${encodeURIComponent(toIso2)}`;
+      const [evRes, tkRes] = await Promise.all([
+        fetch(`/api/google/calendar/events?${qs}`),
+        fetch(`/api/google/tasks?${qs}`),
+      ]);
+      const evJson: CalendarEventsResponse = evRes.ok ? await evRes.json() : { events: [] };
+      const tkJson: TasksResponse = tkRes.ok ? await tkRes.json() : { tasks: [] };
+
+      // events を NormalizedEvent 形へ写像（サーバ契約の最小形）。
+      const planEvents: PlanEventInput[] = (evJson.events ?? []).map((ev) => ({
+        id: ev.id,
+        account: ev.account,
+        title: ev.title,
+        start: ev.start,
+        end: ev.end,
+        allDay: ev.allDay,
+      }));
+
+      const res = await fetch('/api/planner/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: fromIso,
+          to: toIso2,
+          tasks: tkJson.tasks ?? [],
+          events: planEvents,
+        }),
+      });
+      if (!res.ok) throw new Error(`プラン作成に失敗しました (HTTP ${res.status})`);
+      const json = (await res.json()) as PlanResponse;
+      setPlan(json);
+      setShowPlan(true);
+    } catch (e) {
+      setPlanError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPlanLoading(false);
+    }
+  }, [plannerConfig]);
+
+  // 設定パネルを開く（未取得なら取得）。
+  const openSettings = useCallback(async () => {
+    setShowSettings(true);
+    if (!plannerConfig) {
+      try {
+        const res = await fetch('/api/planner/config');
+        if (res.ok) setPlannerConfig((await res.json()) as PlannerConfig);
+      } catch {
+        // 取得失敗時はパネル側で既定を促すだけ（致命的ではない）。
+      }
+    }
+  }, [plannerConfig]);
+
+  // 設定保存（部分更新）。保存後の最新 config を state に反映。
+  const saveSettings = useCallback(async (patch: Partial<PlannerConfig>) => {
+    const res = await fetch('/api/planner/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`設定の保存に失敗しました (HTTP ${res.status})`);
+    setPlannerConfig((await res.json()) as PlannerConfig);
+  }, []);
+
   // ── 期間ナビゲーション ──
   const goPrev = () => {
     if (mode === 'month') {
@@ -383,6 +536,62 @@ export default function Schedule() {
             </div>
           </div>
 
+          {/* プランナー操作バー（接続済みのとき） */}
+          {hasAccounts && (
+            <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between md:p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void createPlan()}
+                  disabled={planLoading}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-accent bg-accent/10 px-3 py-1.5 text-[12px] font-semibold text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <SparkIcon width={14} height={14} />
+                  {planLoading ? 'プラン作成中…' : 'プランを作成'}
+                </button>
+                {plan && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPlan((v) => !v)}
+                    aria-pressed={showPlan}
+                    className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
+                      showPlan
+                        ? 'border-accent/60 bg-accent/5 text-accent'
+                        : 'border-border text-text-muted hover:bg-surface-2 hover:text-text'
+                    }`}
+                  >
+                    <EyeIcon width={14} height={14} />
+                    {showPlan ? 'プランを表示中' : 'プランを表示'}
+                  </button>
+                )}
+                {planLoading && (
+                  <span className="text-[11px] text-text-muted">
+                    AI見積りで数〜十数秒かかります…
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => void openSettings()}
+                aria-label="プランナー設定"
+                className="inline-flex items-center gap-1.5 self-start rounded-md border border-border px-2.5 py-1.5 text-[12px] font-medium text-text-muted transition-colors hover:bg-surface-2 hover:text-text sm:self-auto"
+              >
+                <SettingsIcon width={14} height={14} />
+                設定
+              </button>
+            </div>
+          )}
+
+          {/* プランのメタ情報・エラー・未配置 */}
+          {planError && (
+            <div className="rounded-lg border border-blocked/50 bg-blocked/10 px-3 py-2 text-xs text-blocked">
+              {planError}
+            </div>
+          )}
+          {plan && showPlan && (
+            <PlanSummary plan={plan} />
+          )}
+
           {/* アカウント凡例（接続済みのとき） */}
           {hasAccounts && <AccountLegend accounts={accounts} accountColors={accountColors} />}
 
@@ -400,6 +609,7 @@ export default function Schedule() {
                   today={today}
                   eventsByDate={eventsByDate}
                   tasksByDate={tasksByDate}
+                  planByDate={planByDate}
                   accountColors={accountColors}
                   onSelectDay={openDay}
                 />
@@ -410,6 +620,7 @@ export default function Schedule() {
                   today={today}
                   now={now}
                   events={events}
+                  planBlocks={planBlocks}
                   tasksByDate={tasksByDate}
                   accountColors={accountColors}
                   onSelectDay={openDay}
@@ -421,6 +632,7 @@ export default function Schedule() {
                   today={today}
                   now={now}
                   events={events}
+                  planBlocks={planBlocks}
                   tasksByDate={tasksByDate}
                   accountColors={accountColors}
                 />
@@ -429,7 +641,214 @@ export default function Schedule() {
           )}
         </div>
       </div>
+
+      {/* プランナー設定モーダル（最小） */}
+      {showSettings && (
+        <PlannerSettingsModal
+          config={plannerConfig}
+          onClose={() => setShowSettings(false)}
+          onSave={saveSettings}
+        />
+      )}
     </div>
+  );
+}
+
+// ─── プラン要約（メタ情報＋未配置）─────────────────────────────
+function PlanSummary({ plan }: { plan: PlanResponse }) {
+  const generated = (() => {
+    const d = new Date(plan.generatedAt);
+    if (Number.isNaN(d.getTime())) return plan.generatedAt;
+    return `${formatMd(eventDateIso(plan.generatedAt, false))} ${isoHmLabel(plan.generatedAt)}`;
+  })();
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-accent/40 bg-accent/5 p-3 text-xs">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-text-muted">
+        <span className="inline-flex items-center gap-1 font-semibold text-accent">
+          <SparkIcon width={13} height={13} />
+          プラン {plan.blocks.length}件
+        </span>
+        <span>{plan.usedAi ? 'AI見積りで作成' : 'ヒューリスティック見積りで作成'}</span>
+        <span>生成: {generated}</span>
+        <span className="text-text-faint">（Googleには未反映＝提示のみ）</span>
+      </div>
+      {plan.unplaced.length > 0 && (
+        <div className="rounded-md border border-blocked/40 bg-blocked/10 p-2">
+          <p className="mb-1 text-[11px] font-semibold text-blocked">
+            未配置（{plan.unplaced.length}件）— 空き時間に入りきりませんでした
+          </p>
+          <ul className="flex flex-col gap-0.5">
+            {plan.unplaced.map((u) => (
+              <li key={`${u.account}-${u.taskId}`} className="text-[11px] leading-tight text-text-muted">
+                <span className="font-medium text-text">{u.title}</span>
+                <span className="text-text-faint"> — {u.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── プランナー設定モーダル（稼働時間帯など主要項目のみ）───────────
+function PlannerSettingsModal({
+  config,
+  onClose,
+  onSave,
+}: {
+  config: PlannerConfig | null;
+  onClose: () => void;
+  onSave: (patch: Partial<PlannerConfig>) => Promise<void>;
+}) {
+  const [workdayStart, setWorkdayStart] = useState('');
+  const [workdayEnd, setWorkdayEnd] = useState('');
+  const [dailyMaxMinutes, setDailyMaxMinutes] = useState('');
+  const [bufferMinutes, setBufferMinutes] = useState('');
+  const [horizonDays, setHorizonDays] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // config 取得後にフォーム初期値を流し込む。
+  useEffect(() => {
+    if (!config) return;
+    setWorkdayStart(config.workdayStart);
+    setWorkdayEnd(config.workdayEnd);
+    setDailyMaxMinutes(String(config.dailyMaxMinutes));
+    setBufferMinutes(String(config.bufferMinutes));
+    setHorizonDays(String(config.horizonDays));
+  }, [config]);
+
+  const submit = async () => {
+    setSaving(true);
+    setErr(null);
+    try {
+      const patch: Partial<PlannerConfig> = {
+        workdayStart,
+        workdayEnd,
+        dailyMaxMinutes: Number(dailyMaxMinutes),
+        bufferMinutes: Number(bufferMinutes),
+        horizonDays: Number(horizonDays),
+      };
+      await onSave(patch);
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="プランナー設定"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-lg border border-border bg-surface p-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-bold text-text">プランナー設定</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="閉じる"
+            className="rounded-md p-1 text-text-muted hover:bg-surface-2 hover:text-text"
+          >
+            <CloseIcon width={16} height={16} />
+          </button>
+        </div>
+
+        {!config ? (
+          <p className="py-6 text-center text-xs text-text-muted">設定を読み込み中…</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <SettingsField label="稼働開始">
+                <input
+                  type="time"
+                  value={workdayStart}
+                  onChange={(e) => setWorkdayStart(e.target.value)}
+                  className="w-full rounded-md border border-border bg-bg px-2 py-1 text-sm text-text"
+                />
+              </SettingsField>
+              <SettingsField label="稼働終了">
+                <input
+                  type="time"
+                  value={workdayEnd}
+                  onChange={(e) => setWorkdayEnd(e.target.value)}
+                  className="w-full rounded-md border border-border bg-bg px-2 py-1 text-sm text-text"
+                />
+              </SettingsField>
+            </div>
+            <SettingsField label="1日の作業上限（分）">
+              <input
+                type="number"
+                min={0}
+                value={dailyMaxMinutes}
+                onChange={(e) => setDailyMaxMinutes(e.target.value)}
+                className="w-full rounded-md border border-border bg-bg px-2 py-1 text-sm text-text"
+              />
+            </SettingsField>
+            <SettingsField label="ブロック間バッファ（分）">
+              <input
+                type="number"
+                min={0}
+                value={bufferMinutes}
+                onChange={(e) => setBufferMinutes(e.target.value)}
+                className="w-full rounded-md border border-border bg-bg px-2 py-1 text-sm text-text"
+              />
+            </SettingsField>
+            <SettingsField label="計画期間（日）">
+              <input
+                type="number"
+                min={1}
+                value={horizonDays}
+                onChange={(e) => setHorizonDays(e.target.value)}
+                className="w-full rounded-md border border-border bg-bg px-2 py-1 text-sm text-text"
+              />
+            </SettingsField>
+
+            <p className="text-[11px] text-text-faint">
+              targetLists・禁止帯（blackout）は既定のまま。保存後「プランを作成」で再計算してください。
+            </p>
+
+            {err && <p className="text-[11px] text-blocked">{err}</p>}
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-md border border-border px-3 py-1.5 text-[12px] font-medium text-text-muted hover:bg-surface-2 hover:text-text"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => void submit()}
+                disabled={saving}
+                className="rounded-md border border-accent bg-accent/10 px-3 py-1.5 text-[12px] font-semibold text-accent hover:bg-accent/20 disabled:opacity-60"
+              >
+                {saving ? '保存中…' : '保存'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SettingsField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[11px] font-medium text-text-muted">{label}</span>
+      {children}
+    </label>
   );
 }
 
@@ -512,6 +931,7 @@ function MonthView({
   today,
   eventsByDate,
   tasksByDate,
+  planByDate,
   accountColors,
   onSelectDay,
 }: {
@@ -519,6 +939,7 @@ function MonthView({
   today: string;
   eventsByDate: Map<string, GoogleCalendarEvent[]>;
   tasksByDate: Map<string, GoogleTask[]>;
+  planByDate: Map<string, PlanBlock[]>;
   accountColors: Map<string, string>;
   onSelectDay: (iso: string) => void;
 }) {
@@ -567,6 +988,7 @@ function MonthView({
           });
           const shown = dayEvents.slice(0, 3);
           const more = dayEvents.length - shown.length;
+          const dayPlanCount = planByDate.get(iso)?.length ?? 0;
 
           return (
             <button
@@ -606,6 +1028,16 @@ function MonthView({
               ))}
               {more > 0 && <span className="px-1 text-[9px] leading-tight text-text-faint">ほか{more}件</span>}
 
+              {/* プラン件数チップ（提示のみ・アクセント点線） */}
+              {dayPlanCount > 0 && (
+                <span
+                  title={`プラン ${dayPlanCount} 件（提示のみ・Google未反映）`}
+                  className="flex items-center gap-1 overflow-hidden rounded-sm border border-dashed border-accent bg-accent/10 px-1 py-0.5 text-[9px] leading-tight text-accent"
+                >
+                  <span className="truncate font-semibold">プラン {dayPlanCount}件</span>
+                </span>
+              )}
+
               {/* タスク（due）＝終日チップ。完了は取り消し線。 */}
               {dayTasks.map((t) => {
                 const done = t.status === 'completed';
@@ -633,14 +1065,26 @@ function MonthView({
 }
 
 // ─── 時間グリッドの共通計算 ─────────────────────────────────
-/** 表示日群の時刻あり予定から、表示すべき時間範囲 [startHour, endHour] を決める。 */
-function computeHourRange(events: GoogleCalendarEvent[]): { startHour: number; endHour: number } {
+/**
+ * 表示日群の時刻あり予定（＋任意でプランブロック）から、表示すべき時間範囲を決める。
+ * プランは空き時間に置かれるため、稼働時間帯がデフォルト外なら範囲を広げてクリップを防ぐ。
+ */
+function computeHourRange(
+  events: GoogleCalendarEvent[],
+  planBlocks: PlanBlock[] = [],
+): { startHour: number; endHour: number } {
   let minH = DEFAULT_START_HOUR;
   let maxH = DEFAULT_END_HOUR;
   for (const ev of events) {
     if (ev.allDay) continue;
     const s = minutesOfDay(ev.start);
     const e = minutesOfDay(ev.end);
+    if (s !== null) minH = Math.min(minH, Math.floor(s / 60));
+    if (e !== null) maxH = Math.max(maxH, Math.ceil(e / 60));
+  }
+  for (const b of planBlocks) {
+    const s = minutesOfDay(b.start);
+    const e = minutesOfDay(b.end);
     if (s !== null) minH = Math.min(minH, Math.floor(s / 60));
     if (e !== null) maxH = Math.max(maxH, Math.ceil(e / 60));
   }
@@ -718,6 +1162,63 @@ function layoutTimedEvents(
     i = j;
   }
   return positioned;
+}
+
+// ─── プランブロックの座標変換（既存の時刻→座標ロジックを踏襲）─────
+/** ISO(RFC3339) の JST 'HH:MM' 表示。 */
+function isoHmLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+/** プランブロックの所属日（ローカル YYYY-MM-DD）。 */
+function planBlockDateIso(b: PlanBlock): string {
+  return eventDateIso(b.start, false);
+}
+
+/** 日(YYYY-MM-DD) → プランブロック配列 の索引を作る。 */
+function groupPlanByDay(blocks: PlanBlock[]): Map<string, PlanBlock[]> {
+  const m = new Map<string, PlanBlock[]>();
+  for (const b of blocks) {
+    const iso = planBlockDateIso(b);
+    if (!iso) continue;
+    const arr = m.get(iso) ?? [];
+    arr.push(b);
+    m.set(iso, arr);
+  }
+  return m;
+}
+
+interface PositionedBlock {
+  block: PlanBlock;
+  topPx: number;
+  heightPx: number;
+}
+
+/**
+ * 1 日分のプランブロックを縦位置・高さへ割り付ける。
+ * 座標変換は既存予定（layoutTimedEvents）と同一の式を用いる。
+ * プランは実予定と重ねて専用レーンに描くため、横方向の重なり列計算は行わない。
+ */
+function layoutPlanBlocks(blocks: PlanBlock[], startHour: number): PositionedBlock[] {
+  const startMin = startHour * 60;
+  return blocks
+    .map((block) => {
+      const s = minutesOfDay(block.start) ?? 0;
+      const eRaw = minutesOfDay(block.end);
+      const e = eRaw !== null && eRaw > s ? eRaw : s + 30;
+      return {
+        block,
+        topPx: ((s - startMin) / 60) * HOUR_PX,
+        heightPx: Math.max(((e - s) / 60) * HOUR_PX, 14),
+        s,
+      };
+    })
+    .sort((a, b) => a.s - b.s)
+    .map(({ block, topPx, heightPx }) => ({ block, topPx, heightPx }));
 }
 
 /** 現在時刻ラインの top(px)。表示範囲外なら null。 */
@@ -817,6 +1318,7 @@ function HourAxis({ startHour, endHour }: { startHour: number; endHour: number }
 // ─── 1日分の時間カラム（予定を絶対配置）─────────────────────
 function DayColumn({
   dayEvents,
+  dayPlanBlocks,
   startHour,
   endHour,
   accountColors,
@@ -824,6 +1326,7 @@ function DayColumn({
   now,
 }: {
   dayEvents: GoogleCalendarEvent[];
+  dayPlanBlocks: PlanBlock[];
   startHour: number;
   endHour: number;
   accountColors: Map<string, string>;
@@ -831,6 +1334,10 @@ function DayColumn({
   now: Date;
 }) {
   const positioned = useMemo(() => layoutTimedEvents(dayEvents, startHour), [dayEvents, startHour]);
+  const positionedPlan = useMemo(
+    () => layoutPlanBlocks(dayPlanBlocks, startHour),
+    [dayPlanBlocks, startHour],
+  );
   const totalPx = (endHour - startHour) * HOUR_PX;
   const nowTop = showNowLine ? nowLineTop(now, startHour, endHour) : null;
 
@@ -875,6 +1382,27 @@ function DayColumn({
           </div>
         );
       })}
+
+      {/* プランブロック（提示のみ・実予定と見分くアクセント点線枠／半透明。右側レーンに重ねる） */}
+      {positionedPlan.map((p) => (
+        <div
+          key={`plan-${p.block.account}-${p.block.taskId}-${p.block.start}`}
+          title={`プラン: ${isoHmLabel(p.block.start)}〜${isoHmLabel(p.block.end)} ${p.block.title}（${p.block.estMinutes}分）\n理由: ${p.block.reason}`}
+          className="absolute z-20 overflow-hidden rounded-sm border border-dashed border-accent bg-accent/15 px-1 py-0.5 text-[9px] leading-tight text-text backdrop-blur-[1px]"
+          style={{
+            top: p.topPx,
+            height: p.heightPx,
+            left: 'calc(50% + 1px)',
+            width: 'calc(50% - 2px)',
+          }}
+        >
+          <span className="block truncate font-semibold text-accent">プラン</span>
+          <span className="block truncate font-medium">{p.block.title}</span>
+          <span className="block truncate text-text-muted">
+            {isoHmLabel(p.block.start)}〜{isoHmLabel(p.block.end)}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -885,6 +1413,7 @@ function WeekView({
   today,
   now,
   events,
+  planBlocks,
   tasksByDate,
   accountColors,
   onSelectDay,
@@ -893,6 +1422,7 @@ function WeekView({
   today: string;
   now: Date;
   events: GoogleCalendarEvent[];
+  planBlocks: PlanBlock[];
   tasksByDate: Map<string, GoogleTask[]>;
   accountColors: Map<string, string>;
   onSelectDay: (iso: string) => void;
@@ -918,7 +1448,13 @@ function WeekView({
     return { allDayByDay: allDay, timedByDay: timed };
   }, [events]);
 
-  const { startHour, endHour } = useMemo(() => computeHourRange(events), [events]);
+  // 日 → プランブロック の索引。
+  const planByDay = useMemo(() => groupPlanByDay(planBlocks), [planBlocks]);
+
+  const { startHour, endHour } = useMemo(
+    () => computeHourRange(events, planBlocks),
+    [events, planBlocks],
+  );
 
   return (
     <section className="overflow-x-auto rounded-lg border border-border bg-surface">
@@ -970,6 +1506,7 @@ function WeekView({
               <DayColumn
                 key={d}
                 dayEvents={timedByDay.get(d) ?? []}
+                dayPlanBlocks={planByDay.get(d) ?? []}
                 startHour={startHour}
                 endHour={endHour}
                 accountColors={accountColors}
@@ -990,6 +1527,7 @@ function DayView({
   today,
   now,
   events,
+  planBlocks,
   tasksByDate,
   accountColors,
 }: {
@@ -997,6 +1535,7 @@ function DayView({
   today: string;
   now: Date;
   events: GoogleCalendarEvent[];
+  planBlocks: PlanBlock[];
   tasksByDate: Map<string, GoogleTask[]>;
   accountColors: Map<string, string>;
 }) {
@@ -1019,7 +1558,15 @@ function DayView({
     return { allDayByDay: allDay, timed: timedArr };
   }, [events, anchor]);
 
-  const { startHour, endHour } = useMemo(() => computeHourRange(events), [events]);
+  const dayPlanBlocks = useMemo(
+    () => planBlocks.filter((b) => planBlockDateIso(b) === anchor),
+    [planBlocks, anchor],
+  );
+
+  const { startHour, endHour } = useMemo(
+    () => computeHourRange(events, planBlocks),
+    [events, planBlocks],
+  );
 
   return (
     <section className="overflow-x-auto rounded-lg border border-border bg-surface">
@@ -1038,6 +1585,7 @@ function DayView({
           <div className="grid flex-1" style={{ gridTemplateColumns: 'minmax(0, 1fr)' }}>
             <DayColumn
               dayEvents={timed}
+              dayPlanBlocks={dayPlanBlocks}
               startHour={startHour}
               endHour={endHour}
               accountColors={accountColors}
