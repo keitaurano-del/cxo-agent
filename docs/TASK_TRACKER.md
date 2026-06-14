@@ -2924,7 +2924,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-246 |
 | タイトル | 基本のお世話5項目をタップ→詳細モーダルで画像/解説動画を表示（ビジュアルで理解） |
 | 優先度 | P2 |
-| ステータス | IN_PROGRESS（2026-06-15 Son 駆動）。Keita 要望「基本のお世話はビジュアルで理解・タップで詳細・画像か動画で説明」→「おすすめでいいよ全部」で**解説動画の埋め込み(案1)**確定。対象=CareBasicsSection（childcareData.ts の CARE_BASICS 5項目: 授乳・調乳/沐浴/おむつ替え/寝かせ方/体温・室温）。各項目を**タップ可能化→詳細モーダル**（要点＋埋め込み解説動画）。動画は**信頼できる発信元(自治体/病院/公的機関/メーカー公式)を厳選**しデータ駆動（差し替え容易）。Son は動画内容を視聴確認できないため**Keita のレビュー/差し替え前提**で注記。 |
+| ステータス | DONE（2026-06-15 Son 駆動・リサーチ+実装 subagent・自己検証→push）。Keita 要望「基本のお世話はビジュアルで理解・タップで詳細・画像か動画で説明」→「おすすめでいいよ全部」で**解説動画の埋め込み(案1)**確定。CareBasic に videoId/videoTitle/source/sourceType/watchUrl/caveat を追加。5項目に**信頼できる発信元**の解説動画を設定＝①授乳・調乳=森永乳業公式 Cv599TddA1s ②沐浴=一宮西病院産科 EL-dgK8PxlI ③おむつ替え=パンパース公式 hY0QmLqGzBE ⑤体温・室温=葛飾赤十字産院 3WCHrasc1-g／④寝かせ方=政府広報(SIDS)は YouTube単独ID未確定のため**外部リンク**(gov-online)。CareBasicsSection を button 化→CareBasicDetail モーダル（youtube-nocookie 埋め込み・aspect-video・発信元クレジット・Esc/背面で閉じる・MC-243 作法踏襲）。CSP は本リポ未設定＝frame-src ブロック無し（サーバ変更不要）。**検証:** `tsc -b`＋`vite build` EXIT0→restart→health ok→配信バンドル(Childcare-Dg6G0Qqt.js)に youtube-nocookie/森永乳業 在を確認。**未実施/要レビュー:** Son は各動画を視聴できず、(1)再生/iframe埋め込み許可 (2)内容が項目に合致するか は未確認。Keita に視聴レビュー＋必要なら childcareData.ts の videoId 差し替えを依頼。寝かせ方は動画ID特定で将来埋め込み化可。 |
 | 担当 | Son（駆動・検証・反映）／実装 subagent／動画リサーチ subagent |
 | 詳細 | childcareData.ts に CareBasic へ videoId/videoUrl/source 等を追加し、Childcare.tsx の CareBasicsSection を「リスト→タップで詳細モーダル(YouTube iframe 埋め込み)」に。MC-243 のドロワー作法を流用可。 |
 | 受け入れ条件（DoD） | 5項目タップで詳細＋動画が開く、発信元表示、build green＋実画面確認、動画は差し替え可能なデータ構造。 |
