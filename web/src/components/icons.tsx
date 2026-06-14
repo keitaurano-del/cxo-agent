@@ -507,6 +507,18 @@ export function AudioFileIcon(props: IconProps) {
   );
 }
 
+// 育児（/childcare）ナビ用。哺乳瓶＋目盛り＋やさしいハートで「赤ちゃん／育児」を表す。
+export function BabyIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M9.5 4.5h5l-.5 2h-4z" />
+      <path d="M9 6.5h6v11a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z" />
+      <path d="M9 11h6M9 14h6" />
+      <path d="M11 3.2a1 1 0 0 1 2 0" />
+    </svg>
+  );
+}
+
 // 設定アイコン（MC-178 フォントサイズ等）
 export function SettingsIcon(props: IconProps) {
   return (
