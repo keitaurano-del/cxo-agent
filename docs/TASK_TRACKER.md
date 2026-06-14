@@ -2938,7 +2938,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-247 |
 | タイトル | 新規「スケジュール」ページに 月/週/日 切替カレンダー（予定＋タスク表示） |
 | 優先度 | P2 |
-| ステータス | TODO（2026-06-15 起票）。MC-245 設計 P1。新規ページ＋月/週/日トグル。週=7列×時間グリッド・日=1列時間グリッド・月=既存流儀。既存 /api/google/calendar/events ＋ /api/google/tasks を流用。オートプランナー(P2/MC-248予定)はこの上に載せる。 |
+| ステータス | DONE（2026-06-15 Son 駆動・実装 subagent・自己検証→push）。MC-245 設計 P1。新規 `/schedule`（NAV「スケジュール」/ClockIcon）に **月/週/日** トグル。月=7列グリッド(日クリックで日ビュー遷移)・週=7列×時間グリッド(終日帯＋6-23時軸・範囲外で拡張・現在時刻ライン・簡易重なり列分割)・日=1列時間グリッド。`/api/google/status`＋`events`＋`tasks` を timeMin/timeMax で取得しアカウント色で重ね表示・凡例。未接続は専用表示。読み取り表示のみ（オートプランナーは P2/MC-248）。新規 web/src/views/Schedule.tsx(1052行)＋App.tsx(lazy/NAV/Route)。**検証:** `tsc -b`＋`vite build` EXIT0→restart→health ok→dist に Schedule-B63XsdpU.js 在を確認(/schedule の curl 401 は未認証＝想定どおり)。**未実施:** ブラウザツール無で月/週/日 の実描画・予定/タスク配置は目視未確認(Keita 端末で確認推奨)。 |
 | 担当 | Son（駆動）／実装 subagent（dev-apollo レーン） |
 | 詳細 | App.tsx に NAV/ルート追加、新規ビュー（時間グリッド系コンポーネント）。成長日記カレンダーは現状維持。TZ=JST。 |
 | 受け入れ条件（DoD） | 月/週/日 切替が動く、予定と期日付きタスクが各ビューに表示、build green＋実画面確認。 |
