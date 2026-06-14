@@ -198,6 +198,11 @@ function mediaUrl(id: string): string {
   return `/api/baby-diary/media/${id}`;
 }
 
+/** サムネ URL（サーバ側で 480px webp を生成・キャッシュ）。一覧/グリッドの軽量表示用。 */
+function thumbUrl(id: string): string {
+  return `/api/baby-diary/media/${id}?thumb=1`;
+}
+
 // ─── Google 連携ユーティリティ ──────────────────────────────
 /** Google イベント start の表示用ローカル YYYY-MM-DD（カレンダーセルへの割り当て用）。 */
 function eventDateIso(t: GoogleEventTime): string {
@@ -1352,9 +1357,10 @@ function CalendarSection({
               {firstImage && (
                 <span className="relative mt-0.5 block flex-1 overflow-hidden rounded-sm">
                   <img
-                    src={mediaUrl(firstImage.id)}
+                    src={thumbUrl(firstImage.id)}
                     alt=""
                     loading="lazy"
+                    decoding="async"
                     className="h-full w-full object-cover"
                   />
                   {media.length > 1 && (
@@ -2059,14 +2065,23 @@ function MediaSection({
               className="group relative overflow-hidden rounded-md border border-border bg-bg"
             >
               {m.kind === 'image' ? (
-                <img
+                <a href={mediaUrl(m.id)} target="_blank" rel="noreferrer" className="block">
+                  <img
+                    src={thumbUrl(m.id)}
+                    alt={m.originalName}
+                    loading="lazy"
+                    decoding="async"
+                    className="aspect-square w-full object-cover"
+                  />
+                </a>
+              ) : (
+                <video
                   src={mediaUrl(m.id)}
-                  alt={m.originalName}
-                  loading="lazy"
+                  controls
+                  preload="none"
+                  playsInline
                   className="aspect-square w-full object-cover"
                 />
-              ) : (
-                <video src={mediaUrl(m.id)} controls className="aspect-square w-full object-cover" />
               )}
               <span
                 aria-hidden

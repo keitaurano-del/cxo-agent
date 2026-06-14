@@ -17,11 +17,14 @@ import { createReadStream, mkdirSync, readFileSync, realpathSync, statSync, unli
 import { join, relative, resolve, sep, isAbsolute } from 'node:path';
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
+import sharp from 'sharp';
+import pLimit from 'p-limit';
 
 import {
   BABY_DIARY_MEDIA_DIR,
   BABY_DIARY_MEDIA_MAX_BYTES,
   BABY_DIARY_MEDIA_MAX_FILES,
+  BABY_DIARY_THUMB_DIR,
 } from './config.js';
 import { sanitizeFilename } from './lib/inboxPath.js';
 import {
@@ -175,6 +178,95 @@ function sha256File(abs: string): string | null {
   }
 }
 
+// ─── サムネイル生成（webp・キャッシュ）─────────────────────────
+// 原寸画像（計 12GB 規模）をカレンダー/グリッドにそのまま流すと重いので、
+// 480px 上限の webp サムネを生成して BABY_DIARY_THUMB_DIR/<id>.webp にキャッシュする。
+// 一度作れば以後はファイルをそのままストリームする。EXIF 向きは .rotate() で補正。
+
+// sharp 実行を並列 2 に制限し、CPU を食い潰さないようにする（生成は CPU バウンド）。
+const thumbLimit = pLimit(2);
+
+// 同一 id の同時生成が重ならないよう in-flight Promise をメモ化する（生成中ロック）。
+const thumbInFlight = new Map<string, Promise<string | null>>();
+
+/** id（メタ id）に対応するサムネのキャッシュ絶対パス（<THUMB_DIR>/<id>.webp）。 */
+function thumbPathFor(id: string): string {
+  return join(BABY_DIARY_THUMB_DIR, `${id}.webp`);
+}
+
+/** 既存のサムネキャッシュが「ファイルとして」存在すればそのパスを返す。無ければ null。 */
+function existingThumb(id: string): string | null {
+  const p = thumbPathFor(id);
+  try {
+    if (statSync(p).isFile()) return p;
+  } catch {
+    /* 無い */
+  }
+  return null;
+}
+
+/**
+ * 原寸画像から 480px webp サムネを生成してキャッシュに書き、その絶対パスを返す。
+ * 既にキャッシュがあればそれを返す。生成失敗（壊れた画像・非対応）は null（呼び出し側で原寸フォールバック）。
+ * 同一 id の同時要求は in-flight Promise を共有し、sharp 実行は pLimit(2) で並列制限する。
+ */
+function ensureThumb(id: string, originalPath: string): Promise<string | null> {
+  const cached = existingThumb(id);
+  if (cached) return Promise.resolve(cached);
+
+  const running = thumbInFlight.get(id);
+  if (running) return running;
+
+  const task = thumbLimit(async () => {
+    // ロック取得後に再確認（待っている間に他要求が生成済みかもしれない）。
+    const again = existingThumb(id);
+    if (again) return again;
+    const dest = thumbPathFor(id);
+    try {
+      mkdirSync(BABY_DIARY_THUMB_DIR, { recursive: true });
+      await sharp(originalPath)
+        .rotate() // EXIF 向き補正（必須）。
+        .resize(480, 480, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 72 })
+        .toFile(dest);
+      return dest;
+    } catch {
+      // 生成失敗（壊れ/非対応）。原寸フォールバックさせるため null。
+      return null;
+    }
+  }).finally(() => {
+    thumbInFlight.delete(id);
+  });
+
+  thumbInFlight.set(id, task);
+  return task;
+}
+
+/** webp サムネをそのままストリーム配信する（長期キャッシュ可・不変）。 */
+function streamThumb(res: Response, thumbAbs: string): void {
+  let size = 0;
+  try {
+    const st = statSync(thumbAbs);
+    if (!st.isFile()) {
+      res.status(404).json({ error: 'thumb not found' });
+      return;
+    }
+    size = st.size;
+  } catch {
+    res.status(404).json({ error: 'thumb not found' });
+    return;
+  }
+  res.type('image/webp');
+  res.set('Cache-Control', 'private, max-age=31536000, immutable');
+  res.set('Content-Length', String(size));
+  const stream = createReadStream(thumbAbs);
+  stream.on('error', () => {
+    if (!res.headersSent) res.status(500).json({ error: 'failed to read thumb' });
+    else res.destroy();
+  });
+  stream.pipe(res);
+}
+
 // ─── ハンドラ ───────────────────────────────────────────
 
 /** GET /api/baby-diary — エントリ＋メディアの一覧。 */
@@ -317,9 +409,16 @@ async function handleUploadMedia(req: Request, res: Response): Promise<void> {
   res.status(201).json({ media: saved, skipped });
 }
 
-/** GET /api/baby-diary/media/:id — 実体ストリーム配信。 */
-function handleStreamMedia(req: Request, res: Response): void {
-  const meta = getMedia(String(req.params.id));
+/**
+ * GET /api/baby-diary/media/:id — 実体ストリーム配信。
+ *
+ * クエリ ?thumb=1 かつ画像のとき: 480px webp サムネを生成/キャッシュして配信する（軽量化）。
+ * サムネ生成失敗・動画・thumb 無しのときは、Range(206) 対応の原寸配信に完全フォールバックする
+ * （動画シーク・iOS 再生のため原寸経路は絶対に壊さない）。
+ */
+async function handleStreamMedia(req: Request, res: Response): Promise<void> {
+  const id = String(req.params.id);
+  const meta = getMedia(id);
   if (!meta) {
     res.status(404).json({ error: 'media not found' });
     return;
@@ -329,6 +428,19 @@ function handleStreamMedia(req: Request, res: Response): void {
     res.status(404).json({ error: 'media file not found' });
     return;
   }
+
+  // サムネ要求（画像のみ）。生成できればそれを配信、ダメなら原寸へフォールバック。
+  const wantThumb = req.query.thumb === '1';
+  if (wantThumb && meta.kind === 'image') {
+    const thumbAbs = await ensureThumb(id, abs);
+    if (thumbAbs && !res.headersSent) {
+      streamThumb(res, thumbAbs);
+      return;
+    }
+    // null（生成失敗）or 既に応答済みでなければ原寸へフォールバック。
+    if (res.headersSent) return;
+  }
+
   let total = 0;
   try {
     const st = statSync(abs);
@@ -498,7 +610,7 @@ export function babyDiaryRouter(): Router {
   router.delete('/entry/:date', handleDeleteEntry);
   router.post('/media', (req, res) => void handleUploadMedia(req, res));
   router.post('/media/maintenance', handleMaintenance);
-  router.get('/media/:id', handleStreamMedia);
+  router.get('/media/:id', (req, res) => void handleStreamMedia(req, res));
   router.delete('/media/:id', handleDeleteMedia);
   return router;
 }

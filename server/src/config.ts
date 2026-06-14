@@ -907,6 +907,14 @@ export const BABY_DIARY_MEDIA_FILE = join(BABY_DIARY_DIR, 'baby-diary-media.json
 export const BABY_DIARY_MEDIA_DIR = env('BABY_DIARY_MEDIA_DIR', join(BABY_DIARY_DIR, 'baby-diary-media'));
 
 /**
+ * サムネイル（webp）キャッシュの保存ディレクトリ。
+ * 原寸画像（最大 12GB 規模）をカレンダー/グリッドにそのまま流すと重いため、
+ * サーバ側で 480px webp を生成して `<id>.webp` でここにキャッシュし、以後はそのまま配信する。
+ * data/ 配下なので .gitignore 済み・ランタイムデータ。env BABY_DIARY_THUMB_DIR で上書き可。
+ */
+export const BABY_DIARY_THUMB_DIR = env('BABY_DIARY_THUMB_DIR', join(BABY_DIARY_DIR, 'baby-diary-thumbs'));
+
+/**
  * 成長日記メディア 1 ファイルあたりの最大バイト数（既定 1GB）。
  * 動画添付を考慮して大きめ。multer diskStorage でストリーム保存するためメモリには載らない。
  * env BABY_DIARY_MEDIA_MAX_BYTES で上書き可。
