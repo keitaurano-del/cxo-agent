@@ -1468,6 +1468,9 @@ function CalendarSection({
   );
 }
 
+// 期日なしタスクで既定で開いておくリスト名（それ以外は折りたたむ）。
+const DEFAULT_OPEN_TASK_LIST = '今日やる';
+
 // タスクを Google Tasks のリスト（listTitle）ごとにまとめる。
 // グループ順は listOrder（= Google Tasks アプリ上のリスト並び順）昇順、各リスト内は渡された並び（タイトル昇順）。
 function groupTasksByList(tasks: GoogleTask[]): { listTitle: string; tasks: GoogleTask[] }[] {
@@ -1568,6 +1571,20 @@ function DayDetailSection({
   const todos = todosForDate(date);
   // 取り込み/書き出しの対象（visible が0なら null）。visible が1つなら自動的にそれ。
   const activeAccount = accountsConnected ? importTarget : null;
+
+  // 期日なしタスクのリスト折りたたみ。既定は「今日やる」だけ開き、他は閉じる。
+  // ユーザがクリックした分だけ override に記録し、既定からの差分として扱う。
+  const [listOpenOverride, setListOpenOverride] = useState<Map<string, boolean>>(() => new Map());
+  const isListOpen = (listTitle: string) =>
+    listOpenOverride.has(listTitle)
+      ? (listOpenOverride.get(listTitle) as boolean)
+      : listTitle === DEFAULT_OPEN_TASK_LIST;
+  const toggleList = (listTitle: string) =>
+    setListOpenOverride((prev) => {
+      const next = new Map(prev);
+      next.set(listTitle, !isListOpen(listTitle));
+      return next;
+    });
 
   return (
     <section className="flex flex-col gap-4 rounded-lg border border-accent/40 bg-surface p-4 md:p-5">
@@ -1673,26 +1690,42 @@ function DayDetailSection({
       {accountsConnected && noDueTasks.length > 0 && (
         <div>
           <h3 className="mb-1.5 text-sm font-bold text-text">Googleタスク（期日なし）</h3>
-          <div className="flex flex-col gap-3">
-            {groupTasksByList(noDueTasks).map(({ listTitle, tasks }) => (
-              <div key={listTitle}>
-                <h4 className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-text-muted">
-                  {listTitle}
-                  <span className="rounded-full bg-surface-2 px-1.5 text-[10px] font-semibold text-text-faint">
-                    {tasks.length}
-                  </span>
-                </h4>
-                <ul className="flex flex-col gap-1.5">
-                  {tasks.map((task) => (
-                    <TaskRow
-                      key={`${task.account}:${task.id}`}
-                      task={task}
-                      accountColors={accountColors}
-                    />
-                  ))}
-                </ul>
-              </div>
-            ))}
+          <div className="flex flex-col gap-2">
+            {groupTasksByList(noDueTasks).map(({ listTitle, tasks }) => {
+              const open = isListOpen(listTitle);
+              return (
+                <div key={listTitle}>
+                  <button
+                    type="button"
+                    onClick={() => toggleList(listTitle)}
+                    aria-expanded={open}
+                    className="flex w-full items-center gap-1.5 rounded-md px-1 py-1 text-left text-[11px] font-bold uppercase tracking-wide text-text-muted hover:bg-surface-2"
+                  >
+                    <span
+                      aria-hidden
+                      className={`inline-block shrink-0 text-text-faint transition-transform ${open ? 'rotate-90' : ''}`}
+                    >
+                      ▶
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{listTitle}</span>
+                    <span className="shrink-0 rounded-full bg-surface-2 px-1.5 text-[10px] font-semibold text-text-faint">
+                      {tasks.length}
+                    </span>
+                  </button>
+                  {open && (
+                    <ul className="mt-1 flex flex-col gap-1.5">
+                      {tasks.map((task) => (
+                        <TaskRow
+                          key={`${task.account}:${task.id}`}
+                          task={task}
+                          accountColors={accountColors}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
