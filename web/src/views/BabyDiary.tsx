@@ -105,6 +105,27 @@ interface CalendarEventsResponse {
   errors?: unknown[];
 }
 
+// Google ToDo（Google Tasks）。due は 'YYYY-MM-DD'（カレンダーセルへの割り当てに使う）。
+interface GoogleTask {
+  id: string;
+  account: string; // email
+  title: string;
+  due: string; // YYYY-MM-DD
+  status: string; // 'needsAction' | 'completed' 等（未完了のみ来る想定）
+  listTitle: string;
+  notes?: string;
+}
+
+interface TasksError {
+  account: string;
+  error: string;
+}
+
+interface TasksResponse {
+  tasks: GoogleTask[];
+  errors?: TasksError[];
+}
+
 // ─── ToDo（締切）ソース: 行政手続き＋健診を {id,title,dueIso} に正規化 ──
 interface DueTodo {
   id: string;
@@ -415,6 +436,76 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
     return m;
   }, [gEvents, visibleAccounts]);
 
+  // ── 表示中の月の Google タスク（接続済みアカウントがあるときのみ）──
+  // events と同じ流儀で取得。errors（tasks-not-authorized 等）も保持し、未許可ヒントに使う。
+  const [gTasks, setGTasks] = useState<GoogleTask[]>([]);
+  const [taskErrors, setTaskErrors] = useState<TasksError[]>([]);
+
+  useEffect(() => {
+    if (!hasAccounts) {
+      setGTasks([]);
+      setTaskErrors([]);
+      return;
+    }
+    let cancelled = false;
+    const { timeMin, timeMax } = monthRangeIso(view.year, view.month);
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/google/tasks?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`,
+        );
+        if (!res.ok) {
+          if (!cancelled) {
+            setGTasks([]);
+            setTaskErrors([]);
+          }
+          return;
+        }
+        const json = (await res.json()) as TasksResponse;
+        if (!cancelled) {
+          setGTasks(json.tasks ?? []);
+          setTaskErrors(json.errors ?? []);
+        }
+      } catch {
+        if (!cancelled) {
+          setGTasks([]);
+          setTaskErrors([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasAccounts, view.year, view.month]);
+
+  // due(YYYY-MM-DD) → Google タスク配列 の索引。チェック中(visible)のアカウントのみ。
+  const tasksByDate = useMemo(() => {
+    const m = new Map<string, GoogleTask[]>();
+    for (const t of gTasks) {
+      if (!visibleAccounts.has(t.account)) continue;
+      if (!t.due) continue;
+      const arr = m.get(t.due) ?? [];
+      arr.push(t);
+      m.set(t.due, arr);
+    }
+    return m;
+  }, [gTasks, visibleAccounts]);
+
+  // tasks の権限が一つも無いか（errors が全て tasks-not-authorized）。再接続ヒント用。
+  // 接続アカウントが1件以上あり、全アカウントが tasks-not-authorized を返した場合のみ true。
+  const tasksNeedReconnect = useMemo(() => {
+    if (!hasAccounts) return false;
+    const notAuthed = taskErrors.filter((e) => e.error === 'tasks-not-authorized');
+    if (notAuthed.length === 0) return false;
+    // 許可済みアカが1つでもあれば（タスクが来ている or 別エラー）ヒントは出さない。
+    const authedAccounts = new Set(gTasks.map((t) => t.account));
+    return accounts.every(
+      (a) =>
+        !authedAccounts.has(a.email) &&
+        notAuthed.some((e) => e.account === a.email),
+    );
+  }, [hasAccounts, taskErrors, gTasks, accounts]);
+
   const fetchData = useCallback(async () => {
     try {
       const res = await fetch('/api/baby-diary');
@@ -499,6 +590,7 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
             entryByDate={entryByDate}
             mediaByDate={mediaByDate}
             eventsByDate={eventsByDate}
+            tasksByDate={tasksByDate}
             accountColors={accountColors}
             onPrev={goPrevMonth}
             onNext={goNextMonth}
@@ -510,6 +602,8 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
             entry={entryByDate.get(selected)}
             media={mediaByDate.get(selected) ?? []}
             googleEvents={eventsByDate.get(selected) ?? []}
+            googleTasks={tasksByDate.get(selected) ?? []}
+            tasksNeedReconnect={tasksNeedReconnect}
             accountColors={accountColors}
             visibleEmails={visibleEmails}
             importTarget={activeImportAccount}
@@ -1125,6 +1219,7 @@ function CalendarSection({
   entryByDate,
   mediaByDate,
   eventsByDate,
+  tasksByDate,
   accountColors,
   onPrev,
   onNext,
@@ -1137,6 +1232,7 @@ function CalendarSection({
   entryByDate: Map<string, DiaryEntry>;
   mediaByDate: Map<string, MediaMeta[]>;
   eventsByDate: Map<string, GoogleCalendarEvent[]>;
+  tasksByDate: Map<string, GoogleTask[]>;
   accountColors: Map<string, string>;
   onPrev: () => void;
   onNext: () => void;
@@ -1213,6 +1309,7 @@ function CalendarSection({
           const firstImage = media.find((m) => m.kind === 'image');
           const todos = todosForDate(iso);
           const gEvents = eventsByDate.get(iso) ?? [];
+          const gTasks = tasksByDate.get(iso) ?? [];
           const weekday = (lead + day - 1) % 7;
 
           return (
@@ -1302,6 +1399,24 @@ function CalendarSection({
                     {gEvents.length}
                   </span>
                 )}
+                {gTasks.length > 0 && (
+                  <span
+                    className="inline-flex items-center gap-0.5 rounded-sm border border-border bg-bg px-1 text-[8px] font-bold leading-tight text-text-muted"
+                    title={gTasks.map((t) => `${t.title}（${t.account}）`).join('・')}
+                  >
+                    {/* タスクは予定（丸ドット）と区別する□印。取得元アカウントごとの識別色の四角。 */}
+                    <span aria-hidden className="leading-none">□</span>
+                    {Array.from(new Set(gTasks.map((t) => t.account))).map((acc) => (
+                      <span
+                        key={acc}
+                        aria-hidden
+                        className="inline-block h-1.5 w-1.5 rounded-[1px]"
+                        style={{ background: accountColors.get(acc) ?? 'var(--mc-idle)' }}
+                      />
+                    ))}
+                    {gTasks.length}
+                  </span>
+                )}
                 {!firstImage && media.length > 0 && (
                   <span className="text-[8px] font-bold leading-tight text-text-muted">
                     🎞{media.length}
@@ -1325,6 +1440,9 @@ function CalendarSection({
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-text-muted" aria-hidden /> Google予定（色＝アカウント）
         </span>
         <span className="inline-flex items-center gap-1">
+          <span aria-hidden className="leading-none">□</span> Googleタスク（色＝アカウント）
+        </span>
+        <span className="inline-flex items-center gap-1">
           <span aria-hidden>🎂</span> 誕生日
         </span>
       </div>
@@ -1338,6 +1456,8 @@ function DayDetailSection({
   entry,
   media,
   googleEvents,
+  googleTasks,
+  tasksNeedReconnect,
   accountColors,
   visibleEmails,
   importTarget,
@@ -1350,6 +1470,8 @@ function DayDetailSection({
   entry: DiaryEntry | undefined;
   media: MediaMeta[];
   googleEvents: GoogleCalendarEvent[];
+  googleTasks: GoogleTask[];
+  tasksNeedReconnect: boolean;
   accountColors: Map<string, string>;
   visibleEmails: string[];
   importTarget: string | null;
@@ -1446,6 +1568,74 @@ function DayDetailSection({
               );
             })}
           </ul>
+        </div>
+      )}
+
+      {/* Googleタスク（接続時のみ・タスクがあれば）。□チェック印＋タイトル＋listTitle＋アカウント色。 */}
+      {accountsConnected && googleTasks.length > 0 && (
+        <div>
+          <h3 className="mb-1.5 text-sm font-bold text-text">Googleタスク</h3>
+          <ul className="flex flex-col gap-1.5">
+            {googleTasks.map((task) => {
+              const color = accountColors.get(task.account) ?? 'var(--mc-idle)';
+              const done = task.status === 'completed';
+              return (
+                <li
+                  key={`${task.account}:${task.id}`}
+                  className="flex items-start gap-2 rounded-md border border-border bg-bg px-2.5 py-1.5"
+                  style={{ borderLeftColor: color, borderLeftWidth: 3 }}
+                >
+                  {/* 完了/未完了を□/☑で示す（未完了のみ来る想定）。 */}
+                  <span
+                    aria-hidden
+                    className="mt-px shrink-0 text-sm font-bold leading-none"
+                    style={{ color }}
+                    title={done ? '完了' : '未完了'}
+                  >
+                    {done ? '☑' : '□'}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className={`text-xs font-medium text-text ${done ? 'line-through opacity-60' : ''}`}
+                    >
+                      {task.title || '(無題のタスク)'}
+                    </span>
+                    {task.notes && (
+                      <span className="block truncate text-[10px] text-text-muted">{task.notes}</span>
+                    )}
+                    <span className="flex items-center gap-1 truncate text-[10px] text-text-faint">
+                      <span
+                        className="inline-block h-1.5 w-1.5 shrink-0 rounded-[1px]"
+                        style={{ background: color }}
+                        aria-hidden
+                      />
+                      {task.listTitle ? `${task.listTitle}・` : ''}
+                      {task.account}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {/* タスク権限が未許可（全アカウント tasks-not-authorized）のときの再接続ヒント。 */}
+      {accountsConnected && tasksNeedReconnect && (
+        <div className="rounded-md border border-dashed border-border bg-bg px-2.5 py-2">
+          <p className="text-[11px] text-text-muted">
+            Googleタスクを表示するには Google の再接続（タスクへのアクセス許可）が必要です。
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              window.location.href = '/api/google/oauth/start';
+            }}
+            className="mt-1.5 inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-2 hover:text-text"
+          >
+            <LinkIcon width={14} height={14} />
+            再接続してタスクを許可
+          </button>
         </div>
       )}
 

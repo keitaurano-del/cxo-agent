@@ -18,6 +18,7 @@
 //   7. POST   /photos/picker/session            Picker セッション作成 → { sessionId, pickerUri, account }
 //      GET    /photos/picker/session/:sessionId 選択完了ポーリング → { mediaItemsSet }
 //      POST   /photos/picker/import             選択メディアを取得して babyDiaryStore へ保存
+//   8. GET    /tasks                            全接続アカウント横断で期日付き Google Tasks を取得（部分劣化・tasks 未許可は優しく畳む）
 //
 // HTTP はすべて標準 fetch（googleapis 等の重い依存は足さない）。外部呼び出しは全てタイムアウト付き。
 // access_token / refresh_token / secret はレスポンスに一切含めない。
@@ -34,6 +35,7 @@ import {
   GOOGLE_OAUTH_REDIRECT_URI,
   GOOGLE_OAUTH_SCOPE,
   GOOGLE_DRIVE_SCOPE,
+  GOOGLE_TASKS_SCOPE,
   GOOGLE_HTTP_TIMEOUT_MS,
   BABY_DIARY_MEDIA_DIR,
 } from './config.js';
@@ -845,6 +847,131 @@ async function handleDriveImport(req: Request, res: Response): Promise<void> {
   }
 }
 
+// ─── 9. GET /tasks（MC-233 Tasks 連携）──────────────────────
+//
+// 接続済み全アカウント横断で Google Tasks（期日付きタスク）を取得する（部分劣化）。
+// 既存接続済みトークンは tasks.readonly を含まない（再同意するまで Tasks 系 API は未許可）ため、
+// scope に tasks.readonly が無いアカウントは API を叩かず errors に 'tasks-not-authorized' で畳む
+// （無駄な 401 を避け、全アカ未許可でも 200 で { tasks:[], errors:[...] } を返す）。
+//
+// 取得対象は due（期日）がある未完了タスクのみ。due は RFC3339（UTC 0 時表現が多い）なので、
+// JST の YYYY-MM-DD は date 部分（先頭 10 文字）をそのまま採用する。
+
+/** token の scope に tasks.readonly が含まれるか（= 再同意で Tasks 読取が付与済みか）。 */
+function tasksScopeGranted(account: string): boolean {
+  const rec = getTokens(account);
+  if (!rec) return false;
+  // scope はスペース区切り。tasks.readonly の完全一致トークンを探す。
+  return rec.scope.split(/\s+/).includes(GOOGLE_TASKS_SCOPE);
+}
+
+interface GTaskList {
+  id?: string;
+  title?: string;
+}
+interface GTaskListsResponse {
+  items?: GTaskList[];
+}
+interface GTask {
+  id?: string;
+  title?: string;
+  due?: string;
+  status?: string;
+  notes?: string;
+}
+interface GTasksResponse {
+  items?: GTask[];
+}
+
+interface NormalizedTask {
+  id: string;
+  account: string;
+  title: string;
+  due: string;
+  status: string;
+  notes?: string;
+  listTitle: string;
+}
+
+/**
+ * Google Tasks の due（RFC3339・実質 UTC 0 時の日付表現）を JST の YYYY-MM-DD に正規化する。
+ * Tasks の due は時刻情報を持たず日付として扱う仕様のため、date 部分（先頭 10 文字）を採用する。
+ */
+function normalizeTaskDue(due: string): string | undefined {
+  const m = due.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : undefined;
+}
+
+async function handleTasksList(req: Request, res: Response): Promise<void> {
+  if (!requireConfigured(res)) return;
+
+  // timeMin/timeMax は受理する（クライアント互換のため）。Tasks API では list 取得後に
+  // due で絞り込めるが、まずは due 有り未完了の正規化に徹し、範囲指定はクライアント側で扱える形にする。
+  void req.query.timeMin;
+  void req.query.timeMax;
+
+  const accounts = listAccounts();
+  const tasks: NormalizedTask[] = [];
+  const errors: { account: string; error: string }[] = [];
+
+  await Promise.all(
+    accounts.map(async (acc) => {
+      // tasks 未許可アカウントは API を叩かず errors に畳む（無駄な 401 回避）。
+      if (!tasksScopeGranted(acc.email)) {
+        errors.push({ account: acc.email, error: 'tasks-not-authorized' });
+        return;
+      }
+      try {
+        const accessToken = await getValidAccessToken(acc.email);
+        // タスクリスト一覧を取得。
+        const lists = await googleGet<GTaskListsResponse>(
+          'https://tasks.googleapis.com/tasks/v1/users/@me/lists',
+          accessToken,
+        );
+        // 各リストのタスクを取得（未完了・非表示除外・最大 100）。
+        for (const list of lists.items ?? []) {
+          const listId = list.id;
+          if (!listId) continue;
+          const listTitle = list.title ?? '(無題リスト)';
+          const params = new URLSearchParams({
+            showCompleted: 'false',
+            showHidden: 'false',
+            maxResults: '100',
+          });
+          const data = await googleGet<GTasksResponse>(
+            `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(listId)}/tasks?${params.toString()}`,
+            accessToken,
+          );
+          for (const t of data.items ?? []) {
+            if (!t.due) continue; // due が無いタスクは対象外。
+            const due = normalizeTaskDue(t.due);
+            if (!due) continue;
+            tasks.push({
+              id: t.id ?? '',
+              account: acc.email,
+              title: t.title ?? '(無題)',
+              due,
+              status: t.status ?? 'needsAction',
+              ...(t.notes ? { notes: t.notes } : {}),
+              listTitle,
+            });
+          }
+        }
+      } catch (e) {
+        errors.push({ account: acc.email, error: e instanceof Error ? e.message : String(e) });
+      }
+    }),
+  );
+
+  // due 昇順（同 due はタイトル）で全アカウント混在ソート。
+  tasks.sort((a, b) => {
+    if (a.due !== b.due) return a.due.localeCompare(b.due);
+    return a.title.localeCompare(b.title);
+  });
+
+  res.json({ tasks, ...(errors.length > 0 ? { errors } : {}) });
+}
+
 // ─── Router 組み立て ─────────────────────────────────────
 
 /** /api/google 配下のルータを返す。index.ts で auth ミドルウェア配下に mount する。 */
@@ -862,6 +989,8 @@ export function googleRouter(): Router {
   router.post('/photos/picker/session', (req, res) => void handlePickerCreate(req, res));
   router.get('/photos/picker/session/:sessionId', (req, res) => void handlePickerPoll(req, res));
   router.post('/photos/picker/import', (req, res) => void handlePickerImport(req, res));
+
+  router.get('/tasks', (req, res) => void handleTasksList(req, res));
 
   router.get('/drive/status', handleDriveStatus);
   router.get('/drive/folders', (req, res) => void handleDriveFolders(req, res));

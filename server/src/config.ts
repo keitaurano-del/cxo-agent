@@ -952,15 +952,19 @@ export function googleConfigured(): boolean {
  *  - calendar.readonly / calendar.events                       : 予定の読み込み・終日イベント作成
  *  - photospicker.mediaitems.readonly                          : Photos Picker で選択メディアを読む
  *  - drive.readonly                                            : Drive 指定フォルダの画像/動画を自動取り込み（MC-233 Drive 連携）
+ *  - tasks.readonly                                            : Google Tasks（期日付きタスク）の読み込み（MC-233 Tasks 連携）
  *
- * 注意: 既存接続済みトークンは drive.readonly を含まない（再同意するまで Drive 系 API は未許可）。
- * Drive スコープが付与されているかは token の scope 文字列に drive.readonly が含まれるかで判定する。
+ * 注意: 既存接続済みトークンは drive.readonly / tasks.readonly を含まない（再同意するまで Drive/Tasks 系 API は未許可）。
+ * Drive/Tasks スコープが付与されているかは token の scope 文字列に該当スコープが含まれるかで判定する。
  */
 export const GOOGLE_OAUTH_SCOPE =
-  'openid email https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/photospicker.mediaitems.readonly https://www.googleapis.com/auth/drive.readonly';
+  'openid email https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/photospicker.mediaitems.readonly https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/tasks.readonly';
 
 /** Drive 読取スコープ（token の scope にこれが含まれるかで driveScopeGranted を判定）。 */
 export const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+
+/** Tasks 読取スコープ（token の scope にこれが含まれるかで tasksScopeGranted を判定）。 */
+export const GOOGLE_TASKS_SCOPE = 'https://www.googleapis.com/auth/tasks.readonly';
 
 /** Google トークン台帳（last-wins by email）。data/ 配下なので .gitignore 済み。 */
 export const GOOGLE_TOKENS_FILE = join(BABY_DIARY_DIR, 'google-tokens.jsonl');
