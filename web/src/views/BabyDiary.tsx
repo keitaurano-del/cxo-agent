@@ -106,11 +106,12 @@ interface CalendarEventsResponse {
 }
 
 // Google ToDo（Google Tasks）。due は 'YYYY-MM-DD'（カレンダーセルへの割り当てに使う）。
+// due は任意＝期日なしのタスクは due 無しで来る（カレンダーには置かず、別枠で表示する）。
 interface GoogleTask {
   id: string;
   account: string; // email
   title: string;
-  due: string; // YYYY-MM-DD
+  due?: string; // YYYY-MM-DD（期日なしは未設定）
   status: string; // 'needsAction' | 'completed' 等（未完了のみ来る想定）
   listTitle: string;
   notes?: string;
@@ -496,6 +497,15 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
     return m;
   }, [gTasks, visibleAccounts]);
 
+  // 期日なしの Google タスク（visible アカウントのみ・タイトル昇順）。日付に紐づかないので別枠で表示する。
+  const noDueTasks = useMemo(
+    () =>
+      gTasks
+        .filter((t) => visibleAccounts.has(t.account) && !t.due)
+        .sort((a, b) => a.title.localeCompare(b.title)),
+    [gTasks, visibleAccounts],
+  );
+
   // tasks の権限が一つも無いか（errors が全て tasks-not-authorized）。再接続ヒント用。
   // 接続アカウントが1件以上あり、全アカウントが tasks-not-authorized を返した場合のみ true。
   const tasksNeedReconnect = useMemo(() => {
@@ -608,6 +618,7 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
             media={mediaByDate.get(selected) ?? []}
             googleEvents={eventsByDate.get(selected) ?? []}
             googleTasks={tasksByDate.get(selected) ?? []}
+            noDueTasks={noDueTasks}
             tasksNeedReconnect={tasksNeedReconnect}
             accountColors={accountColors}
             visibleEmails={visibleEmails}
@@ -1456,6 +1467,51 @@ function CalendarSection({
   );
 }
 
+// ─── Google タスク 1 行（期日あり・期日なし共通）──────────────────
+function TaskRow({
+  task,
+  accountColors,
+}: {
+  task: GoogleTask;
+  accountColors: Map<string, string>;
+}) {
+  const color = accountColors.get(task.account) ?? 'var(--mc-idle)';
+  const done = task.status === 'completed';
+  return (
+    <li
+      className="flex items-start gap-2 rounded-md border border-border bg-bg px-2.5 py-1.5"
+      style={{ borderLeftColor: color, borderLeftWidth: 3 }}
+    >
+      {/* 完了/未完了を□/☑で示す（未完了のみ来る想定）。 */}
+      <span
+        aria-hidden
+        className="mt-px shrink-0 text-sm font-bold leading-none"
+        style={{ color }}
+        title={done ? '完了' : '未完了'}
+      >
+        {done ? '☑' : '□'}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className={`text-xs font-medium text-text ${done ? 'line-through opacity-60' : ''}`}>
+          {task.title || '(無題のタスク)'}
+        </span>
+        {task.notes && (
+          <span className="block truncate text-[10px] text-text-muted">{task.notes}</span>
+        )}
+        <span className="flex items-center gap-1 truncate text-[10px] text-text-faint">
+          <span
+            className="inline-block h-1.5 w-1.5 shrink-0 rounded-[1px]"
+            style={{ background: color }}
+            aria-hidden
+          />
+          {task.listTitle ? `${task.listTitle}・` : ''}
+          {task.account}
+        </span>
+      </span>
+    </li>
+  );
+}
+
 // ─── その日の詳細パネル ──────────────────────────────────────
 function DayDetailSection({
   date,
@@ -1463,6 +1519,7 @@ function DayDetailSection({
   media,
   googleEvents,
   googleTasks,
+  noDueTasks,
   tasksNeedReconnect,
   accountColors,
   visibleEmails,
@@ -1477,6 +1534,7 @@ function DayDetailSection({
   media: MediaMeta[];
   googleEvents: GoogleCalendarEvent[];
   googleTasks: GoogleTask[];
+  noDueTasks: GoogleTask[];
   tasksNeedReconnect: boolean;
   accountColors: Map<string, string>;
   visibleEmails: string[];
@@ -1582,46 +1640,21 @@ function DayDetailSection({
         <div>
           <h3 className="mb-1.5 text-sm font-bold text-text">Googleタスク</h3>
           <ul className="flex flex-col gap-1.5">
-            {googleTasks.map((task) => {
-              const color = accountColors.get(task.account) ?? 'var(--mc-idle)';
-              const done = task.status === 'completed';
-              return (
-                <li
-                  key={`${task.account}:${task.id}`}
-                  className="flex items-start gap-2 rounded-md border border-border bg-bg px-2.5 py-1.5"
-                  style={{ borderLeftColor: color, borderLeftWidth: 3 }}
-                >
-                  {/* 完了/未完了を□/☑で示す（未完了のみ来る想定）。 */}
-                  <span
-                    aria-hidden
-                    className="mt-px shrink-0 text-sm font-bold leading-none"
-                    style={{ color }}
-                    title={done ? '完了' : '未完了'}
-                  >
-                    {done ? '☑' : '□'}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span
-                      className={`text-xs font-medium text-text ${done ? 'line-through opacity-60' : ''}`}
-                    >
-                      {task.title || '(無題のタスク)'}
-                    </span>
-                    {task.notes && (
-                      <span className="block truncate text-[10px] text-text-muted">{task.notes}</span>
-                    )}
-                    <span className="flex items-center gap-1 truncate text-[10px] text-text-faint">
-                      <span
-                        className="inline-block h-1.5 w-1.5 shrink-0 rounded-[1px]"
-                        style={{ background: color }}
-                        aria-hidden
-                      />
-                      {task.listTitle ? `${task.listTitle}・` : ''}
-                      {task.account}
-                    </span>
-                  </span>
-                </li>
-              );
-            })}
+            {googleTasks.map((task) => (
+              <TaskRow key={`${task.account}:${task.id}`} task={task} accountColors={accountColors} />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* 期日なしの Google タスク（接続時のみ・あれば）。日付に紐づかないので選択日に関わらず常に表示。 */}
+      {accountsConnected && noDueTasks.length > 0 && (
+        <div>
+          <h3 className="mb-1.5 text-sm font-bold text-text">Googleタスク（期日なし）</h3>
+          <ul className="flex flex-col gap-1.5">
+            {noDueTasks.map((task) => (
+              <TaskRow key={`${task.account}:${task.id}`} task={task} accountColors={accountColors} />
+            ))}
           </ul>
         </div>
       )}

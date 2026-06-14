@@ -887,7 +887,8 @@ interface NormalizedTask {
   id: string;
   account: string;
   title: string;
-  due: string;
+  /** 期日（JST YYYY-MM-DD）。Google Tasks では任意なので、未設定のタスクでは省略する。 */
+  due?: string;
   status: string;
   notes?: string;
   listTitle: string;
@@ -943,14 +944,13 @@ async function handleTasksList(req: Request, res: Response): Promise<void> {
             accessToken,
           );
           for (const t of data.items ?? []) {
-            if (!t.due) continue; // due が無いタスクは対象外。
-            const due = normalizeTaskDue(t.due);
-            if (!due) continue;
+            // due があれば JST 日付に正規化。無ければ「期日なし」タスクとして due を省略して含める。
+            const due = t.due ? normalizeTaskDue(t.due) : undefined;
             tasks.push({
               id: t.id ?? '',
               account: acc.email,
               title: t.title ?? '(無題)',
-              due,
+              ...(due ? { due } : {}),
               status: t.status ?? 'needsAction',
               ...(t.notes ? { notes: t.notes } : {}),
               listTitle,
@@ -963,9 +963,14 @@ async function handleTasksList(req: Request, res: Response): Promise<void> {
     }),
   );
 
-  // due 昇順（同 due はタイトル）で全アカウント混在ソート。
+  // due 昇順（同 due はタイトル）で全アカウント混在ソート。期日なし（due 省略）は末尾へ。
   tasks.sort((a, b) => {
-    if (a.due !== b.due) return a.due.localeCompare(b.due);
+    if (a.due && b.due) {
+      if (a.due !== b.due) return a.due.localeCompare(b.due);
+      return a.title.localeCompare(b.title);
+    }
+    if (a.due) return -1; // 期日あり < 期日なし
+    if (b.due) return 1;
     return a.title.localeCompare(b.title);
   });
 
