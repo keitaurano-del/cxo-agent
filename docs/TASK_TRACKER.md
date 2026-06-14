@@ -2629,12 +2629,12 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-228 |
 | タイトル | ドキュメント(Deliverables)でファイル・フォルダを別フォルダへ移動できるようにする |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | REVIEW |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 1。現状ツリーは表示専用で移動不可。POST /api/deliverables/move（srcPath→destDir、パス検証・同名衝突チェック）を追加。UIは (1)ドラッグ&ドロップでフォルダへドロップ（ドロップ先ハイライト必須）と (2)「移動先を選ぶ」メニュー（深い階層用の確実な導線）の両対応。 |
 | 受け入れ条件（DoD） | D&Dとメニューの両方でファイル/フォルダを移動でき、ツリーに反映。`data/deliverables` 外不可。循環移動（親を子へ）防止。server tsc0 / web build0 / restart 後 実画面で移動→反映を確認。 |
 | 依存 | MC-227（パス検証ヘルパを共用すると効率的）。 |
-| 備考 | NO_PUSH。検証に林は入れない。 |
+| 備考 | NO_PUSH。検証に林は入れない。<br>【実装/検証 2026-06-14 ソラ・commit 5f40fd7（ローカルのみ・未push）】POST /api/deliverables/move を追加（`server/src/index.ts:1077-1148`）。検証ヘルパ resolveDeliverableDir/resolveMoveTarget（`server/src/lib/deliverablePath.ts:350-413`）= realpath/トラバーサル防御流用・親→子の循環移動を SafePathError(400) で拒否。UI は (a) D&D（FileCard/FileRow/FolderNodeView を draggable 化、FolderNodeView がドロップ先＝ハイライト ring-accent、ルート直下ドロップゾーンも `web/src/views/Deliverables.tsx`）と (b) MoveDialog（フォルダツリーから移動先選択・現在の親/自分自身/子孫は無効化）。MoveIcon を追加（`web/src/components/icons.tsx`）。server tsc --noEmit EXIT0 / web build EXIT0 → systemctl restart → healthz200。curl 検証: 移動成功(JSON relpath)・同名衝突409・循環移動400（自身/子孫）・destDir トラバーサル400・README 403・src/destDir 不在404・ルート直下への移動成功 を確認。Playwright で MoveDialog からファイル→フォルダ移動→ディスク反映（inDir=true/atRoot=false）・D&D ハイライト・JSエラーなし・390px 横溢れなしを実画面確認。 |
 | 更新日 | 2026-06-14 |
 
 ---
@@ -2646,12 +2646,12 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-229 |
 | タイトル | ドキュメント(Deliverables)で複数選択して一括削除/移動/ダウンロードできるようにする |
 | 優先度 | P1 |
-| ステータス | TODO |
+| ステータス | REVIEW |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 1。現状は1個ずつ操作。Shift連続選択・Ctrl/Cmd個別選択を実装し、選択時のみ「文脈ツールバー」（選択数バッジ＋一括削除/一括移動/一括DL）を表示。一括DLはzipまとめ or 連続DL。バックエンドは既存のdelete/move（MC-228）をループ or バッチAPI化。 |
 | 受け入れ条件（DoD） | 複数選択→一括削除・一括移動・一括DLが動作。選択時のみツールバー表示・通常時はクリーン。server tsc0 / web build0 / restart 後 実画面で確認。 |
 | 依存 | MC-228（move）、MC-230（削除はゴミ箱経由が望ましい）。 |
-| 備考 | NO_PUSH。検証に林は入れない。 |
+| 備考 | NO_PUSH。検証に林は入れない。<br>【実装/検証 2026-06-14 ソラ・commit 5f40fd7（ローカルのみ・未push）】FileCard/FileRow/FolderNodeView にチェックボックス＋モディファイア付きクリックで選択（Shift=表示順で連続選択・Ctrl/Cmd=個別トグル、アンカー管理は親の onSelectToggle、`web/src/views/Deliverables.tsx`）。選択時のみ SelectionToolbar（選択数バッジ＋一括移動/DL/削除＋選択解除）を表示・通常時は非表示。一括削除は1件ずつ DELETE /api/deliverables/file をループ＝MC-230 のゴミ箱経由（物理削除しない・Undo/復元可）。一括移動は MoveDialog（MC-228）を複数対象で流用。一括DLは連続DL（250ms 間隔の a[download]）。CheckIcon を追加（`web/src/components/icons.tsx`）。web build EXIT0 → restart → healthz200。Playwright で 選択→ツールバー出現（「N 件を選択中」）・MoveDialog 起動・一括削除→一覧から消える→ゴミ箱に出現→復元 を実画面確認、JSエラーなし。注: 一括DLは zip でなく連続DL方式を採用（DoD は「zip まとめ or 連続DL」のいずれかで可）。 |
 | 更新日 | 2026-06-14 |
 
 ---
@@ -2697,10 +2697,10 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-232 |
 | タイトル | ドキュメント(Deliverables)にパンくず・戻る/進む・最近使った項目のナビを追加 |
 | 優先度 | P2 |
-| ステータス | TODO |
+| ステータス | REVIEW |
 | 担当 | ソラ（dev-apollo） |
 | 詳細 | Phase 1。現状フォルダ階層の現在地ナビが弱い。(1)クリック可能なパンくず（各階層へジャンプ）、(2)戻る/進む（ナビ履歴）、(3)最近開いた/アップロードした項目の自動リスト（localStorage or mtime ベース）を追加し、深い階層で迷子にならないようにする。 |
 | 受け入れ条件（DoD） | パンくずで各階層へジャンプ可、戻る/進むが履歴通り動作、最近使った項目が表示される。web build0 / restart 後 実画面で確認。 |
 | 依存 | なし（主にクライアント側）。 |
-| 備考 | NO_PUSH。Phase 1 の中では優先度やや低（P2）。 |
+| 備考 | NO_PUSH。Phase 1 の中では優先度やや低（P2）。<br>【実装/検証 2026-06-14 ソラ・commit 5f40fd7（ローカルのみ・未push）】フォルダビューを currentDir スコープ化（findNode でツリーを現在地で切り出し＝PCフォルダ並みの現在地表示、`web/src/views/Deliverables.tsx`）。Breadcrumb コンポーネント＝各階層クリックでジャンプ（navigateTo）＋戻る/進むボタン（navHistory/navIndex のブラウザ式履歴、現在位置以降切り捨て）。RecentStrip＝最近開いた/DL した項目を localStorage（apollo.deliverables.recent、最大12件）に記録、アップロードは既知パス集合との差分で新規ファイルを検知して記録。フォルダ名クリックで descend（onOpenFolder→navigateTo）、chevron は別ボタンでインライン展開。ChevronLeftIcon/ClockIcon を追加（`web/src/components/icons.tsx`）。サーバ変更なし。web build EXIT0 → restart。Playwright で パンくず表示・フォルダクリックで descend（パンくずに __verify_dir 出現・サブフォルダ表示）・パンくずルートジャンプ・戻るで前階層復帰・390px 横溢れ0・JSエラーなしを実画面確認。 |
 | 更新日 | 2026-06-14 |
