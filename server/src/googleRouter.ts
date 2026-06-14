@@ -892,6 +892,8 @@ interface NormalizedTask {
   status: string;
   notes?: string;
   listTitle: string;
+  /** タスクリストの並び順（tasklists.list の返却順＝ユーザのアプリ上の順）。グループ表示順に使う。 */
+  listOrder: number;
 }
 
 /**
@@ -930,7 +932,10 @@ async function handleTasksList(req: Request, res: Response): Promise<void> {
           accessToken,
         );
         // 各リストのタスクを取得（未完了・非表示除外・最大 100）。
-        for (const list of lists.items ?? []) {
+        // lists.items の順＝tasklists.list 返却順＝ユーザのアプリ上のリスト並び順。
+        const listItems = lists.items ?? [];
+        for (let listIdx = 0; listIdx < listItems.length; listIdx++) {
+          const list = listItems[listIdx];
           const listId = list.id;
           if (!listId) continue;
           const listTitle = list.title ?? '(無題リスト)';
@@ -954,6 +959,7 @@ async function handleTasksList(req: Request, res: Response): Promise<void> {
               status: t.status ?? 'needsAction',
               ...(t.notes ? { notes: t.notes } : {}),
               listTitle,
+              listOrder: listIdx,
             });
           }
         }

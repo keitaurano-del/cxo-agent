@@ -114,6 +114,7 @@ interface GoogleTask {
   due?: string; // YYYY-MM-DD（期日なしは未設定）
   status: string; // 'needsAction' | 'completed' 等（未完了のみ来る想定）
   listTitle: string;
+  listOrder?: number; // タスクリストの並び順（Google Tasks アプリ上の順）。グループ表示順に使う。
   notes?: string;
 }
 
@@ -1467,22 +1468,24 @@ function CalendarSection({
   );
 }
 
-// タスクを Google Tasks のリスト（listTitle）ごとにまとめる。リストの出現順を保ち、
-// 各リスト内は渡された並び（タイトル昇順）のまま。
+// タスクを Google Tasks のリスト（listTitle）ごとにまとめる。
+// グループ順は listOrder（= Google Tasks アプリ上のリスト並び順）昇順、各リスト内は渡された並び（タイトル昇順）。
 function groupTasksByList(tasks: GoogleTask[]): { listTitle: string; tasks: GoogleTask[] }[] {
-  const groups: { listTitle: string; tasks: GoogleTask[] }[] = [];
-  const index = new Map<string, GoogleTask[]>();
+  const index = new Map<string, { listTitle: string; order: number; tasks: GoogleTask[] }>();
   for (const t of tasks) {
     const key = t.listTitle || '(無題リスト)';
-    let arr = index.get(key);
-    if (!arr) {
-      arr = [];
-      index.set(key, arr);
-      groups.push({ listTitle: key, tasks: arr });
+    let g = index.get(key);
+    if (!g) {
+      g = { listTitle: key, order: t.listOrder ?? Number.MAX_SAFE_INTEGER, tasks: [] };
+      index.set(key, g);
     }
-    arr.push(t);
+    // 同一リスト名で listOrder がぶれた場合は小さい方を採用（複数アカウント混在時の保険）。
+    if (t.listOrder !== undefined && t.listOrder < g.order) g.order = t.listOrder;
+    g.tasks.push(t);
   }
-  return groups;
+  return Array.from(index.values())
+    .sort((a, b) => a.order - b.order || a.listTitle.localeCompare(b.listTitle))
+    .map(({ listTitle, tasks }) => ({ listTitle, tasks }));
 }
 
 // ─── Google タスク 1 行（期日あり・期日なし共通）──────────────────
