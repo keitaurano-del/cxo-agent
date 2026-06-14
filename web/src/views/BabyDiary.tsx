@@ -84,18 +84,15 @@ interface DriveFolder {
   name: string;
 }
 
-// Google カレンダーの予定。start/end は Google 形式（{date} か {dateTime}）。
-interface GoogleEventTime {
-  date?: string; // YYYY-MM-DD（終日）
-  dateTime?: string; // RFC3339
-}
+// Google カレンダーの予定。start/end はサーバ正規化済みの文字列。
+// 終日=YYYY-MM-DD、時刻あり=RFC3339(例 2026-06-02T09:00:00+09:00)。allDay で判別する。
 
 interface GoogleCalendarEvent {
   id: string;
   account: string;
   title: string;
-  start: GoogleEventTime;
-  end: GoogleEventTime;
+  start: string | null;
+  end: string | null;
   allDay: boolean;
   htmlLink?: string;
 }
@@ -206,30 +203,29 @@ function thumbUrl(id: string): string {
 }
 
 // ─── Google 連携ユーティリティ ──────────────────────────────
-/** Google イベント start の表示用ローカル YYYY-MM-DD（カレンダーセルへの割り当て用）。 */
-function eventDateIso(t: GoogleEventTime): string {
-  if (t.date) return t.date; // 終日
-  if (t.dateTime) {
-    const d = new Date(t.dateTime);
-    // JST 表示（ブラウザロケール依存を避け、ローカル日付の YYYY-MM-DD を組む）。
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  }
-  return '';
+/** Google イベント start の表示用ローカル YYYY-MM-DD（カレンダーセルへの割り当て用）。
+ *  start はサーバ正規化済み文字列（終日=YYYY-MM-DD、時刻あり=RFC3339）。 */
+function eventDateIso(start: string | null, allDay: boolean): string {
+  if (!start) return '';
+  // 終日 or 'T' を含まない（日付のみ）はそのまま先頭10文字。
+  if (allDay || !start.includes('T')) return start.slice(0, 10);
+  const d = new Date(start);
+  if (Number.isNaN(d.getTime())) return start.slice(0, 10);
+  // ローカル(JST)日付の YYYY-MM-DD を組む（ブラウザロケール依存を避ける）。
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /** 時刻なし終日 or 'HH:MM' の短い表示文字列。 */
 function eventTimeLabel(ev: GoogleCalendarEvent): string {
-  if (ev.allDay || ev.start.date) return '終日';
-  if (ev.start.dateTime) {
-    const d = new Date(ev.start.dateTime);
-    const hh = String(d.getHours()).padStart(2, '0');
-    const mm = String(d.getMinutes()).padStart(2, '0');
-    return `${hh}:${mm}`;
-  }
-  return '';
+  if (ev.allDay || !ev.start || !ev.start.includes('T')) return '終日';
+  const d = new Date(ev.start);
+  if (Number.isNaN(d.getTime())) return '終日';
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
 }
 
 /** 表示中の月の [timeMin, timeMax)（ローカル境界の ISO 文字列）。 */
@@ -434,7 +430,7 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
     const m = new Map<string, GoogleCalendarEvent[]>();
     for (const ev of gEvents) {
       if (!visibleAccounts.has(ev.account)) continue;
-      const iso = eventDateIso(ev.start);
+      const iso = eventDateIso(ev.start, ev.allDay);
       if (!iso) continue;
       const arr = m.get(iso) ?? [];
       arr.push(ev);
