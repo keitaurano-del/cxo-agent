@@ -2944,3 +2944,17 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 受け入れ条件（DoD） | 月/週/日 切替が動く、予定と期日付きタスクが各ビューに表示、build green＋実画面確認。 |
 | 依存 | web/src/App.tsx, 新規ビュー。関連 MC-245/MC-233。 |
 | 更新日 | 2026-06-15 |
+
+### MC-248 — MC-245 P2: オートプランナー（やることを自動で時間割化・提示）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-248 |
+| タイトル | やること(タスク/締切)を空き時間へ自動配置し「今週のプラン」を提示（AI見積り＋決定的配置） |
+| 優先度 | P2 |
+| ステータス | DONE（2026-06-15 Son 駆動・backend/ frontend subagent＋Son レビュー修正・自己検証→push）。設計どおり「AIで見積り・決定的ロジックで配置」。**バックエンド**(server/src/planner{Store,Estimate,Engine,Router}.ts＋index.ts/config.ts): `/api/planner/{config,task-meta,plan}`。plan は client から tasks/events を受け取り、見積り(手動>AI〔claude haiku・内容ハッシュキャッシュ〕>ヒューリスティック)→決定的配置(空き=稼働時間−blackout−予定±buffer、締切順守・重複ゼロ・dailyMax・daypart優先・過去に置かない)→blocks＋未配置(理由つき)。**フロント**(Schedule.tsx): 「プランを作成」→horizon分のevents/tasks取得→/plan→週/日グリッドに点線アクセントの専用レーンで重ね描画・月はチップ・未配置を明示・AI/heuristic種別/generatedAt/「Google未反映」注記・設定モーダルで稼働時間帯等を PUT /config。**Google書き戻しは未実装＝P3(MC-249予定)**。**Son レビューで重大バグ修正**: 見積りプロンプトの id に NUL区切りキーが混入→execFile 同期throw→未処理rejectionで**サーバ全体クラッシュ**していたのを、cacheKey の NUL-free 化＋プロンプトの NUL除去(/\\x00/)＋execFile try/catch＋/plan の .catch で解消。**検証:** server `tsc` 0／web `tsc -b`＋`vite build` 0→restart→health ok。**疎通(Bearer)**: GET /config=既定値、POST /plan=サンプルで HTTP200(予定10-11時を±buffer回避して09:00〜配置・estMinutesはAI由来・unplaced0・usedAi true・13.7s)・連投でサーバ存続。配信に Schedule-Cv0dZ1CI.js(「プランを作成」在)。**未実施:** ブラウザ無で実画面のプラン重ね描画/設定UIは目視未確認。AI見積りは claude CLI 依存(失敗時はheuristicで動作)。 |
+| 担当 | Son（駆動・検証・反映）／backend・frontend subagent |
+| 詳細 | 新規 server/src/planner*.ts（4本）＋ web/src/views/Schedule.tsx 拡張。データは data/planner-config.json・planner-task-meta.jsonl・planner-estimate-cache.jsonl（gitignore配下）。 |
+| 受け入れ条件（DoD） | プラン生成API稼働・空き時間に締切順守で配置・未配置明示・週/日に重ね表示・設定変更可・build green。（実画面目視は Keita 確認） |
+| 依存 | MC-245/MC-247。サーバ: claude CLI(NOTEBOOK_CLAUDE_BIN)。P3=Googleカレンダー書き戻し。 |
+| 更新日 | 2026-06-15 |
