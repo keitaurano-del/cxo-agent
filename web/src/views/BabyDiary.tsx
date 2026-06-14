@@ -66,6 +66,25 @@ interface GoogleStatus {
   accounts: GoogleAccount[];
 }
 
+// ─── Google Drive 自動取り込み API 型（サーバ契約に対応）─────────
+interface DriveAccountStatus {
+  account: string;
+  configured: boolean; // 監視フォルダ設定済み
+  folderName?: string;
+  autoImport: boolean;
+  lastImportAt?: string;
+  driveScopeGranted: boolean;
+}
+
+interface DriveStatusResponse {
+  accounts: DriveAccountStatus[];
+}
+
+interface DriveFolder {
+  id: string;
+  name: string;
+}
+
 // Google カレンダーの予定。start/end は Google 形式（{date} か {dateTime}）。
 interface GoogleEventTime {
   date?: string; // YYYY-MM-DD（終日）
@@ -453,6 +472,14 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
         pushToast={pushToast}
       />
 
+      {hasAccounts && (
+        <GoogleDriveImportPanel
+          accountColors={accountColors}
+          onImported={fetchData}
+          pushToast={pushToast}
+        />
+      )}
+
       <ResourceState loading={loading} error={error} hasData={!!data}>
         {/* PC: 2カラム（カレンダー｜詳細）、モバイル: 1列（カレンダー → 詳細）。 */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -669,6 +696,327 @@ function GoogleConnectPanel({
         </div>
       )}
     </section>
+  );
+}
+
+// ─── Google Drive 自動取り込みパネル ────────────────────────
+// 接続済みアカウントごとに「監視フォルダ選択／自動取り込みトグル／保存／今すぐ取り込み」を提供する。
+// Drive スコープ未許可のアカウントは再接続（再同意で Drive 許可）へ誘導する。
+function GoogleDriveImportPanel({
+  accountColors,
+  onImported,
+  pushToast,
+}: {
+  accountColors: Map<string, string>;
+  onImported: () => Promise<void> | void;
+  pushToast: (kind: ToastKind, text: string) => void;
+}) {
+  const [driveStatus, setDriveStatus] = useState<DriveStatusResponse | null>(null);
+
+  // マウント時に Drive status を取得（接続アカウントがある前提でレンダされる）。
+  const fetchDriveStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/google/drive/status');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = (await res.json()) as DriveStatusResponse;
+      setDriveStatus(json);
+    } catch {
+      // 取得失敗時は静かに非表示（既存機能を壊さない）。
+      setDriveStatus({ accounts: [] });
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchDriveStatus();
+  }, [fetchDriveStatus]);
+
+  // ── 自動取り込み（任意・軽量）──
+  // mount 時、autoImport=true かつ configured かつ granted のアカウントを
+  // バックグラウンドで1回だけ取り込み、成功したら baby-diary を再取得する。
+  // 多重実行防止に in-flight ガード（アカウント単位）を張る。
+  const autoRanRef = useRef(false);
+  const inFlightRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!driveStatus || autoRanRef.current) return;
+    const targets = driveStatus.accounts.filter(
+      (a) => a.autoImport && a.configured && a.driveScopeGranted,
+    );
+    if (targets.length === 0) return;
+    autoRanRef.current = true;
+    let imported = false;
+    (async () => {
+      for (const t of targets) {
+        if (inFlightRef.current.has(t.account)) continue;
+        inFlightRef.current.add(t.account);
+        try {
+          const res = await fetch('/api/google/drive/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account: t.account }),
+          });
+          if (res.ok) {
+            const j = (await res.json()) as { imported: number };
+            if ((j.imported ?? 0) > 0) imported = true;
+          }
+        } catch {
+          /* 自動取り込みは静かに失敗（手動取り込みで補える） */
+        } finally {
+          inFlightRef.current.delete(t.account);
+        }
+      }
+      if (imported) {
+        await onImported();
+        await fetchDriveStatus();
+      }
+    })();
+  }, [driveStatus, onImported, fetchDriveStatus]);
+
+  if (!driveStatus || driveStatus.accounts.length === 0) return null;
+
+  return (
+    <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-text-muted">
+          <UploadIcon width={16} height={16} />
+        </span>
+        <h2 className="text-base font-bold text-text">Google Drive 自動取り込み</h2>
+      </div>
+      <p className="mb-3 text-xs text-text-muted">
+        指定した Google Drive のフォルダに入れた写真・動画を、撮影日の記録として自動で取り込みます。
+      </p>
+
+      <ul className="flex flex-col gap-2">
+        {driveStatus.accounts.map((da) => (
+          <DriveAccountRow
+            key={da.account}
+            status={da}
+            color={accountColors.get(da.account) ?? 'var(--mc-accent)'}
+            onChanged={fetchDriveStatus}
+            onImported={onImported}
+            pushToast={pushToast}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// Drive 取り込み設定の1アカウント行。
+function DriveAccountRow({
+  status,
+  color,
+  onChanged,
+  onImported,
+  pushToast,
+}: {
+  status: DriveAccountStatus;
+  color: string;
+  onChanged: () => Promise<void> | void;
+  onImported: () => Promise<void> | void;
+  pushToast: (kind: ToastKind, text: string) => void;
+}) {
+  // driveScopeGranted がローカルで false に落ちる場合（import が 403 を返したとき）に
+  // 再接続誘導へ切り替えるためのローカルフラグ。
+  const [needsReconnect, setNeedsReconnect] = useState(false);
+  const granted = status.driveScopeGranted && !needsReconnect;
+
+  const [folders, setFolders] = useState<DriveFolder[] | null>(null);
+  const [foldersError, setFoldersError] = useState<string | null>(null);
+  const [folderId, setFolderId] = useState<string>('');
+  const [folderName, setFolderName] = useState<string>(status.folderName ?? '');
+  const [autoImport, setAutoImport] = useState<boolean>(status.autoImport);
+  const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+
+  // granted のときフォルダ一覧を取得し、現在の folderName を選択状態にする。
+  useEffect(() => {
+    if (!granted) return;
+    let cancelled = false;
+    (async () => {
+      setFoldersError(null);
+      try {
+        const res = await fetch(
+          `/api/google/drive/folders?account=${encodeURIComponent(status.account)}`,
+        );
+        if (res.status === 403) {
+          if (!cancelled) setNeedsReconnect(true);
+          return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as { folders: DriveFolder[] };
+        if (cancelled) return;
+        const list = json.folders ?? [];
+        setFolders(list);
+        // 現在設定中のフォルダ名に一致する id を初期選択にする。
+        const cur = list.find((f) => f.name === status.folderName);
+        if (cur) {
+          setFolderId(cur.id);
+          setFolderName(cur.name);
+        }
+      } catch (err) {
+        if (!cancelled) setFoldersError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [granted, status.account, status.folderName]);
+
+  const reconnect = () => {
+    // 再同意で Drive スコープを付与するため OAuth を開始（ブラウザ遷移）。
+    window.location.href = '/api/google/oauth/start';
+  };
+
+  const onSelectFolder = (id: string) => {
+    setFolderId(id);
+    const f = folders?.find((x) => x.id === id);
+    setFolderName(f?.name ?? '');
+  };
+
+  const save = async () => {
+    if (!folderId) {
+      pushToast('error', '監視するフォルダを選択してください');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/google/drive/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: status.account, folderId, folderName, autoImport }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      pushToast('success', `${status.account} の取り込み設定を保存しました`);
+      await onChanged();
+    } catch (err) {
+      pushToast('error', `設定の保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const importNow = async () => {
+    setImporting(true);
+    try {
+      const res = await fetch('/api/google/drive/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: status.account }),
+      });
+      if (res.status === 403) {
+        setNeedsReconnect(true);
+        pushToast('error', '写真の自動取り込みには Google の再接続（Driveへのアクセス許可）が必要です');
+        return;
+      }
+      if (res.status === 400) {
+        pushToast('error', '先に監視フォルダを選んで保存してください');
+        return;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const j = (await res.json()) as { imported: number; skipped: number };
+      pushToast('success', `取り込み ${j.imported ?? 0}件（スキップ ${j.skipped ?? 0}件）`);
+      await onImported();
+      await onChanged();
+    } catch (err) {
+      pushToast('error', `取り込みに失敗しました: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <li className="flex flex-col gap-2 rounded-md border border-border bg-bg px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <span
+          className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+          style={{ background: color }}
+          aria-hidden
+        />
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-text">{status.account}</span>
+        {status.lastImportAt && (
+          <span className="shrink-0 text-[10px] text-text-faint">
+            最終取り込み: {status.lastImportAt.slice(0, 16).replace('T', ' ')}
+          </span>
+        )}
+      </div>
+
+      {!granted ? (
+        // Drive スコープ未許可: 再接続へ誘導。
+        <div className="rounded-md border border-dashed border-border bg-surface px-2.5 py-2">
+          <p className="text-[11px] text-text-muted">
+            写真の自動取り込みには Google の再接続（Driveへのアクセス許可）が必要です。
+          </p>
+          <button
+            type="button"
+            onClick={reconnect}
+            className="mt-1.5 inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-2 hover:text-text"
+          >
+            <LinkIcon width={14} height={14} />
+            再接続して Drive を許可
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {/* 監視フォルダ選択 */}
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium text-text-muted">監視フォルダ</span>
+            {foldersError ? (
+              <span className="text-[11px] text-blocked">
+                フォルダ一覧の取得に失敗しました: {foldersError}
+              </span>
+            ) : folders === null ? (
+              <span className="text-[11px] text-text-faint">フォルダを読み込み中…</span>
+            ) : (
+              <select
+                value={folderId}
+                onChange={(e) => onSelectFolder(e.target.value)}
+                className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-xs text-text focus:border-accent focus:outline-none"
+              >
+                <option value="">フォルダを選択…</option>
+                {folders.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </label>
+
+          {/* 自動取り込みトグル */}
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={autoImport}
+              onChange={(e) => setAutoImport(e.target.checked)}
+              className="h-4 w-4 shrink-0 accent-accent"
+            />
+            <span className="text-[11px] font-medium text-text-muted">
+              新しい写真を自動で取り込む（ページを開いたときに確認します）
+            </span>
+          </label>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-bold text-bg transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? '保存中…' : '保存'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void importNow()}
+              disabled={importing}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
+            >
+              <UploadIcon width={14} height={14} />
+              {importing ? '取り込み中…' : '今すぐ取り込み'}
+            </button>
+          </div>
+        </div>
+      )}
+    </li>
   );
 }
 

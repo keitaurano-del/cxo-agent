@@ -951,12 +951,31 @@ export function googleConfigured(): boolean {
  *  - openid email                                              : userinfo で email を取るため
  *  - calendar.readonly / calendar.events                       : 予定の読み込み・終日イベント作成
  *  - photospicker.mediaitems.readonly                          : Photos Picker で選択メディアを読む
+ *  - drive.readonly                                            : Drive 指定フォルダの画像/動画を自動取り込み（MC-233 Drive 連携）
+ *
+ * 注意: 既存接続済みトークンは drive.readonly を含まない（再同意するまで Drive 系 API は未許可）。
+ * Drive スコープが付与されているかは token の scope 文字列に drive.readonly が含まれるかで判定する。
  */
 export const GOOGLE_OAUTH_SCOPE =
-  'openid email https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/photospicker.mediaitems.readonly';
+  'openid email https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/photospicker.mediaitems.readonly https://www.googleapis.com/auth/drive.readonly';
+
+/** Drive 読取スコープ（token の scope にこれが含まれるかで driveScopeGranted を判定）。 */
+export const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 
 /** Google トークン台帳（last-wins by email）。data/ 配下なので .gitignore 済み。 */
 export const GOOGLE_TOKENS_FILE = join(BABY_DIARY_DIR, 'google-tokens.jsonl');
+
+/**
+ * Drive 監視フォルダ設定の台帳（last-wins by account）。data/ 配下なので .gitignore 済み。
+ * 1 行 = { account, folderId, folderName, autoImport, lastImportAt? }。
+ */
+export const GOOGLE_DRIVE_CONFIG_FILE = join(BABY_DIARY_DIR, 'google-drive-config.jsonl');
+
+/**
+ * Drive 取り込み済みファイル ID の台帳（append・重複取り込み防止用の集合）。data/ 配下なので .gitignore 済み。
+ * 1 行 = { account, driveFileId, mediaId, importedAt }。
+ */
+export const GOOGLE_DRIVE_IMPORTED_FILE = join(BABY_DIARY_DIR, 'google-drive-imported.jsonl');
 
 /** Google API 呼び出しの HTTP タイムアウト（ミリ秒）。ネットワーク詰まりで Apollo を固めない。 */
 export const GOOGLE_HTTP_TIMEOUT_MS = envNum('GOOGLE_HTTP_TIMEOUT_MS', 15000);

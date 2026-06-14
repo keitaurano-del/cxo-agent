@@ -33,6 +33,7 @@ import {
   GOOGLE_OAUTH_CLIENT_SECRET,
   GOOGLE_OAUTH_REDIRECT_URI,
   GOOGLE_OAUTH_SCOPE,
+  GOOGLE_DRIVE_SCOPE,
   GOOGLE_HTTP_TIMEOUT_MS,
   BABY_DIARY_MEDIA_DIR,
 } from './config.js';
@@ -41,10 +42,18 @@ import {
   saveTokens,
   removeAccount,
   getValidAccessToken,
+  getTokens,
   type GoogleTokenRecord,
 } from './lib/googleTokenStore.js';
 import { sanitizeFilename } from './lib/inboxPath.js';
 import { appendMedia, type MediaMeta } from './lib/babyDiaryStore.js';
+import {
+  listConfigs as listDriveConfigs,
+  getConfig as getDriveConfig,
+  setConfig as setDriveConfig,
+  isImported as isDriveImported,
+  markImported as markDriveImported,
+} from './lib/googleDriveStore.js';
 
 // ─── 共通ヘルパ ───────────────────────────────────────────
 
@@ -569,6 +578,273 @@ async function handlePickerImport(req: Request, res: Response): Promise<void> {
   }
 }
 
+// ─── 8. Google Drive 自動取り込み（MC-233 Drive 連携）──────────────
+//
+// Google Photos の自動読み取りは 2025 年に廃止されたため、Drive の指定フォルダを監視して
+// その中の画像/動画を「撮影日（無ければ作成日）」ごとに成長日記メディアへ自動取り込みする。
+// 既存接続済みトークンは drive.readonly を含まない（再同意するまで Drive 系 API は未許可）ため、
+// status は driveScopeGranted:false を返し、folders/import は drive-not-authorized を返して優しく扱う。
+
+/** token の scope に drive.readonly が含まれるか（= 再同意で Drive 読取が付与済みか）。 */
+function driveScopeGranted(account: string): boolean {
+  const rec = getTokens(account);
+  if (!rec) return false;
+  // scope はスペース区切り。drive.readonly の完全一致トークンを探す。
+  return rec.scope.split(/\s+/).includes(GOOGLE_DRIVE_SCOPE);
+}
+
+// ─── 8-1. GET /drive/status ──────────────────────────────
+// 接続アカウントごとに設定状況と driveScopeGranted を返す。
+
+function handleDriveStatus(_req: Request, res: Response): void {
+  if (!requireConfigured(res)) return;
+  const configs = new Map(listDriveConfigs().map((c) => [c.account, c]));
+  const accounts = listAccounts().map((acc) => {
+    const cfg = configs.get(acc.email);
+    return {
+      account: acc.email,
+      configured: Boolean(cfg),
+      ...(cfg?.folderName !== undefined ? { folderName: cfg.folderName } : {}),
+      autoImport: cfg?.autoImport ?? false,
+      ...(cfg?.lastImportAt !== undefined ? { lastImportAt: cfg.lastImportAt } : {}),
+      driveScopeGranted: driveScopeGranted(acc.email),
+    };
+  });
+  res.json({ accounts });
+}
+
+// ─── 8-2. GET /drive/folders?account= ────────────────────
+// 指定アカウントの Drive フォルダ一覧（name 順・最大 100）。drive 未許可なら 403。
+
+interface DriveFile {
+  id?: string;
+  name?: string;
+  mimeType?: string;
+  createdTime?: string;
+  imageMediaMetadata?: { time?: string };
+  videoMediaMetadata?: Record<string, unknown>;
+}
+interface DriveFileListResponse {
+  files?: DriveFile[];
+  nextPageToken?: string;
+}
+
+async function handleDriveFolders(req: Request, res: Response): Promise<void> {
+  if (!requireConfigured(res)) return;
+  const account = typeof req.query.account === 'string' ? req.query.account : '';
+  if (!account) {
+    res.status(400).json({ error: 'account is required' });
+    return;
+  }
+  if (!driveScopeGranted(account)) {
+    res.status(403).json({ error: 'drive-not-authorized' });
+    return;
+  }
+  try {
+    const accessToken = await getValidAccessToken(account);
+    const params = new URLSearchParams({
+      q: "mimeType='application/vnd.google-apps.folder' and trashed=false",
+      fields: 'files(id,name)',
+      pageSize: '100',
+      orderBy: 'name',
+    });
+    const data = await googleGet<DriveFileListResponse>(
+      `https://www.googleapis.com/drive/v3/files?${params.toString()}`,
+      accessToken,
+    );
+    const folders = (data.files ?? [])
+      .filter((f) => f.id && f.name)
+      .map((f) => ({ id: f.id as string, name: f.name as string }));
+    res.json({ folders });
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+// ─── 8-3. POST /drive/config ─────────────────────────────
+// 監視フォルダ設定を upsert する。
+
+function handleDriveConfig(req: Request, res: Response): void {
+  if (!requireConfigured(res)) return;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const account = typeof body.account === 'string' ? body.account : '';
+  const folderId = typeof body.folderId === 'string' ? body.folderId : '';
+  const folderName = typeof body.folderName === 'string' ? body.folderName : '';
+  const autoImport = typeof body.autoImport === 'boolean' ? body.autoImport : undefined;
+
+  if (!account) {
+    res.status(400).json({ error: 'account is required' });
+    return;
+  }
+  if (!folderId) {
+    res.status(400).json({ error: 'folderId is required' });
+    return;
+  }
+  if (!folderName) {
+    res.status(400).json({ error: 'folderName is required' });
+    return;
+  }
+  setDriveConfig({ account, folderId, folderName, autoImport });
+  res.json({ ok: true });
+}
+
+// ─── 8-4. POST /drive/import ─────────────────────────────
+// 監視フォルダ内の画像/動画を「撮影日（無ければ作成日）」ごとに取り込む。
+
+/**
+ * Drive ファイルの撮影日を YYYY-MM-DD（JST）で決める。
+ *  - imageMediaMetadata.time（'YYYY:MM:DD HH:MM:SS' = 撮影時刻・タイムゾーン無し）優先。
+ *    EXIF の撮影時刻はカメラのローカル時刻として「そのままの日付」を採用する（JST 端末想定）。
+ *  - 無ければ createdTime（ISO8601・UTC）を JST（+9h）に換算した日付。
+ *  - いずれも取れなければ undefined。
+ */
+function decideShotDate(file: DriveFile): string | undefined {
+  const exif = file.imageMediaMetadata?.time;
+  if (typeof exif === 'string') {
+    // 'YYYY:MM:DD HH:MM:SS' の日付部のみ採用（ローカル撮影時刻＝端末の日付をそのまま使う）。
+    const m = exif.match(/^(\d{4}):(\d{2}):(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  }
+  if (typeof file.createdTime === 'string') {
+    const ms = Date.parse(file.createdTime);
+    if (Number.isFinite(ms)) {
+      // UTC → JST（+9h）に換算してから日付部を取る。
+      const jst = new Date(ms + 9 * 60 * 60 * 1000);
+      return jst.toISOString().slice(0, 10);
+    }
+  }
+  return undefined;
+}
+
+async function handleDriveImport(req: Request, res: Response): Promise<void> {
+  if (!requireConfigured(res)) return;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const account = typeof body.account === 'string' ? body.account : '';
+  if (!account) {
+    res.status(400).json({ error: 'account is required' });
+    return;
+  }
+  if (!driveScopeGranted(account)) {
+    res.status(403).json({ error: 'drive-not-authorized' });
+    return;
+  }
+  const cfg = getDriveConfig(account);
+  if (!cfg) {
+    res.status(400).json({ error: 'folder-not-configured' });
+    return;
+  }
+
+  try {
+    const accessToken = await getValidAccessToken(account);
+
+    // 監視フォルダ内の画像/動画を列挙（ページネーション対応・最大 ~500）。
+    const escapedFolderId = cfg.folderId.replace(/'/g, "\\'");
+    const files: DriveFile[] = [];
+    let pageToken: string | undefined;
+    const MAX_FILES = 500;
+    do {
+      const params = new URLSearchParams({
+        q: `'${escapedFolderId}' in parents and trashed=false and (mimeType contains 'image/' or mimeType contains 'video/')`,
+        fields:
+          'nextPageToken,files(id,name,mimeType,createdTime,imageMediaMetadata(time),videoMediaMetadata)',
+        pageSize: '100',
+      });
+      if (pageToken) params.set('pageToken', pageToken);
+      const page = await googleGet<DriveFileListResponse>(
+        `https://www.googleapis.com/drive/v3/files?${params.toString()}`,
+        accessToken,
+      );
+      for (const f of page.files ?? []) {
+        files.push(f);
+        if (files.length >= MAX_FILES) break;
+      }
+      pageToken = files.length >= MAX_FILES ? undefined : page.nextPageToken;
+    } while (pageToken);
+
+    mkdirSync(BABY_DIARY_MEDIA_DIR, { recursive: true });
+
+    let imported = 0;
+    let skipped = 0;
+    const items: { date: string; originalName: string }[] = [];
+
+    for (const file of files) {
+      const driveFileId = file.id;
+      if (!driveFileId) {
+        skipped++;
+        continue;
+      }
+      // 重複取り込み防止: 取り込み済みは skip。
+      if (isDriveImported(account, driveFileId)) {
+        skipped++;
+        continue;
+      }
+      try {
+        const mime = file.mimeType || 'application/octet-stream';
+        const kind = kindFromMime(mime);
+        const date = decideShotDate(file);
+        if (!date) {
+          console.warn(`[google drive import] skip (no date): ${file.name ?? driveFileId}`);
+          skipped++;
+          continue;
+        }
+
+        // バイト取得（1 ファイルずつ・Bearer 付き alt=media）。
+        const dl = await fetchWithTimeout(
+          `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media`,
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+        );
+        if (!dl.ok) {
+          console.warn(
+            `[google drive import] skip (HTTP ${dl.status}): ${file.name ?? driveFileId}`,
+          );
+          skipped++;
+          continue;
+        }
+        const bytes = Buffer.from(await dl.arrayBuffer());
+
+        const id = randomUUID();
+        const originalName = file.name || `drive${extFromMime(mime)}`;
+        const safe = sanitizeFilename(originalName);
+        const filename = `${id}-${safe}`;
+        writeFileSync(join(BABY_DIARY_MEDIA_DIR, filename), bytes);
+
+        const meta = appendMedia({
+          id,
+          date,
+          filename,
+          originalName,
+          mime,
+          kind,
+          size: bytes.length,
+          createdAt: new Date().toISOString(),
+        });
+        markDriveImported(account, driveFileId, meta.id);
+        imported++;
+        items.push({ date, originalName });
+      } catch (fileErr) {
+        console.warn(
+          `[google drive import] skip ${file.id}:`,
+          fileErr instanceof Error ? fileErr.message : String(fileErr),
+        );
+        skipped++;
+      }
+    }
+
+    // lastImportAt 更新（既存設定を維持しつつ最終取り込み時刻のみ更新）。
+    setDriveConfig({
+      account,
+      folderId: cfg.folderId,
+      folderName: cfg.folderName,
+      autoImport: cfg.autoImport,
+      lastImportAt: new Date().toISOString(),
+    });
+
+    res.json({ imported, skipped, items });
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
 // ─── Router 組み立て ─────────────────────────────────────
 
 /** /api/google 配下のルータを返す。index.ts で auth ミドルウェア配下に mount する。 */
@@ -586,6 +862,11 @@ export function googleRouter(): Router {
   router.post('/photos/picker/session', (req, res) => void handlePickerCreate(req, res));
   router.get('/photos/picker/session/:sessionId', (req, res) => void handlePickerPoll(req, res));
   router.post('/photos/picker/import', (req, res) => void handlePickerImport(req, res));
+
+  router.get('/drive/status', handleDriveStatus);
+  router.get('/drive/folders', (req, res) => void handleDriveFolders(req, res));
+  router.post('/drive/config', handleDriveConfig);
+  router.post('/drive/import', (req, res) => void handleDriveImport(req, res));
 
   return router;
 }
