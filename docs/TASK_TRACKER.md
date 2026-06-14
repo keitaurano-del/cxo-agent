@@ -2578,7 +2578,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-225 |
 | タイトル | Ops 端末の Masayoshi が正規 agent:main:main でなく一時 tui-<乱数> セッションで起動する |
 | 優先度 | P2 |
-| ステータス | スクリプト修正済（再起動待ち）。2026-06-14 Son: `/home/dev/cron-scripts/term4-openclaw.sh` の起動行に `--session agent:main:main` を追加（term5(Son)が `--session agent:son:main` を明示しているのと同流儀）。**次回端末再起動で有効化**。現行稼働中の tui セッション(agent:main:tui-5f90…b515aa, 626k/60%)は温存のため未再起動。 |
+| ステータス | DONE（2026-06-14 Son）。`/home/dev/cron-scripts/term4-openclaw.sh` の起動行に `--session agent:main:main` を追加（term5(Son)が `--session agent:son:main` を明示しているのと同流儀）。Keita 承認のうえ Ops 端末のみ再起動（`tmux kill-session -t '=openclaw'` で exact-match 指定し Son 端末を巻き込まず → ttyd:7684 が修正版スクリプトを再実行）。**実機確認: フッタが `agent main (Masayoshi) | session main`（224k/1.0m=正規 agent:main:main）に切替**。Son 端末(pid 3139)無傷。以後は起動毎に同一 main へ着地。旧 tui セッション(tui-5f90…b515aa)の履歴は session store に残存。 |
 | 担当 | Son |
 | 詳細 | Keita「Opsターミナルが挙動おかしい」。【調査】Ops=Apollo端末4→ttyd:7684→tmux `openclaw`→Masayoshi。プロセス生存・`idle/local ready`・ゲートウェイログにエラー無・プロキシ対応(/terminal/4→7684)正常＝表示/応答は正常。【根本原因】`term4-openclaw.sh` が `openclaw chat` を **--session 指定なし** で起動 → 起動毎に一時 `agent:main:tui-<uuid>` を生成し、正規 `agent:main:main`(system) と履歴/文脈が分離（sessions list で確認: tui-5f90…b515aa が稼働・main は6日前224k）。Son端末(term5)は `--session agent:son:main` を明示しているため安定。 |
 | 受け入れ条件（DoD） | 端末4再起動後、フッタのセッション表示が `agent main (Masayoshi) | session main` になり、以後起動毎に同一セッションへ着地すること。 |
