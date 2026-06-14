@@ -649,3 +649,12 @@ export function InfoIcon(props: IconProps) {
     </svg>
   );
 }
+
+// MC-238: スター（お気に入り）。filled 表示は呼び出し側で fill="currentColor" を渡す。
+export function StarIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 17.3l-5.4 3.1 1.4-6.1-4.7-4.1 6.2-.5L12 4l2.5 5.7 6.2.5-4.7 4.1 1.4 6.1z" />
+    </svg>
+  );
+}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useLiveResource } from '../lib/useLiveData';
 import { MinutesPane } from './Notebooks';
 
@@ -7,6 +7,9 @@ import type {
   DeliverableFile,
   DeliverableKind,
   DeliverablesResponse,
+  DeliverableMeta,
+  DeliverableColor,
+  DeliverableMetaResponse,
   TrashEntry,
   TrashResponse,
 } from '../lib/types';
@@ -41,6 +44,10 @@ import {
   ChevronLeftIcon,
   CopyIcon,
   InfoIcon,
+  StarIcon,
+  TagIcon,
+  LinkIcon,
+  SearchIcon,
 } from '../components/icons';
 import { relativeTime, absoluteTime } from '../lib/time';
 import { highlightCode, isHighlightable } from '../lib/codeHighlight';
@@ -150,6 +157,95 @@ function sortFiles(files: DeliverableFile[], pref: SortPref): DeliverableFile[] 
   return out;
 }
 
+// ─── 検索フィルタ（MC-237）──────────────────────────────────
+// ファイル名インクリメンタル検索＋フィルタチップ（種類/更新日レンジ/タグ）＋スコープ切替。
+
+type DateRange = 'all' | '7d' | '30d' | '90d';
+type SearchScope = 'current' | 'all';
+
+const DATE_RANGE_LABELS: Record<DateRange, string> = {
+  all: '期間すべて',
+  '7d': '7日以内',
+  '30d': '30日以内',
+  '90d': '90日以内',
+};
+
+const DATE_RANGE_DAYS: Record<Exclude<DateRange, 'all'>, number> = {
+  '7d': 7,
+  '30d': 30,
+  '90d': 90,
+};
+
+/** file の更新日が dateRange 内か（all は常に true）。 */
+function matchesDateRange(file: DeliverableFile, range: DateRange): boolean {
+  if (range === 'all') return true;
+  const days = DATE_RANGE_DAYS[range];
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  return Date.parse(file.mtime) >= cutoff;
+}
+
+/** file が scope（現在フォルダ配下のみ / 全体）に含まれるか。 */
+function matchesScope(file: DeliverableFile, scope: SearchScope, currentDir: string): boolean {
+  if (scope === 'all' || currentDir === '') return true;
+  return file.relpath === currentDir || file.relpath.startsWith(currentDir + '/');
+}
+
+// ─── 属性列テーブル + 列幅永続化 + ギャラリー（MC-239）──────────────────
+
+type ColumnKey = 'mtime' | 'created' | 'size' | 'kind';
+
+// 列幅（px）の既定と localStorage キー。name 列は flex（残り幅）なので固定列のみ管理する。
+const COL_WIDTH_STORAGE_KEY = 'apollo.deliverables.colWidths';
+const DEFAULT_COL_WIDTHS: Record<ColumnKey, number> = {
+  mtime: 130,
+  created: 130,
+  size: 90,
+  kind: 110,
+};
+const COL_MIN_WIDTH = 60;
+const COL_MAX_WIDTH = 360;
+
+const COLUMN_LABELS: Record<ColumnKey, string> = {
+  mtime: '更新日',
+  created: '作成日',
+  size: 'サイズ',
+  kind: '種類',
+};
+
+// ColumnKey は SortKey（name/mtime/created/size）と概ね一致するが、kind はソート不可（種類順は無意味）。
+const COLUMN_SORT_KEY: Record<ColumnKey, SortKey | null> = {
+  mtime: 'mtime',
+  created: 'created',
+  size: 'size',
+  kind: null,
+};
+
+function loadColWidths(): Record<ColumnKey, number> {
+  try {
+    const raw = localStorage.getItem(COL_WIDTH_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_COL_WIDTHS };
+    const parsed = JSON.parse(raw) as Partial<Record<ColumnKey, number>>;
+    const out = { ...DEFAULT_COL_WIDTHS };
+    for (const k of Object.keys(DEFAULT_COL_WIDTHS) as ColumnKey[]) {
+      const v = parsed[k];
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        out[k] = Math.min(COL_MAX_WIDTH, Math.max(COL_MIN_WIDTH, Math.round(v)));
+      }
+    }
+    return out;
+  } catch {
+    return { ...DEFAULT_COL_WIDTHS };
+  }
+}
+
+function saveColWidths(w: Record<ColumnKey, number>): void {
+  try {
+    localStorage.setItem(COL_WIDTH_STORAGE_KEY, JSON.stringify(w));
+  } catch {
+    /* 永続化不可は無視。 */
+  }
+}
+
 // ─── 移動（MC-228）────────────────────────────────────────
 // POST /api/deliverables/move でファイル/フォルダを別フォルダへ移動する。
 // D&D（フォルダにドロップ）と「移動先を選ぶ」メニューの両方から呼ぶ共通関数。
@@ -208,6 +304,72 @@ async function copyDeliverable(
 function parentDirOf(relpath: string): string {
   const idx = relpath.lastIndexOf('/');
   return idx >= 0 ? relpath.slice(0, idx) : '';
+}
+
+// ─── メタデータ（スター/タグ/色ラベル）（MC-238）──────────────────
+// サイドカー store（GET/PUT /api/deliverables/meta）の読み書きと、UI の色定義。
+
+const EMPTY_META: DeliverableMeta = { starred: false, tags: [], color: null };
+
+/** 色ラベルの表示用パレット（CSS 値）。UI chrome は CSS変数優先だが、ラベル色は固定色で識別性を保つ。 */
+const COLOR_OPTIONS: Array<{ value: DeliverableColor; label: string; css: string }> = [
+  { value: 'red', label: '赤', css: '#ef4444' },
+  { value: 'orange', label: 'オレンジ', css: '#f97316' },
+  { value: 'yellow', label: '黄', css: '#eab308' },
+  { value: 'green', label: '緑', css: '#22c55e' },
+  { value: 'blue', label: '青', css: '#3b82f6' },
+  { value: 'purple', label: '紫', css: '#a855f7' },
+  { value: 'gray', label: 'グレー', css: '#9ca3af' },
+];
+
+function colorCss(color: DeliverableColor | null): string | null {
+  if (!color) return null;
+  return COLOR_OPTIONS.find((c) => c.value === color)?.css ?? null;
+}
+
+// ─── パス取得＋コピー（MC-240）──────────────────────────────────
+// クリップボードへコピーする（navigator.clipboard、不可環境は execCommand フォールバック）。
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* フォールバックへ。 */
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/** メタ設定 API を叩く。成功で確定メタ、失敗で null。 */
+async function setDeliverableMeta(
+  relpath: string,
+  meta: DeliverableMeta,
+): Promise<DeliverableMeta | null> {
+  try {
+    const res = await fetch('/api/deliverables/meta', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: relpath, ...meta }),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { meta?: DeliverableMeta };
+    return body.meta ?? meta;
+  } catch {
+    return null;
+  }
 }
 
 // ─── 最近使った項目（MC-232）──────────────────────────────────
@@ -280,6 +442,10 @@ interface ItemInteractions {
   setDraggingPath: (p: string | null) => void;
   // MC-235: コピー/複製ダイアログを開く。
   onCopyRequest: (f: DeliverableFile) => void;
+  // MC-238: relpath → メタ（スター/タグ/色）。バッジ表示・スター即トグルに使う。
+  metaByPath: Map<string, DeliverableMeta>;
+  // MC-238: メタを設定する（楽観更新→API→失敗時 refetch は親が担う）。
+  onSetMeta: (relpath: string, meta: DeliverableMeta) => void;
 }
 
 /** リネーム API を叩く。成功で { ok:true }、失敗で { ok:false, error } を返す。 */
@@ -616,6 +782,249 @@ function isPreviewable(file: DeliverableFile): boolean {
   return isImage || isPdf || isText || isOfficePreviewable(file);
 }
 
+// ─── メタバッジ / スタートグル / メタエディタ（MC-238）──────────────────
+
+// MC-238: 色ドット＋スター＋タグを一覧（カード/行）にコンパクト表示するバッジ群。
+function MetaBadges({ meta, compact }: { meta: DeliverableMeta | undefined; compact?: boolean }) {
+  if (!meta || (!meta.starred && meta.tags.length === 0 && !meta.color)) return null;
+  const css = colorCss(meta.color);
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1">
+      {css && (
+        <span
+          className="inline-block h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: css }}
+          aria-label={`色ラベル: ${meta.color}`}
+          title={`色ラベル: ${meta.color}`}
+        />
+      )}
+      {meta.starred && (
+        <span className="shrink-0" style={{ color: '#eab308' }} aria-label="お気に入り" title="お気に入り">
+          <StarIcon width={12} height={12} fill="currentColor" stroke="currentColor" />
+        </span>
+      )}
+      {meta.tags.slice(0, compact ? 1 : 3).map((t) => (
+        <span
+          key={t}
+          className="inline-flex max-w-[7rem] shrink-0 items-center gap-0.5 truncate rounded-full bg-surface-3 px-1.5 py-0.5 text-[10px] text-text-muted"
+          title={t}
+        >
+          <TagIcon width={9} height={9} />
+          <span className="truncate">{t}</span>
+        </span>
+      ))}
+      {meta.tags.length > (compact ? 1 : 3) && (
+        <span className="shrink-0 text-[10px] text-text-faint">+{meta.tags.length - (compact ? 1 : 3)}</span>
+      )}
+    </span>
+  );
+}
+
+// MC-238: スター即トグル（カード/行のアクション行に置く）。楽観更新は親 onSetMeta が担う。
+function StarToggle({
+  relpath, meta, onSetMeta, size = 16,
+}: {
+  relpath: string;
+  meta: DeliverableMeta | undefined;
+  onSetMeta: (relpath: string, meta: DeliverableMeta) => void;
+  size?: number;
+}) {
+  const m = meta ?? EMPTY_META;
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onSetMeta(relpath, { ...m, starred: !m.starred }); }}
+      className="shrink-0 rounded p-1 transition-colors hover:bg-surface-2"
+      style={{ color: m.starred ? '#eab308' : undefined }}
+      aria-label={m.starred ? 'お気に入りを解除' : 'お気に入りに追加'}
+      aria-pressed={m.starred}
+      title={m.starred ? 'お気に入りを解除' : 'お気に入りに追加'}
+    >
+      <StarIcon
+        width={size}
+        height={size}
+        fill={m.starred ? 'currentColor' : 'none'}
+        className={m.starred ? '' : 'text-text-faint hover:text-text'}
+      />
+    </button>
+  );
+}
+
+// MC-238: メタ編集（右ペイン詳細用）。スター/色ラベル/タグ（自動補完つき入力）。
+function MetaEditor({
+  relpath, meta, allTags, onSetMeta,
+}: {
+  relpath: string;
+  meta: DeliverableMeta | undefined;
+  allTags: string[];
+  onSetMeta: (relpath: string, meta: DeliverableMeta) => void;
+}) {
+  const m = meta ?? EMPTY_META;
+  const [tagInput, setTagInput] = useState('');
+
+  const addTag = (raw: string) => {
+    const t = raw.trim();
+    if (!t || m.tags.includes(t)) { setTagInput(''); return; }
+    onSetMeta(relpath, { ...m, tags: [...m.tags, t] });
+    setTagInput('');
+  };
+  const removeTag = (t: string) => {
+    onSetMeta(relpath, { ...m, tags: m.tags.filter((x) => x !== t) });
+  };
+  const toggleStar = () => onSetMeta(relpath, { ...m, starred: !m.starred });
+  const setColor = (c: DeliverableColor | null) =>
+    onSetMeta(relpath, { ...m, color: m.color === c ? null : c });
+
+  // 自動補完候補: 既存タグのうち未付与＆入力に前方一致するもの。
+  const suggestions = allTags
+    .filter((t) => !m.tags.includes(t) && (tagInput === '' || t.toLowerCase().includes(tagInput.toLowerCase())))
+    .slice(0, 6);
+
+  return (
+    <div className="space-y-2.5 rounded-lg border border-border bg-surface-2 p-2.5">
+      {/* スター + 色ラベル */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={toggleStar}
+          className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-1 text-xs transition-colors hover:bg-surface-3"
+          style={{ color: m.starred ? '#eab308' : undefined }}
+          aria-pressed={m.starred}
+        >
+          <StarIcon width={13} height={13} fill={m.starred ? 'currentColor' : 'none'} />
+          {m.starred ? 'お気に入り' : 'お気に入りに追加'}
+        </button>
+        <div className="ml-auto flex items-center gap-1" role="group" aria-label="色ラベル">
+          {COLOR_OPTIONS.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setColor(c.value)}
+              className={`h-4 w-4 rounded-full transition-transform hover:scale-110 ${
+                m.color === c.value ? 'ring-2 ring-offset-1 ring-offset-surface-2' : ''
+              }`}
+              style={{ backgroundColor: c.css, ['--tw-ring-color' as string]: c.css }}
+              aria-label={`色ラベル: ${c.label}`}
+              aria-pressed={m.color === c.value}
+              title={c.label}
+            />
+          ))}
+          {m.color && (
+            <button
+              type="button"
+              onClick={() => setColor(null)}
+              className="rounded p-0.5 text-text-faint hover:text-text"
+              aria-label="色ラベルを外す"
+              title="色ラベルを外す"
+            >
+              <CloseIcon width={12} height={12} />
+            </button>
+          )}
+        </div>
+      </div>
+      {/* タグ */}
+      <div>
+        <div className="mb-1 flex flex-wrap gap-1">
+          {m.tags.map((t) => (
+            <span
+              key={t}
+              className="inline-flex items-center gap-1 rounded-full bg-surface-3 px-2 py-0.5 text-[11px] text-text-muted"
+            >
+              <TagIcon width={10} height={10} />
+              {t}
+              <button
+                type="button"
+                onClick={() => removeTag(t)}
+                className="text-text-faint hover:text-text"
+                aria-label={`タグ ${t} を削除`}
+              >
+                <CloseIcon width={10} height={10} />
+              </button>
+            </span>
+          ))}
+        </div>
+        <input
+          type="text"
+          value={tagInput}
+          onChange={(e) => setTagInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput); }
+          }}
+          placeholder="タグを追加（Enter で確定）"
+          list={`tag-suggest-${relpath}`}
+          className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
+        />
+        {suggestions.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {suggestions.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => addTag(t)}
+                className="inline-flex items-center gap-0.5 rounded-full border border-border bg-surface px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:bg-surface-3 hover:text-text"
+              >
+                <PlusIcon width={9} height={9} />
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── パス表示＋コピー（MC-240）────────────────────────────────
+// 相対パス（relpath、deliverables ルート起点）を表示し、ボタンでクリップボードへコピーする。
+function PathRow({ relpath }: { relpath: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    const ok = await copyToClipboard(relpath);
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    }
+  };
+  return (
+    <div className="rounded-lg border border-border bg-surface-2 p-2">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-[11px] text-text-faint">パス（相対）</span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[10px] text-text-muted transition-colors hover:bg-surface-3 hover:text-text"
+          aria-label="パスをコピー"
+        >
+          {copied ? <CheckIcon width={11} height={11} /> : <CopyIcon width={11} height={11} />}
+          {copied ? 'コピーしました' : 'パスをコピー'}
+        </button>
+      </div>
+      <code className="block break-all font-mono text-[11px] text-text-muted">{relpath}</code>
+    </div>
+  );
+}
+
+// MC-240: 一覧の各行/カードから使う「パスをコピー」ボタン（アイコンのみ・トースト無し）。
+function CopyPathButton({ relpath, size = 16 }: { relpath: string; size?: number }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async (e) => {
+        e.stopPropagation();
+        const ok = await copyToClipboard(relpath);
+        if (ok) { setCopied(true); window.setTimeout(() => setCopied(false), 1200); }
+      }}
+      className="shrink-0 rounded p-1 text-text-faint transition-colors hover:bg-surface-2 hover:text-text"
+      aria-label="パスをコピー"
+      title={copied ? 'コピーしました' : `パスをコピー: ${relpath}`}
+      style={{ color: copied ? '#22c55e' : undefined }}
+    >
+      {copied ? <CheckIcon width={size} height={size} /> : <LinkIcon width={size} height={size} />}
+    </button>
+  );
+}
+
 // MC-236 / MC-241: 選択中ファイルのメタ情報パネル（右ペイン詳細・モーダル詳細で共用）。
 // 更新日・作成日（MC-241）は区別して表示し、ツールチップで絶対日時を出す。
 function FileMetaPanel({ file }: { file: DeliverableFile }) {
@@ -731,175 +1140,6 @@ function FileViewer({
       <div className="flex-1 overflow-auto">
         <FileViewerBody file={file} />
       </div>
-    </div>
-  );
-}
-
-// 削除（MC-125 → MC-230 ゴミ箱方式）。ゴミ箱ボタンで即退避し、ページ側で Undo トーストを出す。
-// リネーム（MC-227）も同カードに内蔵。削除されたカードは refetch で一覧から消える。
-function FileCard({
-  file, onDelete, onView, onRenamed, onMoveRequest, interactions,
-}: {
-  file: DeliverableFile;
-  onDelete: (f: DeliverableFile) => void;
-  onView: (f: DeliverableFile) => void;
-  onRenamed: () => void;
-  onMoveRequest: (f: DeliverableFile) => void;
-  interactions: ItemInteractions;
-}) {
-  const isImage =
-    file.kind === 'image' || IMG_EXTS.has(file.ext.toLowerCase());
-  const isPdf = file.kind === 'pdf';
-  const officePreviewable = isOfficePreviewable(file);
-  const isText =
-    TEXT_KINDS.has(file.kind) || file.ext.toLowerCase() === CSV_EXT || isHighlightable(file.ext);
-  const viewable = isImage || isPdf || officePreviewable || isText;
-  const downloadHref = `/api/deliverables/file?path=${encodeURIComponent(file.relpath)}`;
-  const selected = interactions.selectedPaths.has(file.relpath);
-
-  const [rename, setRename] = useState<RenameState>({ editing: false, value: '', saving: false, error: null });
-
-  const commitRename = useCallback(async (value: string) => {
-    const next = value.trim();
-    if (!next || next === file.name) {
-      setRename({ editing: false, value: '', saving: false, error: null });
-      return;
-    }
-    setRename((r) => ({ ...r, saving: true, error: null }));
-    const result = await renameDeliverable(file.relpath, next);
-    if (result.ok) {
-      setRename({ editing: false, value: '', saving: false, error: null });
-      onRenamed();
-    } else {
-      setRename((r) => ({ ...r, saving: false, error: result.error }));
-    }
-  }, [file.relpath, file.name, onRenamed]);
-
-  return (
-    <div
-      draggable={!rename.editing}
-      onDragStart={(e) => {
-        e.dataTransfer.setData(DND_MIME, file.relpath);
-        e.dataTransfer.effectAllowed = 'move';
-        interactions.setDraggingPath(file.relpath);
-      }}
-      onDragEnd={() => interactions.setDraggingPath(null)}
-      onClick={(e) => {
-        // モディファイアキー押下時のみ選択トグル（通常クリックはボタン操作を邪魔しない）。
-        if (e.shiftKey || e.metaKey || e.ctrlKey) {
-          e.preventDefault();
-          interactions.onSelectToggle(file.relpath, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey });
-        }
-      }}
-      className={`flex flex-col rounded-lg border bg-surface p-4 transition-colors ${
-        selected ? 'border-accent ring-1 ring-accent' : 'border-border'
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={() => interactions.onSelectToggle(file.relpath, { shift: false, meta: true })}
-            onClick={(e) => e.stopPropagation()}
-            className="h-3.5 w-3.5 shrink-0 accent-accent"
-            aria-label={`${file.name} を選択`}
-          />
-          <span className="shrink-0 text-text-faint">
-            <KindIcon kind={file.kind} ext={file.ext} />
-          </span>
-          {rename.editing ? (
-            <InlineRenameInput
-              initial={file.name}
-              saving={rename.saving}
-              error={rename.error}
-              onCommit={commitRename}
-              onCancel={() => setRename({ editing: false, value: '', saving: false, error: null })}
-            />
-          ) : (
-            <button
-              type="button"
-              onDoubleClick={() => setRename({ editing: true, value: file.name, saving: false, error: null })}
-              className="truncate text-left text-sm font-medium text-text"
-              title={`${file.name}（ダブルクリックで名前を変更）`}
-            >
-              {file.name}
-            </button>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-0.5">
-          {viewable && (
-            <button
-              type="button"
-              onClick={() => onView(file)}
-              className="rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
-              aria-label={`${file.name} をプレビュー`}
-            >
-              <EyeIcon width={16} height={16} />
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setRename({ editing: true, value: file.name, saving: false, error: null })}
-            className="rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
-            aria-label={`${file.name} の名前を変更`}
-          >
-            <EditIcon width={16} height={16} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onMoveRequest(file)}
-            className="rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
-            aria-label={`${file.name} を移動`}
-          >
-            <MoveIcon width={16} height={16} />
-          </button>
-          <button
-            type="button"
-            onClick={() => interactions.onCopyRequest(file)}
-            className="rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
-            aria-label={`${file.name} をコピー`}
-          >
-            <CopyIcon width={16} height={16} />
-          </button>
-          <a
-            href={downloadHref}
-            download={file.name}
-            className="rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
-            aria-label={`${file.name} をダウンロード`}
-          >
-            <DownloadIcon width={16} height={16} />
-          </a>
-          <button
-            type="button"
-            onClick={() => onDelete(file)}
-            className="rounded p-1 text-text-faint hover:bg-surface-2 hover:text-text"
-            aria-label={`${file.name} を削除`}
-          >
-            <TrashIcon width={16} height={16} />
-          </button>
-        </div>
-      </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-text-faint">
-        <span>{humanReadableSize(file.sizeBytes)}</span>
-        <span title={`更新日: ${absoluteTime(file.mtime)}`}>更新 {relativeTime(file.mtime)}</span>
-        <span title={`作成日: ${absoluteTime(file.created)}`}>作成 {relativeTime(file.created)}</span>
-      </div>
-      {isImage && (
-        <button
-          type="button"
-          onClick={() => onView(file)}
-          className="mt-2 block w-full overflow-hidden rounded border border-border"
-          aria-label={`${file.name} をプレビュー`}
-        >
-          <img
-            src={`/api/deliverables/file?path=${encodeURIComponent(file.relpath)}&inline=1`}
-            alt={file.name}
-            className="h-24 w-full object-cover"
-            loading="lazy"
-          />
-        </button>
-      )}
     </div>
   );
 }
@@ -1035,9 +1275,16 @@ function FileRow({
             title={`${file.name}（ダブルクリックで名前を変更）`}
           >{file.name}</button>
         )}
+        <MetaBadges meta={interactions.metaByPath.get(file.relpath)} compact />
         <span className="shrink-0 text-[10px] text-text-faint whitespace-nowrap">
           {humanReadableSize(file.sizeBytes)}
         </span>
+        <StarToggle
+          relpath={file.relpath}
+          meta={interactions.metaByPath.get(file.relpath)}
+          onSetMeta={interactions.onSetMeta}
+          size={14}
+        />
         {viewable && (
           <button
             type="button"
@@ -1072,6 +1319,9 @@ function FileRow({
         >
           <CopyIcon width={14} height={14} />
         </button>
+        <span className="shrink-0 opacity-0 group-hover:opacity-100">
+          <CopyPathButton relpath={file.relpath} size={14} />
+        </span>
         <a
           href={downloadHref}
           download={file.name}
@@ -1248,6 +1498,14 @@ function FolderNodeView({
         </button>
         {!rename.editing && (
           <>
+            <span className="shrink-0">
+              <StarToggle
+                relpath={node.path}
+                meta={interactions.metaByPath.get(node.path)}
+                onSetMeta={interactions.onSetMeta}
+                size={14}
+              />
+            </span>
             <button
               type="button"
               onClick={() => setRename({ editing: true, value: node.name, saving: false, error: null })}
@@ -1272,6 +1530,9 @@ function FolderNodeView({
             >
               <CopyIcon width={14} height={14} />
             </button>
+            <span className="shrink-0 opacity-0 group-hover:opacity-100">
+              <CopyPathButton relpath={node.path} size={14} />
+            </span>
             <button
               type="button"
               onClick={() => onDelete(folderAsFile)}
@@ -1282,6 +1543,7 @@ function FolderNodeView({
             </button>
           </>
         )}
+        <MetaBadges meta={interactions.metaByPath.get(node.path)} compact />
         <span className="shrink-0 rounded-full bg-surface-3 px-1.5 py-0.5 text-[10px] text-text-faint">
           {total}
         </span>
@@ -1696,6 +1958,155 @@ function SortControl({ sort, onChange }: { sort: SortPref; onChange: (s: SortPre
       >
         {sort.dir === 'asc' ? <ArrowUpIcon width={14} height={14} /> : <ArrowDownIcon width={14} height={14} />}
       </button>
+    </div>
+  );
+}
+
+// ─── 検索フィルタバー（MC-237）──────────────────────────────────
+// インクリメンタル検索ボックス＋スコープ切替＋フィルタチップ（種類/更新日/タグ）。
+function SearchFilterBar({
+  query, onQuery,
+  scope, onScope,
+  kind, onKind, kindOptions, kindCounts,
+  dateRange, onDateRange,
+  allTags, tagFilter, onToggleTag,
+  onReset, hasActive,
+}: {
+  query: string;
+  onQuery: (q: string) => void;
+  scope: SearchScope;
+  onScope: (s: SearchScope) => void;
+  kind: FilterKind;
+  onKind: (k: FilterKind) => void;
+  kindOptions: FilterKind[];
+  kindCounts: Record<string, number>;
+  dateRange: DateRange;
+  onDateRange: (r: DateRange) => void;
+  allTags: string[];
+  tagFilter: Set<string>;
+  onToggleTag: (t: string) => void;
+  onReset: () => void;
+  hasActive: boolean;
+}) {
+  const dateRanges: DateRange[] = ['all', '7d', '30d', '90d'];
+  return (
+    <div className="mb-3 space-y-2 rounded-lg border border-border bg-surface-2 p-2.5">
+      {/* 検索ボックス + スコープ */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1">
+          <span className="shrink-0 text-text-faint">
+            <SearchIcon width={14} height={14} />
+          </span>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => onQuery(e.target.value)}
+            placeholder="ファイル名で検索"
+            className="min-w-0 flex-1 bg-transparent text-xs text-text placeholder:text-text-faint focus:outline-none"
+            aria-label="ファイル名で検索"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => onQuery('')}
+              className="shrink-0 rounded p-0.5 text-text-faint hover:text-text"
+              aria-label="検索をクリア"
+            >
+              <CloseIcon width={12} height={12} />
+            </button>
+          )}
+        </div>
+        <div className="flex shrink-0 rounded-full border border-border bg-surface p-0.5 text-xs" role="group" aria-label="検索スコープ">
+          <button
+            type="button"
+            onClick={() => onScope('current')}
+            className={`rounded-full px-2.5 py-1 transition-colors ${
+              scope === 'current' ? 'bg-accent text-bg font-semibold' : 'text-text-muted hover:text-text'
+            }`}
+            aria-pressed={scope === 'current'}
+          >
+            このフォルダ
+          </button>
+          <button
+            type="button"
+            onClick={() => onScope('all')}
+            className={`rounded-full px-2.5 py-1 transition-colors ${
+              scope === 'all' ? 'bg-accent text-bg font-semibold' : 'text-text-muted hover:text-text'
+            }`}
+            aria-pressed={scope === 'all'}
+          >
+            全体
+          </button>
+        </div>
+        {hasActive && (
+          <button
+            type="button"
+            onClick={onReset}
+            className="inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs text-text-muted hover:bg-surface-3 hover:text-text"
+          >
+            <CloseIcon width={12} height={12} />
+            条件をクリア
+          </button>
+        )}
+      </div>
+      {/* 種類チップ */}
+      {kindOptions.length > 1 && (
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="種類フィルタ">
+          {kindOptions.map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => onKind(k)}
+              className={`rounded-full px-2.5 py-0.5 text-[11px] transition-colors ${
+                kind === k ? 'bg-accent text-bg font-semibold' : 'bg-surface text-text-muted hover:bg-surface-3 hover:text-text'
+              }`}
+              aria-pressed={kind === k}
+            >
+              {KIND_LABELS[k]}
+              {k !== 'all' && <span className="ml-1 opacity-70">{kindCounts[k] ?? 0}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* 更新日レンジチップ */}
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="更新日フィルタ">
+        {dateRanges.map((r) => (
+          <button
+            key={r}
+            type="button"
+            onClick={() => onDateRange(r)}
+            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] transition-colors ${
+              dateRange === r ? 'bg-accent text-bg font-semibold' : 'bg-surface text-text-muted hover:bg-surface-3 hover:text-text'
+            }`}
+            aria-pressed={dateRange === r}
+          >
+            <ClockIcon width={10} height={10} />
+            {DATE_RANGE_LABELS[r]}
+          </button>
+        ))}
+      </div>
+      {/* タグチップ（MC-238 のタグ。タグが存在する時のみ表示）。 */}
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="タグフィルタ">
+          {allTags.map((t) => {
+            const on = tagFilter.has(t);
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => onToggleTag(t)}
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] transition-colors ${
+                  on ? 'bg-accent text-bg font-semibold' : 'bg-surface text-text-muted hover:bg-surface-3 hover:text-text'
+                }`}
+                aria-pressed={on}
+              >
+                <TagIcon width={10} height={10} />
+                {t}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -2140,6 +2551,329 @@ function RecentStrip({
   );
 }
 
+// ─── 属性列テーブル（MC-239）──────────────────────────────────
+// 名前/更新日/作成日/サイズ/種類の列を持つテーブル。列ヘッダクリックでソート、
+// 列幅は境界ドラッグで調整して localStorage に永続化する。
+function AttributeTable({
+  files, sort, onSort, colWidths, onColWidths,
+  onDelete, onView, onRenamed, onMoveRequest, interactions,
+}: {
+  files: DeliverableFile[];
+  sort: SortPref;
+  onSort: (key: SortKey) => void;
+  colWidths: Record<ColumnKey, number>;
+  onColWidths: (w: Record<ColumnKey, number>) => void;
+  onDelete: (f: DeliverableFile) => void;
+  onView: (f: DeliverableFile) => void;
+  onRenamed: () => void;
+  onMoveRequest: (f: DeliverableFile) => void;
+  interactions: ItemInteractions;
+}) {
+  const columns: ColumnKey[] = ['mtime', 'created', 'size', 'kind'];
+  const dragRef = useRef<{ key: ColumnKey; startX: number; startW: number } | null>(null);
+
+  const onDragStart = (key: ColumnKey, e: ReactPointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragRef.current = { key, startX: e.clientX, startW: colWidths[key] };
+    const onMove = (ev: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const w = Math.min(COL_MAX_WIDTH, Math.max(COL_MIN_WIDTH, d.startW + (ev.clientX - d.startX)));
+      onColWidths({ ...colWidths, [d.key]: Math.round(w) });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const sortIndicator = (key: ColumnKey) => {
+    const sk = COLUMN_SORT_KEY[key];
+    if (!sk || sort.key !== sk) return null;
+    return sort.dir === 'asc'
+      ? <ArrowUpIcon width={11} height={11} />
+      : <ArrowDownIcon width={11} height={11} />;
+  };
+
+  const cellValue = (f: DeliverableFile, key: ColumnKey): { text: string; tip?: string } => {
+    if (key === 'mtime') return { text: relativeTime(f.mtime), tip: absoluteTime(f.mtime) };
+    if (key === 'created') return { text: relativeTime(f.created), tip: absoluteTime(f.created) };
+    if (key === 'size') return { text: f.isDir ? '—' : humanReadableSize(f.sizeBytes) };
+    return { text: KIND_LABELS[f.kind] ?? f.kind };
+  };
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-border bg-surface">
+      {/* ヘッダ */}
+      <div className="flex items-center border-b border-border bg-surface-2 px-2 py-1.5 text-[11px] font-semibold text-text-muted">
+        <button
+          type="button"
+          onClick={() => onSort('name')}
+          className="flex min-w-0 flex-1 items-center gap-1 px-1 text-left hover:text-text"
+        >
+          名前
+          {sort.key === 'name' && (sort.dir === 'asc'
+            ? <ArrowUpIcon width={11} height={11} />
+            : <ArrowDownIcon width={11} height={11} />)}
+        </button>
+        {columns.map((c) => {
+          const sk = COLUMN_SORT_KEY[c];
+          return (
+            <div
+              key={c}
+              className="relative flex shrink-0 items-center"
+              style={{ width: `${colWidths[c]}px` }}
+            >
+              <button
+                type="button"
+                onClick={() => sk && onSort(sk)}
+                disabled={!sk}
+                className={`flex w-full items-center gap-1 px-1 text-left ${sk ? 'hover:text-text' : 'cursor-default'}`}
+              >
+                {COLUMN_LABELS[c]}
+                {sortIndicator(c)}
+              </button>
+              {/* 列幅ドラッグハンドル（右端境界）。 */}
+              <span
+                onPointerDown={(e) => onDragStart(c, e)}
+                className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-accent/40"
+                role="separator"
+                aria-label={`${COLUMN_LABELS[c]} 列の幅を調整`}
+              />
+            </div>
+          );
+        })}
+        {/* 操作列スペーサ。 */}
+        <div className="w-8 shrink-0" />
+      </div>
+      {/* 行 */}
+      {files.map((f) => {
+        const selected = interactions.selectedPaths.has(f.relpath);
+        return (
+          <AttributeTableRow
+            key={f.relpath}
+            file={f}
+            columns={columns}
+            colWidths={colWidths}
+            cellValue={cellValue}
+            selected={selected}
+            onDelete={onDelete}
+            onView={onView}
+            onRenamed={onRenamed}
+            onMoveRequest={onMoveRequest}
+            interactions={interactions}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function AttributeTableRow({
+  file, columns, colWidths, cellValue, selected,
+  onDelete, onView, onRenamed, onMoveRequest, interactions,
+}: {
+  file: DeliverableFile;
+  columns: ColumnKey[];
+  colWidths: Record<ColumnKey, number>;
+  cellValue: (f: DeliverableFile, key: ColumnKey) => { text: string; tip?: string };
+  selected: boolean;
+  onDelete: (f: DeliverableFile) => void;
+  onView: (f: DeliverableFile) => void;
+  onRenamed: () => void;
+  onMoveRequest: (f: DeliverableFile) => void;
+  interactions: ItemInteractions;
+}) {
+  const isImage = file.kind === 'image' || IMG_EXTS.has(file.ext.toLowerCase());
+  const isText = TEXT_KINDS.has(file.kind) || file.ext.toLowerCase() === CSV_EXT || isHighlightable(file.ext);
+  const viewable = isImage || file.kind === 'pdf' || isOfficePreviewable(file) || isText;
+  const downloadHref = `/api/deliverables/file?path=${encodeURIComponent(file.relpath)}`;
+  const [rename, setRename] = useState<RenameState>({ editing: false, value: '', saving: false, error: null });
+
+  const commitRename = useCallback(async (value: string) => {
+    const next = value.trim();
+    if (!next || next === file.name) { setRename({ editing: false, value: '', saving: false, error: null }); return; }
+    setRename((r) => ({ ...r, saving: true, error: null }));
+    const result = await renameDeliverable(file.relpath, next);
+    if (result.ok) { setRename({ editing: false, value: '', saving: false, error: null }); onRenamed(); }
+    else setRename((r) => ({ ...r, saving: false, error: result.error }));
+  }, [file.relpath, file.name, onRenamed]);
+
+  return (
+    <div
+      draggable={!rename.editing}
+      onDragStart={(e) => {
+        e.dataTransfer.setData(DND_MIME, file.relpath);
+        e.dataTransfer.effectAllowed = 'move';
+        interactions.setDraggingPath(file.relpath);
+      }}
+      onDragEnd={() => interactions.setDraggingPath(null)}
+      onClick={(e) => {
+        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+          e.preventDefault();
+          interactions.onSelectToggle(file.relpath, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey });
+        }
+      }}
+      className={`group flex items-center border-b border-border/50 px-2 py-1.5 text-xs last:border-b-0 ${
+        selected ? 'bg-accent/10' : 'hover:bg-surface-2'
+      }`}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => interactions.onSelectToggle(file.relpath, { shift: false, meta: true })}
+          onClick={(e) => e.stopPropagation()}
+          className="h-3.5 w-3.5 shrink-0 accent-accent"
+          aria-label={`${file.name} を選択`}
+        />
+        <span className="shrink-0 text-text-faint"><KindIcon kind={file.kind} ext={file.ext} /></span>
+        {rename.editing ? (
+          <InlineRenameInput
+            initial={file.name}
+            saving={rename.saving}
+            error={rename.error}
+            onCommit={commitRename}
+            onCancel={() => setRename({ editing: false, value: '', saving: false, error: null })}
+          />
+        ) : (
+          <button
+            type="button"
+            onDoubleClick={() => setRename({ editing: true, value: file.name, saving: false, error: null })}
+            className="min-w-0 flex-1 truncate text-left text-text"
+            title={`${file.name}（ダブルクリックで名前を変更）`}
+          >{file.name}</button>
+        )}
+        <MetaBadges meta={interactions.metaByPath.get(file.relpath)} compact />
+      </div>
+      {columns.map((c) => {
+        const { text, tip } = cellValue(file, c);
+        return (
+          <div
+            key={c}
+            className="shrink-0 truncate px-1 text-text-muted"
+            style={{ width: `${colWidths[c]}px` }}
+            title={tip}
+          >{text}</div>
+        );
+      })}
+      <div className="flex w-8 shrink-0 items-center justify-end gap-0.5">
+        <StarToggle relpath={file.relpath} meta={interactions.metaByPath.get(file.relpath)} onSetMeta={interactions.onSetMeta} size={14} />
+        {viewable && (
+          <button type="button" onClick={() => onView(file)} className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text" aria-label={`${file.name} をプレビュー`}>
+            <EyeIcon width={14} height={14} />
+          </button>
+        )}
+        <button type="button" onClick={() => onMoveRequest(file)} className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text" aria-label={`${file.name} を移動`}>
+          <MoveIcon width={14} height={14} />
+        </button>
+        <button type="button" onClick={() => interactions.onCopyRequest(file)} className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text" aria-label={`${file.name} をコピー`}>
+          <CopyIcon width={14} height={14} />
+        </button>
+        <span className="shrink-0 opacity-0 group-hover:opacity-100"><CopyPathButton relpath={file.relpath} size={14} /></span>
+        <a href={downloadHref} download={file.name} className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text" aria-label={`${file.name} をダウンロード`}>
+          <DownloadIcon width={14} height={14} />
+        </a>
+        <button type="button" onClick={() => onDelete(file)} className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text" aria-label={`${file.name} を削除`}>
+          <TrashIcon width={14} height={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── ギャラリービュー（MC-239）──────────────────────────────────
+// 画像が多いフォルダ向け。大サムネのグリッド＋下部フィルムストリップ送り。
+// 画像以外も大アイコンで並べるが、メインは画像。
+function GalleryView({
+  files, onView, interactions,
+}: {
+  files: DeliverableFile[];
+  onView: (f: DeliverableFile) => void;
+  interactions: ItemInteractions;
+}) {
+  const images = files.filter((f) => f.kind === 'image' || IMG_EXTS.has(f.ext.toLowerCase()));
+  const [active, setActive] = useState(0);
+  const safeActive = Math.min(active, Math.max(0, images.length - 1));
+  if (images.length === 0) {
+    return <EmptyState>このフォルダに画像はありません</EmptyState>;
+  }
+  const current = images[safeActive];
+  const thumbSrc = (f: DeliverableFile) => `/api/deliverables/file?path=${encodeURIComponent(f.relpath)}&inline=1`;
+  return (
+    <div className="space-y-3">
+      {/* 大プレビュー */}
+      <div className="rounded-lg border border-border bg-surface p-2">
+        <button
+          type="button"
+          onClick={() => onView(current)}
+          className="block w-full overflow-hidden rounded"
+          aria-label={`${current.name} を拡大表示`}
+        >
+          <img src={thumbSrc(current)} alt={current.name} className="mx-auto max-h-[55vh] w-auto object-contain" loading="lazy" />
+        </button>
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+          <span className="truncate text-text-muted" title={current.relpath}>{current.name}</span>
+          <span className="shrink-0 text-text-faint">{safeActive + 1} / {images.length}</span>
+        </div>
+      </div>
+      {/* フィルムストリップ */}
+      <div className="flex gap-2 overflow-x-auto rounded-lg border border-border bg-surface-2 p-2">
+        {images.map((f, i) => (
+          <button
+            key={f.relpath}
+            type="button"
+            onClick={() => setActive(i)}
+            className={`shrink-0 overflow-hidden rounded border transition-colors ${
+              i === safeActive ? 'border-accent ring-1 ring-accent' : 'border-border hover:border-accent/50'
+            }`}
+            aria-label={`${f.name} を選択`}
+            aria-current={i === safeActive}
+            title={f.name}
+          >
+            <img src={thumbSrc(f)} alt={f.name} className="h-16 w-16 object-cover" loading="lazy" />
+          </button>
+        ))}
+      </div>
+      {/* 大サムネグリッド */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {images.map((f, i) => {
+          const selected = interactions.selectedPaths.has(f.relpath);
+          return (
+            <button
+              key={f.relpath}
+              type="button"
+              onClick={(e) => {
+                if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                  e.preventDefault();
+                  interactions.onSelectToggle(f.relpath, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey });
+                  return;
+                }
+                setActive(i);
+                onView(f);
+              }}
+              className={`overflow-hidden rounded-lg border bg-surface transition-colors ${
+                selected ? 'border-accent ring-1 ring-accent' : 'border-border hover:border-accent/50'
+              }`}
+              title={f.name}
+            >
+              <img src={thumbSrc(f)} alt={f.name} className="h-32 w-full object-cover" loading="lazy" />
+              <div className="flex items-center gap-1 px-2 py-1.5">
+                <span className="min-w-0 flex-1 truncate text-left text-[11px] text-text-muted">{f.name}</span>
+                <MetaBadges meta={interactions.metaByPath.get(f.relpath)} compact />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────
 
 export default function Deliverables() {
@@ -2149,8 +2883,25 @@ export default function Deliverables() {
   const { data, error, loading, fetchedAt, refetch } = useLiveResource<DeliverablesResponse>(
     '/api/deliverables',
   );
+  // MC-238: メタ（スター/タグ/色）store。楽観更新用にローカル state で保持し、API 成功で確定・失敗で巻き戻す。
+  const { data: metaData, refetch: refetchMeta } = useLiveResource<DeliverableMetaResponse>(
+    '/api/deliverables/meta',
+  );
+  const [metaOverrides, setMetaOverrides] = useState<Map<string, DeliverableMeta>>(new Map());
+  // MC-238: ファイルとメタを同時に再取得する（rename/move/copy/delete でメタのキー追従を反映させる）。
+  const refetchAll = useCallback(() => {
+    refetch();
+    refetchMeta();
+  }, [refetch, refetchMeta]);
   const [filter, setFilter] = useState<FilterKind>('all');
-  const [viewMode, setViewMode] = useState<'folder' | 'list'>('folder');
+  // MC-237: 検索/フィルタチップ/スコープ。
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange>('all');
+  const [tagFilter, setTagFilter] = useState<Set<string>>(new Set());
+  const [searchScope, setSearchScope] = useState<SearchScope>('all');
+  const [viewMode, setViewMode] = useState<'folder' | 'list' | 'gallery'>('folder');
+  // MC-239: 属性列テーブルの列幅（localStorage 永続化）。
+  const [colWidths, setColWidths] = useState<Record<ColumnKey, number>>(loadColWidths);
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
   const [selectedViewFile, setSelectedViewFile] = useState<DeliverableFile | null>(null);
   // MC-231: 並び替え（localStorage 永続化）。
@@ -2178,6 +2929,52 @@ export default function Deliverables() {
     setSort(s);
     saveSortPref(s);
   }, []);
+
+  // MC-239: 列ヘッダクリックでソート。同じキーなら昇降反転、別キーなら既定方向で開始。
+  const sortByColumn = useCallback((key: SortKey) => {
+    setSort((prev) => {
+      const next: SortPref =
+        prev.key === key
+          ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+          : { key, dir: key === 'name' ? 'asc' : 'desc' };
+      saveSortPref(next);
+      return next;
+    });
+  }, []);
+
+  // MC-239: 列幅変更（state 更新＋localStorage 永続化）。
+  const changeColWidths = useCallback((w: Record<ColumnKey, number>) => {
+    setColWidths(w);
+    saveColWidths(w);
+  }, []);
+
+  // MC-238: メタ設定。即座にローカル override で反映（楽観更新）→ PUT → 成功で server から refetch、
+  // 失敗なら override を破棄して server 値に戻す。
+  const onSetMeta = useCallback((relpath: string, meta: DeliverableMeta) => {
+    setMetaOverrides((prev) => {
+      const next = new Map(prev);
+      next.set(relpath, meta);
+      return next;
+    });
+    setDeliverableMeta(relpath, meta).then((confirmed) => {
+      if (confirmed) {
+        // server 反映済み → store を再取得して override を掃除（confirmed と同期）。
+        refetchMeta();
+        setMetaOverrides((prev) => {
+          const next = new Map(prev);
+          next.delete(relpath);
+          return next;
+        });
+      } else {
+        // 失敗 → override 破棄（server 値に戻る）。
+        setMetaOverrides((prev) => {
+          const next = new Map(prev);
+          next.delete(relpath);
+          return next;
+        });
+      }
+    });
+  }, [refetchMeta]);
 
   const toggleFolder = useCallback((path: string) => {
     setOpenFolders((prev) => {
@@ -2271,23 +3068,23 @@ export default function Deliverables() {
         if (res.ok) {
           const body = (await res.json().catch(() => ({}))) as { trashId?: string };
           if (body.trashId) setPendingUndo({ trashId: body.trashId, name: file.name });
-          refetch();
+          refetchAll();
           return;
         }
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         setOpError(body.error ?? `削除に失敗しました（HTTP ${res.status}）。`);
       })
       .catch(() => setOpError('ネットワークエラーで削除に失敗しました。'));
-  }, [refetch]);
+  }, [refetchAll]);
 
   // MC-228: D&D / ドロップでの単発移動。
   const handleDropMove = useCallback((srcPath: string, destDir: string) => {
     setOpError(null);
     moveDeliverable(srcPath, destDir).then((result) => {
-      if (result.ok) { clearSelection(); refetch(); }
+      if (result.ok) { clearSelection(); refetchAll(); }
       else setOpError(result.error);
     });
-  }, [refetch, clearSelection]);
+  }, [refetchAll, clearSelection]);
 
   // MC-229: 一括削除（ゴミ箱経由。1 件ずつ DELETE する＝MC-230 のゴミ箱に入る）。
   const handleBulkDelete = useCallback(async (items: DeliverableFile[]) => {
@@ -2305,9 +3102,9 @@ export default function Deliverables() {
       }
     }
     clearSelection();
-    refetch();
+    refetchAll();
     if (failed.length > 0) setOpError(`一部を削除できませんでした: ${failed.join(' / ')}`);
-  }, [refetch, clearSelection]);
+  }, [refetchAll, clearSelection]);
 
   // MC-229: 一括ダウンロード（連続 DL。各ファイルを順に取得し a[download] で保存）。
   //  フォルダは直接 DL 不可なのでスキップする。
@@ -2338,12 +3135,12 @@ export default function Deliverables() {
       body: JSON.stringify({ trashId: undo.trashId }),
     })
       .then(async (res) => {
-        if (res.ok) { refetch(); return; }
+        if (res.ok) { refetchAll(); return; }
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         setOpError(body.error ?? '元に戻せませんでした。');
       })
       .catch(() => setOpError('ネットワークエラーで元に戻せませんでした。'));
-  }, [pendingUndo, refetch]);
+  }, [pendingUndo, refetchAll]);
 
   // MC-232: アップロード検知。アップロード後に新規出現したファイルを「最近使った」に積む。
   // イベントには relpath が乗らないため、既知パス集合との差分で新規を割り出す。
@@ -2395,7 +3192,7 @@ export default function Deliverables() {
   if (showTrash) {
     return (
       <TrashView
-        onChanged={refetch}
+        onChanged={refetchAll}
         onClose={() => setShowTrash(false)}
       />
     );
@@ -2437,16 +3234,42 @@ export default function Deliverables() {
     (k) => k === 'all' || activeKinds.has(k as DeliverableKind),
   );
 
-  const filtered = sortFiles(
-    filter === 'all' ? realFiles : realFiles.filter((f) => f.kind === filter),
-    sort,
-  );
+  // MC-238: server メタ + ローカル override をマージした実効メタ map（検索のタグ判定でも使う）。
+  const metaByPath = new Map<string, DeliverableMeta>();
+  if (metaData?.meta) {
+    for (const [k, v] of Object.entries(metaData.meta)) metaByPath.set(k, v);
+  }
+  for (const [k, v] of metaOverrides) metaByPath.set(k, v);
+  // MC-238: タグ自動補完/フィルタチップ用の全タグ集合（重複排除・五十音/英字ソート）。
+  const allTags = Array.from(
+    new Set([...metaByPath.values()].flatMap((m) => m.tags)),
+  ).sort((a, b) => a.localeCompare(b, 'ja'));
 
-  // MC-228/232: ツリーと現在地スコープ。currentDir が実在しなくなったらルートへ戻す（移動/削除で消えた場合）。
+  // MC-228/232: ツリーと現在地スコープ（フィルタ前に算出。スコープ判定に effectiveDir を使う）。
   const tree = buildTree(files);
   let scopedNode = findNode(tree, currentDir);
   const effectiveDir = scopedNode ? currentDir : '';
   if (!scopedNode) scopedNode = tree;
+
+  // MC-237: ファイル名検索 + 種類 + 更新日レンジ + タグ + スコープ の複合フィルタ predicate。
+  const q = searchQuery.trim().toLowerCase();
+  const tagFilterActive = tagFilter.size > 0;
+  const matchesAllFilters = (f: DeliverableFile): boolean => {
+    if (filter !== 'all' && f.kind !== filter) return false;
+    if (q && !f.name.toLowerCase().includes(q)) return false;
+    if (!matchesDateRange(f, dateRange)) return false;
+    if (!matchesScope(f, searchScope, effectiveDir)) return false;
+    if (tagFilterActive) {
+      const tags = metaByPath.get(f.relpath)?.tags ?? [];
+      for (const t of tagFilter) if (!tags.includes(t)) return false;
+    }
+    return true;
+  };
+  // MC-237: 何らかの検索/フィルタが有効か（フォルダビューを検索結果フラット表示へ切替える判定）。
+  const searchActive =
+    q !== '' || dateRange !== 'all' || tagFilterActive || filter !== 'all' || searchScope === 'current';
+
+  const filtered = sortFiles(realFiles.filter(matchesAllFilters), sort);
 
   // MC-229: 選択集合を実体（DeliverableFile）に解決する。フォルダは合成エントリで補う。
   const allByPath = new Map<string, DeliverableFile>();
@@ -2472,6 +3295,14 @@ export default function Deliverables() {
   // MC-229: 表示順の relpath 列を構築（Shift 連続選択用）。ref へ反映。
   const orderedVisible: string[] = [];
   if (viewMode === 'list') {
+    for (const f of filtered) orderedVisible.push(f.relpath);
+  } else if (viewMode === 'gallery') {
+    // ギャラリーは画像のみだが、送り対象としては filtered の画像順で十分。
+    for (const f of filtered.filter((x) => x.kind === 'image' || IMG_EXTS.has(x.ext.toLowerCase()))) {
+      orderedVisible.push(f.relpath);
+    }
+  } else if (viewMode === 'folder' && searchActive) {
+    // 検索結果フラット表示時は filtered 順。
     for (const f of filtered) orderedVisible.push(f.relpath);
   } else {
     // フォルダビュー: 開いているフォルダを深さ優先で（フォルダ→ファイルの表示順に）たどる。
@@ -2509,7 +3340,16 @@ export default function Deliverables() {
     busy: !!(selectedViewFile || moveTargets || copyTargets),
   };
 
-  // MC-228/229: 子コンポーネントへ渡す共通インタラクション束。
+  // MC-238/240: 詳細ペインの対象＝単一選択（ファイル/フォルダ問わず）。プレビュー可否に関わらずメタ編集・パスを出す。
+  let selectedSingle: DeliverableFile | null = null;
+  if (selectedPaths.size === 1) {
+    const p = [...selectedPaths][0];
+    selectedSingle = allByPath.get(p) ?? folderByPath.get(p) ?? null;
+  } else if (selectionAnchor) {
+    selectedSingle = allByPath.get(selectionAnchor) ?? folderByPath.get(selectionAnchor) ?? null;
+  }
+
+  // MC-228/229/238: 子コンポーネントへ渡す共通インタラクション束。
   const interactions: ItemInteractions = {
     selectedPaths,
     onSelectToggle,
@@ -2517,6 +3357,8 @@ export default function Deliverables() {
     draggingPath,
     setDraggingPath,
     onCopyRequest: (f) => setCopyTargets([f]),
+    metaByPath,
+    onSetMeta,
   };
 
   const canBack = navIndex > 0;
@@ -2587,34 +3429,20 @@ export default function Deliverables() {
                     <GridIcon width={13} height={13} />
                     リスト
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('gallery')}
+                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 transition-colors ${
+                      viewMode === 'gallery'
+                        ? 'bg-accent text-bg font-semibold'
+                        : 'text-text-muted hover:text-text'
+                    }`}
+                  >
+                    <ImageFileIcon width={13} height={13} />
+                    ギャラリー
+                  </button>
                 </div>
 
-                {/* 種別フィルタ（リストビュー時のみ） */}
-                {viewMode === 'list' && visibleFilters.length > 1 && (
-                  <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="種別フィルタ">
-                    {visibleFilters.map((k) => (
-                      <button
-                        key={k}
-                        type="button"
-                        role="tab"
-                        aria-selected={filter === k}
-                        onClick={() => setFilter(k)}
-                        className={`rounded-full px-3 py-1 text-xs transition-colors ${
-                          filter === k
-                            ? 'bg-accent text-bg font-semibold'
-                            : 'bg-surface-2 text-text-muted hover:bg-surface-3 hover:text-text'
-                        }`}
-                      >
-                        {KIND_LABELS[k]}
-                        {k !== 'all' && (
-                          <span className="ml-1 text-[10px] opacity-70">
-                            {realFiles.filter((f) => f.kind === k).length}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
                 {/* MC-231: 並び替えコントロール */}
                 <SortControl sort={sort} onChange={changeSort} />
 
@@ -2632,8 +3460,42 @@ export default function Deliverables() {
                 </div>
               </div>
 
+              {/* MC-237: 検索 + フィルタチップ + スコープ切替。 */}
+              <SearchFilterBar
+                query={searchQuery}
+                onQuery={setSearchQuery}
+                scope={searchScope}
+                onScope={setSearchScope}
+                kind={filter}
+                onKind={setFilter}
+                kindOptions={visibleFilters}
+                kindCounts={Object.fromEntries(
+                  visibleFilters.filter((k) => k !== 'all').map((k) => [k, realFiles.filter((f) => f.kind === k).length]),
+                )}
+                dateRange={dateRange}
+                onDateRange={setDateRange}
+                allTags={allTags}
+                tagFilter={tagFilter}
+                onToggleTag={(t) =>
+                  setTagFilter((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(t)) next.delete(t);
+                    else next.add(t);
+                    return next;
+                  })
+                }
+                onReset={() => {
+                  setSearchQuery('');
+                  setFilter('all');
+                  setDateRange('all');
+                  setTagFilter(new Set());
+                  setSearchScope('all');
+                }}
+                hasActive={searchActive}
+              />
+
               {/* MC-232: パンくず + 戻る/進む（フォルダビュー時のみ。リストは平坦なので非表示）。 */}
-              {viewMode === 'folder' && (
+              {viewMode === 'folder' && !searchActive && (
                 <Breadcrumb
                   currentDir={effectiveDir}
                   onNavigate={navigateTo}
@@ -2703,6 +3565,19 @@ export default function Deliverables() {
                     }`}
                   >
                     {(() => {
+                      // MC-237: 検索/フィルタが有効なら、ツリーでなく該当ファイルのフラット結果を表示する。
+                      if (searchActive) {
+                        if (filtered.length === 0) {
+                          return <EmptyState>条件に一致する項目がありません</EmptyState>;
+                        }
+                        return (
+                          <>
+                            {filtered.map((f) => (
+                              <FileRow key={f.relpath} file={f} onDelete={handleDelete} indent={0} onView={openView} onRenamed={refetchAll} onMoveRequest={(ff) => setMoveTargets([ff])} interactions={interactions} />
+                            ))}
+                          </>
+                        );
+                      }
                       const node = scopedNode!;
                       const topDirs = Array.from(node.subdirs.values()).sort((a, b) =>
                         a.name.localeCompare(b.name, 'ja', { numeric: true, sensitivity: 'base' }),
@@ -2722,7 +3597,7 @@ export default function Deliverables() {
                               toggleFolder={toggleFolder}
                               onDelete={handleDelete}
                               onView={openView}
-                              onRenamed={refetch}
+                              onRenamed={refetchAll}
                               sort={sort}
                               onMoveRequest={(f) => setMoveTargets([f])}
                               interactions={interactions}
@@ -2730,7 +3605,7 @@ export default function Deliverables() {
                             />
                           ))}
                           {topFiles.map((f) => (
-                            <FileRow key={f.relpath} file={f} onDelete={handleDelete} indent={0} onView={openView} onRenamed={refetch} onMoveRequest={(ff) => setMoveTargets([ff])} interactions={interactions} />
+                            <FileRow key={f.relpath} file={f} onDelete={handleDelete} indent={0} onView={openView} onRenamed={refetchAll} onMoveRequest={(ff) => setMoveTargets([ff])} interactions={interactions} />
                           ))}
                         </>
                       );
@@ -2739,17 +3614,29 @@ export default function Deliverables() {
                 )
               )}
 
-              {/* リストビュー */}
+              {/* リストビュー（MC-239: 属性列テーブル＋列ヘッダソート＋列幅永続化）。 */}
               {viewMode === 'list' && (
                 filtered.length === 0 ? (
-                  <EmptyState>まだ成果物がありません</EmptyState>
+                  <EmptyState>{searchActive ? '条件に一致する項目がありません' : 'まだ成果物がありません'}</EmptyState>
                 ) : (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {filtered.map((file) => (
-                      <FileCard key={file.relpath} file={file} onDelete={handleDelete} onView={openView} onRenamed={refetch} onMoveRequest={(f) => setMoveTargets([f])} interactions={interactions} />
-                    ))}
-                  </div>
+                  <AttributeTable
+                    files={filtered}
+                    sort={sort}
+                    onSort={sortByColumn}
+                    colWidths={colWidths}
+                    onColWidths={changeColWidths}
+                    onDelete={handleDelete}
+                    onView={openView}
+                    onRenamed={refetchAll}
+                    onMoveRequest={(f) => setMoveTargets([f])}
+                    interactions={interactions}
+                  />
                 )
+              )}
+
+              {/* ギャラリービュー（MC-239: 画像向け 大サムネ＋フィルムストリップ）。 */}
+              {viewMode === 'gallery' && (
+                <GalleryView files={filtered} onView={openView} interactions={interactions} />
               )}
               </div>
 
@@ -2762,27 +3649,41 @@ export default function Deliverables() {
                     <InfoIcon width={14} height={14} />
                     詳細
                   </div>
-                  {detailFile ? (
+                  {selectedSingle ? (
                     <div className="space-y-3">
-                      <div className="truncate text-sm font-medium text-text" title={detailFile.name}>
-                        {detailFile.name}
+                      <div className="truncate text-sm font-medium text-text" title={selectedSingle.name}>
+                        {selectedSingle.name}
                       </div>
-                      <div className="max-h-72 overflow-auto rounded-lg border border-border bg-surface-2">
-                        <FileViewerBody file={detailFile} />
-                      </div>
-                      <FileMetaPanel file={detailFile} />
-                      <button
-                        type="button"
-                        onClick={() => openView(detailFile)}
-                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text-muted transition-colors hover:bg-surface-3 hover:text-text"
-                      >
-                        <EyeIcon width={13} height={13} />
-                        大きく表示（Space）
-                      </button>
+                      {/* プレビューはプレビュー可能ファイルのみ（detailFile）。フォルダ/非対応は省略。 */}
+                      {detailFile && detailFile.relpath === selectedSingle.relpath && (
+                        <div className="max-h-72 overflow-auto rounded-lg border border-border bg-surface-2">
+                          <FileViewerBody file={detailFile} />
+                        </div>
+                      )}
+                      <FileMetaPanel file={selectedSingle} />
+                      {/* MC-240: パス表示＋コピー。 */}
+                      <PathRow relpath={selectedSingle.relpath} />
+                      {/* MC-238: メタ編集（スター/タグ/色）。 */}
+                      <MetaEditor
+                        relpath={selectedSingle.relpath}
+                        meta={metaByPath.get(selectedSingle.relpath)}
+                        allTags={allTags}
+                        onSetMeta={onSetMeta}
+                      />
+                      {detailFile && detailFile.relpath === selectedSingle.relpath && (
+                        <button
+                          type="button"
+                          onClick={() => openView(detailFile)}
+                          className="inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text-muted transition-colors hover:bg-surface-3 hover:text-text"
+                        >
+                          <EyeIcon width={13} height={13} />
+                          大きく表示（Space）
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <p className="text-xs text-text-faint">
-                      ファイルを 1 件選択すると、ここに詳細とプレビューが表示されます。
+                      項目を 1 件選択すると、ここに詳細・パス・タグなどが表示されます。
                     </p>
                   )}
                 </div>
@@ -2796,7 +3697,7 @@ export default function Deliverables() {
           items={moveTargets}
           tree={tree}
           onCancel={() => setMoveTargets(null)}
-          onDone={() => { setMoveTargets(null); clearSelection(); refetch(); }}
+          onDone={() => { setMoveTargets(null); clearSelection(); refetchAll(); }}
         />
       )}
       {copyTargets && (
@@ -2804,7 +3705,7 @@ export default function Deliverables() {
           items={copyTargets}
           tree={tree}
           onCancel={() => setCopyTargets(null)}
-          onDone={() => { setCopyTargets(null); clearSelection(); refetch(); }}
+          onDone={() => { setCopyTargets(null); clearSelection(); refetchAll(); }}
         />
       )}
       {selectedViewFile && (

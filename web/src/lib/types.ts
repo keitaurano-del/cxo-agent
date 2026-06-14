@@ -389,6 +389,30 @@ export interface TrashResponse {
   error?: string;
 }
 
+// ─── 成果物メタ（スター/タグ/色ラベル）（MC-238）──────────────────
+// server/src/lib/deliverableMeta.ts の DeliverableMeta と一致させる。
+
+export type DeliverableColor =
+  | 'red'
+  | 'orange'
+  | 'yellow'
+  | 'green'
+  | 'blue'
+  | 'purple'
+  | 'gray';
+
+export interface DeliverableMeta {
+  starred: boolean;
+  tags: string[];
+  color: DeliverableColor | null;
+}
+
+export interface DeliverableMetaResponse {
+  generatedAt: string;
+  meta: Record<string, DeliverableMeta>; // relpath → meta
+  error?: string;
+}
+
 // ─── 横断検索（MC-73 / GET /api/search）──────────────────────
 // server/src/collectors/search.ts のレスポンス形と一致させる。
 
