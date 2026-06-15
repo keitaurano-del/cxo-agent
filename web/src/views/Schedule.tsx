@@ -88,12 +88,19 @@ interface PlanBlock {
   reason: string;
 }
 
+// 未配置のカテゴリ（サーバ契約。reason は従来どおり日本語文字列）。
+//  deadline-miss   … 締切に間に合わない（要対応として強調）
+//  no-capacity     … 容量不足で後回し（正常な溢れ）
+//  no-due-overflow … 期日なしが溢れた（正常な溢れ）
+type UnplacedCategory = 'deadline-miss' | 'no-capacity' | 'no-due-overflow';
+
 // 配置できなかった 1 件（理由つき・黙って落とさない）。
 interface UnplacedItem {
   taskId: string;
   account: string;
   title: string;
   reason: string;
+  category: UnplacedCategory;
 }
 
 interface PlanResponse {
@@ -101,6 +108,20 @@ interface PlanResponse {
   unplaced: UnplacedItem[];
   usedAi: boolean;
   generatedAt: string;
+  // 前回プラン比（previousBlocks を渡したときのみ意味を持つ）。
+  movedCount: number; // 動いた/新規ブロック数
+  keptCount: number; // 維持されたブロック数
+}
+
+// タスクメタ更新の body（PUT /api/planner/task-meta）。
+interface TaskMetaPatch {
+  account: string;
+  taskId: string;
+  locked?: boolean;
+  fixedStartIso?: string;
+  estMinutes?: number;
+  priority?: 'P1' | 'P2' | 'P3' | 'P4';
+  preferredDaypart?: string;
 }
 
 // プラン作成時に POST /plan へ渡す events の最小形（NormalizedEvent）。
@@ -390,6 +411,12 @@ export default function Schedule() {
   const [plannerConfig, setPlannerConfig] = useState<PlannerConfig | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
+  // このセッションでロックした「account|taskId」集合（即時反映用）。
+  // サーバ（task-meta）にも保存するが、UI 反映はこの集合を一次ソースとする。
+  const [lockedKeys, setLockedKeys] = useState<Set<string>>(() => new Set());
+  // ロック保存→再プランの直列処理中フラグ（連打防止）。
+  const [lockBusy, setLockBusy] = useState(false);
+
   // ── プランの Google カレンダー反映/削除（MC-245 P3）──
   // 登録先アカウント（選択。既定＝先頭。複数接続時のみ select を出す）。
   const [applyAccount, setApplyAccount] = useState<string>('');
@@ -415,9 +442,13 @@ export default function Schedule() {
   const planByDate = useMemo(() => groupPlanByDay(planBlocks), [planBlocks]);
 
   // 「プランを作成」: config 取得 → [now, now+horizon] の events/tasks を取得 → POST /plan。
+  // sticky 再プラン: 既にプランがあれば現在の blocks を previousBlocks として渡し、
+  //   有効な前回配置の位置を維持する（再実行で配置がガラッと変わらない）。
   const createPlan = useCallback(async () => {
     setPlanLoading(true);
     setPlanError(null);
+    // クロージャ時点の現プラン（sticky 用）。state 更新前に確定させる。
+    const prevBlocks = plan?.blocks ?? null;
     try {
       // config（horizonDays を使う。取得済みなら再利用）。
       let cfg = plannerConfig;
@@ -450,15 +481,25 @@ export default function Schedule() {
         allDay: ev.allDay,
       }));
 
+      const body: {
+        from: string;
+        to: string;
+        tasks: GoogleTask[];
+        events: PlanEventInput[];
+        previousBlocks?: PlanBlock[];
+      } = {
+        from: fromIso,
+        to: toIso2,
+        tasks: tkJson.tasks ?? [],
+        events: planEvents,
+      };
+      // 前回プランがある時だけ sticky 用に previousBlocks を載せる（無ければ付けない）。
+      if (prevBlocks && prevBlocks.length > 0) body.previousBlocks = prevBlocks;
+
       const res = await fetch('/api/planner/plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: fromIso,
-          to: toIso2,
-          tasks: tkJson.tasks ?? [],
-          events: planEvents,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`プラン作成に失敗しました (HTTP ${res.status})`);
       const json = (await res.json()) as PlanResponse;
@@ -469,7 +510,52 @@ export default function Schedule() {
     } finally {
       setPlanLoading(false);
     }
-  }, [plannerConfig]);
+  }, [plannerConfig, plan]);
+
+  // プランブロックのロック切替: task-meta を保存 → 成功後にそのまま sticky 再プラン。
+  // 即時反映のため lockedKeys を先に更新し、サーバ保存失敗時はロールバックする。
+  const toggleLock = useCallback(
+    async (block: PlanBlock) => {
+      if (lockBusy) return;
+      const key = blockKey(block.account, block.taskId);
+      const nextLocked = !lockedKeys.has(key);
+      setLockBusy(true);
+      // 楽観更新（UI 即時反映）。
+      setLockedKeys((cur) => {
+        const next = new Set(cur);
+        if (nextLocked) next.add(key);
+        else next.delete(key);
+        return next;
+      });
+      try {
+        const patch: TaskMetaPatch = {
+          account: block.account,
+          taskId: block.taskId,
+          locked: nextLocked,
+        };
+        const res = await fetch('/api/planner/task-meta', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        });
+        if (!res.ok) throw new Error(`ロックの保存に失敗しました (HTTP ${res.status})`);
+        // 保存成功 → そのまま再プラン（previousBlocks 付きで反映）。
+        await createPlan();
+      } catch (e) {
+        // 失敗時はロックの楽観更新を巻き戻す。
+        setLockedKeys((cur) => {
+          const next = new Set(cur);
+          if (nextLocked) next.delete(key);
+          else next.add(key);
+          return next;
+        });
+        setPlanError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLockBusy(false);
+      }
+    },
+    [lockBusy, lockedKeys, createPlan],
+  );
 
   // 設定パネルを開く（未取得なら取得）。
   const openSettings = useCallback(async () => {
@@ -717,7 +803,11 @@ export default function Schedule() {
                   className="inline-flex items-center gap-1.5 rounded-md border border-accent bg-accent/10 px-3 py-1.5 text-[12px] font-semibold text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <SparkIcon width={14} height={14} />
-                  {planLoading ? 'プラン作成中…' : 'プランを作成'}
+                  {planLoading
+                    ? 'プラン作成中…'
+                    : plan
+                      ? '再プラン（できるだけ維持）'
+                      : 'プランを作成'}
                 </button>
                 {plan && (
                   <button
@@ -841,7 +931,12 @@ export default function Schedule() {
             </div>
           )}
           {plan && showPlan && (
-            <PlanSummary plan={plan} />
+            <PlanSummary
+              plan={plan}
+              lockedKeys={lockedKeys}
+              lockBusy={lockBusy}
+              onToggleLock={(b) => void toggleLock(b)}
+            />
           )}
 
           {/* アカウント凡例（接続済みのとき） */}
@@ -876,6 +971,9 @@ export default function Schedule() {
                   tasksByDate={tasksByDate}
                   accountColors={accountColors}
                   onSelectDay={openDay}
+                  lockedKeys={lockedKeys}
+                  lockBusy={lockBusy}
+                  onToggleLock={(b) => void toggleLock(b)}
                 />
               )}
               {mode === 'day' && (
@@ -887,6 +985,9 @@ export default function Schedule() {
                   planBlocks={planBlocks}
                   tasksByDate={tasksByDate}
                   accountColors={accountColors}
+                  lockedKeys={lockedKeys}
+                  lockBusy={lockBusy}
+                  onToggleLock={(b) => void toggleLock(b)}
                 />
               )}
             </ResourceState>
@@ -906,13 +1007,35 @@ export default function Schedule() {
   );
 }
 
-// ─── プラン要約（メタ情報＋未配置）─────────────────────────────
-function PlanSummary({ plan }: { plan: PlanResponse }) {
+// ─── プラン要約（メタ情報＋未配置＋ブロック一覧）───────────────
+function PlanSummary({
+  plan,
+  lockedKeys,
+  lockBusy,
+  onToggleLock,
+}: {
+  plan: PlanResponse;
+  lockedKeys: Set<string>;
+  lockBusy: boolean;
+  onToggleLock: (block: PlanBlock) => void;
+}) {
   const generated = (() => {
     const d = new Date(plan.generatedAt);
     if (Number.isNaN(d.getTime())) return plan.generatedAt;
     return `${formatMd(eventDateIso(plan.generatedAt, false))} ${isoHmLabel(plan.generatedAt)}`;
   })();
+
+  // 未配置をカテゴリ別に振り分ける。
+  //  deadline-miss             → 要対応（最上部に強調・常時展開）
+  //  no-capacity/no-due-overflow → 容量不足の正常な溢れ（控えめ・折りたたみ）
+  const deadlineMiss = plan.unplaced.filter((u) => u.category === 'deadline-miss');
+  const overflow = plan.unplaced.filter(
+    (u) => u.category === 'no-capacity' || u.category === 'no-due-overflow',
+  );
+
+  // moved/kept 表示は前回プランがあった再プラン時のみ（初回＝両方 0 は出さない）。
+  const showDelta = plan.movedCount + plan.keptCount > 0;
+
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-accent/40 bg-accent/5 p-3 text-xs">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-text-muted">
@@ -921,16 +1044,23 @@ function PlanSummary({ plan }: { plan: PlanResponse }) {
           プラン {plan.blocks.length}件
         </span>
         <span>{plan.usedAi ? 'AI見積りで作成' : 'ヒューリスティック見積りで作成'}</span>
+        {showDelta && (
+          <span className="font-medium text-text">
+            {plan.keptCount}件を維持・{plan.movedCount}件を更新
+          </span>
+        )}
         <span>生成: {generated}</span>
         <span className="text-text-faint">（Googleには未反映＝提示のみ）</span>
       </div>
-      {plan.unplaced.length > 0 && (
-        <div className="rounded-md border border-blocked/40 bg-blocked/10 p-2">
+
+      {/* 締切に間に合わない（要対応・常時展開で強調） */}
+      {deadlineMiss.length > 0 && (
+        <div className="rounded-md border border-blocked/60 bg-blocked/15 p-2">
           <p className="mb-1 text-[11px] font-semibold text-blocked">
-            未配置（{plan.unplaced.length}件）— 空き時間に入りきりませんでした
+            ⚠️ 締切に間に合わない（{deadlineMiss.length}件）— 要対応
           </p>
           <ul className="flex flex-col gap-0.5">
-            {plan.unplaced.map((u) => (
+            {deadlineMiss.map((u) => (
               <li key={`${u.account}-${u.taskId}`} className="text-[11px] leading-tight text-text-muted">
                 <span className="font-medium text-text">{u.title}</span>
                 <span className="text-text-faint"> — {u.reason}</span>
@@ -939,6 +1069,121 @@ function PlanSummary({ plan }: { plan: PlanResponse }) {
           </ul>
         </div>
       )}
+
+      {/* 容量不足で後回し（正常な溢れ・控えめ＋折りたたみ） */}
+      {overflow.length > 0 && <OverflowSection items={overflow} />}
+
+      {/* ブロック一覧（ロックのトグル付き） */}
+      {plan.blocks.length > 0 && (
+        <PlanBlockList
+          blocks={plan.blocks}
+          lockedKeys={lockedKeys}
+          lockBusy={lockBusy}
+          onToggleLock={onToggleLock}
+        />
+      )}
+    </div>
+  );
+}
+
+// 容量不足の溢れ（折りたたみ・既定は閉じる）。
+function OverflowSection({ items }: { items: UnplacedItem[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-md border border-border bg-surface-2/50 p-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-1 text-left text-[11px] font-semibold text-text-muted hover:text-text"
+      >
+        <ChevronRightIcon
+          width={12}
+          height={12}
+          className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`}
+        />
+        容量不足で後回し（{items.length}件）
+      </button>
+      {open ? (
+        <>
+          <p className="mt-1 text-[10px] leading-tight text-text-faint">
+            稼働時間に入りきらなかった通常の溢れです（締切超過ではありません）。
+          </p>
+          <ul className="mt-1 flex flex-col gap-0.5">
+            {items.map((u) => (
+              <li key={`${u.account}-${u.taskId}`} className="text-[11px] leading-tight text-text-muted">
+                <span className="font-medium text-text">{u.title}</span>
+                <span className="text-text-faint"> — {u.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="mt-0.5 text-[10px] leading-tight text-text-faint">
+          稼働時間に入りきらなかった通常の溢れです（クリックで展開）。
+        </p>
+      )}
+    </div>
+  );
+}
+
+// プランブロック一覧（日時順）＋ロックのトグル（🔒）。
+function PlanBlockList({
+  blocks,
+  lockedKeys,
+  lockBusy,
+  onToggleLock,
+}: {
+  blocks: PlanBlock[];
+  lockedKeys: Set<string>;
+  lockBusy: boolean;
+  onToggleLock: (block: PlanBlock) => void;
+}) {
+  const sorted = useMemo(
+    () => blocks.slice().sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)),
+    [blocks],
+  );
+  return (
+    <div className="rounded-md border border-accent/30 bg-bg/40 p-2">
+      <p className="mb-1 text-[11px] font-semibold text-text-muted">
+        ブロック一覧 — 🔒は「再プランで動かさない」（位置を固定）
+      </p>
+      <ul className="flex flex-col gap-0.5">
+        {sorted.map((b) => {
+          const locked = lockedKeys.has(blockKey(b.account, b.taskId));
+          return (
+            <li
+              key={`${b.account}-${b.taskId}-${b.start}`}
+              className={`flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-[11px] leading-tight ${
+                locked ? 'bg-accent/10' : ''
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => onToggleLock(b)}
+                disabled={lockBusy}
+                aria-pressed={locked}
+                title={
+                  locked
+                    ? 'ロック中：再プランで動かしません（クリックで解除）'
+                    : 'ロックすると再プランで動かしません（位置を固定）'
+                }
+                className={`shrink-0 rounded-sm px-1 py-0.5 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  locked
+                    ? 'text-accent hover:bg-accent/20'
+                    : 'opacity-50 hover:bg-surface-2 hover:opacity-100'
+                }`}
+              >
+                {locked ? '🔒' : '🔓'}
+              </button>
+              <span className="shrink-0 tabular-nums text-text-faint">
+                {formatMd(planBlockDateIso(b))} {isoHmLabel(b.start)}〜{isoHmLabel(b.end)}
+              </span>
+              <span className="truncate font-medium text-text">{b.title}</span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -1431,6 +1676,11 @@ function planBlockDateIso(b: PlanBlock): string {
   return eventDateIso(b.start, false);
 }
 
+/** ロック集合のキー（account + taskId）。同一タスクのロック状態を一意に識別。 */
+function blockKey(account: string, taskId: string): string {
+  return `${account}|${taskId}`;
+}
+
 /** 日(YYYY-MM-DD) → プランブロック配列 の索引を作る。 */
 function groupPlanByDay(blocks: PlanBlock[]): Map<string, PlanBlock[]> {
   const m = new Map<string, PlanBlock[]>();
@@ -1576,6 +1826,9 @@ function DayColumn({
   accountColors,
   showNowLine,
   now,
+  lockedKeys,
+  lockBusy,
+  onToggleLock,
 }: {
   dayEvents: GoogleCalendarEvent[];
   dayPlanBlocks: PlanBlock[];
@@ -1584,6 +1837,9 @@ function DayColumn({
   accountColors: Map<string, string>;
   showNowLine: boolean;
   now: Date;
+  lockedKeys: Set<string>;
+  lockBusy: boolean;
+  onToggleLock: (block: PlanBlock) => void;
 }) {
   const positioned = useMemo(() => layoutTimedEvents(dayEvents, startHour), [dayEvents, startHour]);
   const positionedPlan = useMemo(
@@ -1636,25 +1892,51 @@ function DayColumn({
       })}
 
       {/* プランブロック（提示のみ・実予定と見分くアクセント点線枠／半透明。右側レーンに重ねる） */}
-      {positionedPlan.map((p) => (
-        <div
-          key={`plan-${p.block.account}-${p.block.taskId}-${p.block.start}`}
-          title={`プラン: ${isoHmLabel(p.block.start)}〜${isoHmLabel(p.block.end)} ${p.block.title}（${p.block.estMinutes}分）\n理由: ${p.block.reason}`}
-          className="absolute z-20 overflow-hidden rounded-sm border border-dashed border-accent bg-accent/15 px-1 py-0.5 text-[9px] leading-tight text-text backdrop-blur-[1px]"
-          style={{
-            top: p.topPx,
-            height: p.heightPx,
-            left: 'calc(50% + 1px)',
-            width: 'calc(50% - 2px)',
-          }}
-        >
-          <span className="block truncate font-semibold text-accent">プラン</span>
-          <span className="block truncate font-medium">{p.block.title}</span>
-          <span className="block truncate text-text-muted">
-            {isoHmLabel(p.block.start)}〜{isoHmLabel(p.block.end)}
-          </span>
-        </div>
-      ))}
+      {positionedPlan.map((p) => {
+        const locked = lockedKeys.has(blockKey(p.block.account, p.block.taskId));
+        return (
+          <div
+            key={`plan-${p.block.account}-${p.block.taskId}-${p.block.start}`}
+            title={
+              `プラン: ${isoHmLabel(p.block.start)}〜${isoHmLabel(p.block.end)} ${p.block.title}（${p.block.estMinutes}分）\n理由: ${p.block.reason}` +
+              (locked ? '\n🔒 ロック中（再プランで動かしません）' : '')
+            }
+            className={`absolute z-20 overflow-hidden rounded-sm border bg-accent/15 px-1 py-0.5 text-[9px] leading-tight text-text backdrop-blur-[1px] ${
+              locked ? 'border-solid border-accent ring-1 ring-accent/60' : 'border-dashed border-accent'
+            }`}
+            style={{
+              top: p.topPx,
+              height: p.heightPx,
+              left: 'calc(50% + 1px)',
+              width: 'calc(50% - 2px)',
+            }}
+          >
+            <span className="flex items-center justify-between gap-0.5">
+              <span className="truncate font-semibold text-accent">プラン</span>
+              <button
+                type="button"
+                onClick={() => onToggleLock(p.block)}
+                disabled={lockBusy}
+                aria-pressed={locked}
+                title={
+                  locked
+                    ? 'ロック中：再プランで動かしません（クリックで解除）'
+                    : 'ロックすると再プランで動かしません（位置を固定）'
+                }
+                className={`shrink-0 leading-none transition-opacity disabled:cursor-not-allowed disabled:opacity-50 ${
+                  locked ? 'opacity-100' : 'opacity-50 hover:opacity-100'
+                }`}
+              >
+                {locked ? '🔒' : '🔓'}
+              </button>
+            </span>
+            <span className="block truncate font-medium">{p.block.title}</span>
+            <span className="block truncate text-text-muted">
+              {isoHmLabel(p.block.start)}〜{isoHmLabel(p.block.end)}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1669,6 +1951,9 @@ function WeekView({
   tasksByDate,
   accountColors,
   onSelectDay,
+  lockedKeys,
+  lockBusy,
+  onToggleLock,
 }: {
   anchor: string;
   today: string;
@@ -1678,6 +1963,9 @@ function WeekView({
   tasksByDate: Map<string, GoogleTask[]>;
   accountColors: Map<string, string>;
   onSelectDay: (iso: string) => void;
+  lockedKeys: Set<string>;
+  lockBusy: boolean;
+  onToggleLock: (block: PlanBlock) => void;
 }) {
   const weekStart = startOfWeekIso(anchor);
   const days = useMemo(
@@ -1764,6 +2052,9 @@ function WeekView({
                 accountColors={accountColors}
                 showNowLine={d === today}
                 now={now}
+                lockedKeys={lockedKeys}
+                lockBusy={lockBusy}
+                onToggleLock={onToggleLock}
               />
             ))}
           </div>
@@ -1782,6 +2073,9 @@ function DayView({
   planBlocks,
   tasksByDate,
   accountColors,
+  lockedKeys,
+  lockBusy,
+  onToggleLock,
 }: {
   anchor: string;
   today: string;
@@ -1790,6 +2084,9 @@ function DayView({
   planBlocks: PlanBlock[];
   tasksByDate: Map<string, GoogleTask[]>;
   accountColors: Map<string, string>;
+  lockedKeys: Set<string>;
+  lockBusy: boolean;
+  onToggleLock: (block: PlanBlock) => void;
 }) {
   const days = useMemo(() => [anchor], [anchor]);
 
@@ -1843,6 +2140,9 @@ function DayView({
               accountColors={accountColors}
               showNowLine={anchor === today}
               now={now}
+              lockedKeys={lockedKeys}
+              lockBusy={lockBusy}
+              onToggleLock={onToggleLock}
             />
           </div>
         </div>
