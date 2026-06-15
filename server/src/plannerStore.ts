@@ -132,7 +132,8 @@ export const DEFAULT_PLANNER_CONFIG: PlannerConfig = {
   ],
   dailyMaxMinutes: 480,
   bufferMinutes: 15,
-  horizonDays: 7,
+  // 既定の計画期間は 14 日（タスクが多く空き時間が限られる運用で、7日だと未配置が大量に出るため広げた）。
+  horizonDays: 14,
   defaultTaskMinutes: 30,
   targetLists: null,
 };
