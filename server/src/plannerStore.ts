@@ -27,6 +27,21 @@ export type DaypartPref = 'morning' | 'afternoon' | 'evening';
 /** 優先度（4 段。P1=最重要 … P4=後回し可）。旧 high/med/low は normPriority で後方互換マップ。 */
 export type Priority = 'P1' | 'P2' | 'P3' | 'P4';
 
+/**
+ * 集中時間／習慣枠（P4d）の定義。指定曜日(JST)の固定時刻に durationMin の枠を先取り確保する。
+ * 配置はタスクより前に行い、タスクがこの枠に重ならないようにする（busy 相当の占有）。
+ */
+export interface FocusBlockDef {
+  /** 枠の表示名（非空）。 */
+  title: string;
+  /** 対象曜日（0=日 .. 6=土・JST）。 */
+  daysOfWeek: number[];
+  /** 開始 'HH:MM'（JST）。 */
+  start: string;
+  /** 継続（分・正の数）。 */
+  durationMin: number;
+}
+
 /** プランナー設定（稼働時間帯・ブラックアウト・上限・計画期間など）。 */
 export interface PlannerConfig {
   /** 稼働開始 'HH:MM'（既定 '09:00'）。 */
@@ -45,6 +60,8 @@ export interface PlannerConfig {
   defaultTaskMinutes: number;
   /** 対象 listTitle。null = 全部。 */
   targetLists: string[] | null;
+  /** 集中時間／習慣枠（P4d・既定 []）。タスク配置の前に空きを占有する。 */
+  focusBlocks: FocusBlockDef[];
 }
 
 /**
@@ -104,6 +121,8 @@ export interface PlanBlock {
   end: string;
   estMinutes: number;
   reason: string;
+  /** ブロック種別（P4d）。省略時は 'task' 扱い。'focus' は集中時間／習慣枠。 */
+  kind?: 'task' | 'focus';
 }
 
 /**
@@ -151,6 +170,7 @@ export const DEFAULT_PLANNER_CONFIG: PlannerConfig = {
   horizonDays: 14,
   defaultTaskMinutes: 30,
   targetLists: null,
+  focusBlocks: [],
 };
 
 // ─── 汎用 JSONL ヘルパ（last-wins）─────────────────────────
@@ -211,6 +231,7 @@ function mergeConfig(base: PlannerConfig, patch: Partial<PlannerConfig>): Planne
     defaultTaskMinutes: patch.defaultTaskMinutes ?? base.defaultTaskMinutes,
     // targetLists は null を明示値として尊重するため、undefined のときだけ base を使う。
     targetLists: patch.targetLists === undefined ? base.targetLists : patch.targetLists,
+    focusBlocks: patch.focusBlocks ?? base.focusBlocks,
   };
 }
 

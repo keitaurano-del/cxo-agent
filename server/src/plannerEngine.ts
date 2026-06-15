@@ -18,6 +18,7 @@
 
 import {
   type DaypartPref,
+  type FocusBlockDef,
   type PlanBlock,
   type PlanEventInput,
   type PlannerConfig,
@@ -160,6 +161,67 @@ function buildSlots(
   return slots;
 }
 
+// ─── 集中枠（focusBlocks・P4d）────────────────────────────────
+
+/** epoch ms（その日の JST 0:00）から JST 曜日（0=日..6=土）を返す。 */
+function jstDayOfWeek(dayStartMs: number): number {
+  // 1970-01-01(UTC) は木曜=4。JST 0:00 の epoch ms に +9h して日数を取り、(4+days) mod 7。
+  const days = Math.floor((dayStartMs + JST_OFFSET_MS) / 86_400_000);
+  return ((days % 7) + 4 + 7 * 2) % 7; // +28 で負を避けてから mod。
+}
+
+/**
+ * 計画期間 [fromMs, toMs) の各 JST 日について、focusBlocks のうちその曜日に該当する定義ごとに
+ * 集中枠ブロックを生成し、空きスロットを占有（reserve）する。占有できた枠だけ PlanBlock を返す。
+ * - dailyMaxMinutes には算入しない（reserveFocus がスロット分割のみ行う）。
+ * - 稼働窓外/blackout/予定・pin と衝突、from 以前はスキップ。
+ */
+function reserveFocusBlocks(
+  slots: Slot[],
+  fromMs: number,
+  toMs: number,
+  defs: FocusBlockDef[],
+): PlanBlock[] {
+  const out: PlanBlock[] = [];
+  if (!Array.isArray(defs) || defs.length === 0) return out;
+
+  let dayStart = jstDayStart(fromMs);
+  const lastDayStart = jstDayStart(toMs);
+  for (; dayStart <= lastDayStart; dayStart += 86_400_000) {
+    const dow = jstDayOfWeek(dayStart);
+    for (let di = 0; di < defs.length; di++) {
+      const def = defs[di];
+      if (!def || !Array.isArray(def.daysOfWeek) || !def.daysOfWeek.includes(dow)) continue;
+      const startMin = hhmmToMinutes(def.start);
+      if (startMin === null) continue;
+      const dur = def.durationMin;
+      if (!Number.isFinite(dur) || dur <= 0) continue;
+
+      const startMs = dayStart + startMin * MS_PER_MIN;
+      const endMs = startMs + dur * MS_PER_MIN;
+      // from 以前（過去）はスキップ。
+      if (startMs < fromMs) continue;
+      // 占有を試みる（稼働窓外/blackout/予定・pin と衝突する枠は false でスキップ）。
+      if (!reserveFocus(slots, startMs, endMs)) continue;
+
+      // YYYY-MM-DD（JST）を組み立てる（taskId の決定的キー用）。
+      const jst = new Date(dayStart + JST_OFFSET_MS);
+      const ymd = `${jst.getUTCFullYear()}-${String(jst.getUTCMonth() + 1).padStart(2, '0')}-${String(jst.getUTCDate()).padStart(2, '0')}`;
+      out.push({
+        taskId: `focus:${di}:${ymd}`,
+        account: '',
+        title: typeof def.title === 'string' ? def.title : '',
+        start: toIso(startMs),
+        end: toIso(endMs),
+        estMinutes: dur,
+        reason: '集中時間（習慣枠）',
+        kind: 'focus',
+      });
+    }
+  }
+  return out;
+}
+
 // ─── タスク整列 ──────────────────────────────────────────────
 
 // P1=最重要 … P4=後回し可。整列では rank が小さいほど先（=高優先）。
@@ -260,6 +322,8 @@ export function planSchedule(
   const prevStartByKey = new Map<string, string>();
   if (hasPrevious) {
     for (const pb of req.previousBlocks!) {
+      // focus 枠は config から決定的に出るため moved/kept 突合の対象外（除外）。
+      if (pb.kind === 'focus') continue;
       prevStartByKey.set(metaKey(pb.account, pb.taskId), pb.start);
     }
   }
@@ -286,6 +350,12 @@ export function planSchedule(
 
   // 日次の既使用分（dailyMaxMinutes 集計）。key=dayStart epoch ms。
   const usedPerDay = new Map<number, number>();
+
+  // ①' 集中枠（focusBlocks・P4d）をタスク配置の前に先取り確保する。
+  //    各 JST 日の該当曜日について [start, start+durationMin) を占有（busy 相当・dailyMax 非算入）。
+  //    稼働窓外・blackout・既存予定/pin と衝突する枠、from 以前の枠はスキップ（無理に押し込まない）。
+  const focusBlocks = reserveFocusBlocks(slots, effectiveFrom, toMs, config.focusBlocks);
+  for (const fb of focusBlocks) blocks.push(fb);
 
   // 固定予定（fixedStartIso）の busy を先に slots から差し引くため、固定タスクを先に処理する。
   // 整列対象タスク（status=completed は除外）。
@@ -412,18 +482,20 @@ export function planSchedule(
   // ─── finalize（moved/kept 集計＋整列）─────────────────────────
 
   function finalize(bs: PlanBlock[], up: UnplacedItem[]): PlanResponse {
-    // ブロックは開始時刻順に整える（固定・ピン・可変が混ざるため）。
+    // ブロックは開始時刻順に整える（固定・ピン・可変・focus が混ざるため）。
     bs.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+    // moved/kept は task ブロック（kind!=='focus'）だけで集計する（focus は config から決定的で増減ノイズにしない）。
+    const taskBlocks = bs.filter((b) => b.kind !== 'focus');
     let movedCount: number;
     let keptCount: number;
     if (!hasPrevious) {
-      // previousBlocks 未指定 → 全件「新規」扱い。
-      movedCount = bs.length;
+      // previousBlocks 未指定 → 全件「新規」扱い（task のみ）。
+      movedCount = taskBlocks.length;
       keptCount = 0;
     } else {
       movedCount = 0;
       keptCount = 0;
-      for (const b of bs) {
+      for (const b of taskBlocks) {
         const prevStart = prevStartByKey.get(metaKey(b.account, b.taskId));
         if (prevStart !== undefined && prevStart === b.start) keptCount++;
         else movedCount++; // 位置変更 or 新規。
@@ -464,6 +536,7 @@ export function planSchedule(
       end: toIso(endMs),
       estMinutes: st.est.estMinutes,
       reason: buildReason(st, startMs, fixed),
+      kind: 'task',
     };
   }
 }
@@ -521,6 +594,30 @@ function greedyPlace(
     if (pref) return pref;
   }
   return tryPass(false);
+}
+
+/**
+ * 集中枠（focus）を [start,end) に占有（reserve）できるか試す（P4d）。
+ * placeFixed と同様、既存スロットに完全に収まる（重複なし）場合のみスロットを分割して占有し true。
+ * 部分重なり/稼働窓外/blackout/既存予定・pin と衝突する場合は占有せず false（その枠はスキップ）。
+ * タスクではないため dailyMaxMinutes（usedPerDay）には算入しない。スロット占有のみ行う。
+ */
+function reserveFocus(slots: Slot[], start: number, end: number): boolean {
+  for (let i = 0; i < slots.length; i++) {
+    const slot = slots[i];
+    if (start >= slot.start && end <= slot.end) {
+      // 完全包含 → スロットを分割（usedPerDay は加算しない）。
+      const dayStart = slot.dayStart;
+      const replacements: Slot[] = [];
+      if (start - slot.start >= MS_PER_MIN) replacements.push({ start: slot.start, end: start, dayStart });
+      if (slot.end - end >= MS_PER_MIN) replacements.push({ start: end, end: slot.end, dayStart });
+      slots.splice(i, 1, ...replacements);
+      return true;
+    }
+    // 完全包含でない重なり → このスロットでは占有不可。完全包含し得るスロットは他に無いので失敗。
+    if (overlaps({ start, end }, { start: slot.start, end: slot.end })) return false;
+  }
+  return false;
 }
 
 /**

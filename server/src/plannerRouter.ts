@@ -20,6 +20,7 @@ import {
   upsertTaskMeta,
   taskMetaMap,
   type DaypartPref,
+  type FocusBlockDef,
   type PlanBlock,
   type PlannerConfig,
   type PlanEventInput,
@@ -116,6 +117,46 @@ function validateConfigPatch(body: Record<string, unknown>, res: Response): Part
       res.status(400).json({ error: 'targetLists must be string[] or null' });
       return null;
     }
+  }
+  if (body.focusBlocks !== undefined) {
+    if (!Array.isArray(body.focusBlocks)) {
+      res.status(400).json({ error: 'focusBlocks must be an array of { title, daysOfWeek, start, durationMin }' });
+      return null;
+    }
+    const out: FocusBlockDef[] = [];
+    for (const f of body.focusBlocks) {
+      if (!f || typeof f !== 'object') {
+        res.status(400).json({ error: 'each focusBlock must be { title, daysOfWeek, start, durationMin }' });
+        return null;
+      }
+      const rec = f as Record<string, unknown>;
+      if (typeof rec.title !== 'string' || rec.title.trim() === '') {
+        res.status(400).json({ error: 'focusBlocks title must be a non-empty string' });
+        return null;
+      }
+      if (
+        !Array.isArray(rec.daysOfWeek) ||
+        !rec.daysOfWeek.every((d) => Number.isInteger(d) && (d as number) >= 0 && (d as number) <= 6)
+      ) {
+        res.status(400).json({ error: 'focusBlocks daysOfWeek must be an array of integers 0..6' });
+        return null;
+      }
+      if (!isHHMM(rec.start)) {
+        res.status(400).json({ error: 'focusBlocks start must be HH:MM' });
+        return null;
+      }
+      if (!isFiniteNumber(rec.durationMin) || (rec.durationMin as number) <= 0) {
+        res.status(400).json({ error: 'focusBlocks durationMin must be a positive number' });
+        return null;
+      }
+      out.push({
+        title: rec.title.trim(),
+        daysOfWeek: (rec.daysOfWeek as number[]).slice(),
+        start: rec.start.trim(),
+        durationMin: rec.durationMin as number,
+      });
+    }
+    patch.focusBlocks = out;
   }
   return patch;
 }
