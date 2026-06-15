@@ -59,9 +59,18 @@ function clampMinutes(v: unknown, fallback: number): number {
   return Math.min(MAX_EST, Math.max(MIN_EST, Math.round(n)));
 }
 
-/** priority 文字列を正規化（不正は 'med'）。 */
-function normPriority(v: unknown): Priority {
-  return v === 'high' || v === 'med' || v === 'low' ? v : 'med';
+/**
+ * priority を 4 段（P1-P4）に正規化する。後方互換つき。
+ *  - 'high' → 'P2', 'med' → 'P3', 'low' → 'P4'
+ *  - 既に 'P1'..'P4' ならそのまま
+ *  - それ以外/不正 → 'P3'
+ */
+export function normPriority(v: unknown): Priority {
+  if (v === 'P1' || v === 'P2' || v === 'P3' || v === 'P4') return v;
+  if (v === 'high') return 'P2';
+  if (v === 'med') return 'P3';
+  if (v === 'low') return 'P4';
+  return 'P3';
 }
 
 /** daypart 文字列を正規化（不正/未指定は null）。 */
@@ -80,8 +89,12 @@ function cacheKeyFor(t: PlanTaskInput): string {
 
 // ─── ヒューリスティック見積り（必ず動く）──────────────────────
 
-const HIGH_WORDS = ['今日', '高', '至急', '緊急', 'asap', 'urgent'];
-const LOW_WORDS = ['低', 'いつか', 'someday', 'later'];
+// P1（最重要）: 至急/緊急/asap/urgent。
+const P1_WORDS = ['至急', '緊急', 'asap', 'urgent'];
+// P2（高）: 今日/高。
+const P2_WORDS = ['今日', '高'];
+// P4（後回し可）: 低/someday/later（いつか も後方互換で含む）。
+const P4_WORDS = ['低', 'いつか', 'someday', 'later'];
 
 /** 締切が 48h 以内か（due は JST の YYYY-MM-DD・時刻なし。その日の 23:59 JST を期限とみなす）。 */
 function dueWithin48h(due: string | undefined, fromMs: number): boolean {
@@ -93,15 +106,18 @@ function dueWithin48h(due: string | undefined, fromMs: number): boolean {
   return endUtc - fromMs <= 48 * 3600 * 1000;
 }
 
-/** 優先度を 1 段引き上げる。 */
+/** 優先度を 1 段引き上げる（P1 で頭打ち）。 */
 function bumpPriority(p: Priority): Priority {
-  return p === 'low' ? 'med' : 'high';
+  if (p === 'P4') return 'P3';
+  if (p === 'P3') return 'P2';
+  return 'P1'; // P2 → P1, P1 → P1（頭打ち）。
 }
 
 /**
  * ヒューリスティック見積り（claude を呼ばない・必ず返す）。
  *  - estMinutes: defaultTaskMinutes をベースに、タイトル/notes のキーワードで軽く調整。
- *  - priority: listTitle/タイトルに「今日」「高」→ high、「低」→ low、それ以外 med。due 48h 以内なら 1 段上げ。
+ *  - priority: listTitle/タイトルに「至急/緊急/asap/urgent」→ P1、「今日/高」→ P2、
+ *    「低/someday/later」→ P4、それ以外 P3。due 48h 以内なら 1 段上げ（P1 で頭打ち）。
  *  - preferredDaypart: null。
  */
 export function heuristicEstimate(
@@ -111,9 +127,10 @@ export function heuristicEstimate(
 ): TaskEstimate {
   const hay = `${t.listTitle} ${t.title} ${t.notes ?? ''}`.toLowerCase();
 
-  let priority: Priority = 'med';
-  if (HIGH_WORDS.some((w) => hay.includes(w.toLowerCase()))) priority = 'high';
-  else if (LOW_WORDS.some((w) => hay.includes(w.toLowerCase()))) priority = 'low';
+  let priority: Priority = 'P3';
+  if (P1_WORDS.some((w) => hay.includes(w.toLowerCase()))) priority = 'P1';
+  else if (P2_WORDS.some((w) => hay.includes(w.toLowerCase()))) priority = 'P2';
+  else if (P4_WORDS.some((w) => hay.includes(w.toLowerCase()))) priority = 'P4';
   if (dueWithin48h(t.due, fromMs)) priority = bumpPriority(priority);
 
   // 所要時間の軽い調整（任意）。「資料/設計/実装」等は長め、「連絡/メール/確認」等は短め。
@@ -146,15 +163,15 @@ function buildPrompt(tasks: PlanTaskInput[]): string {
     '',
     '各タスクの推定値の制約:',
     '- estMinutes: 実際に手を動かす所要時間（分）。5〜240 の現実的な整数。短い連絡/確認は小さく、資料/設計/実装は大きく。',
-    '- priority: "high"（締切が近い・重要）/ "med"（通常）/ "low"（後回し可）のいずれか。',
+    '- priority: "P1"（最重要・最優先）/ "P2"（高）/ "P3"（通常）/ "P4"（後回し可）のいずれか。',
     '- daypart: 適した時間帯。"morning"（午前・集中作業）/ "afternoon"（午後）/ "evening"（夜）/ 特に無ければ null。',
-    '- 情報が乏しい場合は無理に決めず、estMinutes=30・priority="med"・daypart=null 寄りの無難な値にする。',
+    '- 情報が乏しい場合は無理に決めず、estMinutes=30・priority="P3"・daypart=null 寄りの無難な値にする。',
     '',
     'タスク一覧:',
     ...items,
     '',
     '出力は次の JSON 配列のみ（前後に説明や ``` を付けない）。id は入力の id をそのまま返す:',
-    '[{"id":"...","estMinutes":30,"priority":"med","daypart":null}]',
+    '[{"id":"...","estMinutes":30,"priority":"P3","daypart":null}]',
   ].join('\n');
 }
 
@@ -266,7 +283,8 @@ export async function estimateTasks(
     if (cached) {
       base = {
         estMinutes: cached.estMinutes,
-        priority: cached.priority,
+        // 旧キャッシュは high/med/low で保存されている可能性があるため normPriority で 4 段化する。
+        priority: normPriority(cached.priority),
         preferredDaypart: cached.preferredDaypart,
         source: 'ai',
       };

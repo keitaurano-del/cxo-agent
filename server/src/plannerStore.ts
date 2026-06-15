@@ -24,8 +24,8 @@ import {
 /** 希望時間帯。 */
 export type DaypartPref = 'morning' | 'afternoon' | 'evening';
 
-/** 優先度。 */
-export type Priority = 'high' | 'med' | 'low';
+/** 優先度（4 段。P1=最重要 … P4=後回し可）。旧 high/med/low は normPriority で後方互換マップ。 */
+export type Priority = 'P1' | 'P2' | 'P3' | 'P4';
 
 /** プランナー設定（稼働時間帯・ブラックアウト・上限・計画期間など）。 */
 export interface PlannerConfig {
@@ -91,6 +91,8 @@ export interface PlanRequest {
   to?: string;
   tasks: PlanTaskInput[];
   events: PlanEventInput[];
+  /** 前回プラン（sticky 再プラン用）。有効なら位置を維持する（P4b）。 */
+  previousBlocks?: PlanBlock[];
 }
 
 /** 配置された 1 ブロック。 */
@@ -104,12 +106,21 @@ export interface PlanBlock {
   reason: string;
 }
 
+/**
+ * 未配置のカテゴリ（P4a）。
+ *  - deadline-miss : due があり、その due までに置けなかった（締切に間に合わない＝要対応）。
+ *  - no-due-overflow: due が無く、容量不足で置けなかった（期日なしの後回し）。
+ *  - no-capacity  : それ以外（due が計画期間より先 等で期間内に置けない／一般の容量不足）。
+ */
+export type UnplacedCategory = 'deadline-miss' | 'no-capacity' | 'no-due-overflow';
+
 /** 配置できなかった 1 件（理由つき・黙って落とさない）。 */
 export interface UnplacedItem {
   taskId: string;
   account: string;
   title: string;
   reason: string;
+  category: UnplacedCategory;
 }
 
 /** /plan の出力。 */
@@ -118,6 +129,10 @@ export interface PlanResponse {
   unplaced: UnplacedItem[];
   usedAi: boolean;
   generatedAt: string;
+  /** previousBlocks と比べ位置が変わった/新規になったブロック数（未指定なら blocks.length）。 */
+  movedCount: number;
+  /** sticky で位置を維持したブロック数（未指定なら 0）。 */
+  keptCount: number;
 }
 
 // ─── 既定値 ──────────────────────────────────────────────

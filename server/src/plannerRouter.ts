@@ -20,13 +20,14 @@ import {
   upsertTaskMeta,
   taskMetaMap,
   type DaypartPref,
+  type PlanBlock,
   type PlannerConfig,
   type PlanEventInput,
   type PlanRequest,
   type PlanTaskInput,
-  type Priority,
   type TaskMeta,
 } from './plannerStore.js';
+import { normPriority } from './plannerEstimate.js';
 import { estimateTasks } from './plannerEstimate.js';
 import { planSchedule } from './plannerEngine.js';
 
@@ -42,8 +43,12 @@ function isFiniteNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
 
-function isPriority(v: unknown): v is Priority {
-  return v === 'high' || v === 'med' || v === 'low';
+/** P1-P4（4 段）または旧 high/med/low を受理（保存時は normPriority で P1-P4 に正規化）。 */
+function isPriorityInput(v: unknown): boolean {
+  return (
+    v === 'P1' || v === 'P2' || v === 'P3' || v === 'P4' ||
+    v === 'high' || v === 'med' || v === 'low'
+  );
 }
 
 function isDaypart(v: unknown): v is DaypartPref {
@@ -137,11 +142,12 @@ function validateTaskMeta(body: Record<string, unknown>, res: Response): TaskMet
     meta.estMinutes = body.estMinutes;
   }
   if (body.priority !== undefined) {
-    if (!isPriority(body.priority)) {
-      res.status(400).json({ error: "priority must be 'high' | 'med' | 'low'" });
+    if (!isPriorityInput(body.priority)) {
+      res.status(400).json({ error: "priority must be 'P1' | 'P2' | 'P3' | 'P4' (or legacy high/med/low)" });
       return null;
     }
-    meta.priority = body.priority;
+    // 保存は 4 段に正規化（旧 high/med/low も P1-P4 に変換して統一）。
+    meta.priority = normPriority(body.priority);
   }
   if (body.preferredDaypart !== undefined) {
     if (body.preferredDaypart !== null && !isDaypart(body.preferredDaypart)) {
@@ -194,6 +200,24 @@ function normTask(raw: unknown): PlanTaskInput | null {
     listTitle: r.listTitle,
     ...(typeof r.due === 'string' ? { due: r.due } : {}),
     ...(typeof r.notes === 'string' ? { notes: r.notes } : {}),
+  };
+}
+
+/** /plan の previousBlocks 1 件を検証して PlanBlock に正規化。不正は null（静かに落とす）。 */
+function normPrevBlock(raw: unknown): PlanBlock | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.taskId !== 'string' || typeof r.account !== 'string') return null;
+  if (typeof r.start !== 'string' || !Number.isFinite(Date.parse(r.start))) return null;
+  if (typeof r.end !== 'string' || !Number.isFinite(Date.parse(r.end))) return null;
+  return {
+    taskId: r.taskId,
+    account: r.account,
+    title: typeof r.title === 'string' ? r.title : '',
+    start: r.start,
+    end: r.end,
+    estMinutes: isFiniteNumber(r.estMinutes) ? r.estMinutes : 0,
+    reason: typeof r.reason === 'string' ? r.reason : '',
   };
 }
 
@@ -260,6 +284,10 @@ async function handlePlan(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'events must be an array' });
     return;
   }
+  if (body.previousBlocks !== undefined && !Array.isArray(body.previousBlocks)) {
+    res.status(400).json({ error: 'previousBlocks must be an array' });
+    return;
+  }
 
   // 入力を正規化（不正項目は静かに落とす＝堅牢性優先）。
   const tasks: PlanTaskInput[] = [];
@@ -271,6 +299,17 @@ async function handlePlan(req: Request, res: Response): Promise<void> {
   for (const e of (body.events as unknown[] | undefined) ?? []) {
     const norm = normEvent(e);
     if (norm) events.push(norm);
+  }
+
+  // previousBlocks（sticky 用）。指定があれば正規化（不正項目は静かに落とす）。
+  // 指定そのものが無い場合は undefined のまま（従来挙動: moved=blocks.length, kept=0）。
+  let previousBlocks: PlanBlock[] | undefined;
+  if (Array.isArray(body.previousBlocks)) {
+    previousBlocks = [];
+    for (const pb of body.previousBlocks) {
+      const norm = normPrevBlock(pb);
+      if (norm) previousBlocks.push(norm);
+    }
   }
 
   const config = getConfig();
@@ -293,6 +332,7 @@ async function handlePlan(req: Request, res: Response): Promise<void> {
     ...(typeof body.to === 'string' ? { to: body.to } : {}),
     tasks: filteredTasks,
     events,
+    ...(previousBlocks !== undefined ? { previousBlocks } : {}),
   };
   const result = planSchedule(planReq, config, byKey, metaMap, usedAi);
   res.json(result);

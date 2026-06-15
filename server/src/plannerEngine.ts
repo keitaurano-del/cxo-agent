@@ -25,6 +25,8 @@ import {
   type PlanTaskInput,
   type Priority,
   type TaskMeta,
+  type UnplacedCategory,
+  type UnplacedItem,
   metaKey,
 } from './plannerStore.js';
 import type { TaskEstimate } from './plannerEstimate.js';
@@ -160,7 +162,8 @@ function buildSlots(
 
 // ─── タスク整列 ──────────────────────────────────────────────
 
-const PRIORITY_RANK: Record<Priority, number> = { high: 0, med: 1, low: 2 };
+// P1=最重要 … P4=後回し可。整列では rank が小さいほど先（=高優先）。
+const PRIORITY_RANK: Record<Priority, number> = { P1: 0, P2: 1, P3: 2, P4: 3 };
 
 interface ScheduledTask {
   task: PlanTaskInput;
@@ -168,6 +171,23 @@ interface ScheduledTask {
   meta: TaskMeta | undefined;
   /** due の epoch ms（JST 当日 23:59:59 を期限とみなす）。無ければ undefined。 */
   dueMs: number | undefined;
+}
+
+/**
+ * 締切の切迫度で実効優先度段を引き上げる（締切が優先度を上書きする）。
+ *  - due が 24h 以内 → 2 段引き上げ（P3→P1 等）
+ *  - due が 48h 以内 → 1 段引き上げ
+ *  - それ以外 → 据え置き
+ * P1（rank 0）で頭打ち。返り値は PRIORITY_RANK と同じ「小さいほど高優先」のスケール。
+ */
+function effectivePriorityRank(base: Priority, dueMs: number | undefined, fromMs: number): number {
+  let rank = PRIORITY_RANK[base];
+  if (dueMs !== undefined) {
+    const lead = dueMs - fromMs;
+    if (lead <= 24 * 3600 * 1000) rank -= 2;
+    else if (lead <= 48 * 3600 * 1000) rank -= 1;
+  }
+  return Math.max(0, rank);
 }
 
 /** due（JST YYYY-MM-DD・時刻なし）を「その日 23:59:59 JST」の epoch ms に。無効は undefined。 */
@@ -195,7 +215,8 @@ function buildReason(st: ScheduledTask, startMs: number, fixed: boolean): string
   if (fixed) return '固定時刻の予定';
   const reasons: string[] = [];
   if (st.dueMs !== undefined && st.dueMs - startMs <= 48 * 3600 * 1000) reasons.push('締切が近い');
-  if (st.est.priority === 'high') reasons.push('優先度高');
+  if (st.est.priority === 'P1') reasons.push('最優先(P1)');
+  else if (st.est.priority === 'P2') reasons.push('優先度高(P2)');
   const dp = st.est.preferredDaypart;
   if (dp && inDaypart(startMs, dp)) {
     reasons.push(dp === 'morning' ? '午前の集中枠' : dp === 'afternoon' ? '午後の枠' : '夜の枠');
@@ -213,7 +234,13 @@ function buildReason(st: ScheduledTask, startMs: number, fixed: boolean): string
  * @param usedAi    見積り段階で AI が使われたか（そのまま PlanResponse に通す）。
  */
 export function planSchedule(
-  req: { from: string; to?: string; tasks: PlanTaskInput[]; events: PlanEventInput[] },
+  req: {
+    from: string;
+    to?: string;
+    tasks: PlanTaskInput[];
+    events: PlanEventInput[];
+    previousBlocks?: PlanBlock[];
+  },
   config: PlannerConfig,
   estimates: Map<string, TaskEstimate>,
   metaMap: Map<string, TaskMeta>,
@@ -227,15 +254,31 @@ export function planSchedule(
   const toParsed = req.to ? Date.parse(req.to) : NaN;
   const toMs = Number.isFinite(toParsed) ? toParsed : effectiveFrom + horizonMs;
 
+  // sticky 用: クライアントが previousBlocks を渡したか（渡さない＝従来挙動）。
+  const hasPrevious = Array.isArray(req.previousBlocks);
+  // taskMetaKey → 前回ブロックの開始 ISO。moved/kept 判定に使う。
+  const prevStartByKey = new Map<string, string>();
+  if (hasPrevious) {
+    for (const pb of req.previousBlocks!) {
+      prevStartByKey.set(metaKey(pb.account, pb.taskId), pb.start);
+    }
+  }
+
   const blocks: PlanBlock[] = [];
-  const unplaced: PlanResponse['unplaced'] = [];
+  const unplaced: UnplacedItem[] = [];
 
   if (toMs <= effectiveFrom) {
-    // 期間が無い → 全件 unplaced。
+    // 期間が無い → 全件 unplaced（due の有無でカテゴリ分け）。
     for (const t of req.tasks) {
-      unplaced.push({ taskId: t.id, account: t.account, title: t.title, reason: '計画期間が空です' });
+      unplaced.push({
+        taskId: t.id,
+        account: t.account,
+        title: t.title,
+        reason: '計画期間が空です',
+        category: t.due ? 'deadline-miss' : 'no-due-overflow',
+      });
     }
-    return { blocks, unplaced, usedAi, generatedAt: new Date().toISOString() };
+    return finalize(blocks, unplaced);
   }
 
   // ① 空きスロット生成。
@@ -252,30 +295,36 @@ export function planSchedule(
     const mkey = metaKey(t.account, t.id);
     const est = estimates.get(mkey) ?? {
       estMinutes: config.defaultTaskMinutes,
-      priority: 'med' as Priority,
+      priority: 'P3' as Priority,
       preferredDaypart: null,
       source: 'heuristic' as const,
     };
     scheduled.push({ task: t, est, meta: metaMap.get(mkey), dueMs: dueToMs(t.due) });
   }
 
-  // ② 固定タスク（fixedStartIso が有効）を先に確定配置する。
+  // ② 固定タスク（locked + fixedStartIso が有効）を先に確定配置する。
+  //    locked は「再プランで動かさない」厳密尊重。fixedStartIso があればその位置に固定、
+  //    locked だが fixedStartIso が無い場合は previousBlocks の位置をピン留め対象にする（③ で処理）。
   const movable: ScheduledTask[] = [];
   for (const st of scheduled) {
     const fixedIso = st.meta?.fixedStartIso;
-    if (st.meta?.locked && fixedIso) {
+    if (fixedIso) {
       const startMs = Date.parse(fixedIso);
       if (Number.isFinite(startMs) && startMs >= effectiveFrom) {
         const endMs = startMs + st.est.estMinutes * MS_PER_MIN;
-        if (placeFixed(slots, usedPerDay, config, startMs, endMs)) {
+        // 締切超過は配置しない（堅牢性）。
+        const deadline = st.dueMs ?? toMs;
+        if (endMs <= deadline && placeFixed(slots, usedPerDay, config, startMs, endMs)) {
           blocks.push(makeBlock(st, startMs, endMs, true));
           continue;
         }
+        // 固定位置が衝突/稼働外/締切超過/上限超過 → 未配置（no-capacity）。動かさない原則のため再配置しない。
         unplaced.push({
           taskId: st.task.id,
           account: st.task.account,
           title: st.task.title,
-          reason: '固定時刻が他の予定/稼働外と重なり配置できません',
+          reason: '固定時刻が他の予定/稼働外/締切と重なり配置できません',
+          category: 'no-capacity',
         });
         continue;
       }
@@ -284,8 +333,49 @@ export function planSchedule(
     movable.push(st);
   }
 
-  // ③ 可変タスク整列: due 昇順（無しは最後）→ priority → estMinutes 降順。
-  movable.sort((a, b) => {
+  // ③ sticky ピン留め: previousBlocks のうち、対応タスクがまだ計画対象で、その位置が現在も
+  //    有効（稼働窓内・blackout/予定と非衝突・due 内・dailyMax 超過しない）なら位置を維持。
+  //    locked タスクは fixedStartIso が無くても previousBlocks の位置を最優先でピン留めする。
+  const stillMovable: ScheduledTask[] = [];
+  if (hasPrevious) {
+    // locked を先に、次に通常 sticky を試す（locked の位置確保を優先）。
+    const ordered = [...movable].sort(
+      (a, b) => (b.meta?.locked ? 1 : 0) - (a.meta?.locked ? 1 : 0),
+    );
+    for (const st of ordered) {
+      const prevStart = prevStartByKey.get(metaKey(st.task.account, st.task.id));
+      if (prevStart === undefined) {
+        stillMovable.push(st);
+        continue;
+      }
+      const startMs = Date.parse(prevStart);
+      if (!Number.isFinite(startMs) || startMs < effectiveFrom) {
+        // 過去/不正な前回位置は維持できない → 再配置へ。
+        stillMovable.push(st);
+        continue;
+      }
+      const endMs = startMs + st.est.estMinutes * MS_PER_MIN;
+      const deadline = st.dueMs ?? toMs;
+      if (endMs <= deadline && placeFixed(slots, usedPerDay, config, startMs, endMs)) {
+        // 位置を維持（占有スロットとして busy 化済み）。
+        blocks.push(makeBlock(st, startMs, endMs, false));
+      } else {
+        // 前回位置がもう無効 → 残スロットへ再配置。
+        stillMovable.push(st);
+      }
+    }
+  } else {
+    stillMovable.push(...movable);
+  }
+
+  // ④ 残りの可変タスク整列:
+  //    (実効締切切迫度＝effectivePriorityRank, 優先度段 P1>P2>P3>P4, estMinutes 降順)。
+  //    締切が近いほど実効優先度を引き上げ（締切が優先度を上書き）、due 無し P4 は末尾＝溢れやすい。
+  stillMovable.sort((a, b) => {
+    const ar = effectivePriorityRank(a.est.priority, a.dueMs, effectiveFrom);
+    const br = effectivePriorityRank(b.est.priority, b.dueMs, effectiveFrom);
+    if (ar !== br) return ar - br;
+    // 同実効段内では締切が早い順（無しは最後）。
     const ad = a.dueMs ?? Number.POSITIVE_INFINITY;
     const bd = b.dueMs ?? Number.POSITIVE_INFINITY;
     if (ad !== bd) return ad - bd;
@@ -295,8 +385,8 @@ export function planSchedule(
     return b.est.estMinutes - a.est.estMinutes;
   });
 
-  // ④ 貪欲配置。
-  for (const st of movable) {
+  // ⑤ 貪欲配置。
+  for (const st of stillMovable) {
     const durMs = st.est.estMinutes * MS_PER_MIN;
     const deadline = st.dueMs ?? toMs;
     const earliest = effectiveFrom;
@@ -313,17 +403,55 @@ export function planSchedule(
     if (placed) {
       blocks.push(makeBlock(st, placed.start, placed.end, false));
     } else {
-      const reason =
-        st.dueMs !== undefined
-          ? '締切までに空きが足りません'
-          : '期間内に空きがありません';
-      unplaced.push({ taskId: st.task.id, account: st.task.account, title: st.task.title, reason });
+      unplaced.push(unplacedFor(st));
     }
   }
 
-  // ブロックは開始時刻順に整える（固定と可変が混ざるため）。
-  blocks.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
-  return { blocks, unplaced, usedAi, generatedAt: new Date().toISOString() };
+  return finalize(blocks, unplaced);
+
+  // ─── finalize（moved/kept 集計＋整列）─────────────────────────
+
+  function finalize(bs: PlanBlock[], up: UnplacedItem[]): PlanResponse {
+    // ブロックは開始時刻順に整える（固定・ピン・可変が混ざるため）。
+    bs.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+    let movedCount: number;
+    let keptCount: number;
+    if (!hasPrevious) {
+      // previousBlocks 未指定 → 全件「新規」扱い。
+      movedCount = bs.length;
+      keptCount = 0;
+    } else {
+      movedCount = 0;
+      keptCount = 0;
+      for (const b of bs) {
+        const prevStart = prevStartByKey.get(metaKey(b.account, b.taskId));
+        if (prevStart !== undefined && prevStart === b.start) keptCount++;
+        else movedCount++; // 位置変更 or 新規。
+      }
+    }
+    return { blocks: bs, unplaced: up, usedAi, generatedAt: new Date().toISOString(), movedCount, keptCount };
+  }
+
+  // ─── 未配置のカテゴリ判定（P4a）──────────────────────────────
+
+  function unplacedFor(st: ScheduledTask): UnplacedItem {
+    let category: UnplacedCategory;
+    let reason: string;
+    if (st.dueMs !== undefined && st.dueMs <= toMs) {
+      // due が計画期間内にあり、その due までに置けなかった＝締切に間に合わない。
+      category = 'deadline-miss';
+      reason = '締切までに空きが足りません（締切に間に合いません）';
+    } else if (st.dueMs !== undefined) {
+      // due が計画期間より先 → 期間内の容量不足（締切は限定要因でない）。
+      category = 'no-capacity';
+      reason = '計画期間内に空きがありません（締切は期間外）';
+    } else {
+      // due 無し＝正常な後回し（溢れ）。
+      category = 'no-due-overflow';
+      reason = '期間内に空きがありません（期日なし・後回し）';
+    }
+    return { taskId: st.task.id, account: st.task.account, title: st.task.title, reason, category };
+  }
 
   // ─── 内部ヘルパ（クロージャで slots/usedPerDay を共有）─────────
 
