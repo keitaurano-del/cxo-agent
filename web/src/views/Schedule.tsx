@@ -66,6 +66,14 @@ interface TasksResponse {
 }
 
 // ─── オートプランナー API 型（/api/planner。サーバ契約と同一）──────
+// 集中時間／習慣枠の 1 定義。daysOfWeek は 0=日..6=土（JST）。
+interface FocusBlockDef {
+  title: string;
+  daysOfWeek: number[];
+  start: string; // 'HH:MM'
+  durationMin: number;
+}
+
 interface PlannerConfig {
   workdayStart: string; // 'HH:MM'
   workdayEnd: string; // 'HH:MM'
@@ -75,9 +83,12 @@ interface PlannerConfig {
   horizonDays: number;
   defaultTaskMinutes: number;
   targetLists: string[] | null;
+  focusBlocks: FocusBlockDef[];
 }
 
 // プランの 1 ブロック（提示のみ・Google 未反映）。start/end は ISO(RFC3339)。
+// kind: 'task'（省略時も含む）＝タスクブロック / 'focus'＝集中時間（習慣枠）ブロック。
+type PlanBlockKind = 'task' | 'focus';
 interface PlanBlock {
   taskId: string;
   account: string;
@@ -86,6 +97,12 @@ interface PlanBlock {
   end: string;
   estMinutes: number;
   reason: string;
+  kind?: PlanBlockKind;
+}
+
+/** focus ブロック判定（kind 省略時はタスク扱い）。 */
+function isFocusBlock(b: PlanBlock): boolean {
+  return b.kind === 'focus';
 }
 
 // 未配置のカテゴリ（サーバ契約。reason は従来どおり日本語文字列）。
@@ -1150,6 +1167,29 @@ function PlanBlockList({
       </p>
       <ul className="flex flex-col gap-0.5">
         {sorted.map((b) => {
+          // focus（集中枠）はタスクではないためロックトグルを付けない。代わりに「集中」ラベル。
+          if (isFocusBlock(b)) {
+            return (
+              <li
+                key={`focus-${b.taskId}-${b.start}`}
+                className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-[11px] leading-tight"
+              >
+                <span
+                  className="shrink-0 rounded-sm px-1 py-0.5 text-[10px] font-semibold"
+                  style={{
+                    background: 'color-mix(in srgb, var(--mc-review) 15%, transparent)',
+                    color: 'var(--mc-review)',
+                  }}
+                >
+                  集中
+                </span>
+                <span className="shrink-0 tabular-nums text-text-faint">
+                  {formatMd(planBlockDateIso(b))} {isoHmLabel(b.start)}〜{isoHmLabel(b.end)}
+                </span>
+                <span className="truncate font-medium text-text">{b.title}</span>
+              </li>
+            );
+          }
           const locked = lockedKeys.has(blockKey(b.account, b.taskId));
           return (
             <li
@@ -1203,6 +1243,8 @@ function PlannerSettingsModal({
   const [dailyMaxMinutes, setDailyMaxMinutes] = useState('');
   const [bufferMinutes, setBufferMinutes] = useState('');
   const [horizonDays, setHorizonDays] = useState('');
+  // 集中時間／習慣枠の編集用ローカル状態（フォーム入力は文字列で持ち、保存時に正規化）。
+  const [focusBlocks, setFocusBlocks] = useState<FocusBlockDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -1214,18 +1256,50 @@ function PlannerSettingsModal({
     setDailyMaxMinutes(String(config.dailyMaxMinutes));
     setBufferMinutes(String(config.bufferMinutes));
     setHorizonDays(String(config.horizonDays));
+    setFocusBlocks((config.focusBlocks ?? []).map(toFocusDraft));
   }, [config]);
+
+  const addFocusBlock = () => {
+    setFocusBlocks((cur) => [...cur, { title: '', daysOfWeek: [], start: '', durationMin: '' }]);
+  };
+  const removeFocusBlock = (idx: number) => {
+    setFocusBlocks((cur) => cur.filter((_, i) => i !== idx));
+  };
+  const updateFocusBlock = (idx: number, patch: Partial<FocusBlockDraft>) => {
+    setFocusBlocks((cur) => cur.map((b, i) => (i === idx ? { ...b, ...patch } : b)));
+  };
+  const toggleFocusDay = (idx: number, day: number) => {
+    setFocusBlocks((cur) =>
+      cur.map((b, i) => {
+        if (i !== idx) return b;
+        const has = b.daysOfWeek.includes(day);
+        const days = has ? b.daysOfWeek.filter((d) => d !== day) : [...b.daysOfWeek, day].sort((a, c) => a - c);
+        return { ...b, daysOfWeek: days };
+      }),
+    );
+  };
 
   const submit = async () => {
     setSaving(true);
     setErr(null);
     try {
+      // 集中枠のクライアントバリデーション → 正規化。不正なら保存しない。
+      const normalizedFocus: FocusBlockDef[] = [];
+      for (let i = 0; i < focusBlocks.length; i++) {
+        const draft = focusBlocks[i];
+        const validated = validateFocusDraft(draft);
+        if (typeof validated === 'string') {
+          throw new Error(`集中枠${i + 1}「${draft.title || '(無題)'}」: ${validated}`);
+        }
+        normalizedFocus.push(validated);
+      }
       const patch: Partial<PlannerConfig> = {
         workdayStart,
         workdayEnd,
         dailyMaxMinutes: Number(dailyMaxMinutes),
         bufferMinutes: Number(bufferMinutes),
         horizonDays: Number(horizonDays),
+        focusBlocks: normalizedFocus,
       };
       await onSave(patch);
       onClose();
@@ -1245,7 +1319,7 @@ function PlannerSettingsModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-lg border border-border bg-surface p-4 shadow-xl"
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-border bg-surface p-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
@@ -1310,6 +1384,15 @@ function PlannerSettingsModal({
               />
             </SettingsField>
 
+            {/* 集中時間／習慣枠エディタ（focusBlocks） */}
+            <FocusBlocksEditor
+              blocks={focusBlocks}
+              onAdd={addFocusBlock}
+              onRemove={removeFocusBlock}
+              onUpdate={updateFocusBlock}
+              onToggleDay={toggleFocusDay}
+            />
+
             <p className="text-[11px] text-text-faint">
               targetLists・禁止帯（blackout）は既定のまま。保存後「プランを作成」で再計算してください。
             </p>
@@ -1346,6 +1429,147 @@ function SettingsField({ label, children }: { label: string; children: ReactNode
       <span className="text-[11px] font-medium text-text-muted">{label}</span>
       {children}
     </label>
+  );
+}
+
+// ─── 集中時間／習慣枠エディタ ───────────────────────────────────
+// フォーム入力中は数値も文字列で保持し（途中の空文字を許容）、保存時に正規化＋検証する。
+interface FocusBlockDraft {
+  title: string;
+  daysOfWeek: number[];
+  start: string; // 'HH:MM'
+  durationMin: string;
+}
+
+/** 保存済み FocusBlockDef → 編集用ドラフト。 */
+function toFocusDraft(def: FocusBlockDef): FocusBlockDraft {
+  return {
+    title: def.title,
+    daysOfWeek: def.daysOfWeek.slice().sort((a, b) => a - b),
+    start: def.start,
+    durationMin: String(def.durationMin),
+  };
+}
+
+const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** ドラフトを検証し、OK なら FocusBlockDef、NG ならエラー文字列を返す。 */
+function validateFocusDraft(draft: FocusBlockDraft): FocusBlockDef | string {
+  const title = draft.title.trim();
+  if (!title) return '枠名を入力してください';
+  if (draft.daysOfWeek.length === 0) return '曜日を1つ以上選んでください';
+  if (!HHMM_RE.test(draft.start)) return '開始は HH:MM 形式で入力してください';
+  const duration = Number(draft.durationMin);
+  if (!Number.isFinite(duration) || duration <= 0) return '長さ（分）は正の数で入力してください';
+  return {
+    title,
+    daysOfWeek: draft.daysOfWeek.slice().sort((a, b) => a - b),
+    start: draft.start,
+    durationMin: Math.round(duration),
+  };
+}
+
+function FocusBlocksEditor({
+  blocks,
+  onAdd,
+  onRemove,
+  onUpdate,
+  onToggleDay,
+}: {
+  blocks: FocusBlockDraft[];
+  onAdd: () => void;
+  onRemove: (idx: number) => void;
+  onUpdate: (idx: number, patch: Partial<FocusBlockDraft>) => void;
+  onToggleDay: (idx: number, day: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border bg-surface-2/40 p-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold text-text">集中時間／習慣枠</span>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="rounded-md border border-accent bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent hover:bg-accent/20"
+        >
+          ＋ 枠を追加
+        </button>
+      </div>
+      <p className="text-[10px] leading-tight text-text-faint">
+        毎週の決まった集中時間・習慣枠です。プラン作成時に予定として確保されます。
+      </p>
+
+      {blocks.length === 0 ? (
+        <p className="py-1 text-center text-[11px] text-text-faint">枠はありません</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {blocks.map((b, idx) => (
+            <li key={idx} className="flex flex-col gap-1.5 rounded-md border border-border bg-bg p-2">
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  value={b.title}
+                  onChange={(e) => onUpdate(idx, { title: e.target.value })}
+                  placeholder="枠名（例: 朝の集中）"
+                  className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2 py-1 text-[12px] text-text"
+                />
+                <button
+                  type="button"
+                  onClick={() => onRemove(idx)}
+                  aria-label="この枠を削除"
+                  className="shrink-0 rounded-md p-1 text-text-muted hover:bg-surface-2 hover:text-blocked"
+                >
+                  <TrashIcon width={14} height={14} />
+                </button>
+              </div>
+
+              {/* 曜日トグル（0=日..6=土） */}
+              <div className="flex flex-wrap gap-1">
+                {WEEKDAY_NAMES.map((w, day) => {
+                  const on = b.daysOfWeek.includes(day);
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => onToggleDay(idx, day)}
+                      aria-pressed={on}
+                      className={`h-6 w-6 rounded-md border text-[11px] font-medium transition-colors ${
+                        on
+                          ? 'border-accent bg-accent/15 text-accent'
+                          : 'border-border text-text-muted hover:bg-surface-2 hover:text-text'
+                      }`}
+                    >
+                      {w}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-[10px] font-medium text-text-muted">開始</span>
+                  <input
+                    type="time"
+                    value={b.start}
+                    onChange={(e) => onUpdate(idx, { start: e.target.value })}
+                    className="w-full rounded-md border border-border bg-bg px-2 py-1 text-[12px] text-text"
+                  />
+                </label>
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-[10px] font-medium text-text-muted">長さ（分）</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={b.durationMin}
+                    onChange={(e) => onUpdate(idx, { durationMin: e.target.value })}
+                    className="w-full rounded-md border border-border bg-bg px-2 py-1 text-[12px] text-text"
+                  />
+                </label>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -1485,7 +1709,9 @@ function MonthView({
           });
           const shown = dayEvents.slice(0, 3);
           const more = dayEvents.length - shown.length;
-          const dayPlanCount = planByDate.get(iso)?.length ?? 0;
+          const dayPlan = planByDate.get(iso) ?? [];
+          const dayFocusCount = dayPlan.filter(isFocusBlock).length;
+          const dayTaskPlanCount = dayPlan.length - dayFocusCount;
 
           return (
             <button
@@ -1526,12 +1752,27 @@ function MonthView({
               {more > 0 && <span className="px-1 text-[9px] leading-tight text-text-faint">ほか{more}件</span>}
 
               {/* プラン件数チップ（提示のみ・アクセント点線） */}
-              {dayPlanCount > 0 && (
+              {dayTaskPlanCount > 0 && (
                 <span
-                  title={`プラン ${dayPlanCount} 件（提示のみ・Google未反映）`}
+                  title={`プラン ${dayTaskPlanCount} 件（提示のみ・Google未反映）`}
                   className="flex items-center gap-1 overflow-hidden rounded-sm border border-dashed border-accent bg-accent/10 px-1 py-0.5 text-[9px] leading-tight text-accent"
                 >
-                  <span className="truncate font-semibold">プラン {dayPlanCount}件</span>
+                  <span className="truncate font-semibold">プラン {dayTaskPlanCount}件</span>
+                </span>
+              )}
+
+              {/* 集中枠チップ（習慣枠・violet 実線でプランと区別） */}
+              {dayFocusCount > 0 && (
+                <span
+                  title={`集中時間（習慣枠） ${dayFocusCount} 件`}
+                  className="flex items-center gap-1 overflow-hidden rounded-sm border border-solid px-1 py-0.5 text-[9px] leading-tight"
+                  style={{
+                    borderColor: 'var(--mc-review)',
+                    background: 'color-mix(in srgb, var(--mc-review) 12%, transparent)',
+                    color: 'var(--mc-review)',
+                  }}
+                >
+                  <span className="truncate font-semibold">集中 {dayFocusCount}件</span>
                 </span>
               )}
 
@@ -1891,8 +2132,37 @@ function DayColumn({
         );
       })}
 
-      {/* プランブロック（提示のみ・実予定と見分くアクセント点線枠／半透明。右側レーンに重ねる） */}
+      {/* プランブロック（提示のみ・右側レーンに重ねる）。
+          focus（集中時間／習慣枠）はタスクと別スタイル（violet 実線・ロックなし）で描く。 */}
       {positionedPlan.map((p) => {
+        const focus = isFocusBlock(p.block);
+        const blockStyle = {
+          top: p.topPx,
+          height: p.heightPx,
+          left: 'calc(50% + 1px)',
+          width: 'calc(50% - 2px)',
+        };
+        if (focus) {
+          return (
+            <div
+              key={`focus-${p.block.taskId}-${p.block.start}`}
+              title={`集中: ${isoHmLabel(p.block.start)}〜${isoHmLabel(p.block.end)} ${p.block.title}（${p.block.estMinutes}分）\n${p.block.reason}`}
+              className="absolute z-20 overflow-hidden rounded-sm border border-solid px-1 py-0.5 text-[9px] leading-tight backdrop-blur-[1px]"
+              style={{
+                ...blockStyle,
+                borderColor: 'var(--mc-review)',
+                background: 'color-mix(in srgb, var(--mc-review) 18%, transparent)',
+                color: 'var(--mc-review)',
+              }}
+            >
+              <span className="block truncate font-semibold">集中</span>
+              <span className="block truncate font-medium text-text">{p.block.title}</span>
+              <span className="block truncate text-text-muted">
+                {isoHmLabel(p.block.start)}〜{isoHmLabel(p.block.end)}
+              </span>
+            </div>
+          );
+        }
         const locked = lockedKeys.has(blockKey(p.block.account, p.block.taskId));
         return (
           <div
@@ -1904,12 +2174,7 @@ function DayColumn({
             className={`absolute z-20 overflow-hidden rounded-sm border bg-accent/15 px-1 py-0.5 text-[9px] leading-tight text-text backdrop-blur-[1px] ${
               locked ? 'border-solid border-accent ring-1 ring-accent/60' : 'border-dashed border-accent'
             }`}
-            style={{
-              top: p.topPx,
-              height: p.heightPx,
-              left: 'calc(50% + 1px)',
-              width: 'calc(50% - 2px)',
-            }}
+            style={blockStyle}
           >
             <span className="flex items-center justify-between gap-0.5">
               <span className="truncate font-semibold text-accent">プラン</span>
