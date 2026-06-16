@@ -52,6 +52,32 @@ export function ageInMonths(now: Date = new Date()): number {
   return Math.max(0, months);
 }
 
+/**
+ * BIRTH_DATE からの「小数月齢」を返す（成長グラフの横軸位置に使う）。
+ * 1か月をその月の実日数で割って加算するため、満月齢に小数で連続的に対応する。
+ * 例: 誕生日当日 = 0、誕生日からちょうど1か月後 = 1.0、その中間 = 0.5 付近。
+ */
+export function ageMonthsDecimal(iso: string): number {
+  const birth = parseIsoDate(BIRTH_DATE);
+  const target = parseIsoDate(iso);
+  if (target.getTime() <= birth.getTime()) return 0;
+  // 満月齢（応当日で繰り上がる整数月）を求める。
+  let whole =
+    (target.getFullYear() - birth.getFullYear()) * 12 +
+    (target.getMonth() - birth.getMonth());
+  if (target.getDate() < birth.getDate()) whole -= 1;
+  if (whole < 0) whole = 0;
+  // 直近の応当日（満 whole か月の日）から target までを、その月の長さで割って小数部に。
+  const anchor = parseIsoDate(BIRTH_DATE);
+  anchor.setMonth(anchor.getMonth() + whole);
+  const nextAnchor = parseIsoDate(BIRTH_DATE);
+  nextAnchor.setMonth(nextAnchor.getMonth() + whole + 1);
+  const spanDays = (nextAnchor.getTime() - anchor.getTime()) / MS_PER_DAY;
+  const intoDays = (target.getTime() - anchor.getTime()) / MS_PER_DAY;
+  const frac = spanDays > 0 ? Math.min(1, Math.max(0, intoDays / spanDays)) : 0;
+  return whole + frac;
+}
+
 /** BIRTH_DATE から指定日数後の ISO 日付を返す（出生届の14日以内などの算出用）。 */
 export function isoFromBirthOffset(days: number): string {
   const base = parseIsoDate(BIRTH_DATE);

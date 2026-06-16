@@ -25,14 +25,23 @@ import {
   formatJpDate,
   parseIsoDate,
   todayIso,
+  ageMonthsDecimal,
   ADMIN_PROCEDURES,
   CHECKUP_ITEMS,
 } from './childcareData';
+import {
+  MALE_WEIGHT_PERCENTILES,
+  WEIGHT_CHART_MIN_MONTH,
+  WEIGHT_CHART_MAX_MONTH,
+  WEIGHT_STANDARD_SOURCE_LABEL,
+  WEIGHT_STANDARD_SOURCE_URL,
+} from './growthStandards';
 
 // ─── API 型（サーバ契約に対応）──────────────────────────────
 interface DiaryEntry {
   date: string; // YYYY-MM-DD
   memo?: string;
+  weightKg?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -627,6 +636,11 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
             pushToast={pushToast}
           />
         </div>
+
+        {/* 体重グラフ（母子手帳ふう・標準体重帯つき）。データ0件でも帯と軸を表示する。 */}
+        <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+          <WeightGrowthChart entries={data?.entries ?? []} />
+        </section>
       </ResourceState>
     </div>
   );
@@ -2025,6 +2039,246 @@ function TodoRow({
   );
 }
 
+// ─── 体重グラフ（自作SVG・母子手帳ふう標準体重帯つき）──────────
+// 横軸＝月齢(0〜12)、縦軸＝体重(kg)。背景に 3〜97 パーセンタイルの帯（厚労省 平成22年 男子）を
+// 薄く塗り、境界線を描く。記録した体重を点＋線でプロットする。外部依存なしの SVG で描画。
+function WeightGrowthChart({ entries }: { entries: DiaryEntry[] }) {
+  // weightKg を持つエントリを月齢(小数)→体重 の点に変換し、月齢昇順に並べる。
+  const points = useMemo(() => {
+    return entries
+      .filter((e) => typeof e.weightKg === 'number' && Number.isFinite(e.weightKg))
+      .map((e) => ({
+        date: e.date,
+        month: ageMonthsDecimal(e.date),
+        kg: e.weightKg as number,
+      }))
+      .filter((p) => p.month >= WEIGHT_CHART_MIN_MONTH && p.month <= WEIGHT_CHART_MAX_MONTH)
+      .sort((a, b) => a.month - b.month);
+  }, [entries]);
+
+  // 描画領域（viewBox 座標）。レスポンシブは外側の width:100% + preserveAspectRatio に任せる。
+  const W = 520;
+  const H = 320;
+  const padL = 40; // 左（Y 軸ラベル＋目盛り）
+  const padR = 14;
+  const padT = 14;
+  const padB = 38; // 下（X 軸ラベル）
+
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  const minMonth = WEIGHT_CHART_MIN_MONTH;
+  const maxMonth = WEIGHT_CHART_MAX_MONTH;
+
+  // Y レンジ: 帯（p3 最小 〜 p97 最大）を必ず収め、データ点があればそれも収める。
+  const bandMin = Math.min(...MALE_WEIGHT_PERCENTILES.map((d) => d.p3));
+  const bandMax = Math.max(...MALE_WEIGHT_PERCENTILES.map((d) => d.p97));
+  const dataMin = points.length ? Math.min(...points.map((p) => p.kg)) : bandMin;
+  const dataMax = points.length ? Math.max(...points.map((p) => p.kg)) : bandMax;
+  const rawMin = Math.min(bandMin, dataMin);
+  const rawMax = Math.max(bandMax, dataMax);
+  // 端を少し余裕を持たせ、整数 kg に丸める。
+  const yMin = Math.max(0, Math.floor(rawMin - 0.5));
+  const yMax = Math.ceil(rawMax + 0.5);
+
+  const xOf = (month: number) =>
+    padL + ((month - minMonth) / (maxMonth - minMonth)) * plotW;
+  const yOf = (kg: number) => padT + (1 - (kg - yMin) / (yMax - yMin)) * plotH;
+
+  // 帯（p3 下限〜p97 上限）のポリゴン: 上端を左→右に p97、下端を右→左に p3。
+  const bandPath = useMemo(() => {
+    const top = MALE_WEIGHT_PERCENTILES.map((d) => `${xOf(d.month)},${yOf(d.p97)}`);
+    const bottom = MALE_WEIGHT_PERCENTILES.slice()
+      .reverse()
+      .map((d) => `${xOf(d.month)},${yOf(d.p3)}`);
+    return `M ${top.join(' L ')} L ${bottom.join(' L ')} Z`;
+    // xOf/yOf は yMin/yMax に依存するので依存配列に含める。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yMin, yMax]);
+
+  const lineFor = (key: 'p3' | 'p50' | 'p97') =>
+    'M ' + MALE_WEIGHT_PERCENTILES.map((d) => `${xOf(d.month)},${yOf(d[key])}`).join(' L ');
+
+  // データの折れ線（2点以上で描く）。
+  const dataLine =
+    points.length >= 2
+      ? 'M ' + points.map((p) => `${xOf(p.month)},${yOf(p.kg)}`).join(' L ')
+      : '';
+
+  // 軸目盛り。X は 0〜12 か月（偶数）、Y は yMin〜yMax の整数 kg を等間隔で。
+  const xTicks: number[] = [];
+  for (let m = minMonth; m <= maxMonth; m += 2) xTicks.push(m);
+  const yTicks: number[] = [];
+  for (let kg = yMin; kg <= yMax; kg += 1) yTicks.push(kg);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-sm font-bold text-text">体重グラフ</h3>
+      <div className="rounded-md border border-border bg-bg p-2">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          width="100%"
+          role="img"
+          aria-label="体重の成長グラフ（標準範囲の帯つき）"
+          className="block h-auto w-full"
+          preserveAspectRatio="xMidYMid meet"
+        >
+          {/* グリッド線（Y） */}
+          {yTicks.map((kg) => (
+            <line
+              key={`gy${kg}`}
+              x1={padL}
+              y1={yOf(kg)}
+              x2={W - padR}
+              y2={yOf(kg)}
+              stroke="var(--mc-border)"
+              strokeWidth={1}
+              opacity={0.5}
+            />
+          ))}
+          {/* グリッド線（X） */}
+          {xTicks.map((m) => (
+            <line
+              key={`gx${m}`}
+              x1={xOf(m)}
+              y1={padT}
+              x2={xOf(m)}
+              y2={padT + plotH}
+              stroke="var(--mc-border)"
+              strokeWidth={1}
+              opacity={0.35}
+            />
+          ))}
+
+          {/* 標準体重帯（3〜97パーセンタイル）の塗り */}
+          <path d={bandPath} fill="var(--mc-accent)" opacity={0.14} />
+          {/* 帯の境界線（下限=3p / 上限=97p）と中央値(50p) */}
+          <path d={lineFor('p97')} fill="none" stroke="var(--mc-accent)" strokeWidth={1.5} opacity={0.7} />
+          <path d={lineFor('p3')} fill="none" stroke="var(--mc-accent)" strokeWidth={1.5} opacity={0.7} />
+          <path
+            d={lineFor('p50')}
+            fill="none"
+            stroke="var(--mc-accent)"
+            strokeWidth={1}
+            strokeDasharray="4 3"
+            opacity={0.55}
+          />
+
+          {/* 軸線 */}
+          <line x1={padL} y1={padT} x2={padL} y2={padT + plotH} stroke="var(--mc-text-muted)" strokeWidth={1} />
+          <line
+            x1={padL}
+            y1={padT + plotH}
+            x2={W - padR}
+            y2={padT + plotH}
+            stroke="var(--mc-text-muted)"
+            strokeWidth={1}
+          />
+
+          {/* Y 軸目盛りラベル */}
+          {yTicks.map((kg) => (
+            <text
+              key={`yl${kg}`}
+              x={padL - 6}
+              y={yOf(kg) + 3}
+              textAnchor="end"
+              fontSize={10}
+              fill="var(--mc-text-faint)"
+            >
+              {kg}
+            </text>
+          ))}
+          {/* X 軸目盛りラベル */}
+          {xTicks.map((m) => (
+            <text
+              key={`xl${m}`}
+              x={xOf(m)}
+              y={padT + plotH + 14}
+              textAnchor="middle"
+              fontSize={10}
+              fill="var(--mc-text-faint)"
+            >
+              {m}
+            </text>
+          ))}
+
+          {/* 軸タイトル */}
+          <text x={padL} y={padT - 3} textAnchor="start" fontSize={10} fill="var(--mc-text-muted)">
+            体重(kg)
+          </text>
+          <text
+            x={padL + plotW / 2}
+            y={padT + plotH + 32}
+            textAnchor="middle"
+            fontSize={10}
+            fill="var(--mc-text-muted)"
+          >
+            月齢(か月)
+          </text>
+
+          {/* 記録した体重: 線（2点以上）＋点 */}
+          {dataLine && (
+            <path d={dataLine} fill="none" stroke="var(--mc-review)" strokeWidth={2} />
+          )}
+          {points.map((p) => (
+            <circle
+              key={p.date}
+              cx={xOf(p.month)}
+              cy={yOf(p.kg)}
+              r={3.5}
+              fill="var(--mc-review)"
+              stroke="var(--mc-bg)"
+              strokeWidth={1}
+            >
+              <title>{`${formatJpDate(p.date)}・${p.kg}kg（月齢 ${p.month.toFixed(1)}）`}</title>
+            </circle>
+          ))}
+        </svg>
+      </div>
+
+      {/* 凡例 */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-faint">
+        <span className="inline-flex items-center gap-1">
+          <span
+            className="inline-block h-2.5 w-3.5 rounded-sm"
+            style={{ background: 'var(--mc-accent)', opacity: 0.25 }}
+            aria-hidden
+          />
+          {WEIGHT_STANDARD_SOURCE_LABEL}
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span
+            className="inline-block h-px w-4"
+            style={{ borderTop: '1px dashed var(--mc-accent)' }}
+            aria-hidden
+          />
+          中央値（50パーセンタイル）
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span
+            className="inline-block h-2 w-2 rounded-full"
+            style={{ background: 'var(--mc-review)' }}
+            aria-hidden
+          />
+          記録した体重
+        </span>
+      </div>
+      <p className="text-[10px] text-text-faint">
+        出典:{' '}
+        <a
+          href={WEIGHT_STANDARD_SOURCE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-accent hover:underline"
+        >
+          厚生労働省 平成22年 乳幼児身体発育調査（男子・体重）
+        </a>
+        。成長の目安です。
+      </p>
+    </div>
+  );
+}
+
 // ─── 日記フォーム（memo のみ）──────────
 function DiaryForm({
   date,
@@ -2036,11 +2290,17 @@ function DiaryForm({
   onSaved: () => Promise<void> | void;
 }) {
   const [memo, setMemo] = useState('');
+  // 体重(kg)。入力中の文字列として保持し、保存時に数値化する（空文字＝未設定）。
+  const [weight, setWeight] = useState('');
   // 既存メモがあれば閲覧（VIEW）から始め、無ければ即編集（EDIT）。
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
+  // 体重欄の保存状態（メモとは独立した保存フィードバック）。
+  const [weightSaving, setWeightSaving] = useState(false);
+  const [weightError, setWeightError] = useState<string | null>(null);
+  const [weightFlash, setWeightFlash] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   // 直近にサーバへ保存した値。これと一致する間は保存を発火しない（初期 prefill 含む）。
@@ -2056,8 +2316,14 @@ function DiaryForm({
   // 保留中のデバウンス保存がキャプチャした (date, value)。flush 時はここから読むことで、
   // 日付切替後に dateRef が新日付へ進んでいても“出ていく日付”に正しく保存する。
   const pendingRef = useRef<{ date: string; value: string } | null>(null);
+  // 体重欄から最新のメモ／体重を読むための ref（相互に上書きしないよう同梱保存に使う）。
+  const weightRef = useRef('');
+  // 直近にサーバへ保存した体重（文字列）。これと一致する間は体重保存を発火しない。
+  const lastSavedWeightRef = useRef('');
+  const weightFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   memoRef.current = memo;
+  weightRef.current = weight;
   dateRef.current = date;
 
   // 実際の保存処理。保存時点の date / memo をキャプチャし、レスポンス到着時に
@@ -2073,7 +2339,8 @@ function DiaryForm({
         const res = await fetch('/api/baby-diary/entry', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date: saveDate, memo: value }),
+          // 体重を消さないよう、メモ保存時も現在の体重を同梱する（空文字＝未設定）。
+          body: JSON.stringify({ date: saveDate, memo: value, weightKg: weightRef.current.trim() }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         await onSaved();
@@ -2108,6 +2375,47 @@ function DiaryForm({
     }
   }, [persist]);
 
+  // 体重の保存（blur / Enter 時）。メモを消さないよう現在のメモを同梱する。
+  // raw は入力文字列（空＝未設定）。サーバ側で空文字は未設定扱い。
+  const persistWeight = useCallback(
+    async (saveDate: string, raw: string): Promise<void> => {
+      const value = raw.trim();
+      if (value === lastSavedWeightRef.current.trim()) return;
+      // 数値として妥当でない（負・非数値）入力は保存しない（空は未設定として許可）。
+      if (value !== '') {
+        const n = Number(value);
+        if (!Number.isFinite(n) || n < 0) {
+          setWeightError('体重は0以上の数値で入力してください');
+          return;
+        }
+      }
+      lastSavedWeightRef.current = value;
+      setWeightSaving(true);
+      setWeightError(null);
+      try {
+        const res = await fetch('/api/baby-diary/entry', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: saveDate, memo: memoRef.current, weightKg: value }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        await onSaved();
+        if (dateRef.current !== saveDate) return;
+        setWeightFlash(true);
+        if (weightFlashTimerRef.current) clearTimeout(weightFlashTimerRef.current);
+        weightFlashTimerRef.current = setTimeout(() => setWeightFlash(false), 1800);
+      } catch (err) {
+        lastSavedWeightRef.current = '__force_resave__';
+        if (dateRef.current === saveDate) {
+          setWeightError(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        setWeightSaving(false);
+      }
+    },
+    [onSaved],
+  );
+
   // 選択日 / 既存エントリが変わったら prefill しなおす。
   // 切替の前に、出ていく日付の未保存編集を flush してから状態を入れ替える。
   useEffect(() => {
@@ -2129,6 +2437,17 @@ function DiaryForm({
     setEditing(next.trim() === '');
     setSaveError(null);
     setSavedFlash(false);
+    // 体重も新しい日付の値で prefill（未設定は空文字）。
+    const nextWeight = entry?.weightKg != null ? String(entry.weightKg) : '';
+    setWeight(nextWeight);
+    weightRef.current = nextWeight;
+    lastSavedWeightRef.current = nextWeight;
+    setWeightError(null);
+    setWeightFlash(false);
+    if (weightFlashTimerRef.current) {
+      clearTimeout(weightFlashTimerRef.current);
+      weightFlashTimerRef.current = null;
+    }
     if (flashTimerRef.current) {
       clearTimeout(flashTimerRef.current);
       flashTimerRef.current = null;
@@ -2150,6 +2469,7 @@ function DiaryForm({
         void persist(d, v);
       }
       if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      if (weightFlashTimerRef.current) clearTimeout(weightFlashTimerRef.current);
     };
   }, [persist]);
 
@@ -2180,6 +2500,24 @@ function DiaryForm({
   const leaveEdit = () => {
     flush();
     setEditing(false);
+  };
+
+  const handleWeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setWeight(v);
+    weightRef.current = v;
+    if (weightError) setWeightError(null);
+  };
+
+  const handleWeightBlur = () => {
+    void persistWeight(dateRef.current, weightRef.current);
+  };
+
+  const handleWeightKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
   };
 
   const hasMemo = memo.trim() !== '';
@@ -2237,6 +2575,36 @@ function DiaryForm({
         ) : (
           savedFlash && <span className="text-xs font-medium text-accent">保存しました</span>
         )}
+      </div>
+
+      {/* 体重（任意）。空欄なら未設定。小数（例: 3.25）も入力できます。 */}
+      <div className="flex flex-col gap-1">
+        <label className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-text-muted">体重</span>
+          <span className="inline-flex items-center gap-1">
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              value={weight}
+              onChange={handleWeightChange}
+              onBlur={handleWeightBlur}
+              onKeyDown={handleWeightKeyDown}
+              placeholder="例: 3.25"
+              aria-label="体重（kg）"
+              className="w-28 rounded-md border border-border bg-bg px-2.5 py-1.5 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
+            />
+            <span className="text-sm text-text-muted">kg</span>
+          </span>
+          {weightSaving ? (
+            <span className="text-xs font-medium text-text-muted">保存中…</span>
+          ) : (
+            weightFlash && <span className="text-xs font-medium text-accent">保存しました</span>
+          )}
+        </label>
+        <p className="text-[11px] text-text-faint">下の成長グラフに反映されます（任意）。</p>
+        {weightError && <p className="text-xs text-blocked">{weightError}</p>}
       </div>
     </div>
   );
