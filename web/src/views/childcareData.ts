@@ -78,6 +78,19 @@ export function ageMonthsDecimal(iso: string): number {
   return whole + frac;
 }
 
+/**
+ * BIRTH_DATE からの「小数週齢」を返す（成長グラフの週表示の横軸位置に使う）。
+ * 週齢 = 出生からの経過日数 / 7（出生当日 = 0週）。ハードコードせず日付差から算出する。
+ * 例: 誕生日当日 = 0、誕生日から7日後 = 1.0、3.5日後 = 0.5。
+ */
+export function ageWeeksDecimal(iso: string): number {
+  const birth = parseIsoDate(BIRTH_DATE);
+  const target = parseIsoDate(iso);
+  const elapsedMs = target.getTime() - birth.getTime();
+  if (elapsedMs <= 0) return 0;
+  return elapsedMs / MS_PER_DAY / 7;
+}
+
 /** BIRTH_DATE から指定日数後の ISO 日付を返す（出生届の14日以内などの算出用）。 */
 export function isoFromBirthOffset(days: number): string {
   const base = parseIsoDate(BIRTH_DATE);

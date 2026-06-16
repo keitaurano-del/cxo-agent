@@ -26,6 +26,7 @@ import {
   parseIsoDate,
   todayIso,
   ageMonthsDecimal,
+  ageWeeksDecimal,
   ADMIN_PROCEDURES,
   CHECKUP_ITEMS,
 } from './childcareData';
@@ -33,6 +34,9 @@ import {
   MALE_WEIGHT_PERCENTILES,
   WEIGHT_CHART_MIN_MONTH,
   WEIGHT_CHART_MAX_MONTH,
+  WEIGHT_CHART_MAX_WEEK,
+  WEIGHT_CHART_DEFAULT_MAX_WEEK,
+  weightPercentileAtWeek,
   WEIGHT_STANDARD_SOURCE_LABEL,
   WEIGHT_STANDARD_SOURCE_URL,
 } from './growthStandards';
@@ -2042,18 +2046,23 @@ function TodoRow({
 // ─── 体重グラフ（自作SVG・母子手帳ふう標準体重帯つき）──────────
 // 横軸＝月齢(0〜12)、縦軸＝体重(kg)。背景に 3〜97 パーセンタイルの帯（厚労省 平成22年 男子）を
 // 薄く塗り、境界線を描く。記録した体重を点＋線でプロットする。外部依存なしの SVG で描画。
+type WeightChartUnit = 'month' | 'week';
+
 function WeightGrowthChart({ entries }: { entries: DiaryEntry[] }) {
-  // weightKg を持つエントリを月齢(小数)→体重 の点に変換し、月齢昇順に並べる。
-  const points = useMemo(() => {
+  // 表示単位（横軸）の切替。デフォルトは月齢（既存挙動を維持）。
+  const [unit, setUnit] = useState<WeightChartUnit>('month');
+
+  // weightKg を持つエントリを「横軸位置（月齢 or 週齢の小数）→体重」の点に変換し昇順に並べる。
+  // month/week 両方の位置を持たせ、単位切替時は同じ点を使い回す。
+  const allPoints = useMemo(() => {
     return entries
       .filter((e) => typeof e.weightKg === 'number' && Number.isFinite(e.weightKg))
       .map((e) => ({
         date: e.date,
         month: ageMonthsDecimal(e.date),
+        week: ageWeeksDecimal(e.date),
         kg: e.weightKg as number,
-      }))
-      .filter((p) => p.month >= WEIGHT_CHART_MIN_MONTH && p.month <= WEIGHT_CHART_MAX_MONTH)
-      .sort((a, b) => a.month - b.month);
+      }));
   }, [entries]);
 
   // 描画領域（viewBox 座標）。レスポンシブは外側の width:100% + preserveAspectRatio に任せる。
@@ -2067,12 +2076,63 @@ function WeightGrowthChart({ entries }: { entries: DiaryEntry[] }) {
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
 
-  const minMonth = WEIGHT_CHART_MIN_MONTH;
-  const maxMonth = WEIGHT_CHART_MAX_MONTH;
+  // 横軸（X）のレンジと、その位置でのパーセンタイル値・標準体の評価点を単位ごとに用意する。
+  // - 月表示: 既存どおり 0〜12 か月、パーセンタイル定数の各点をそのまま使う。
+  // - 週表示: 0〜（デフォルト13・データが超えたら ceil(最新週)+1、最大は約52週でクランプ）。
+  //           帯/中央値は週位置を月齢に直して線形補間したサンプル点で描く。
+  const xMin = unit === 'month' ? WEIGHT_CHART_MIN_MONTH : 0;
+
+  const points = useMemo(() => {
+    if (unit === 'month') {
+      return allPoints
+        .map((p) => ({ date: p.date, x: p.month, kg: p.kg, month: p.month, week: p.week }))
+        .filter((p) => p.x >= WEIGHT_CHART_MIN_MONTH && p.x <= WEIGHT_CHART_MAX_MONTH)
+        .sort((a, b) => a.x - b.x);
+    }
+    return allPoints
+      .map((p) => ({ date: p.date, x: p.week, kg: p.kg, month: p.month, week: p.week }))
+      .filter((p) => p.x >= 0 && p.x <= WEIGHT_CHART_MAX_WEEK)
+      .sort((a, b) => a.x - b.x);
+  }, [allPoints, unit]);
+
+  // 週表示の横軸上限: デフォルト13週。データが超えたら ceil(最新週)+1、ただし約52週でクランプ。
+  const xMax = useMemo(() => {
+    if (unit === 'month') return WEIGHT_CHART_MAX_MONTH;
+    const latest = points.length ? points[points.length - 1].x : 0;
+    const wanted = Math.max(WEIGHT_CHART_DEFAULT_MAX_WEEK, Math.ceil(latest) + 1);
+    return Math.min(WEIGHT_CHART_MAX_WEEK, wanted);
+  }, [unit, points]);
+
+  // 標準体（帯・中央値）を描くためのサンプル点。月表示は定数の各月、週表示は0..xMaxの各週。
+  const standardSamples = useMemo(() => {
+    if (unit === 'month') {
+      return MALE_WEIGHT_PERCENTILES.map((d) => ({
+        x: d.month,
+        p3: d.p3,
+        p50: d.p50,
+        p97: d.p97,
+      }));
+    }
+    const samples: { x: number; p3: number; p50: number; p97: number }[] = [];
+    // 端まで滑らかに描くため、整数週＋上限を含める。
+    const xs: number[] = [];
+    for (let w = 0; w <= xMax; w += 1) xs.push(w);
+    if (xs[xs.length - 1] !== xMax) xs.push(xMax);
+    for (const w of xs) {
+      samples.push({
+        x: w,
+        p3: weightPercentileAtWeek(w, 'p3'),
+        p50: weightPercentileAtWeek(w, 'p50'),
+        p97: weightPercentileAtWeek(w, 'p97'),
+      });
+    }
+    return samples;
+  }, [unit, xMax]);
 
   // Y レンジ: 帯（p3 最小 〜 p97 最大）を必ず収め、データ点があればそれも収める。
-  const bandMin = Math.min(...MALE_WEIGHT_PERCENTILES.map((d) => d.p3));
-  const bandMax = Math.max(...MALE_WEIGHT_PERCENTILES.map((d) => d.p97));
+  // 帯は表示中の横軸レンジに対応するサンプルから求める（週表示は狭いレンジに自動調整される）。
+  const bandMin = Math.min(...standardSamples.map((d) => d.p3));
+  const bandMax = Math.max(...standardSamples.map((d) => d.p97));
   const dataMin = points.length ? Math.min(...points.map((p) => p.kg)) : bandMin;
   const dataMax = points.length ? Math.max(...points.map((p) => p.kg)) : bandMax;
   const rawMin = Math.min(bandMin, dataMin);
@@ -2081,39 +2141,79 @@ function WeightGrowthChart({ entries }: { entries: DiaryEntry[] }) {
   const yMin = Math.max(0, Math.floor(rawMin - 0.5));
   const yMax = Math.ceil(rawMax + 0.5);
 
-  const xOf = (month: number) =>
-    padL + ((month - minMonth) / (maxMonth - minMonth)) * plotW;
+  const xOf = (x: number) => padL + ((x - xMin) / (xMax - xMin)) * plotW;
   const yOf = (kg: number) => padT + (1 - (kg - yMin) / (yMax - yMin)) * plotH;
 
   // 帯（p3 下限〜p97 上限）のポリゴン: 上端を左→右に p97、下端を右→左に p3。
   const bandPath = useMemo(() => {
-    const top = MALE_WEIGHT_PERCENTILES.map((d) => `${xOf(d.month)},${yOf(d.p97)}`);
-    const bottom = MALE_WEIGHT_PERCENTILES.slice()
+    const top = standardSamples.map((d) => `${xOf(d.x)},${yOf(d.p97)}`);
+    const bottom = standardSamples
+      .slice()
       .reverse()
-      .map((d) => `${xOf(d.month)},${yOf(d.p3)}`);
+      .map((d) => `${xOf(d.x)},${yOf(d.p3)}`);
     return `M ${top.join(' L ')} L ${bottom.join(' L ')} Z`;
-    // xOf/yOf は yMin/yMax に依存するので依存配列に含める。
+    // xOf/yOf は xMin/xMax/yMin/yMax に依存するので依存配列に含める。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [yMin, yMax]);
+  }, [standardSamples, xMin, xMax, yMin, yMax]);
 
   const lineFor = (key: 'p3' | 'p50' | 'p97') =>
-    'M ' + MALE_WEIGHT_PERCENTILES.map((d) => `${xOf(d.month)},${yOf(d[key])}`).join(' L ');
+    'M ' + standardSamples.map((d) => `${xOf(d.x)},${yOf(d[key])}`).join(' L ');
 
   // データの折れ線（2点以上で描く）。
   const dataLine =
     points.length >= 2
-      ? 'M ' + points.map((p) => `${xOf(p.month)},${yOf(p.kg)}`).join(' L ')
+      ? 'M ' + points.map((p) => `${xOf(p.x)},${yOf(p.kg)}`).join(' L ')
       : '';
 
-  // 軸目盛り。X は 0〜12 か月（偶数）、Y は yMin〜yMax の整数 kg を等間隔で。
+  // 軸目盛り。
+  // - 月表示: 0〜12 か月（偶数）。
+  // - 週表示: 0..xMax の週を、本数が多いと間引いて可読に（目安 ≤14本）。
   const xTicks: number[] = [];
-  for (let m = minMonth; m <= maxMonth; m += 2) xTicks.push(m);
+  if (unit === 'month') {
+    for (let m = xMin; m <= xMax; m += 2) xTicks.push(m);
+  } else {
+    const span = xMax - xMin;
+    // 1,2,5,10,… の系列から、本数が約14本以下になる最小ステップを選ぶ。
+    const candidates = [1, 2, 5, 10, 13, 26];
+    const step = candidates.find((s) => span / s <= 14) ?? Math.ceil(span / 14);
+    for (let w = xMin; w <= xMax + 1e-9; w += step) xTicks.push(Math.round(w));
+    // 末端の上限も目盛りに含める（重複は除く）。
+    const lastTick = xTicks[xTicks.length - 1];
+    if (lastTick !== Math.round(xMax)) xTicks.push(Math.round(xMax));
+  }
   const yTicks: number[] = [];
   for (let kg = yMin; kg <= yMax; kg += 1) yTicks.push(kg);
 
+  const xAxisTitle = unit === 'month' ? '月齢(か月)' : '週齢(週)';
+
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-sm font-bold text-text">体重グラフ</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-bold text-text">体重グラフ</h3>
+        {/* 表示単位の切替（月齢 / 週齢）。デフォルトは月齢。 */}
+        <div
+          className="inline-flex overflow-hidden rounded-md border border-border text-[11px]"
+          role="group"
+          aria-label="横軸の表示単位"
+        >
+          {(['month', 'week'] as const).map((u) => (
+            <button
+              key={u}
+              type="button"
+              onClick={() => setUnit(u)}
+              aria-pressed={unit === u}
+              className={
+                'px-2.5 py-1 transition-colors ' +
+                (unit === u
+                  ? 'bg-accent text-white'
+                  : 'bg-bg text-text-muted hover:text-text')
+              }
+            >
+              {u === 'month' ? '月で表示' : '週で表示'}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="rounded-md border border-border bg-bg p-2">
         <svg
           viewBox={`0 0 ${W} ${H}`}
@@ -2213,7 +2313,7 @@ function WeightGrowthChart({ entries }: { entries: DiaryEntry[] }) {
             fontSize={10}
             fill="var(--mc-text-muted)"
           >
-            月齢(か月)
+            {xAxisTitle}
           </text>
 
           {/* 記録した体重: 線（2点以上）＋点 */}
@@ -2223,14 +2323,18 @@ function WeightGrowthChart({ entries }: { entries: DiaryEntry[] }) {
           {points.map((p) => (
             <circle
               key={p.date}
-              cx={xOf(p.month)}
+              cx={xOf(p.x)}
               cy={yOf(p.kg)}
               r={3.5}
               fill="var(--mc-review)"
               stroke="var(--mc-bg)"
               strokeWidth={1}
             >
-              <title>{`${formatJpDate(p.date)}・${p.kg}kg（月齢 ${p.month.toFixed(1)}）`}</title>
+              <title>
+                {unit === 'month'
+                  ? `${formatJpDate(p.date)}・${p.kg}kg（月齢 ${p.month.toFixed(1)}）`
+                  : `${formatJpDate(p.date)}・${p.kg}kg（週齢 ${p.week.toFixed(1)}）`}
+              </title>
             </circle>
           ))}
         </svg>

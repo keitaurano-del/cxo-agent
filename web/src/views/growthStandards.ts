@@ -55,6 +55,60 @@ export const MALE_WEIGHT_PERCENTILES: WeightPercentilePoint[] = [
 export const WEIGHT_CHART_MIN_MONTH = 0;
 export const WEIGHT_CHART_MAX_MONTH = 12;
 
+// ───────────────────────────────────────────────────────────
+// 週齢↔月齢の換算と、週位置でのパーセンタイル線形補間。
+// パーセンタイル定数は月齢0〜12（整数月）でしか無いため、週表示では
+// 「週→月齢 = 週 / WEEKS_PER_MONTH」で月齢に直し、隣接する整数月の値を
+// 線形補間して帯・中央値を滑らかに描く。
+// ───────────────────────────────────────────────────────────
+
+/** 1か月あたりの平均週数（グレゴリオ暦: 365.25 / 12 / 7 ≒ 4.348）。 */
+export const WEEKS_PER_MONTH = 365.25 / 12 / 7;
+
+/** 月齢0〜12 を週齢に直した、横軸の上限（≒52.18週）。週表示の軸クランプに使う。 */
+export const WEIGHT_CHART_MAX_WEEK = WEIGHT_CHART_MAX_MONTH * WEEKS_PER_MONTH;
+
+/** 週表示のデフォルト横軸上限（新生児期を見やすく。≒最初の3か月）。 */
+export const WEIGHT_CHART_DEFAULT_MAX_WEEK = 13;
+
+/**
+ * 指定した「小数月齢」におけるパーセンタイル値（kg）を、隣接する整数月の
+ * 値から線形補間して返す。範囲外は端の値でクランプする。
+ */
+export function weightPercentileAtMonth(
+  month: number,
+  key: 'p3' | 'p50' | 'p97',
+): number {
+  const pts = MALE_WEIGHT_PERCENTILES;
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+  if (month <= first.month) return first[key];
+  if (month >= last.month) return last[key];
+  // month を挟む2点を探して線形補間する（month は整数刻み 0..12）。
+  for (let i = 0; i < pts.length - 1; i += 1) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    if (month >= a.month && month <= b.month) {
+      const t = (month - a.month) / (b.month - a.month);
+      return a[key] + (b[key] - a[key]) * t;
+    }
+  }
+  return last[key];
+}
+
+/** 週齢→（補間用の）小数月齢。 */
+export function monthFromWeek(week: number): number {
+  return week / WEEKS_PER_MONTH;
+}
+
+/** 指定した週齢におけるパーセンタイル値（kg）。週→月齢換算後に線形補間する。 */
+export function weightPercentileAtWeek(
+  week: number,
+  key: 'p3' | 'p50' | 'p97',
+): number {
+  return weightPercentileAtMonth(monthFromWeek(week), key);
+}
+
 /** 出典の短い注記（凡例・キャプションで使う）。 */
 export const WEIGHT_STANDARD_SOURCE_LABEL =
   '標準範囲（3〜97パーセンタイル・厚生労働省 平成22年 男子）';
