@@ -26,6 +26,50 @@ async function readError(res: Response, fallback: string): Promise<string> {
   }
 }
 
+// 非同期ジョブのポーリング設定。生成は Cloudflare エッジ（約100s）を避けるため
+// POST→202 { jobId } を受けて GET /job/:id を約2秒間隔でポーリングする。
+const POLL_INTERVAL_MS = 2_000;
+const POLL_MAX_WAIT_MS = 5 * 60_000; // 約5分でタイムアウト。
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * POST /api/dev/mockup/generate に body を送ってジョブを起票し、完了までポーリングして HTML を返す。
+ * - サーバの error 文言は throw（呼び出し側で setError）。
+ * - 404（ジョブ消失）/ タイムアウトは専用メッセージで throw。
+ */
+async function runMockupJob(
+  body: Record<string, unknown>,
+  startFallback: string,
+): Promise<string> {
+  const startRes = await fetch('/api/dev/mockup/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!startRes.ok) throw new Error(await readError(startRes, startFallback));
+  const startData = (await startRes.json()) as { jobId?: string };
+  const jobId = startData.jobId;
+  if (!jobId) throw new Error(startFallback);
+
+  const deadline = Date.now() + POLL_MAX_WAIT_MS;
+  while (Date.now() < deadline) {
+    await sleep(POLL_INTERVAL_MS);
+    const pollRes = await fetch(`/api/dev/mockup/job/${encodeURIComponent(jobId)}`);
+    if (pollRes.status === 404) {
+      throw new Error('もう一度お試しください');
+    }
+    if (!pollRes.ok) continue; // 一過性のネットワーク/エッジ揺らぎは継続ポーリング。
+    const data = (await pollRes.json()) as { status?: string; html?: string; error?: string };
+    if (data.status === 'done') return data.html ?? '';
+    if (data.status === 'error') throw new Error(data.error || startFallback);
+    // status === 'pending' は継続。
+  }
+  throw new Error('時間がかかっています。後ほどお試しください');
+}
+
 export default function Development() {
   // 操作状態
   const [prompt, setPrompt] = useState('');
@@ -91,14 +135,7 @@ export default function Development() {
     setError(null);
     setNotice(null);
     try {
-      const res = await fetch('/api/dev/mockup/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt.trim() }),
-      });
-      if (!res.ok) throw new Error(await readError(res, '生成に失敗しました'));
-      const data = (await res.json()) as { html?: string };
-      const out = data.html ?? '';
+      const out = await runMockupJob({ prompt: prompt.trim() }, '生成に失敗しました');
       setHtml(out);
       setPreviewHtml(out);
       setCurrentId(null); // 新規生成は未保存扱い。
@@ -118,14 +155,10 @@ export default function Development() {
     setError(null);
     setNotice(null);
     try {
-      const res = await fetch('/api/dev/mockup/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ baseHtml: html, instruction: instruction.trim() }),
-      });
-      if (!res.ok) throw new Error(await readError(res, '修正に失敗しました'));
-      const data = (await res.json()) as { html?: string };
-      const out = data.html ?? '';
+      const out = await runMockupJob(
+        { baseHtml: html, instruction: instruction.trim() },
+        '修正に失敗しました',
+      );
       setHtml(out);
       setPreviewHtml(out);
       setInstruction('');

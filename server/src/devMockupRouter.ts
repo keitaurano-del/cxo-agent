@@ -1,6 +1,7 @@
 // devMockupRouter — 開発ページの AI モックアップ REST API（auth ミドルウェア配下）。
 //
-//  POST   /api/dev/mockup/generate  : { prompt, baseHtml?, instruction? } → { html }
+//  POST   /api/dev/mockup/generate    : { prompt, baseHtml?, instruction? } → 202 { jobId }（非同期ジョブ）
+//  GET    /api/dev/mockup/job/:jobId  : { status:'pending'|'done'|'error', html?, error? }（ポーリング用）
 //  GET    /api/dev/mockups          : { mockups: [{id,title,prompt,createdAt,updatedAt}] }（html 除く軽量）
 //  GET    /api/dev/mockups/:id       : { mockup: {…,html} }
 //  POST   /api/dev/mockups           : { id?, title, html, prompt? } → upsert（保存結果を返す）
@@ -12,6 +13,7 @@
 // 保存先はすべて data/ 配下（.gitignore 済み）。
 
 import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 
 import {
@@ -116,10 +118,85 @@ function runGenerate(prompt: string): Promise<string | null> {
   });
 }
 
+// ─── 非同期ジョブストア ──────────────────────────────────
+//
+// Cloudflare エッジ（cloudflared トンネル）には約 100s の上限があり、claude CLI が
+// 競合等で遅いと 524 になる。生成をバックグラウンドジョブ化し、POST は即 202 で jobId を返し、
+// フロントは GET /job/:id をポーリングする。これでエッジ上限に縛られなくなる。
+// ジョブはインメモリ（プロセス再起動で消える）。
+
+type JobStatus = 'pending' | 'done' | 'error';
+interface Job {
+  status: JobStatus;
+  html?: string;
+  error?: string;
+  createdAt: number;
+}
+
+/** jobId → Job。インメモリのみ。 */
+const jobs = new Map<string, Job>();
+
+/** ジョブの保持期間（15 分）。これより古いものは破棄する。 */
+const JOB_TTL_MS = 15 * 60_000;
+
+/** サーバ側リトライ: 最大試行回数と試行間バックオフ。エッジ上限から外れたので安全に複数回試せる。 */
+const GENERATE_MAX_ATTEMPTS = 3;
+const GENERATE_RETRY_BACKOFF_MS = 5_000;
+
+/** ユーザ向けの最終失敗メッセージ（全試行失敗時）。 */
+const GENERATE_FAILURE_MESSAGE =
+  '生成に失敗しました。生成エンジンが混み合っているか一時的に失敗した可能性があります。少し待ってもう一度お試しください。';
+
+/** TTL を過ぎたジョブを破棄する（アクセス時に呼ぶ・サーバを汚さない）。 */
+function sweepExpiredJobs(): void {
+  const now = Date.now();
+  for (const [id, job] of jobs) {
+    if (now - job.createdAt > JOB_TTL_MS) jobs.delete(id);
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * バックグラウンドで claude CLI を呼んで HTML を生成し、結果をジョブに格納する。
+ * 一過性失敗（空応答・claude 競合・タイムアウト）を吸収するため最大 GENERATE_MAX_ATTEMPTS 回リトライ。
+ * await しない前提（呼び出し側は即 202 を返す）。例外でサーバを落とさない。
+ */
+async function runGenerateJob(jobId: string, cliPrompt: string): Promise<void> {
+  for (let attempt = 1; attempt <= GENERATE_MAX_ATTEMPTS; attempt += 1) {
+    const raw = await runGenerate(cliPrompt);
+    if (raw !== null) {
+      const html = stripFences(raw);
+      // HTML らしさの最低限チェック: 空・タグを含まないものは無効（リトライ対象）。
+      if (html && html.includes('<')) {
+        const job = jobs.get(jobId);
+        if (job) {
+          job.status = 'done';
+          job.html = html;
+        }
+        return;
+      }
+    }
+    // 最終試行でなければバックオフして再試行。
+    if (attempt < GENERATE_MAX_ATTEMPTS) await sleep(GENERATE_RETRY_BACKOFF_MS);
+  }
+
+  // 全試行失敗。
+  const job = jobs.get(jobId);
+  if (job) {
+    job.status = 'error';
+    job.error = GENERATE_FAILURE_MESSAGE;
+  }
+}
+
 // ─── ハンドラ ───────────────────────────────────────────
 
-/** POST /api/dev/mockup/generate — 新規生成 or 反復修正。 */
-async function handleGenerate(req: Request, res: Response): Promise<void> {
+/** POST /api/dev/mockup/generate — 非同期ジョブを起票し 202 { jobId } を即返す。 */
+function handleGenerate(req: Request, res: Response): void {
+  sweepExpiredJobs();
+
   const body = (req.body ?? {}) as Record<string, unknown>;
   const prompt = typeof body.prompt === 'string' ? body.prompt : '';
   const baseHtml = typeof body.baseHtml === 'string' ? body.baseHtml : '';
@@ -136,20 +213,31 @@ async function handleGenerate(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const raw = await runGenerate(cliPrompt);
-  if (raw === null) {
-    res.status(502).json({ error: 'HTML の生成に失敗しました（タイムアウトまたは生成エンジンのエラー）' });
+  const jobId = randomUUID();
+  jobs.set(jobId, { status: 'pending', createdAt: Date.now() });
+  // 生成はバックグラウンドで開始（await しない）。例外は runGenerateJob 内で吸収するが念のため握りつぶす。
+  void runGenerateJob(jobId, cliPrompt).catch(() => {
+    const job = jobs.get(jobId);
+    if (job) {
+      job.status = 'error';
+      job.error = GENERATE_FAILURE_MESSAGE;
+    }
+  });
+
+  // 即座に 202 を返す＝リクエストは短時間で完了し、エッジ上限に掛からない。
+  res.status(202).json({ jobId });
+}
+
+/** GET /api/dev/mockup/job/:jobId — ジョブの状態を返す。未知/期限切れは 404。 */
+function handleJob(req: Request, res: Response): void {
+  sweepExpiredJobs();
+  const jobId = String(req.params.jobId);
+  const job = jobs.get(jobId);
+  if (!job) {
+    res.status(404).json({ error: 'job not found' });
     return;
   }
-
-  const html = stripFences(raw);
-  // HTML らしさの最低限チェック: 空・タグを含まないものは失敗扱い。
-  if (!html || !html.includes('<')) {
-    res.status(502).json({ error: '有効な HTML が生成されませんでした。指示を具体的にして再度お試しください。' });
-    return;
-  }
-
-  res.json({ html });
+  res.json({ status: job.status, html: job.html, error: job.error });
 }
 
 /** GET /api/dev/mockups — 軽量サマリ一覧（html 除く）。 */
@@ -201,7 +289,8 @@ function handleDelete(req: Request, res: Response): void {
 /** /api/dev 配下のルータを返す。index.ts で auth ミドルウェア配下に mount する。 */
 export function devMockupRouter(): Router {
   const router = Router();
-  router.post('/mockup/generate', (req, res) => void handleGenerate(req, res));
+  router.post('/mockup/generate', handleGenerate);
+  router.get('/mockup/job/:jobId', handleJob);
   router.get('/mockups', handleList);
   router.get('/mockups/:id', handleGet);
   router.post('/mockups', handleUpsert);
