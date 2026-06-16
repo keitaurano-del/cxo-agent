@@ -17,6 +17,7 @@ import {
   TerminalIcon,
   BabyIcon,
   ClockIcon,
+  CodeIcon,
   SunIcon,
   MoonIcon,
   SettingsIcon,
@@ -35,6 +36,7 @@ const DocumentsTabs = lazy(() => import('./views/DocumentsTabs'));
 const PlanUsage = lazy(() => import('./views/PlanUsage'));
 const Childcare = lazy(() => import('./views/Childcare'));
 const Schedule = lazy(() => import('./views/Schedule'));
+const Development = lazy(() => import('./views/Development'));
 const Terminal = lazy(() => import('./views/Terminal'));
 import BottomNav from './components/BottomNav';
 import { SortableNav, DragHandle } from './components/SortableNav';
@@ -153,6 +155,7 @@ const NAV: NavItem[] = [
   { to: '/deliverables', label: 'ドキュメント', shortLabel: 'ドキュ', icon: <DocumentsIcon /> },
   { to: '/childcare', label: '育児', shortLabel: '育児', icon: <BabyIcon /> },
   { to: '/schedule', label: 'スケジュール', shortLabel: '予定', icon: <ClockIcon /> },
+  { to: '/dev', label: '開発', shortLabel: '開発', icon: <CodeIcon /> },
   // 成長日記は独立ナビから外し、育児ページ内の「成長日記」タブに統合した（/baby-diary は後方互換で残す）。
   // ターミナル: iframe ホスト用 React ルートは /terminal-view。
   // サーバ proxy ルート /terminal（→ ttyd）と衝突させないため別パスにする。
@@ -490,6 +493,7 @@ export default function App() {
               {/* 旧 /baby-diary は育児ページの「成長日記」タブに着地（古いリンク/ブックマーク互換）。 */}
               <Route path="/baby-diary" element={<Childcare initialTab="diary" />} />
               <Route path="/schedule" element={<Schedule />} />
+              <Route path="/dev" element={<Development />} />
               <Route path="/terminal-view" element={<div className="flex h-full flex-col overflow-hidden"><Terminal /></div>} />
               <Route path="/terminal-standalone" element={<Terminal />} />
               <Route path="*" element={<Navigate to="/" replace />} />

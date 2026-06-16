@@ -97,6 +97,7 @@ import { navOrderRouter } from './navOrderRouter.js';
 import { babyDiaryRouter } from './babyDiaryRouter.js';
 import { googleRouter } from './googleRouter.js';
 import { plannerRouter } from './plannerRouter.js';
+import { devMockupRouter } from './devMockupRouter.js';
 
 const HEALTHZ_PATH = '/api/healthz';
 
@@ -1376,6 +1377,15 @@ app.use('/api/google', googleRouter());
 // AI 見積りは claude haiku をバッチ 1 回（mood と同流儀）・キャッシュ・失敗時はヒューリスティックに
 // フォールバックする（必ず 200）。auth ミドルウェア配下＝Cookie/Bearer 必須。保存先は data/ 配下。
 app.use('/api/planner', plannerRouter());
+
+// ─── 開発ページ AI モックアップ ──────────────────────────────────
+// Keita が文章で「こんな画面が欲しい」と指示すると claude が単一 HTML ドキュメントを生成し、
+// iframe でプレビュー・修正反復・保存できる。生成は claude CLI を plannerEstimate と同流儀で
+// 安全起動する（NULバイトガード・try/catch・タイムアウト）。失敗/タイムアウトは 502。
+// POST mockup/generate=生成 / GET mockups=軽量一覧 / GET mockups/:id=html込み /
+// POST mockups=upsert / DELETE mockups/:id=論理削除。保存先は data/ 配下（.gitignore 済み）。
+// auth ミドルウェア配下＝Cookie/Bearer 必須。
+app.use('/api/dev', devMockupRouter());
 
 // ─── SSE（chokidar watch → broadcast に接続）──────────────────────
 

@@ -650,6 +650,17 @@ export function InfoIcon(props: IconProps) {
   );
 }
 
+// 開発（/dev）ナビ用。コード記号 </> で「開発・コーディング」を表す。
+export function CodeIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="m8 6-5 6 5 6" />
+      <path d="m16 6 5 6-5 6" />
+      <path d="m13.5 4-3 16" />
+    </svg>
+  );
+}
+
 // MC-238: スター（お気に入り）。filled 表示は呼び出し側で fill="currentColor" を渡す。
 export function StarIcon(props: IconProps) {
   return (

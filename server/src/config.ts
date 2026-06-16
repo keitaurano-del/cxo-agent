@@ -1012,6 +1012,17 @@ export const PLANNER_TASK_META_FILE = join(INBOX_DATA_DIR, 'planner-task-meta.js
 /** AI 見積りキャッシュの JSONL（last-wins by key＝account:taskId + 内容ハッシュ）。 */
 export const PLANNER_ESTIMATE_CACHE_FILE = join(INBOX_DATA_DIR, 'planner-estimate-cache.jsonl');
 
+// ─── 開発ページ AI モックアップ ──────────────────────────────────
+//
+// Keita が文章で「こんな画面が欲しい」と指示すると claude が単一 HTML ドキュメントを生成し、
+// iframe でプレビュー・修正反復・保存できるビュー。生成は plannerEstimate.ts と同流儀で
+// claude CLI を安全起動する（NULバイトガード・try/catch・タイムアウト）。
+// 永続データは data/ 配下（.gitignore 済み・ランタイムデータ）:
+//   data/dev-mockups.jsonl : モックアップ（last-wins by id・論理削除は deleted フラグ）
+
+/** AI 生成 HTML モックアップの JSONL（last-wins by id）。 */
+export const DEV_MOCKUPS_FILE = join(INBOX_DATA_DIR, 'dev-mockups.jsonl');
+
 /** AI 見積りに使うモデル（haiku で安く。mood と同じ流儀。env で差し替え可）。 */
 export const PLANNER_ESTIMATE_MODEL = env('PLANNER_ESTIMATE_MODEL', AGENT_MOOD_MODEL);
 
