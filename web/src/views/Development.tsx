@@ -35,15 +35,20 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type JobResult =
+  | { status: 'done'; html: string; mockupId?: string }
+  | { status: 'timeout' };
+
 /**
- * POST /api/dev/mockup/generate に body を送ってジョブを起票し、完了までポーリングして HTML を返す。
- * - サーバの error 文言は throw（呼び出し側で setError）。
- * - 404（ジョブ消失）/ タイムアウトは専用メッセージで throw。
+ * POST /api/dev/mockup/generate に body を送ってジョブを起票し、完了までポーリングする。
+ * - 完了: { status:'done', html, mockupId }（mockupId はサーバが完了時に自動保存したモックアップ）。
+ * - サーバ error / 404（ジョブ消失）: throw（呼び出し側で setError）。
+ * - タイムアウト: { status:'timeout' }（生成はバックグラウンドで継続し、完了後に自動保存される）。
  */
 async function runMockupJob(
   body: Record<string, unknown>,
   startFallback: string,
-): Promise<string> {
+): Promise<JobResult> {
   // 起票 POST。モバイル等の一過性 fetch 失敗（"Failed to fetch"）は数回まで再試行する。
   let startRes: Response | null = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -80,17 +85,25 @@ async function runMockupJob(
       throw new Error('もう一度お試しください');
     }
     if (!pollRes.ok) continue;
-    let data: { status?: string; html?: string; error?: string };
+    let data: { status?: string; html?: string; error?: string; mockupId?: string };
     try {
-      data = (await pollRes.json()) as { status?: string; html?: string; error?: string };
+      data = (await pollRes.json()) as {
+        status?: string;
+        html?: string;
+        error?: string;
+        mockupId?: string;
+      };
     } catch {
       continue;
     }
-    if (data.status === 'done') return data.html ?? '';
+    if (data.status === 'done') {
+      return { status: 'done', html: data.html ?? '', mockupId: data.mockupId };
+    }
     if (data.status === 'error') throw new Error(data.error || startFallback);
     // status === 'pending' は継続。
   }
-  throw new Error('時間がかかっています。後ほどお試しください');
+  // 上限時間到達。生成はサーバで継続中＝完了後に自動保存される。
+  return { status: 'timeout' };
 }
 
 export default function Development() {
@@ -147,7 +160,7 @@ export default function Development() {
   // 通知は数秒で自動的に消す。
   useEffect(() => {
     if (!notice) return;
-    const id = setTimeout(() => setNotice(null), 3000);
+    const id = setTimeout(() => setNotice(null), 6000);
     return () => clearTimeout(id);
   }, [notice]);
 
@@ -158,18 +171,27 @@ export default function Development() {
     setError(null);
     setNotice(null);
     try {
-      const out = await runMockupJob({ prompt: prompt.trim() }, '生成に失敗しました');
-      setHtml(out);
-      setPreviewHtml(out);
-      setCurrentId(null); // 新規生成は未保存扱い。
-      if (!title.trim()) setTitle(prompt.trim().slice(0, 40));
-      setNotice('モックアップを生成しました。');
+      const r = await runMockupJob({ prompt: prompt.trim() }, '生成に失敗しました');
+      if (r.status === 'timeout') {
+        setNotice(
+          '生成に時間がかかっています。完了すると下の「保存済みモックアップ」に自動保存されます。このページを離れても大丈夫です。',
+        );
+        loadList();
+        [15000, 30000, 60000, 90000].forEach((ms) => window.setTimeout(loadList, ms));
+      } else {
+        setHtml(r.html);
+        setPreviewHtml(r.html);
+        setCurrentId(r.mockupId ?? null);
+        if (!title.trim()) setTitle(prompt.trim().slice(0, 40));
+        setNotice('モックアップを生成しました（下の一覧にも自動保存済み）。');
+        loadList();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : '生成に失敗しました');
     } finally {
       setGenerating(false);
     }
-  }, [prompt, generating, title]);
+  }, [prompt, generating, title, loadList]);
 
   // 反復修正。
   const handleRevise = useCallback(async () => {
@@ -178,20 +200,35 @@ export default function Development() {
     setError(null);
     setNotice(null);
     try {
-      const out = await runMockupJob(
-        { baseHtml: html, instruction: instruction.trim() },
+      const r = await runMockupJob(
+        {
+          baseHtml: html,
+          instruction: instruction.trim(),
+          ...(currentId ? { id: currentId } : {}),
+          ...(title.trim() ? { title: title.trim() } : {}),
+        },
         '修正に失敗しました',
       );
-      setHtml(out);
-      setPreviewHtml(out);
-      setInstruction('');
-      setNotice('モックアップを修正しました。');
+      if (r.status === 'timeout') {
+        setNotice(
+          '修正に時間がかかっています。完了すると下の「保存済みモックアップ」に自動保存されます。このページを離れても大丈夫です。',
+        );
+        loadList();
+        [15000, 30000, 60000, 90000].forEach((ms) => window.setTimeout(loadList, ms));
+      } else {
+        setHtml(r.html);
+        setPreviewHtml(r.html);
+        setInstruction('');
+        if (r.mockupId) setCurrentId(r.mockupId);
+        setNotice('モックアップを修正しました（下の一覧にも自動保存済み）。');
+        loadList();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : '修正に失敗しました');
     } finally {
       setGenerating(false);
     }
-  }, [html, instruction, generating]);
+  }, [html, instruction, generating, currentId, title, loadList]);
 
   // 保存（upsert）。
   const handleSave = useCallback(async () => {

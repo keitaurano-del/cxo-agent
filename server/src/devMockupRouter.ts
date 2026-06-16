@@ -130,6 +130,8 @@ interface Job {
   status: JobStatus;
   html?: string;
   error?: string;
+  /** 完了時に自動保存したモックアップの id（クライアントが currentId に反映できる）。 */
+  mockupId?: string;
   createdAt: number;
 }
 
@@ -164,17 +166,36 @@ function sleep(ms: number): Promise<void> {
  * 一過性失敗（空応答・claude 競合・タイムアウト）を吸収するため最大 GENERATE_MAX_ATTEMPTS 回リトライ。
  * await しない前提（呼び出し側は即 202 を返す）。例外でサーバを落とさない。
  */
-async function runGenerateJob(jobId: string, cliPrompt: string): Promise<void> {
+async function runGenerateJob(
+  jobId: string,
+  cliPrompt: string,
+  save: { title: string; id?: string; prompt?: string },
+): Promise<void> {
   for (let attempt = 1; attempt <= GENERATE_MAX_ATTEMPTS; attempt += 1) {
     const raw = await runGenerate(cliPrompt);
     if (raw !== null) {
       const html = stripFences(raw);
       // HTML らしさの最低限チェック: 空・タグを含まないものは無効（リトライ対象）。
       if (html && html.includes('<')) {
+        // 生成成功。クライアントが離脱・通信失敗しても結果が残るよう、ストアへ自動保存する。
+        // 保存に失敗してもジョブ自体は成功として html を返す（保存はベストエフォート）。
+        let mockupId: string | undefined;
+        try {
+          const saved = upsertMockup({
+            id: save.id,
+            title: save.title,
+            html,
+            prompt: save.prompt,
+          });
+          mockupId = saved.id;
+        } catch {
+          // ignore — html は返す。
+        }
         const job = jobs.get(jobId);
         if (job) {
           job.status = 'done';
           job.html = html;
+          job.mockupId = mockupId;
         }
         return;
       }
@@ -213,10 +234,23 @@ function handleGenerate(req: Request, res: Response): void {
     return;
   }
 
+  // 自動保存用のタイトルと対象 id。新規生成はプロンプト先頭を、修正は既存 id を更新（タイトルは指定 or 指示から）。
+  const oneLine = (s: string): string => s.replace(/\s+/g, ' ').trim().slice(0, 40);
+  const explicitTitle = typeof body.title === 'string' ? body.title.trim() : '';
+  const explicitId = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : undefined;
+  const autoTitle =
+    explicitTitle ||
+    (prompt.trim()
+      ? oneLine(prompt)
+      : instruction.trim()
+        ? `修正: ${oneLine(instruction)}`
+        : 'モックアップ');
+  const storePrompt = prompt.trim() || instruction.trim() || undefined;
+
   const jobId = randomUUID();
   jobs.set(jobId, { status: 'pending', createdAt: Date.now() });
   // 生成はバックグラウンドで開始（await しない）。例外は runGenerateJob 内で吸収するが念のため握りつぶす。
-  void runGenerateJob(jobId, cliPrompt).catch(() => {
+  void runGenerateJob(jobId, cliPrompt, { title: autoTitle, id: explicitId, prompt: storePrompt }).catch(() => {
     const job = jobs.get(jobId);
     if (job) {
       job.status = 'error';
@@ -237,7 +271,7 @@ function handleJob(req: Request, res: Response): void {
     res.status(404).json({ error: 'job not found' });
     return;
   }
-  res.json({ status: job.status, html: job.html, error: job.error });
+  res.json({ status: job.status, html: job.html, error: job.error, mockupId: job.mockupId });
 }
 
 /** GET /api/dev/mockups — 軽量サマリ一覧（html 除く）。 */
