@@ -122,6 +122,12 @@ export default function Development() {
   // 現在編集中のモックアップ id（保存済みを読み込んだ/保存した場合に入る）。
   const [currentId, setCurrentId] = useState<string | null>(null);
 
+  // スマホ幅(md未満)での表示ペイン切替。デスクトップ(md+)では無視され両ペイン横並び。
+  const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit');
+
+  // 生成/修正中の経過秒数（進捗表示用）。generating が true の間だけ 1 秒間隔で加算する。
+  const [elapsed, setElapsed] = useState(0);
+
   // 一覧
   const [mockups, setMockups] = useState<MockupSummary[]>([]);
   const [listLoading, setListLoading] = useState(true);
@@ -157,6 +163,17 @@ export default function Development() {
     loadList();
   }, [loadList]);
 
+  // 生成/修正中だけ経過秒数を 1 秒間隔で更新。停止時は 0 にリセットし interval を破棄。
+  useEffect(() => {
+    if (!generating) {
+      setElapsed(0);
+      return;
+    }
+    setElapsed(0);
+    const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [generating]);
+
   // 通知は数秒で自動的に消す。
   useEffect(() => {
     if (!notice) return;
@@ -184,6 +201,7 @@ export default function Development() {
         setCurrentId(r.mockupId ?? null);
         if (!title.trim()) setTitle(prompt.trim().slice(0, 40));
         setNotice('モックアップを生成しました（下の一覧にも自動保存済み）。');
+        setMobileTab('preview');
         loadList();
       }
     } catch (e) {
@@ -221,6 +239,7 @@ export default function Development() {
         setInstruction('');
         if (r.mockupId) setCurrentId(r.mockupId);
         setNotice('モックアップを修正しました（下の一覧にも自動保存済み）。');
+        setMobileTab('preview');
         loadList();
       }
     } catch (e) {
@@ -277,6 +296,7 @@ export default function Development() {
       setPreviewHtml(m.html);
       setPrompt(m.prompt ?? '');
       setInstruction('');
+      setMobileTab('preview');
       setNotice(`「${m.title}」を読み込みました。`);
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込みに失敗しました');
@@ -328,10 +348,40 @@ export default function Development() {
         </div>
       )}
 
-      {/* 2ペイン: 左=操作 / 右=プレビュー。モバイルは縦積み。 */}
+      {/* スマホ幅のみ: 操作 / プレビュー のタブ切替。デスクトップ(md+)は両ペイン横並びのため非表示。 */}
+      <div className="px-4 pt-3 md:hidden">
+        <div className="flex gap-1 rounded-lg border border-border bg-surface p-1" role="tablist">
+          {([
+            ['edit', '操作'],
+            ['preview', 'プレビュー'],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={mobileTab === key}
+              onClick={() => setMobileTab(key)}
+              className="flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors"
+              style={
+                mobileTab === key
+                  ? { background: 'var(--mc-accent)', color: 'var(--mc-bg)' }
+                  : { color: 'var(--mc-text-muted)' }
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 2ペイン: 左=操作 / 右=プレビュー。スマホはタブで片方のみ表示、md+ は横並び。 */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-        {/* 左ペイン: 操作 */}
-        <div className="flex w-full shrink-0 flex-col gap-4 overflow-y-auto border-b border-border p-4 md:w-[26rem] md:border-b-0 md:border-r">
+        {/* 左ペイン: 操作。スマホは flex-1 で画面いっぱい＋内部スクロール、md+ は固定幅。 */}
+        <div
+          className={`${
+            mobileTab === 'edit' ? 'flex' : 'hidden'
+          } w-full min-h-0 flex-1 flex-col gap-4 overflow-y-auto border-b border-border p-4 md:flex md:w-[26rem] md:flex-none md:border-b-0 md:border-r`}
+        >
           {/* 生成 */}
           <section className="flex flex-col gap-2">
             <label className="text-xs font-semibold text-text-muted" htmlFor="dev-prompt">
@@ -355,6 +405,24 @@ export default function Development() {
               {generating ? <Spinner /> : <SparkIcon width={16} height={16} />}
               {generating ? '生成中…' : '生成'}
             </button>
+
+            {/* 生成/修正中の進捗（経過秒＋推定90秒に対する簡易バー）。 */}
+            {generating && (
+              <div className="flex flex-col gap-1.5" role="status" aria-live="polite">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+                  <div
+                    className="h-full rounded-full transition-[width] duration-1000 ease-linear"
+                    style={{
+                      width: `${Math.min(95, Math.round((elapsed / 90) * 100))}%`,
+                      background: 'var(--mc-accent)',
+                    }}
+                  />
+                </div>
+                <p className="text-[11px] leading-relaxed text-text-muted">
+                  生成中… {elapsed}秒（混雑時は1〜2分ほどかかることがあります。完了すると下の保存済み一覧にも自動保存されます）
+                </p>
+              </div>
+            )}
           </section>
 
           {/* 反復修正（html がある時のみ） */}
@@ -472,8 +540,12 @@ export default function Development() {
           </section>
         </div>
 
-        {/* 右ペイン: プレビュー */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-2">
+        {/* 右ペイン: プレビュー。スマホはタブ選択時のみ表示、md+ は常時横並び。 */}
+        <div
+          className={`${
+            mobileTab === 'preview' ? 'flex' : 'hidden'
+          } min-h-0 min-w-0 flex-1 flex-col bg-surface-2 md:flex`}
+        >
           <div className="flex items-center justify-between border-b border-border px-4 py-2">
             <span className="text-xs font-semibold text-text-muted">プレビュー</span>
           </div>
