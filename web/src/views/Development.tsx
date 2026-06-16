@@ -44,11 +44,22 @@ async function runMockupJob(
   body: Record<string, unknown>,
   startFallback: string,
 ): Promise<string> {
-  const startRes = await fetch('/api/dev/mockup/generate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  // 起票 POST。モバイル等の一過性 fetch 失敗（"Failed to fetch"）は数回まで再試行する。
+  let startRes: Response | null = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      startRes = await fetch('/api/dev/mockup/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      break;
+    } catch {
+      if (attempt === 2) throw new Error(startFallback);
+      await sleep(1_500);
+    }
+  }
+  if (!startRes) throw new Error(startFallback);
   if (!startRes.ok) throw new Error(await readError(startRes, startFallback));
   const startData = (await startRes.json()) as { jobId?: string };
   const jobId = startData.jobId;
@@ -57,12 +68,24 @@ async function runMockupJob(
   const deadline = Date.now() + POLL_MAX_WAIT_MS;
   while (Date.now() < deadline) {
     await sleep(POLL_INTERVAL_MS);
-    const pollRes = await fetch(`/api/dev/mockup/job/${encodeURIComponent(jobId)}`);
+    // ポーリング中の fetch 例外（モバイルの電波揺らぎ等で "Failed to fetch"）・非JSON・!ok は
+    // 致命扱いせず次の周回で再試行する。中断するのは 404（ジョブ消失）・error・タイムアウトのみ。
+    let pollRes: Response;
+    try {
+      pollRes = await fetch(`/api/dev/mockup/job/${encodeURIComponent(jobId)}`);
+    } catch {
+      continue;
+    }
     if (pollRes.status === 404) {
       throw new Error('もう一度お試しください');
     }
-    if (!pollRes.ok) continue; // 一過性のネットワーク/エッジ揺らぎは継続ポーリング。
-    const data = (await pollRes.json()) as { status?: string; html?: string; error?: string };
+    if (!pollRes.ok) continue;
+    let data: { status?: string; html?: string; error?: string };
+    try {
+      data = (await pollRes.json()) as { status?: string; html?: string; error?: string };
+    } catch {
+      continue;
+    }
     if (data.status === 'done') return data.html ?? '';
     if (data.status === 'error') throw new Error(data.error || startFallback);
     // status === 'pending' は継続。
