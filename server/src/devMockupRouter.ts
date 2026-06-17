@@ -2,10 +2,9 @@
 //
 //  POST   /api/dev/mockup/generate    : { prompt, baseHtml?, instruction? } → 202 { jobId }（非同期ジョブ）
 //  GET    /api/dev/mockup/job/:jobId  : ポーリング用。
-//      { status:'pending'|'planning'|'generating'|'done'|'error',
-//        html?, mockupId?, error?,
-//        plannedTitles?, total?, completed?, currentTitle?, saved?:[{id,title}] }
-//      新規生成は 2 段階（計画→各画面を順次生成して個別自動保存）。html/mockupId は最初に成功した画面。
+//      { status:'pending'|'generating'|'done'|'error', html?, mockupId?, error?, saved?:[{id,title}] }
+//      新規生成も修正も「1 つの動くインタラクティブな単一 HTML プロトタイプ」を生成し、完了時に自動保存する。
+//      saved は後方互換のため単一画面でも [{id,title}] 1 件を入れる。
 //  GET    /api/dev/mockups          : { mockups: [{id,title,prompt,createdAt,updatedAt}] }（html 除く軽量）
 //  GET    /api/dev/mockups/:id       : { mockup: {…,html} }
 //  POST   /api/dev/mockups           : { id?, title, html, prompt? } → upsert（保存結果を返す）
@@ -37,12 +36,6 @@ import {
  *  分量の多い複雑なモックアップにも余裕を持たせて 240s。 */
 const GENERATE_TIMEOUT_MS = 240_000;
 
-/** 画面構成の計画（plan）呼び出しのタイムアウト。出力は小さい JSON のみなので短め。 */
-const PLAN_TIMEOUT_MS = 90_000;
-
-/** 1 つの要望から分割する画面数の上限。 */
-const MAX_SCREENS = 6;
-
 /** HTML は大きくなり得るため maxBuffer を広めに取る（8MB）。 */
 const GENERATE_MAX_BUFFER = 8 * 1024 * 1024;
 
@@ -56,49 +49,45 @@ const HTML_RULES = [
   '重要: マークダウン、``` のコードフェンス、前置き・説明文は一切出力しないこと。HTML 本文のみを出力する。',
 ].join('\n');
 
-/**
- * 1 画面分の生成プロンプトを組み立てる（全体文脈 + この画面の指示）。
- * 計画フェーズで分解された各画面の生成に使う。
- */
-function buildScreenGeneratePrompt(
-  originalPrompt: string,
-  screen: { title: string; description: string },
-): string {
-  return [
-    'あなたは UI モックアップを HTML で作るデザイナー兼フロントエンドエンジニアです。',
-    '次は、あるサービス/アプリ全体の要望を画面単位に分割したうちの 1 画面です。',
-    'この 1 画面だけの HTML モックアップを作成してください（他の画面は作らない）。',
-    '',
-    '全体の要望:',
-    originalPrompt,
-    '',
-    `この画面: ${screen.title} — ${screen.description}`,
-    '',
-    HTML_RULES,
-  ].join('\n');
-}
+/** インタラクティブな「動く試作品」を作らせるための共通指示。新規生成・修正の両方で結合する。 */
+const INTERACTIVE_RULES = [
+  '作るのは「1 つの完結した、実際に動くインタラクティブな試作品」です。すべてを単一 HTML に収め、',
+  '別ファイル・別画面には分けないこと。',
+  'ボタン・タブ・フォーム等の操作は実際に動かすこと。インライン <script> でクリックやイベントに反応させる。',
+  '複数の画面/状態が必要な場合は、別ページに分けず、同一ページ内で JS により表示を切り替える',
+  '（ビュー切替・モーダル・タブ等）。',
+  'このサービスの「主要な動作」は必ずサンプルで実演すること: ユーザーが主要ボタンを押したら、その結果が',
+  '実際に画面に現れるようにする。例: サムネ生成ならクリックでサンプルのサムネイルが生成・表示される /',
+  '検索なら結果一覧が出る / 送信なら完了状態が出る。ダミーデータでよいが「動いた手応え」が見えること。',
+  '画像やサムネ等は、外部ネットワークに依存しないプレースホルダ（CSS で描画した図形・SVG・data URI・',
+  'グラデーション等）で見栄え良く表現すること。プレビューは sandbox=allow-scripts で同一オリジン無しのため、',
+  '外部画像・外部 API・外部スクリプトへの依存は避ける。',
+].join('\n');
 
 /**
- * 要望を「作るべき画面」に分解させる計画プロンプトを組み立てる。
- * 出力は JSON のみ（{ screens: [{ title, description }] }）を期待する。
+ * 新規生成プロンプトを組み立てる。
+ * 要望から「1 つの動くインタラクティブな単一 HTML プロトタイプ」を作らせる。
  */
-function buildPlanPrompt(prompt: string): string {
+function buildGeneratePrompt(prompt: string): string {
   return [
-    '次の要望をUIモックアップとして作るべき『画面』に分解してください。',
-    '1画面で十分なら1つだけ。アプリ/サービス全体なら主要画面に分割（最大6画面）。',
-    '各画面にtitle(短い画面名)とdescription(その画面に何を表示するか1-2文)を付ける。',
-    '出力はJSONのみ: {"screens":[{"title":"...","description":"..."}]}。',
-    'マークダウン/フェンス/説明文は出力しない。',
+    'あなたは、動くインタラクティブな試作品を HTML で作るデザイナー兼フロントエンドエンジニアです。',
+    '次の要望に対して、実際に操作できる試作品を 1 つ作成してください。',
     '',
-    `要望: ${prompt}`,
+    '要望:',
+    prompt,
+    '',
+    INTERACTIVE_RULES,
+    '',
+    HTML_RULES,
   ].join('\n');
 }
 
 /** 反復修正のプロンプトを組み立てる（baseHtml 全体を修正指示で書き換え、HTML 全体を返す）。 */
 function buildRevisePrompt(baseHtml: string, instruction: string): string {
   return [
-    'あなたは UI モックアップを HTML で修正するデザイナー兼フロントエンドエンジニアです。',
+    'あなたは、動くインタラクティブな試作品を HTML で修正するデザイナー兼フロントエンドエンジニアです。',
     '次の指示に従って、以下の HTML 全体を修正してください。修正後の HTML 全体を返します。',
+    '修正後も「実際に操作できる動くインタラクティブな HTML」を保つこと（ボタン等は引き続き動かす）。',
     '',
     '指示:',
     instruction,
@@ -127,11 +116,10 @@ function stripFences(out: string): string {
 }
 
 /**
- * claude CLI を起動して文字列を生成する（HTML 生成にも計画 JSON 生成にも使う）。
- * 失敗/タイムアウト/NUL ガード後の例外はすべて null。
- * timeoutMs を渡せば 1 回あたりのタイムアウトを上書きできる（既定は GENERATE_TIMEOUT_MS）。
+ * claude CLI を起動して HTML を生成する。
+ * 失敗/タイムアウト/NUL ガード後の例外はすべて null。タイムアウトは GENERATE_TIMEOUT_MS 固定。
  */
-function runGenerate(prompt: string, timeoutMs: number = GENERATE_TIMEOUT_MS): Promise<string | null> {
+function runGenerate(prompt: string): Promise<string | null> {
   return new Promise((resolve) => {
     // execFile は引数に NUL バイトがあると同期 throw する。想定外の制御文字でサーバを落とさないよう、
     // (1) プロンプトから NUL を除去し、(2) execFile 自体も try/catch で囲う。
@@ -140,7 +128,7 @@ function runGenerate(prompt: string, timeoutMs: number = GENERATE_TIMEOUT_MS): P
       execFile(
         NOTEBOOK_CLAUDE_BIN,
         ['--model', NOTEBOOK_CLAUDE_MODEL, '-p', safePrompt],
-        { timeout: timeoutMs, maxBuffer: GENERATE_MAX_BUFFER, env: process.env },
+        { timeout: GENERATE_TIMEOUT_MS, maxBuffer: GENERATE_MAX_BUFFER, env: process.env },
         (err, stdout) => {
           if (err) {
             resolve(null);
@@ -162,23 +150,15 @@ function runGenerate(prompt: string, timeoutMs: number = GENERATE_TIMEOUT_MS): P
 // フロントは GET /job/:id をポーリングする。これでエッジ上限に縛られなくなる。
 // ジョブはインメモリ（プロセス再起動で消える）。
 
-type JobStatus = 'pending' | 'planning' | 'generating' | 'done' | 'error';
+type JobStatus = 'pending' | 'generating' | 'done' | 'error';
 interface Job {
   status: JobStatus;
-  /** 後方互換: 最初に成功した画面の HTML（既存の「html を表示」経路用）。 */
+  /** 生成された HTML。 */
   html?: string;
   error?: string;
-  /** 後方互換: 最初に成功した画面の保存先 id（クライアントが currentId に反映できる）。 */
+  /** 保存先 id（クライアントが currentId に反映できる）。 */
   mockupId?: string;
-  /** 計画フェーズで決まった画面タイトル一覧。 */
-  plannedTitles?: string[];
-  /** 生成予定の総画面数。 */
-  total?: number;
-  /** 生成（試行）完了済みの画面数。 */
-  completed?: number;
-  /** 現在生成中の画面タイトル。 */
-  currentTitle?: string;
-  /** 自動保存できた画面一覧。 */
+  /** 自動保存できた結果（単一画面でも [{id,title}] 1 件を入れて後方互換を保つ）。 */
   saved?: { id: string; title: string }[];
   createdAt: number;
 }
@@ -228,124 +208,10 @@ async function generateHtmlWithRetry(cliPrompt: string): Promise<string | null> 
   return null;
 }
 
-interface PlannedScreen {
-  title: string;
-  description: string;
-}
-
-/**
- * 計画フェーズ: 要望を「作るべき画面」に分解する。
- * - 計画呼び出しの出力を stripFences 後に JSON.parse し、screens を取り出す。
- * - 失敗/空/screens 非配列なら単一画面にフォールバック。
- * - title/description を正規化し、最大 MAX_SCREENS にクランプ。常に 1 件以上を返す。
- */
-async function planScreens(prompt: string): Promise<PlannedScreen[]> {
-  const oneLine = (s: string): string => s.replace(/\s+/g, ' ').trim().slice(0, 40);
-  const fallback: PlannedScreen[] = [{ title: oneLine(prompt) || 'モックアップ', description: prompt }];
-
-  const raw = await runGenerate(buildPlanPrompt(prompt), PLAN_TIMEOUT_MS);
-  if (raw === null) return fallback;
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(stripFences(raw));
-  } catch {
-    return fallback;
-  }
-
-  const screensRaw = (parsed as { screens?: unknown } | null)?.screens;
-  if (!Array.isArray(screensRaw) || screensRaw.length === 0) return fallback;
-
-  const screens: PlannedScreen[] = [];
-  for (const item of screensRaw) {
-    const rec = item as { title?: unknown; description?: unknown } | null;
-    const title = typeof rec?.title === 'string' ? rec.title.trim() : '';
-    const description = typeof rec?.description === 'string' ? rec.description.trim() : '';
-    // title が無ければスキップ（description は欠けても title を流用）。
-    if (!title) continue;
-    screens.push({ title: title.slice(0, 80), description: description || title });
-    if (screens.length >= MAX_SCREENS) break;
-  }
-  if (screens.length === 0) return fallback;
-  return screens;
-}
-
-/**
- * バックグラウンドで 2 段階生成を行う:
- *   フェーズ1: 計画（要望を画面に分解）
- *   フェーズ2: 各画面を直列に生成し、成功するたび個別に自動保存
- * 進捗はジョブに逐次反映する。await しない前提（呼び出し側は即 202 を返す）。
- */
-async function runPlannedGenerateJob(jobId: string, prompt: string): Promise<void> {
-  // フェーズ1: 計画。
-  {
-    const job = jobs.get(jobId);
-    if (job) job.status = 'planning';
-  }
-  const screens = await planScreens(prompt);
-
-  {
-    const job = jobs.get(jobId);
-    if (job) {
-      job.status = 'generating';
-      job.plannedTitles = screens.map((s) => s.title);
-      job.total = screens.length;
-      job.completed = 0;
-      job.saved = [];
-    }
-  }
-
-  // フェーズ2: 各画面を直列に生成（claude/レート競合を避けるため並列にしない）。
-  for (const screen of screens) {
-    {
-      const job = jobs.get(jobId);
-      if (job) job.currentTitle = screen.title;
-    }
-    const cliPrompt = buildScreenGeneratePrompt(prompt, screen);
-    const html = await generateHtmlWithRetry(cliPrompt);
-
-    if (html) {
-      // 1 画面ごとに即・個別保存（途中まででも残る）。保存はベストエフォート。
-      let savedId: string | undefined;
-      try {
-        const saved = upsertMockup({ title: screen.title, html, prompt });
-        savedId = saved.id;
-      } catch {
-        // ignore — html はジョブに残す。
-      }
-      const job = jobs.get(jobId);
-      if (job) {
-        // 後方互換: 最初に成功した画面の結果をトップレベルにもセット。
-        if (!job.html) {
-          job.html = html;
-          if (savedId) job.mockupId = savedId;
-        }
-        if (savedId) job.saved = [...(job.saved ?? []), { id: savedId, title: screen.title }];
-      }
-    }
-
-    const job = jobs.get(jobId);
-    if (job) {
-      job.completed = (job.completed ?? 0) + 1;
-      job.currentTitle = undefined;
-    }
-  }
-
-  // 全画面試行後。成功 0 件なら error、1 件以上で done。
-  const job = jobs.get(jobId);
-  if (job) {
-    if (!job.saved || job.saved.length === 0) {
-      job.status = 'error';
-      job.error = GENERATE_FAILURE_MESSAGE;
-    } else {
-      job.status = 'done';
-    }
-  }
-}
-
 /**
  * バックグラウンドで claude CLI を呼んで HTML を生成し、結果をジョブに格納する（単一画面）。
- * 修正（baseHtml + instruction）パスで使う。await しない前提。例外でサーバを落とさない。
+ * 新規生成（prompt）・修正（baseHtml + instruction）の両方で使う。
+ * await しない前提。例外でサーバを落とさない。
  */
 async function runGenerateJob(
   jobId: string,
@@ -373,9 +239,7 @@ async function runGenerateJob(
       job.status = 'done';
       job.html = html;
       job.mockupId = mockupId;
-      // 後方互換: 単一画面でも saved を 1 件で埋める（フロントの分岐統一のため）。
-      job.total = 1;
-      job.completed = 1;
+      // 後方互換: 保存できたら saved を 1 件で埋める。
       if (mockupId) job.saved = [{ id: mockupId, title: save.title }];
     }
     return;
@@ -400,8 +264,8 @@ function handleGenerate(req: Request, res: Response): void {
   const baseHtml = typeof body.baseHtml === 'string' ? body.baseHtml : '';
   const instruction = typeof body.instruction === 'string' ? body.instruction : '';
 
-  // モード判定: baseHtml + instruction が両方あれば反復修正（単一画面）、
-  //            prompt のみなら新規生成（2 段階＝計画→各画面生成）。
+  // モード判定: baseHtml + instruction が両方あれば反復修正、prompt のみなら新規生成。
+  // どちらも「1 つの動くインタラクティブな単一 HTML」を生成する。
   const isRevise = Boolean(baseHtml.trim() && instruction.trim());
   const isGenerate = !isRevise && Boolean(prompt.trim());
   if (!isRevise && !isGenerate) {
@@ -420,14 +284,19 @@ function handleGenerate(req: Request, res: Response): void {
     }
   };
 
+  const oneLine = (s: string): string => s.replace(/\s+/g, ' ').trim().slice(0, 40);
+  const explicitTitle = typeof body.title === 'string' ? body.title.trim() : '';
+  const explicitId = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : undefined;
+
   if (isGenerate) {
-    // 新規生成: 計画→各画面を順次生成して個別自動保存（重い要望でも画面単位なら完了しやすい）。
-    void runPlannedGenerateJob(jobId, prompt.trim()).catch(onFatal);
+    // 新規生成: 動くインタラクティブな単一 HTML を 1 本生成して自動保存。
+    const cliPrompt = buildGeneratePrompt(prompt.trim());
+    void runGenerateJob(jobId, cliPrompt, {
+      title: explicitTitle || oneLine(prompt) || 'モックアップ',
+      prompt: prompt.trim(),
+    }).catch(onFatal);
   } else {
-    // 修正: 従来どおり単一画面。自動保存用のタイトルと対象 id を決める。
-    const oneLine = (s: string): string => s.replace(/\s+/g, ' ').trim().slice(0, 40);
-    const explicitTitle = typeof body.title === 'string' ? body.title.trim() : '';
-    const explicitId = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : undefined;
+    // 修正: 単一画面。自動保存用のタイトルと対象 id を決める。
     const autoTitle = explicitTitle || (instruction.trim() ? `修正: ${oneLine(instruction)}` : 'モックアップ');
     const storePrompt = instruction.trim() || undefined;
     const cliPrompt = buildRevisePrompt(baseHtml, instruction);
@@ -454,12 +323,8 @@ function handleJob(req: Request, res: Response): void {
   res.json({
     status: job.status,
     html: job.html,
-    error: job.error,
     mockupId: job.mockupId,
-    plannedTitles: job.plannedTitles,
-    total: job.total,
-    completed: job.completed,
-    currentTitle: job.currentTitle,
+    error: job.error,
     saved: job.saved,
   });
 }

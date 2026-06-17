@@ -35,37 +35,26 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** 自動保存できた画面（id+title）。 */
+/** 自動保存できた結果（id+title）。 */
 interface SavedScreen {
   id: string;
   title: string;
 }
 
-/** ポーリング中の進捗（ジョブの段階表示用）。 */
-interface JobProgress {
-  status: 'pending' | 'planning' | 'generating';
-  total?: number;
-  completed?: number;
-  currentTitle?: string;
-}
-
 type JobResult =
-  | { status: 'done'; html: string; mockupId?: string; saved: SavedScreen[]; multi: boolean }
+  | { status: 'done'; html: string; mockupId?: string; saved: SavedScreen[] }
   | { status: 'timeout' };
 
 /**
  * POST /api/dev/mockup/generate に body を送ってジョブを起票し、完了までポーリングする。
- * - 完了: { status:'done', html, mockupId, saved, multi }。
- *     新規生成は 2 段階（計画→各画面を順次生成して個別自動保存）。html/mockupId は最初に成功した画面、
- *     saved は自動保存できた全画面、multi は複数画面生成だったか。
+ * - 完了: { status:'done', html, mockupId, saved }。生成・修正とも「1 つの動くインタラクティブな
+ *     単一 HTML」を生成して自動保存する。html/mockupId は生成結果、saved は自動保存できた結果（1 件）。
  * - サーバ error / 404（ジョブ消失）: throw（呼び出し側で setError）。
  * - タイムアウト: { status:'timeout' }（生成はバックグラウンドで継続し、完了後に自動保存される）。
- * onProgress を渡すと、ポーリングのたびに段階（planning/generating の進捗）を通知する。
  */
 async function runMockupJob(
   body: Record<string, unknown>,
   startFallback: string,
-  onProgress?: (p: JobProgress) => void,
 ): Promise<JobResult> {
   // 起票 POST。モバイル等の一過性 fetch 失敗（"Failed to fetch"）は数回まで再試行する。
   let startRes: Response | null = null;
@@ -108,9 +97,6 @@ async function runMockupJob(
       html?: string;
       error?: string;
       mockupId?: string;
-      total?: number;
-      completed?: number;
-      currentTitle?: string;
       saved?: SavedScreen[];
     };
     try {
@@ -125,22 +111,10 @@ async function runMockupJob(
         html: data.html ?? '',
         mockupId: data.mockupId,
         saved,
-        multi: saved.length > 1,
       };
     }
     if (data.status === 'error') throw new Error(data.error || startFallback);
-    // pending / planning / generating は継続。段階を通知。
-    if (
-      onProgress &&
-      (data.status === 'pending' || data.status === 'planning' || data.status === 'generating')
-    ) {
-      onProgress({
-        status: data.status,
-        total: data.total,
-        completed: data.completed,
-        currentTitle: data.currentTitle,
-      });
-    }
+    // pending / generating は継続（経過秒表示は呼び出し側の elapsed が担う）。
   }
   // 上限時間到達。生成はサーバで継続中＝完了後に自動保存される。
   return { status: 'timeout' };
@@ -167,9 +141,6 @@ export default function Development() {
 
   // 生成/修正中の経過秒数（進捗表示用）。generating が true の間だけ 1 秒間隔で加算する。
   const [elapsed, setElapsed] = useState(0);
-
-  // 2 段階生成（新規生成）の段階進捗。null の間は従来の経過秒表示にフォールバック。
-  const [jobProgress, setJobProgress] = useState<JobProgress | null>(null);
 
   // 一覧
   const [mockups, setMockups] = useState<MockupSummary[]>([]);
@@ -210,7 +181,6 @@ export default function Development() {
   useEffect(() => {
     if (!generating) {
       setElapsed(0);
-      setJobProgress(null);
       return;
     }
     setElapsed(0);
@@ -232,31 +202,20 @@ export default function Development() {
     setError(null);
     setNotice(null);
     try {
-      const r = await runMockupJob({ prompt: prompt.trim() }, '生成に失敗しました', setJobProgress);
+      const r = await runMockupJob({ prompt: prompt.trim() }, '生成に失敗しました');
       if (r.status === 'timeout') {
         setNotice(
           '生成に時間がかかっています。完了すると下の「保存済みモックアップ」に自動保存されます。このページを離れても大丈夫です。',
         );
         loadList();
         [15000, 30000, 60000, 90000].forEach((ms) => window.setTimeout(loadList, ms));
-      } else if (r.multi) {
-        // 複数画面: 一覧を更新し、最初の画面（先頭 saved）をプレビューに読み込む。
-        const first = r.saved[0];
-        setHtml(r.html);
-        setPreviewHtml(r.html);
-        setCurrentId(first?.id ?? r.mockupId ?? null);
-        if (first?.title) setTitle(first.title);
-        else if (!title.trim()) setTitle(prompt.trim().slice(0, 40));
-        setNotice(`${r.saved.length}画面を生成しました。一覧から各画面を開けます。`);
-        setMobileTab('preview');
-        loadList();
       } else {
         setHtml(r.html);
         setPreviewHtml(r.html);
         setCurrentId(r.mockupId ?? r.saved[0]?.id ?? null);
         if (r.saved[0]?.title) setTitle(r.saved[0].title);
         else if (!title.trim()) setTitle(prompt.trim().slice(0, 40));
-        setNotice('モックアップを生成しました（下の一覧にも自動保存済み）。');
+        setNotice('動く試作品を生成しました（下の一覧にも自動保存済み）。');
         setMobileTab('preview');
         loadList();
       }
@@ -392,7 +351,7 @@ export default function Development() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="開発" subtitle="作りたい画面を説明すると、AI が HTML モックアップを生成します。" />
+      <PageHeader title="開発" subtitle="作りたい画面や機能を説明すると、AI がボタンが実際に動く試作品を 1 つ生成します。" />
 
       {/* 通知/エラー帯 */}
       {(error || notice) && (
@@ -456,7 +415,7 @@ export default function Development() {
           <section className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-2">
               <label className="text-xs font-semibold text-text-muted" htmlFor="dev-prompt">
-                作りたい画面の説明
+                作りたい画面や機能の説明（ボタンが実際に動く試作品を 1 つ作ります）
               </label>
               <button
                 type="button"
@@ -470,7 +429,7 @@ export default function Development() {
               id="dev-prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="例: EC サイトの商品詳細ページ。画像・価格・カートボタン付き"
+              placeholder="例: サムネイル作成ツール。タイトルを入力して『サムネ生成』を押すと、サンプルのサムネが実際に表示される"
               rows={4}
               className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
             />
@@ -485,39 +444,23 @@ export default function Development() {
               {generating ? '生成中…' : '生成'}
             </button>
 
-            {/* 生成/修正中の進捗。
-                - 2 段階生成（新規生成）: planning=計画中、generating=画面ごとの進捗バー。
-                - それ以外（修正 or 計画前）: 従来の経過秒＋推定90秒の簡易バー。 */}
-            {generating && (() => {
-              const isGenStage = jobProgress?.status === 'generating';
-              const total = jobProgress?.total ?? 0;
-              const completed = jobProgress?.completed ?? 0;
-              // 進捗バー: generating かつ total>0 なら completed/total ベース、それ以外は経過秒ベース。
-              const barPct =
-                isGenStage && total > 0
-                  ? Math.min(100, Math.round((completed / total) * 100))
-                  : Math.min(95, Math.round((elapsed / 90) * 100));
-              let label: string;
-              if (jobProgress?.status === 'planning') {
-                label = '画面構成を計画中…';
-              } else if (isGenStage && total > 0) {
-                const cur = jobProgress?.currentTitle;
-                label = `${total}画面を生成中（${completed}/${total}${cur ? `: ${cur}` : ''}）`;
-              } else {
-                label = `生成中… ${elapsed}秒（混雑時は1〜2分ほどかかることがあります。完了すると下の保存済み一覧にも自動保存されます）`;
-              }
-              return (
-                <div className="flex flex-col gap-1.5" role="status" aria-live="polite">
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
-                    <div
-                      className="h-full rounded-full transition-[width] duration-1000 ease-linear"
-                      style={{ width: `${barPct}%`, background: 'var(--mc-accent)' }}
-                    />
-                  </div>
-                  <p className="text-[11px] leading-relaxed text-text-muted">{label}</p>
+            {/* 生成/修正中の進捗。経過秒＋推定90秒ベースの簡易バー。 */}
+            {generating && (
+              <div className="flex flex-col gap-1.5" role="status" aria-live="polite">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+                  <div
+                    className="h-full rounded-full transition-[width] duration-1000 ease-linear"
+                    style={{
+                      width: `${Math.min(95, Math.round((elapsed / 90) * 100))}%`,
+                      background: 'var(--mc-accent)',
+                    }}
+                  />
                 </div>
-              );
-            })()}
+                <p className="text-[11px] leading-relaxed text-text-muted">
+                  生成中… {elapsed}秒（混雑時は1〜2分ほどかかることがあります。完了すると下の保存済み一覧にも自動保存されます）
+                </p>
+              </div>
+            )}
           </section>
 
           {/* 反復修正（html がある時のみ） */}
