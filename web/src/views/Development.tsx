@@ -320,6 +320,20 @@ export default function Development() {
     [currentId, loadList],
   );
 
+  // 新規作成: 入力・コード・プレビュー・選択中 id をすべてクリアして白紙に戻す。
+  // 生成物は一覧に自動保存済みのため、ここで消えても「保存済みモックアップ」から再度開ける。
+  const handleNew = useCallback(() => {
+    setPrompt('');
+    setInstruction('');
+    setTitle('');
+    setHtml('');
+    setPreviewHtml('');
+    setCurrentId(null);
+    setError(null);
+    setNotice('新規作成にしました。');
+    setMobileTab('edit');
+  }, []);
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="開発" subtitle="作りたい画面を説明すると、AI が HTML モックアップを生成します。" />
@@ -384,9 +398,18 @@ export default function Development() {
         >
           {/* 生成 */}
           <section className="flex flex-col gap-2">
-            <label className="text-xs font-semibold text-text-muted" htmlFor="dev-prompt">
-              作りたい画面の説明
-            </label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs font-semibold text-text-muted" htmlFor="dev-prompt">
+                作りたい画面の説明
+              </label>
+              <button
+                type="button"
+                onClick={handleNew}
+                className="shrink-0 rounded px-2 py-0.5 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+              >
+                ＋ 新規作成
+              </button>
+            </div>
             <textarea
               id="dev-prompt"
               value={prompt}
