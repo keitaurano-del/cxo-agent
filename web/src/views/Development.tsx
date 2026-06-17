@@ -29,7 +29,7 @@ async function readError(res: Response, fallback: string): Promise<string> {
 // 非同期ジョブのポーリング設定。生成は Cloudflare エッジ（約100s）を避けるため
 // POST→202 { jobId } を受けて GET /job/:id を約2秒間隔でポーリングする。
 const POLL_INTERVAL_MS = 2_000;
-const POLL_MAX_WAIT_MS = 5 * 60_000; // 約5分でタイムアウト。
+const POLL_MAX_WAIT_MS = 9 * 60_000; // 約9分。サーバの最大生成時間(240s×2)を見届けられる長さ。
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

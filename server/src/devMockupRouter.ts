@@ -29,8 +29,9 @@ import {
 
 // ─── claude CLI（HTML 生成）──────────────────────────────────
 
-/** 生成 1 回あたりのタイムアウト（ミリ秒）。HTML 生成は分量があるため 120s。 */
-const GENERATE_TIMEOUT_MS = 120_000;
+/** 生成 1 回あたりのタイムアウト（ミリ秒）。非同期ジョブ化済みでエッジ上限から外れたので、
+ *  分量の多い複雑なモックアップにも余裕を持たせて 240s。 */
+const GENERATE_TIMEOUT_MS = 240_000;
 
 /** HTML は大きくなり得るため maxBuffer を広めに取る（8MB）。 */
 const GENERATE_MAX_BUFFER = 8 * 1024 * 1024;
@@ -142,7 +143,7 @@ const jobs = new Map<string, Job>();
 const JOB_TTL_MS = 15 * 60_000;
 
 /** サーバ側リトライ: 最大試行回数と試行間バックオフ。エッジ上限から外れたので安全に複数回試せる。 */
-const GENERATE_MAX_ATTEMPTS = 3;
+const GENERATE_MAX_ATTEMPTS = 2;
 const GENERATE_RETRY_BACKOFF_MS = 5_000;
 
 /** ユーザ向けの最終失敗メッセージ（全試行失敗時）。 */
