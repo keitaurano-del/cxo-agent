@@ -2,8 +2,9 @@
 //
 //  POST   /api/dev/mockup/generate    : { prompt, baseHtml?, instruction? } → 202 { jobId }（非同期ジョブ）
 //  GET    /api/dev/mockup/job/:jobId  : ポーリング用。
-//      { status:'pending'|'generating'|'done'|'error', html?, partial?, mockupId?, error?, saved?:[{id,title}] }
+//      { status:'pending'|'generating'|'done'|'error', html?, partial?, plan?, mockupId?, error?, saved?:[{id,title}] }
 //      partial は生成途中の部分 HTML（ストリーム中）。クライアントはこれを逐次表示してコードをライブに見せる。
+//      plan は HTML を書き始める前の「作り方」メモ（設計説明）。HTML が来るまで “考え中” の表示に使う。
 //      新規生成も修正も「1 つの動くインタラクティブな単一 HTML プロトタイプ」を生成し、完了時に自動保存する。
 //      saved は後方互換のため単一画面でも [{id,title}] 1 件を入れる。
 //  GET    /api/dev/mockups          : { mockups: [{id,title,prompt,createdAt,updatedAt}] }（html 除く軽量）
@@ -54,7 +55,19 @@ const HTML_RULES = [
   'コードの要所（レイアウト/デザイン/各操作の動きのまとまり）の先頭に、プログラミング未経験者でも',
   '何をしているか分かる短い日本語コメントを入れること（例: <!-- ボタンを押したら数字を増やす --> や',
   '/* 画面の配色・余白の設定 */）。コメントは要点だけ・専門用語を避け、入れすぎないこと。',
-  '重要: マークダウン、``` のコードフェンス、前置き・説明文は一切出力しないこと。HTML 本文のみを出力する。',
+  '重要: ---HTML--- 以降は、マークダウンや ``` のコードフェンス・説明文を一切入れず、HTML 本文のみを出力すること。',
+].join('\n');
+
+/**
+ * 「先に作り方（設計）を平易な日本語で書いてから HTML を書く」ための共通指示。
+ * 出力は必ず「作り方メモ → ---HTML--- だけの行 → HTML 本文」の順。
+ * サーバは ---HTML--- で分割し、メモを “考え中” のライブ表示に、本文を保存用 HTML に使う。
+ */
+const PLAN_MARKER = '---HTML---';
+const PLAN_RULES = [
+  `まず最初に、これから作る試作品の「作り方」を、プログラミング未経験の人にも分かる平易な日本語で 4〜8 行で説明してください。`,
+  '次の観点を簡潔に（箇条書き中心・短く・専門用語は避ける）: どんな画面か / 置く主な部品（ボタン・入力欄・一覧など）/ 主要ボタンを押すと何が起きるか / 配色や雰囲気の方針。',
+  `その「作り方」を書き終えたら、次の行に ${PLAN_MARKER} とだけ書いた行を 1 行入れ、その直後の行から、完成した単一 HTML ドキュメント本文だけを出力してください。`,
 ].join('\n');
 
 /** インタラクティブな「動く試作品」を作らせるための共通指示。新規生成・修正の両方で結合する。 */
@@ -88,6 +101,8 @@ function buildGeneratePrompt(prompt: string): string {
     '',
     INTERACTIVE_RULES,
     '',
+    PLAN_RULES,
+    '',
     HTML_RULES,
   ].join('\n');
 }
@@ -101,6 +116,9 @@ function buildRevisePrompt(baseHtml: string, instruction: string): string {
     '',
     '指示:',
     instruction,
+    '',
+    `まず、これから行う修正の「作り方」を平易な日本語で 3〜6 行で説明してください（どこを・どう変えるか・狙い）。`,
+    `説明を書き終えたら、次の行に ${PLAN_MARKER} とだけ書いた行を 1 行入れ、その直後の行から修正後の単一 HTML ドキュメント本文だけを出力してください。`,
     '',
     HTML_RULES,
     '',
@@ -123,6 +141,24 @@ function stripFences(out: string): string {
     s = s.replace(/\n?```\s*$/, '');
   }
   return s.trim();
+}
+
+/**
+ * 出力を「作り方メモ（plan）」と「HTML 本文（html）」に分割する。
+ * モデルは PLAN_MARKER（---HTML---）を境にメモ→HTML の順で出力する。
+ * - マーカーがまだ来ていない/無い場合: plan は全文、html は ''（＝まだ設計中）。
+ *   ただし旧仕様（メモ無しでいきなり HTML）との後方互換のため、本文が HTML タグで
+ *   始まっているとみなせる時は html 側に倒す。
+ */
+function splitPlanHtml(out: string): { plan: string; html: string } {
+  const text = out || '';
+  const idx = text.indexOf(PLAN_MARKER);
+  if (idx !== -1) {
+    return { plan: text.slice(0, idx).trim(), html: text.slice(idx + PLAN_MARKER.length) };
+  }
+  // マーカー未到達: 既に HTML らしき出力が始まっているなら html、まだなら plan とみなす。
+  if (/<!DOCTYPE|<html/i.test(text)) return { plan: '', html: text };
+  return { plan: text, html: '' };
 }
 
 /** claude CLI 1 回ぶんの生実行結果（throw せずここに集約する）。 */
@@ -318,6 +354,8 @@ interface Job {
   html?: string;
   /** 生成途中の部分 HTML（ストリーム中の最新 stdout。ライブ表示用）。 */
   partial?: string;
+  /** 生成途中の「作り方」メモ（HTML を書き始める前の設計説明。ライブ表示用）。 */
+  plan?: string;
   error?: string;
   /** 保存先 id（クライアントが currentId に反映できる）。 */
   mockupId?: string;
@@ -397,7 +435,8 @@ async function generateHtmlWithRetry(
     const raw = await runClaudeRaw(cliPrompt, model, onChunk);
 
     if (!raw.error) {
-      const html = stripFences(raw.stdout);
+      // 「作り方メモ → ---HTML--- → HTML 本文」のうち HTML 本文だけを取り出す。
+      const html = stripFences(splitPlanHtml(raw.stdout).html);
       // HTML らしさの最低限チェック: 空・タグを含まないものは無効（リトライ対象）。
       if (html && html.includes('<')) return { html };
       // 応答はあるが HTML ではない（空・フェンスのみ等）。
@@ -467,10 +506,21 @@ async function runGenerateJob(
     const job = jobs.get(jobId);
     if (!job || job.status === 'done' || job.status === 'error') return;
     job.status = 'generating';
-    job.partial = accumulated;
+    // 「作り方メモ」と「HTML 本文」に分割して別々に持つ。クライアントは HTML が来るまで
+    // メモを “作り方を考えています” のライブ表示に使い、HTML が始まったらコードに切り替える。
+    const { plan, html } = splitPlanHtml(accumulated);
+    job.plan = plan || undefined;
+    job.partial = html;
   };
   // 同時実行の食い合いを避けるため、生成は 1 本ずつ直列化する。
-  const result = await serializeDevGen(() => generateHtmlWithRetry(cliPrompt, onChunk));
+  // 直列キューに並んでいる間は status='pending'（=順番待ち）、自分の番が来て実際に
+  // claude を起動する瞬間に status='generating' へ。クライアントは両者を区別して
+  // 「順番待ち中」か「生成中（考え中→コード書き中）」かを正しく表示できる。
+  const result = await serializeDevGen(() => {
+    const job = jobs.get(jobId);
+    if (job && job.status === 'pending') job.status = 'generating';
+    return generateHtmlWithRetry(cliPrompt, onChunk);
+  });
   if (result.html) {
     const html = result.html;
     // 生成成功。クライアントが離脱・通信失敗しても結果が残るよう、ストアへ自動保存する。
@@ -578,6 +628,8 @@ function handleJob(req: Request, res: Response): void {
     html: job.html,
     // 生成途中の部分コード（フェンスを除いて返す）。done になれば html を使うので不要。
     partial: job.status === 'generating' && job.partial ? stripFences(job.partial) : undefined,
+    // 生成途中の「作り方」メモ（HTML を書き始める前に表示する設計説明）。
+    plan: job.status === 'generating' && job.plan ? job.plan : undefined,
     mockupId: job.mockupId,
     error: job.error,
     saved: job.saved,

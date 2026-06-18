@@ -166,7 +166,7 @@ async function pollMockupJob(
   jobId: string,
   startFallback: string,
   sinceMs: number = Date.now(),
-  onPartial?: (partial: string) => void,
+  onProgress?: (status: string, partial: string, plan: string) => void,
 ): Promise<JobResult> {
   const deadline = sinceMs + POLL_MAX_WAIT_MS;
   while (Date.now() < deadline) {
@@ -187,6 +187,7 @@ async function pollMockupJob(
       status?: string;
       html?: string;
       partial?: string;
+      plan?: string;
       error?: string;
       mockupId?: string;
       saved?: SavedScreen[];
@@ -196,9 +197,13 @@ async function pollMockupJob(
     } catch {
       continue;
     }
-    // 生成途中の部分コードを逐次コールバック（ライブ表示用）。
-    if (data.status === 'generating' && typeof data.partial === 'string' && onPartial) {
-      onPartial(data.partial);
+    // 進捗（順番待ち pending / 生成中 generating ＋部分コード）を逐次コールバック（ライブ表示用）。
+    if (onProgress && (data.status === 'pending' || data.status === 'generating')) {
+      onProgress(
+        data.status,
+        typeof data.partial === 'string' ? data.partial : '',
+        typeof data.plan === 'string' ? data.plan : '',
+      );
     }
     if (data.status === 'done') {
       const saved = Array.isArray(data.saved) ? data.saved : [];
@@ -263,6 +268,10 @@ export default function Development() {
   const [nowTick, setNowTick] = useState(() => Date.now());
   // エディタに紐づくジョブの「生成中の部分コード」（ライブ表示用）。
   const [streamCode, setStreamCode] = useState('');
+  // エディタに紐づくジョブの「作り方メモ」（HTML を書き始める前の設計説明。ライブ表示用）。
+  const [streamPlan, setStreamPlan] = useState('');
+  // エディタに紐づくジョブのサーバ状態（'' | 'pending'=順番待ち | 'generating'=生成中）。
+  const [streamStatus, setStreamStatus] = useState<'' | 'pending' | 'generating'>('');
 
   // エディタに紐づく進行中ジョブ（あればエディタ側の進捗バーと生成ボタン無効化に使う）。
   const editorJob = activeJobs.find((j) => j.attachToEditor) ?? null;
@@ -343,8 +352,14 @@ export default function Development() {
         job.jobId,
         fallback,
         job.startedAt,
-        // エディタに紐づくジョブだけ、生成中の部分コードをライブ表示する。
-        job.attachToEditor ? (p) => setStreamCode(p) : undefined,
+        // エディタに紐づくジョブだけ、進捗（順番待ち/生成中）と部分コードをライブ表示する。
+        job.attachToEditor
+          ? (status, p, plan) => {
+              setStreamStatus(status as 'pending' | 'generating');
+              setStreamCode(p);
+              setStreamPlan(plan);
+            }
+          : undefined,
       )
         .then((r) => {
           if (r.status === 'done') {
@@ -356,6 +371,8 @@ export default function Development() {
               if (r.saved[0]?.title) setTitle(r.saved[0].title);
               if (job.mode === 'revise') setInstruction('');
               setStreamCode('');
+              setStreamPlan('');
+              setStreamStatus('');
               setMobileTab('preview');
             }
             setNotice(
@@ -376,6 +393,8 @@ export default function Development() {
           if (job.attachToEditor) {
             setError(e instanceof Error ? e.message : fallback);
             setStreamCode('');
+            setStreamPlan('');
+            setStreamStatus('');
           } else {
             setNotice('完了した試作品は下の「保存済みモックアップ」をご確認ください。');
           }
@@ -399,7 +418,7 @@ export default function Development() {
   useEffect(() => {
     const el = streamPreRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [streamCode]);
+  }, [streamCode, streamPlan]);
 
   // 新規生成。起票だけして「進行中ジョブ」に積む（完了はバックグラウンドのポーリングが捌く）。
   const handleGenerate = useCallback(async () => {
@@ -416,6 +435,8 @@ export default function Development() {
       ]);
       if (!title.trim()) setTitle(label);
       setStreamCode('');
+      setStreamPlan('');
+      setStreamStatus('pending');
       setMobileTab('preview'); // 生成中のコードがライブで見えるプレビュー側へ。
       setNotice('作成を開始しました。コードが書かれていく様子をプレビュー側に表示します。');
     } catch (e) {
@@ -451,6 +472,8 @@ export default function Development() {
         ...prev.map((j) => ({ ...j, attachToEditor: false })),
       ]);
       setStreamCode('');
+      setStreamPlan('');
+      setStreamStatus('pending');
       setMobileTab('preview');
       setNotice('修正を開始しました。コードが書かれていく様子をプレビュー側に表示します。');
     } catch (e) {
@@ -540,6 +563,8 @@ export default function Development() {
     setCurrentId(null);
     setError(null);
     setStreamCode('');
+    setStreamPlan('');
+    setStreamStatus('');
     // 進行中ジョブは消さない。エディタ紐付けだけ外し、一覧に「作成中」で見え続けるようにする。
     setActiveJobs((prev) => prev.map((j) => ({ ...j, attachToEditor: false })));
     setNotice('新規作成にしました。作成中のものは下の一覧に「作成中」で表示され続けます。');
@@ -842,6 +867,13 @@ export default function Development() {
                     <Spinner />
                     <span>{describeStreamPhase(streamCode)}</span>
                   </div>
+                  {/* 先に書いた「作り方」は折りたたんで上に残す（あとから設計意図を読み返せる）。 */}
+                  {streamPlan && (
+                    <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
+                      <summary className="cursor-pointer font-semibold">📝 AI が考えた「作り方」</summary>
+                      <div className="mt-1 whitespace-pre-wrap leading-relaxed">{streamPlan}</div>
+                    </details>
+                  )}
                   <p className="text-[10px] text-text-faint">
                     ↓ AI が実際に書いているコードです（各部分の説明コメント付き）。完成すると下に実際の画面が出ます。
                   </p>
@@ -853,11 +885,49 @@ export default function Development() {
                     <span className="animate-pulse">▋</span>
                   </pre>
                 </div>
-              ) : (
-                <div className="flex h-full items-center justify-center p-6">
-                  <div className="flex items-center gap-2 text-xs text-text-muted">
+              ) : streamPlan ? (
+                // HTML はまだ。先に「作り方（設計）」が書かれていく様子をライブ表示する。
+                <div className="flex h-full flex-col gap-2">
+                  <div
+                    className="flex items-center gap-2 rounded-lg border border-accent px-3 py-2 text-xs font-semibold"
+                    style={{ background: 'var(--mc-active-bg)', color: 'var(--mc-active)' }}
+                  >
                     <Spinner />
-                    <span>コードの生成を待っています…</span>
+                    <span>📝 AI が作り方（設計）を考えています…</span>
+                  </div>
+                  <p className="text-[10px] text-text-faint">
+                    まず作る内容を整理しています。これを書き終えると、続けてコードを書き始めます。
+                  </p>
+                  <pre
+                    ref={streamPreRef}
+                    className="min-h-0 w-full flex-1 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-surface px-3 py-2 text-xs leading-relaxed text-text"
+                  >
+                    {streamPlan}
+                    <span className="animate-pulse">▋</span>
+                  </pre>
+                  <p className="text-[11px] text-text-faint">経過 {elapsed} 秒</p>
+                </div>
+              ) : (
+                // まだコードも作り方も流れてきていない: 順番待ち（pending）か、AIが考え中（generating）かを区別して伝える。
+                <div className="flex h-full items-center justify-center p-6">
+                  <div className="flex max-w-xs flex-col items-center gap-3 text-center">
+                    <Spinner />
+                    {streamStatus === 'pending' ? (
+                      <>
+                        <p className="text-sm font-semibold text-text">🕒 順番待ち中です</p>
+                        <p className="text-xs text-text-muted">
+                          先に作成中のものを処理しています。空き次第これに取りかかり、コードを書き始めます（このまま待てば自動で進みます）。
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-text">🤔 AI が作り方を考えています…</p>
+                        <p className="text-xs text-text-muted">
+                          まもなくコードを書き始めます。書いている様子がここにそのまま表示されます。
+                        </p>
+                      </>
+                    )}
+                    <p className="text-[11px] text-text-faint">経過 {elapsed} 秒</p>
                   </div>
                 </div>
               )
