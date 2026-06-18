@@ -35,7 +35,9 @@ import { withClaudeSlot } from './lib/notebookClaude.js';
 // ─── claude CLI（HTML 生成）──────────────────────────────────
 
 /** 生成 1 回あたりのタイムアウト（ミリ秒）。非同期ジョブ化済みでエッジ上限から外れたので、
- *  分量の多い複雑なモックアップにも余裕を持たせて 240s。 */
+ *  分量の多い複雑なモックアップにも余裕を持たせて 240s。
+ *  タイムアウト時はリトライしない（重すぎ＝再試行しても無駄に 240s 待たせるだけ）ので、
+ *  これが実質「諦めるまでの最大待ち時間」になる。 */
 const GENERATE_TIMEOUT_MS = 240_000;
 
 /** HTML は大きくなり得るため maxBuffer を広めに取る（8MB）。 */
@@ -64,6 +66,8 @@ const INTERACTIVE_RULES = [
   '画像やサムネ等は、外部ネットワークに依存しないプレースホルダ（CSS で描画した図形・SVG・data URI・',
   'グラデーション等）で見栄え良く表現すること。プレビューは sandbox=allow-scripts で同一オリジン無しのため、',
   '外部画像・外部 API・外部スクリプトへの依存は避ける。',
+  '機能や装飾を盛り込みすぎないこと。要望の「主要な動作 1 つ」が動く、要点に絞ったコンパクトな単一画面にする。',
+  '生成を速く確実に終わらせるため、HTML を不必要に大きくしない（過剰な画面数・大量のダミーデータは避ける）。',
 ].join('\n');
 
 /**
@@ -291,8 +295,11 @@ async function generateHtmlWithRetry(cliPrompt: string): Promise<GenResult> {
         );
       }
     } else if (raw.timedOut) {
+      // タイムアウト＝出力が重すぎる/詰まっている。再試行してもまた 240s 待たせるだけなので即諦める。
       lastReason = 'timeout';
       lastDetail = raw.error;
+      if (lastDetail) console.warn(`[dev-mockup] generate attempt ${attempt} timed out → 中断`);
+      break;
     } else {
       lastReason = 'error';
       lastDetail = raw.error;
@@ -305,6 +312,26 @@ async function generateHtmlWithRetry(cliPrompt: string): Promise<GenResult> {
   return { html: null, reason: lastReason, detail: lastDetail };
 }
 
+// ─── dev 生成の直列化 ────────────────────────────────────────
+//
+// 共有 Claude アカウントで重い HTML 生成を同時に走らせると互いに遅くなり 240s 上限に達しやすい
+// （実測: 単発 ~10〜90s が、2 本同時だと両方 240s タイムアウト）。dev 生成は 1 本ずつ直列化する。
+// 後続は前段の完了を待ってから走る＝各々が速く確実に終わり、全体スループットも結局上がる。
+// 注: 直列化は dev 生成同士のみ。ノートブック Q&A とは withClaudeSlot（共有セマフォ）側で調停する。
+
+let devGenChain: Promise<unknown> = Promise.resolve();
+
+/** fn を dev 生成チェーンの末尾に繋いで直列実行する。結果/例外は呼び出し側へ素通し。 */
+function serializeDevGen<T>(fn: () => Promise<T>): Promise<T> {
+  const run = devGenChain.then(fn, fn);
+  // チェーン自体は「次が待てる」ためだけのもの。成否を握り潰して後続を止めない。
+  devGenChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 /**
  * バックグラウンドで claude CLI を呼んで HTML を生成し、結果をジョブに格納する（単一画面）。
  * 新規生成（prompt）・修正（baseHtml + instruction）の両方で使う。
@@ -315,7 +342,8 @@ async function runGenerateJob(
   cliPrompt: string,
   save: { title: string; id?: string; prompt?: string },
 ): Promise<void> {
-  const result = await generateHtmlWithRetry(cliPrompt);
+  // 同時実行の食い合いを避けるため、生成は 1 本ずつ直列化する。
+  const result = await serializeDevGen(() => generateHtmlWithRetry(cliPrompt));
   if (result.html) {
     const html = result.html;
     // 生成成功。クライアントが離脱・通信失敗しても結果が残るよう、ストアへ自動保存する。
