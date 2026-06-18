@@ -125,6 +125,18 @@ type JobResult =
   | { status: 'done'; html: string; mockupId?: string; saved: SavedScreen[] }
   | { status: 'timeout' };
 
+/** 失敗時に「そこまでの内容」を運ぶための情報（思考・作り方・書きかけコード）。 */
+interface LiveSnapshot {
+  thinking: string;
+  plan: string;
+  code: string;
+}
+
+/** Error にそこまでの内容を載せて投げるための拡張。catch 側が拾って画面に残す。 */
+interface JobError extends Error {
+  live?: LiveSnapshot;
+}
+
 /**
  * POST /api/dev/mockup/generate に body を送ってジョブを起票し、jobId を返す。
  * モバイル等の一過性 fetch 失敗（"Failed to fetch"）は数回まで再試行する。
@@ -166,7 +178,7 @@ async function pollMockupJob(
   jobId: string,
   startFallback: string,
   sinceMs: number = Date.now(),
-  onProgress?: (status: string, partial: string, plan: string) => void,
+  onProgress?: (status: string, partial: string, plan: string, thinking: string) => void,
 ): Promise<JobResult> {
   const deadline = sinceMs + POLL_MAX_WAIT_MS;
   while (Date.now() < deadline) {
@@ -188,6 +200,7 @@ async function pollMockupJob(
       html?: string;
       partial?: string;
       plan?: string;
+      thinking?: string;
       error?: string;
       mockupId?: string;
       saved?: SavedScreen[];
@@ -203,6 +216,7 @@ async function pollMockupJob(
         data.status,
         typeof data.partial === 'string' ? data.partial : '',
         typeof data.plan === 'string' ? data.plan : '',
+        typeof data.thinking === 'string' ? data.thinking : '',
       );
     }
     if (data.status === 'done') {
@@ -214,7 +228,16 @@ async function pollMockupJob(
         saved,
       };
     }
-    if (data.status === 'error') throw new Error(data.error || startFallback);
+    if (data.status === 'error') {
+      // 失敗時も「そこまでの思考・作り方・書きかけコード」を error に載せて投げ、画面を空にしない。
+      const err = new Error(data.error || startFallback) as JobError;
+      err.live = {
+        thinking: typeof data.thinking === 'string' ? data.thinking : '',
+        plan: typeof data.plan === 'string' ? data.plan : '',
+        code: typeof data.partial === 'string' ? data.partial : '',
+      };
+      throw err;
+    }
     // pending / generating は継続（経過秒表示は呼び出し側の elapsed が担う）。
   }
   // 上限時間到達。生成はサーバで継続中＝完了後に自動保存される。
@@ -270,6 +293,15 @@ export default function Development() {
   const [streamCode, setStreamCode] = useState('');
   // エディタに紐づくジョブの「作り方メモ」（HTML を書き始める前の設計説明。ライブ表示用）。
   const [streamPlan, setStreamPlan] = useState('');
+  // エディタに紐づくジョブの「AI の思考」（拡張思考。作り方より前段の素の思考。ライブ表示用）。
+  const [streamThinking, setStreamThinking] = useState('');
+  // 直近の失敗内容（時間切れ等）。画面を空にせず「どこまで考え・書けたか＋理由」を残すために使う。
+  const [failedRun, setFailedRun] = useState<{
+    message: string;
+    thinking: string;
+    plan: string;
+    code: string;
+  } | null>(null);
   // エディタに紐づくジョブのサーバ状態（'' | 'pending'=順番待ち | 'generating'=生成中）。
   const [streamStatus, setStreamStatus] = useState<'' | 'pending' | 'generating'>('');
 
@@ -354,10 +386,11 @@ export default function Development() {
         job.startedAt,
         // エディタに紐づくジョブだけ、進捗（順番待ち/生成中）と部分コードをライブ表示する。
         job.attachToEditor
-          ? (status, p, plan) => {
+          ? (status, p, plan, thinking) => {
               setStreamStatus(status as 'pending' | 'generating');
               setStreamCode(p);
               setStreamPlan(plan);
+              setStreamThinking(thinking);
             }
           : undefined,
       )
@@ -372,7 +405,9 @@ export default function Development() {
               if (job.mode === 'revise') setInstruction('');
               setStreamCode('');
               setStreamPlan('');
+              setStreamThinking('');
               setStreamStatus('');
+              setFailedRun(null);
               setMobileTab('preview');
             }
             setNotice(
@@ -387,13 +422,23 @@ export default function Development() {
           }
           loadList();
         })
-        .catch((e) => {
+        .catch((e: unknown) => {
           // 404（サーバ再起動等でジョブ消失）でも完了済みなら一覧に自動保存されている。
           // attachToEditor のジョブのみ赤エラーを出し、デタッチ済み（新規作成後）は静かに一覧更新。
           if (job.attachToEditor) {
-            setError(e instanceof Error ? e.message : fallback);
+            const msg = e instanceof Error ? e.message : fallback;
+            // 失敗時も画面を空にせず「そこまでの思考・作り方・書きかけコード」を残す。
+            const live = (e as JobError).live;
+            setFailedRun({
+              message: msg,
+              thinking: live?.thinking ?? '',
+              plan: live?.plan ?? '',
+              code: live?.code ?? '',
+            });
+            setError(msg);
             setStreamCode('');
             setStreamPlan('');
+            setStreamThinking('');
             setStreamStatus('');
           } else {
             setNotice('完了した試作品は下の「保存済みモックアップ」をご確認ください。');
@@ -418,7 +463,7 @@ export default function Development() {
   useEffect(() => {
     const el = streamPreRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [streamCode, streamPlan]);
+  }, [streamCode, streamPlan, streamThinking]);
 
   // 新規生成。起票だけして「進行中ジョブ」に積む（完了はバックグラウンドのポーリングが捌く）。
   const handleGenerate = useCallback(async () => {
@@ -436,6 +481,8 @@ export default function Development() {
       if (!title.trim()) setTitle(label);
       setStreamCode('');
       setStreamPlan('');
+      setStreamThinking('');
+      setFailedRun(null);
       setStreamStatus('pending');
       setMobileTab('preview'); // 生成中のコードがライブで見えるプレビュー側へ。
       setNotice('作成を開始しました。コードが書かれていく様子をプレビュー側に表示します。');
@@ -473,6 +520,8 @@ export default function Development() {
       ]);
       setStreamCode('');
       setStreamPlan('');
+      setStreamThinking('');
+      setFailedRun(null);
       setStreamStatus('pending');
       setMobileTab('preview');
       setNotice('修正を開始しました。コードが書かれていく様子をプレビュー側に表示します。');
@@ -514,6 +563,7 @@ export default function Development() {
   const handleLoad = useCallback(async (id: string) => {
     setError(null);
     setNotice(null);
+    setFailedRun(null);
     try {
       const res = await fetch(`/api/dev/mockups/${encodeURIComponent(id)}`);
       if (!res.ok) throw new Error(await readError(res, '読み込みに失敗しました'));
@@ -564,7 +614,9 @@ export default function Development() {
     setError(null);
     setStreamCode('');
     setStreamPlan('');
+    setStreamThinking('');
     setStreamStatus('');
+    setFailedRun(null);
     // 進行中ジョブは消さない。エディタ紐付けだけ外し、一覧に「作成中」で見え続けるようにする。
     setActiveJobs((prev) => prev.map((j) => ({ ...j, attachToEditor: false })));
     setNotice('新規作成にしました。作成中のものは下の一覧に「作成中」で表示され続けます。');
@@ -867,7 +919,13 @@ export default function Development() {
                     <Spinner />
                     <span>{describeStreamPhase(streamCode)}</span>
                   </div>
-                  {/* 先に書いた「作り方」は折りたたんで上に残す（あとから設計意図を読み返せる）。 */}
+                  {/* 先に出た「思考」と「作り方」は折りたたんで上に残す（あとから読み返せる）。 */}
+                  {streamThinking && (
+                    <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
+                      <summary className="cursor-pointer font-semibold">🤔 AI の思考</summary>
+                      <div className="mt-1 whitespace-pre-wrap leading-relaxed">{streamThinking}</div>
+                    </details>
+                  )}
                   {streamPlan && (
                     <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
                       <summary className="cursor-pointer font-semibold">📝 AI が考えた「作り方」</summary>
@@ -895,6 +953,12 @@ export default function Development() {
                     <Spinner />
                     <span>📝 AI が作り方（設計）を考えています…</span>
                   </div>
+                  {streamThinking && (
+                    <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
+                      <summary className="cursor-pointer font-semibold">🤔 AI の思考</summary>
+                      <div className="mt-1 whitespace-pre-wrap leading-relaxed">{streamThinking}</div>
+                    </details>
+                  )}
                   <p className="text-[10px] text-text-faint">
                     まず作る内容を整理しています。これを書き終えると、続けてコードを書き始めます。
                   </p>
@@ -907,8 +971,30 @@ export default function Development() {
                   </pre>
                   <p className="text-[11px] text-text-faint">経過 {elapsed} 秒</p>
                 </div>
+              ) : streamThinking ? (
+                // HTML も作り方もまだ。AI の「素の思考」が流れていればそれをライブ表示する。
+                <div className="flex h-full flex-col gap-2">
+                  <div
+                    className="flex items-center gap-2 rounded-lg border border-accent px-3 py-2 text-xs font-semibold"
+                    style={{ background: 'var(--mc-active-bg)', color: 'var(--mc-active)' }}
+                  >
+                    <Spinner />
+                    <span>🤔 AI が考えています…</span>
+                  </div>
+                  <p className="text-[10px] text-text-faint">
+                    AI が「どう作るか」を考えている思考をそのまま表示しています（この後、作り方 → コードへと進みます）。
+                  </p>
+                  <pre
+                    ref={streamPreRef}
+                    className="min-h-0 w-full flex-1 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-surface px-3 py-2 text-xs leading-relaxed text-text-muted"
+                  >
+                    {streamThinking}
+                    <span className="animate-pulse">▋</span>
+                  </pre>
+                  <p className="text-[11px] text-text-faint">経過 {elapsed} 秒</p>
+                </div>
               ) : (
-                // まだコードも作り方も流れてきていない: 順番待ち（pending）か、AIが考え中（generating）かを区別して伝える。
+                // まだ何も流れてきていない: 順番待ち（pending）か、起動直後（generating）かを区別して伝える。
                 <div className="flex h-full items-center justify-center p-6">
                   <div className="flex max-w-xs flex-col items-center gap-3 text-center">
                     <Spinner />
@@ -916,14 +1002,14 @@ export default function Development() {
                       <>
                         <p className="text-sm font-semibold text-text">🕒 順番待ち中です</p>
                         <p className="text-xs text-text-muted">
-                          先に作成中のものを処理しています。空き次第これに取りかかり、コードを書き始めます（このまま待てば自動で進みます）。
+                          先に作成中のものを処理しています。空き次第これに取りかかり、まず考え始めます（このまま待てば自動で進みます）。
                         </p>
                       </>
                     ) : (
                       <>
-                        <p className="text-sm font-semibold text-text">🤔 AI が作り方を考えています…</p>
+                        <p className="text-sm font-semibold text-text">🤔 AI が考え始めています…</p>
                         <p className="text-xs text-text-muted">
-                          まもなくコードを書き始めます。書いている様子がここにそのまま表示されます。
+                          最初の考えをまとめています。考えている内容・作り方・書いているコードが、この後ここに順に流れます。
                         </p>
                       </>
                     )}
@@ -931,6 +1017,44 @@ export default function Development() {
                   </div>
                 </div>
               )
+            ) : failedRun ? (
+              // 失敗（時間切れ等）: 画面を空にせず「どこまで考え・書けたか＋止まった理由」を正直に残す。
+              <div className="flex h-full flex-col gap-2 overflow-auto">
+                <div
+                  className="rounded-lg border px-3 py-2 text-xs"
+                  style={{ color: 'var(--mc-stalled)', background: 'var(--mc-stalled-bg)' }}
+                >
+                  <p className="font-semibold">⚠️ 今回はうまく完成できませんでした</p>
+                  <p className="mt-1 leading-relaxed">{failedRun.message}</p>
+                </div>
+                {failedRun.thinking && (
+                  <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
+                    <summary className="cursor-pointer font-semibold">🤔 AI の思考（ここまで）</summary>
+                    <div className="mt-1 whitespace-pre-wrap leading-relaxed">{failedRun.thinking}</div>
+                  </details>
+                )}
+                {failedRun.plan && (
+                  <details
+                    open
+                    className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted"
+                  >
+                    <summary className="cursor-pointer font-semibold">📝 AI が考えた「作り方」</summary>
+                    <div className="mt-1 whitespace-pre-wrap leading-relaxed">{failedRun.plan}</div>
+                  </details>
+                )}
+                {failedRun.code ? (
+                  <>
+                    <p className="text-[10px] text-text-faint">↓ ここまで書けていたコードです（未完成）。</p>
+                    <pre className="min-h-0 w-full flex-1 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-surface px-3 py-2 font-mono text-[11px] leading-relaxed text-text">
+                      {failedRun.code}
+                    </pre>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-text-faint">
+                    コードを書き始める前に止まりました。要望をもう少し絞って、もう一度「生成」を試してください。
+                  </p>
+                )}
+              </div>
             ) : previewHtml.trim() ? (
               <iframe
                 title="モックアッププレビュー"

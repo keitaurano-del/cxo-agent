@@ -2,9 +2,11 @@
 //
 //  POST   /api/dev/mockup/generate    : { prompt, baseHtml?, instruction? } → 202 { jobId }（非同期ジョブ）
 //  GET    /api/dev/mockup/job/:jobId  : ポーリング用。
-//      { status:'pending'|'generating'|'done'|'error', html?, partial?, plan?, mockupId?, error?, saved?:[{id,title}] }
+//      { status:'pending'|'generating'|'done'|'error', html?, partial?, plan?, thinking?, mockupId?, error?, saved?:[{id,title}] }
 //      partial は生成途中の部分 HTML（ストリーム中）。クライアントはこれを逐次表示してコードをライブに見せる。
 //      plan は HTML を書き始める前の「作り方」メモ（設計説明）。HTML が来るまで “考え中” の表示に使う。
+//      thinking は拡張思考（AI の素の思考）。最初のフェーズで「何をどう考えているか」を見せる。
+//      partial/plan/thinking は error（時間切れ等）でも返す＝失敗時も「どこまで考え・書けたか」を残す。
 //      新規生成も修正も「1 つの動くインタラクティブな単一 HTML プロトタイプ」を生成し、完了時に自動保存する。
 //      saved は後方互換のため単一画面でも [{id,title}] 1 件を入れる。
 //  GET    /api/dev/mockups          : { mockups: [{id,title,prompt,createdAt,updatedAt}] }（html 除く軽量）
@@ -65,6 +67,7 @@ const HTML_RULES = [
  */
 const PLAN_MARKER = '---HTML---';
 const PLAN_RULES = [
+  '頭の中で考えるときも、できるだけ日本語で考えてください。',
   `まず最初に、これから作る試作品の「作り方」を、プログラミング未経験の人にも分かる平易な日本語で 4〜8 行で説明してください。`,
   '次の観点を簡潔に（箇条書き中心・短く・専門用語は避ける）: どんな画面か / 置く主な部品（ボタン・入力欄・一覧など）/ 主要ボタンを押すと何が起きるか / 配色や雰囲気の方針。',
   `その「作り方」を書き終えたら、次の行に ${PLAN_MARKER} とだけ書いた行を 1 行入れ、その直後の行から、完成した単一 HTML ドキュメント本文だけを出力してください。`,
@@ -117,6 +120,7 @@ function buildRevisePrompt(baseHtml: string, instruction: string): string {
     '指示:',
     instruction,
     '',
+    '頭の中で考えるときも、できるだけ日本語で考えてください。',
     `まず、これから行う修正の「作り方」を平易な日本語で 3〜6 行で説明してください（どこを・どう変えるか・狙い）。`,
     `説明を書き終えたら、次の行に ${PLAN_MARKER} とだけ書いた行を 1 行入れ、その直後の行から修正後の単一 HTML ドキュメント本文だけを出力してください。`,
     '',
@@ -185,7 +189,7 @@ interface RawRun {
 function runClaudeRaw(
   prompt: string,
   model: string,
-  onChunk?: (accumulated: string) => void,
+  onChunk?: (accumulated: string, thinking: string) => void,
 ): Promise<RawRun> {
   // 引数に NUL バイトがあると spawn が throw し得る。想定外の制御文字でサーバを落とさないよう、
   // (1) プロンプトから NUL を除去し、(2) spawn 自体も try/catch で囲う。
@@ -214,7 +218,8 @@ function runClaudeRaw(
           return;
         }
 
-        let body = ''; // content_block_delta を積み上げた本文（= 生成中の HTML）。
+        let body = ''; // content_block_delta を積み上げた本文（= 生成中の作り方+HTML）。
+        let thinking = ''; // thinking_delta を積み上げた「AI の思考」（拡張思考。ライブ表示用）。
         let resultText = ''; // result イベントの最終本文（delta が無い場合のフォールバック）。
         let lineBuf = ''; // 行跨ぎ JSON のための未処理バッファ。
         let stderr = '';
@@ -255,9 +260,15 @@ function runClaudeRaw(
             if (ev.type === 'content_block_delta') {
               const delta = (ev.delta ?? {}) as Record<string, unknown>;
               const text = typeof delta.text === 'string' ? delta.text : '';
+              // 拡張思考の差分。本文を書き始める前の「AI が何をどう考えているか」をそのまま見せる。
+              const think = typeof delta.thinking === 'string' ? delta.thinking : '';
               if (text && body.length + text.length <= GENERATE_MAX_BUFFER) {
                 body += text;
-                if (onChunk) onChunk(body);
+                if (onChunk) onChunk(body, thinking);
+              }
+              if (think && thinking.length + think.length <= GENERATE_MAX_BUFFER) {
+                thinking += think;
+                if (onChunk) onChunk(body, thinking);
               }
             }
           } else if (type === 'result') {
@@ -356,6 +367,8 @@ interface Job {
   partial?: string;
   /** 生成途中の「作り方」メモ（HTML を書き始める前の設計説明。ライブ表示用）。 */
   plan?: string;
+  /** 生成途中の「AI の思考」（拡張思考。作り方より前段の、何をどう考えているか。ライブ表示用）。 */
+  thinking?: string;
   error?: string;
   /** 保存先 id（クライアントが currentId に反映できる）。 */
   mockupId?: string;
@@ -392,9 +405,9 @@ const GENERATE_FAILURE_MESSAGES: Record<GenFailReason, string> = {
   limit:
     '生成エンジンが利用上限に達しました（フォールバックでも生成できませんでした）。時間をおいて再度お試しください。',
   timeout:
-    '生成がタイムアウトしました。要望を短く・具体的にしてから再度お試しください。',
+    '時間内（約4分）に作り終わりませんでした。AI がここまで考えた内容と書いたコードは下に残しています。要望をもう少し絞る（画面1つ・機能1つ）と完成しやすくなります。',
   empty:
-    '生成エンジンが有効な HTML を返しませんでした。要望をもう少し具体的にして再度お試しください。',
+    'AI が完成した HTML を返しませんでした（途中で迷った可能性があります）。下に残した思考・作り方を見つつ、要望を少し具体的にして再度お試しください。',
   error:
     '生成に失敗しました。生成エンジンが混み合っているか一時的に失敗した可能性があります。少し待ってもう一度お試しください。',
 };
@@ -424,7 +437,7 @@ function sleep(ms: number): Promise<void> {
  */
 async function generateHtmlWithRetry(
   cliPrompt: string,
-  onChunk?: (accumulated: string) => void,
+  onChunk?: (accumulated: string, thinking: string) => void,
 ): Promise<GenResult> {
   let model = NOTEBOOK_CLAUDE_MODEL; // primary（Sonnet）。利用上限検出で fallback（Opus）へ。
   let switchedToFallback = false;
@@ -502,7 +515,7 @@ async function runGenerateJob(
   save: { title: string; id?: string; prompt?: string },
 ): Promise<void> {
   // 生成途中の stdout をジョブへ反映＝クライアントがポーリングでライブにコードを見られる。
-  const onChunk = (accumulated: string): void => {
+  const onChunk = (accumulated: string, thinking: string): void => {
     const job = jobs.get(jobId);
     if (!job || job.status === 'done' || job.status === 'error') return;
     job.status = 'generating';
@@ -511,6 +524,8 @@ async function runGenerateJob(
     const { plan, html } = splitPlanHtml(accumulated);
     job.plan = plan || undefined;
     job.partial = html;
+    // 拡張思考（あれば）。作り方より前の「素の思考」を最初のフェーズで見せる。
+    job.thinking = thinking || undefined;
   };
   // 同時実行の食い合いを避けるため、生成は 1 本ずつ直列化する。
   // 直列キューに並んでいる間は status='pending'（=順番待ち）、自分の番が来て実際に
@@ -623,13 +638,18 @@ function handleJob(req: Request, res: Response): void {
     res.status(404).json({ error: 'job not found' });
     return;
   }
+  // 生成中はもちろん、失敗（error）時も「そこまでの思考・作り方・書いたコード」を返す。
+  // これで時間切れ等でも画面を空にせず「どこまで考え・書けたか」を正直に見せられる。
+  const liveVisible = job.status === 'generating' || job.status === 'error';
   res.json({
     status: job.status,
     html: job.html,
     // 生成途中の部分コード（フェンスを除いて返す）。done になれば html を使うので不要。
-    partial: job.status === 'generating' && job.partial ? stripFences(job.partial) : undefined,
+    partial: liveVisible && job.partial ? stripFences(job.partial) : undefined,
     // 生成途中の「作り方」メモ（HTML を書き始める前に表示する設計説明）。
-    plan: job.status === 'generating' && job.plan ? job.plan : undefined,
+    plan: liveVisible && job.plan ? job.plan : undefined,
+    // 生成途中の「AI の思考」（拡張思考。最初のフェーズで何をどう考えているかを見せる）。
+    thinking: liveVisible && job.thinking ? job.thinking : undefined,
     mockupId: job.mockupId,
     error: job.error,
     saved: job.saved,
