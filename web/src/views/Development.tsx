@@ -31,6 +31,73 @@ async function readError(res: Response, fallback: string): Promise<string> {
 const POLL_INTERVAL_MS = 2_000;
 const POLL_MAX_WAIT_MS = 9 * 60_000; // 約9分。サーバの最大生成時間(240s×2)を見届けられる長さ。
 
+// ─── 作業状態の永続化（localStorage）──────────────────────────────
+//
+// ページを離れる/リロードすると React 状態は消えるが、入力中・生成結果・生成中ジョブを
+// localStorage に退避しておき、戻ってきたときに復元・ジョブを再開する。
+// モバイルでは「生成中に他画面を見て戻る」が頻発するため、これが無いと毎回真っ白になり
+// 「生成できてない/消えた」ように見える。サーバ側ジョブはインメモリで 15 分保持されるので、
+// その間ならジョブ ID から完了を取り直せる。
+
+/** 編集中ドラフトの保存キー。 */
+const DRAFT_KEY = 'dev-mockup-draft-v1';
+/** 生成中ジョブの保存キー。 */
+const JOB_KEY = 'dev-mockup-job-v1';
+
+/** 編集中ドラフト（入力・生成結果・選択中 id）。 */
+interface DraftState {
+  prompt: string;
+  instruction: string;
+  title: string;
+  html: string;
+  currentId: string | null;
+}
+
+/** 進行中ジョブ（離脱・リロード後に再開するための最小情報）。 */
+interface JobState {
+  jobId: string;
+  mode: 'generate' | 'revise';
+  /** 起票時刻（ms）。POLL_MAX_WAIT_MS を超えた古いジョブは復元対象外。 */
+  startedAt: number;
+}
+
+function loadDraft(): DraftState | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as DraftState) : null;
+  } catch {
+    return null;
+  }
+}
+function saveDraft(d: DraftState): void {
+  try {
+    // 何も入力されていない真っ白状態はキー自体を消す（ゴミを残さない）。
+    if (!d.prompt && !d.instruction && !d.title && !d.html && !d.currentId) {
+      localStorage.removeItem(DRAFT_KEY);
+    } else {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
+    }
+  } catch {
+    /* localStorage 不可（プライベートブラウズ等）でも機能自体は壊さない。 */
+  }
+}
+function loadJob(): JobState | null {
+  try {
+    const raw = localStorage.getItem(JOB_KEY);
+    return raw ? (JSON.parse(raw) as JobState) : null;
+  } catch {
+    return null;
+  }
+}
+function saveJob(j: JobState | null): void {
+  try {
+    if (j) localStorage.setItem(JOB_KEY, JSON.stringify(j));
+    else localStorage.removeItem(JOB_KEY);
+  } catch {
+    /* noop */
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -46,17 +113,13 @@ type JobResult =
   | { status: 'timeout' };
 
 /**
- * POST /api/dev/mockup/generate に body を送ってジョブを起票し、完了までポーリングする。
- * - 完了: { status:'done', html, mockupId, saved }。生成・修正とも「1 つの動くインタラクティブな
- *     単一 HTML」を生成して自動保存する。html/mockupId は生成結果、saved は自動保存できた結果（1 件）。
- * - サーバ error / 404（ジョブ消失）: throw（呼び出し側で setError）。
- * - タイムアウト: { status:'timeout' }（生成はバックグラウンドで継続し、完了後に自動保存される）。
+ * POST /api/dev/mockup/generate に body を送ってジョブを起票し、jobId を返す。
+ * モバイル等の一過性 fetch 失敗（"Failed to fetch"）は数回まで再試行する。
  */
-async function runMockupJob(
+async function startMockupJob(
   body: Record<string, unknown>,
   startFallback: string,
-): Promise<JobResult> {
-  // 起票 POST。モバイル等の一過性 fetch 失敗（"Failed to fetch"）は数回まで再試行する。
+): Promise<string> {
   let startRes: Response | null = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -76,8 +139,22 @@ async function runMockupJob(
   const startData = (await startRes.json()) as { jobId?: string };
   const jobId = startData.jobId;
   if (!jobId) throw new Error(startFallback);
+  return jobId;
+}
 
-  const deadline = Date.now() + POLL_MAX_WAIT_MS;
+/**
+ * 既存 jobId の完了までポーリングする（起票とは分離＝離脱・リロード後の再開でも使える）。
+ * - 完了: { status:'done', html, mockupId, saved }。
+ * - サーバ error / 404（ジョブ消失）: throw（呼び出し側で setError）。
+ * - タイムアウト: { status:'timeout' }（生成はバックグラウンドで継続し、完了後に自動保存される）。
+ * @param sinceMs 経過起点（再開時は元の startedAt）。残り時間 = POLL_MAX_WAIT_MS - 経過。
+ */
+async function pollMockupJob(
+  jobId: string,
+  startFallback: string,
+  sinceMs: number = Date.now(),
+): Promise<JobResult> {
+  const deadline = sinceMs + POLL_MAX_WAIT_MS;
   while (Date.now() < deadline) {
     await sleep(POLL_INTERVAL_MS);
     // ポーリング中の fetch 例外（モバイルの電波揺らぎ等で "Failed to fetch"）・非JSON・!ok は
@@ -120,12 +197,29 @@ async function runMockupJob(
   return { status: 'timeout' };
 }
 
+/**
+ * 起票してから完了までポーリングする（従来 runMockupJob 相当）。
+ * onJobId で jobId を呼び出し側に渡し、離脱・リロードに備えて localStorage へ退避できるようにする。
+ */
+async function runMockupJob(
+  body: Record<string, unknown>,
+  startFallback: string,
+  onJobId?: (jobId: string) => void,
+): Promise<JobResult> {
+  const jobId = await startMockupJob(body, startFallback);
+  onJobId?.(jobId);
+  return pollMockupJob(jobId, startFallback);
+}
+
 export default function Development() {
-  // 操作状態
-  const [prompt, setPrompt] = useState('');
-  const [instruction, setInstruction] = useState('');
-  const [title, setTitle] = useState('');
-  const [html, setHtml] = useState('');
+  // 起動時に localStorage からドラフトを 1 回だけ読む（離脱/リロードからの復元）。
+  const [bootDraft] = useState(loadDraft);
+
+  // 操作状態（ドラフトがあれば復元）。
+  const [prompt, setPrompt] = useState(bootDraft?.prompt ?? '');
+  const [instruction, setInstruction] = useState(bootDraft?.instruction ?? '');
+  const [title, setTitle] = useState(bootDraft?.title ?? '');
+  const [html, setHtml] = useState(bootDraft?.html ?? '');
 
   // 非同期/通知状態
   const [generating, setGenerating] = useState(false);
@@ -134,7 +228,7 @@ export default function Development() {
   const [notice, setNotice] = useState<string | null>(null);
 
   // 現在編集中のモックアップ id（保存済みを読み込んだ/保存した場合に入る）。
-  const [currentId, setCurrentId] = useState<string | null>(null);
+  const [currentId, setCurrentId] = useState<string | null>(bootDraft?.currentId ?? null);
 
   // スマホ幅(md未満)での表示ペイン切替。デスクトップ(md+)では無視され両ペイン横並び。
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit');
@@ -146,8 +240,8 @@ export default function Development() {
   const [mockups, setMockups] = useState<MockupSummary[]>([]);
   const [listLoading, setListLoading] = useState(true);
 
-  // プレビューに反映する html（編集デバウンス用）。
-  const [previewHtml, setPreviewHtml] = useState('');
+  // プレビューに反映する html（編集デバウンス用）。復元時は即プレビューも復元する。
+  const [previewHtml, setPreviewHtml] = useState(bootDraft?.html ?? '');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // html 変更 → 250ms デバウンスでプレビューへ反映。
@@ -177,6 +271,54 @@ export default function Development() {
     loadList();
   }, [loadList]);
 
+  // 入力・生成結果・選択中 id が変わるたびに localStorage へ退避する（離脱/リロード復元用）。
+  useEffect(() => {
+    saveDraft({ prompt, instruction, title, html, currentId });
+  }, [prompt, instruction, title, html, currentId]);
+
+  // マウント時に「進行中ジョブ」があれば再開する（生成中に離脱/リロードしても結果を取り戻す）。
+  // サーバ側ジョブはインメモリで 15 分保持されるため、その間ならジョブ ID から完了を取り直せる。
+  useEffect(() => {
+    const job = loadJob();
+    if (!job) return;
+    // 古すぎる（=サーバ TTL 切れの可能性）ジョブは追わない。掃除して終了。
+    if (Date.now() - job.startedAt > POLL_MAX_WAIT_MS) {
+      saveJob(null);
+      return;
+    }
+    const fallback = job.mode === 'revise' ? '修正に失敗しました' : '生成に失敗しました';
+    setGenerating(true);
+    setError(null);
+    setNotice('前回の生成を再開しています…');
+    pollMockupJob(job.jobId, fallback, job.startedAt)
+      .then((r) => {
+        if (r.status === 'done') {
+          setHtml(r.html);
+          setPreviewHtml(r.html);
+          setCurrentId(r.mockupId ?? r.saved[0]?.id ?? null);
+          if (r.saved[0]?.title) setTitle(r.saved[0].title);
+          setNotice('生成が完了しました（下の一覧にも自動保存済み）。');
+          setMobileTab('preview');
+        } else {
+          setNotice(
+            '生成に時間がかかっています。完了すると下の「保存済みモックアップ」に自動保存されます。',
+          );
+        }
+        loadList();
+      })
+      .catch(() => {
+        // 404（サーバ再起動等でジョブ消失）でも、完了済みなら一覧に自動保存されている。
+        // 怖いエラーは出さず、一覧を更新して案内する。
+        setNotice('前回の生成結果は下の「保存済みモックアップ」をご確認ください。');
+        loadList();
+      })
+      .finally(() => {
+        saveJob(null);
+        setGenerating(false);
+      });
+    // 初回マウント時のみ実行する（loadList は安定参照）。
+  }, [loadList]);
+
   // 生成/修正中だけ経過秒数を 1 秒間隔で更新。停止時は 0 にリセットし interval を破棄。
   useEffect(() => {
     if (!generating) {
@@ -202,7 +344,9 @@ export default function Development() {
     setError(null);
     setNotice(null);
     try {
-      const r = await runMockupJob({ prompt: prompt.trim() }, '生成に失敗しました');
+      const r = await runMockupJob({ prompt: prompt.trim() }, '生成に失敗しました', (jobId) =>
+        saveJob({ jobId, mode: 'generate', startedAt: Date.now() }),
+      );
       if (r.status === 'timeout') {
         setNotice(
           '生成に時間がかかっています。完了すると下の「保存済みモックアップ」に自動保存されます。このページを離れても大丈夫です。',
@@ -222,6 +366,7 @@ export default function Development() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '生成に失敗しました');
     } finally {
+      saveJob(null);
       setGenerating(false);
     }
   }, [prompt, generating, title, loadList]);
@@ -241,6 +386,7 @@ export default function Development() {
           ...(title.trim() ? { title: title.trim() } : {}),
         },
         '修正に失敗しました',
+        (jobId) => saveJob({ jobId, mode: 'revise', startedAt: Date.now() }),
       );
       if (r.status === 'timeout') {
         setNotice(
@@ -260,6 +406,7 @@ export default function Development() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '修正に失敗しました');
     } finally {
+      saveJob(null);
       setGenerating(false);
     }
   }, [html, instruction, generating, currentId, title, loadList]);
@@ -345,6 +492,7 @@ export default function Development() {
     setPreviewHtml('');
     setCurrentId(null);
     setError(null);
+    saveJob(null);
     setNotice('新規作成にしました。');
     setMobileTab('edit');
   }, []);

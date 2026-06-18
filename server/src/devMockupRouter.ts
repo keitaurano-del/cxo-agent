@@ -22,6 +22,7 @@ import { Router, type Request, type Response } from 'express';
 import {
   NOTEBOOK_CLAUDE_BIN,
   NOTEBOOK_CLAUDE_MODEL,
+  DEV_MOCKUP_FALLBACK_MODEL,
 } from './config.js';
 import {
   deleteMockup,
@@ -29,6 +30,7 @@ import {
   listMockups,
   upsertMockup,
 } from './lib/devMockupStore.js';
+import { withClaudeSlot } from './lib/notebookClaude.js';
 
 // ─── claude CLI（HTML 生成）──────────────────────────────────
 
@@ -115,32 +117,72 @@ function stripFences(out: string): string {
   return s.trim();
 }
 
+/** claude CLI 1 回ぶんの生実行結果（throw せずここに集約する）。 */
+interface RawRun {
+  /** stdout 全文（成功・失敗とも。部分出力があれば失敗時も入る）。 */
+  stdout: string;
+  /** エラー時のメッセージ（成功なら undefined）。stderr の先頭を含める。 */
+  error?: string;
+  /** タイムアウト kill されたか。 */
+  timedOut: boolean;
+}
+
 /**
- * claude CLI を起動して HTML を生成する。
- * 失敗/タイムアウト/NUL ガード後の例外はすべて null。タイムアウトは GENERATE_TIMEOUT_MS 固定。
+ * claude CLI を指定モデルで 1 回起動する。throw せず RawRun で返す。
+ * 共有セマフォ（ノートブック Q&A と同じ枠）の中で実行し、同時実行による利用上限エラーを抑える。
+ * 失敗/タイムアウト/NUL ガード後の例外もすべて RawRun.error に集約する（サーバを落とさない）。
  */
-function runGenerate(prompt: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    // execFile は引数に NUL バイトがあると同期 throw する。想定外の制御文字でサーバを落とさないよう、
-    // (1) プロンプトから NUL を除去し、(2) execFile 自体も try/catch で囲う。
-    const safePrompt = prompt.replace(/\x00/g, '');
-    try {
-      execFile(
-        NOTEBOOK_CLAUDE_BIN,
-        ['--model', NOTEBOOK_CLAUDE_MODEL, '-p', safePrompt],
-        { timeout: GENERATE_TIMEOUT_MS, maxBuffer: GENERATE_MAX_BUFFER, env: process.env },
-        (err, stdout) => {
-          if (err) {
-            resolve(null);
-            return;
-          }
-          resolve((stdout || '').toString());
-        },
-      );
-    } catch {
-      resolve(null);
-    }
-  });
+function runClaudeRaw(prompt: string, model: string): Promise<RawRun> {
+  // execFile は引数に NUL バイトがあると同期 throw する。想定外の制御文字でサーバを落とさないよう、
+  // (1) プロンプトから NUL を除去し、(2) execFile 自体も try/catch で囲う。
+  const safePrompt = prompt.replace(/\x00/g, '');
+  return withClaudeSlot(
+    () =>
+      new Promise<RawRun>((resolve) => {
+        try {
+          execFile(
+            NOTEBOOK_CLAUDE_BIN,
+            ['--model', model, '-p', safePrompt],
+            { timeout: GENERATE_TIMEOUT_MS, maxBuffer: GENERATE_MAX_BUFFER, env: process.env },
+            (err, stdout, stderr) => {
+              const out = (stdout || '').toString();
+              if (err) {
+                const killed = (err as NodeJS.ErrnoException & { killed?: boolean }).killed;
+                const detail = stderr ? ` | ${String(stderr).slice(0, 500)}` : '';
+                resolve({
+                  stdout: out,
+                  timedOut: Boolean(killed),
+                  error: killed
+                    ? `claude タイムアウト（${Math.round(GENERATE_TIMEOUT_MS / 1000)}s）`
+                    : `claude 実行失敗: ${err.message}${detail}`,
+                });
+                return;
+              }
+              resolve({ stdout: out, timedOut: false });
+            },
+          );
+        } catch (e) {
+          resolve({ stdout: '', timedOut: false, error: `claude 起動失敗: ${(e as Error).message}` });
+        }
+      }),
+  );
+}
+
+/**
+ * 失敗が「利用上限（Sonnet limit / usage limit / rate limit 等）」由来かを判定する。
+ * notebookClaude.isLimitFailure と同じ語彙。検出したら fallback（Opus）へ切替える。大文字小文字無視。
+ */
+function isLimitFailure(r: RawRun): boolean {
+  const h = `${r.stdout || ''}\n${r.error || ''}`.toLowerCase();
+  if (h.includes('hit your') && h.includes('limit')) return true;
+  return (
+    h.includes('usage limit') ||
+    h.includes('rate limit') ||
+    h.includes('rate_limit') ||
+    h.includes('rate-limited') ||
+    h.includes('reached your') ||
+    (h.includes('exceeded') && h.includes('limit'))
+  );
 }
 
 // ─── 非同期ジョブストア ──────────────────────────────────
@@ -169,13 +211,37 @@ const jobs = new Map<string, Job>();
 /** ジョブの保持期間（15 分）。これより古いものは破棄する。 */
 const JOB_TTL_MS = 15 * 60_000;
 
-/** サーバ側リトライ: 最大試行回数と試行間バックオフ。エッジ上限から外れたので安全に複数回試せる。 */
-const GENERATE_MAX_ATTEMPTS = 2;
+/**
+ * サーバ側リトライ: 最大試行回数と試行間バックオフ。エッジ上限から外れたので安全に複数回試せる。
+ * 3 回にして「一過性失敗の再試行」と「利用上限時の Opus フォールバック」の両方に枠を確保する。
+ */
+const GENERATE_MAX_ATTEMPTS = 3;
 const GENERATE_RETRY_BACKOFF_MS = 5_000;
 
-/** ユーザ向けの最終失敗メッセージ（全試行失敗時）。 */
-const GENERATE_FAILURE_MESSAGE =
-  '生成に失敗しました。生成エンジンが混み合っているか一時的に失敗した可能性があります。少し待ってもう一度お試しください。';
+/** 生成失敗の分類。原因に応じてユーザ向けメッセージを変える。 */
+type GenFailReason = 'limit' | 'timeout' | 'empty' | 'error';
+
+/** 生成の結果。html が取れれば html、ダメなら reason（＋デバッグ用 detail）。 */
+interface GenResult {
+  html: string | null;
+  reason?: GenFailReason;
+  detail?: string;
+}
+
+/** 分類ごとのユーザ向け失敗メッセージ（原因が分かるように出し分ける）。 */
+const GENERATE_FAILURE_MESSAGES: Record<GenFailReason, string> = {
+  limit:
+    '生成エンジンが利用上限に達しました（フォールバックでも生成できませんでした）。時間をおいて再度お試しください。',
+  timeout:
+    '生成がタイムアウトしました。要望を短く・具体的にしてから再度お試しください。',
+  empty:
+    '生成エンジンが有効な HTML を返しませんでした。要望をもう少し具体的にして再度お試しください。',
+  error:
+    '生成に失敗しました。生成エンジンが混み合っているか一時的に失敗した可能性があります。少し待ってもう一度お試しください。',
+};
+
+/** 互換用エイリアス（汎用失敗時のデフォルト文言）。 */
+const GENERATE_FAILURE_MESSAGE = GENERATE_FAILURE_MESSAGES.error;
 
 /** TTL を過ぎたジョブを破棄する（アクセス時に呼ぶ・サーバを汚さない）。 */
 function sweepExpiredJobs(): void {
@@ -191,21 +257,52 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * claude CLI で HTML を 1 本生成し、フェンス除去 + 最低限の妥当性チェックまで行う。
- * 一過性失敗（空応答・claude 競合・タイムアウト）を吸収するため最大 GENERATE_MAX_ATTEMPTS 回リトライ。
- * 成功した HTML 文字列を返す。全試行失敗なら null。
+ * 堅牢化（エラー画面に落とさない）のための多層防御:
+ *  - 一過性失敗（空応答・claude 競合・タイムアウト）を吸収するため最大 GENERATE_MAX_ATTEMPTS 回リトライ。
+ *  - 利用上限（Sonnet limit / rate limit 等）を検出したら、以降の試行を fallback（Opus）へ切替える。
+ *  - 失敗時は原因を分類（limit/timeout/empty/error）して返し、ユーザに出し分けできるようにする。
+ * 成功した HTML を { html } で返す。全試行失敗なら { html:null, reason, detail }。
  */
-async function generateHtmlWithRetry(cliPrompt: string): Promise<string | null> {
+async function generateHtmlWithRetry(cliPrompt: string): Promise<GenResult> {
+  let model = NOTEBOOK_CLAUDE_MODEL; // primary（Sonnet）。利用上限検出で fallback（Opus）へ。
+  let switchedToFallback = false;
+  let lastReason: GenFailReason = 'error';
+  let lastDetail: string | undefined;
+
   for (let attempt = 1; attempt <= GENERATE_MAX_ATTEMPTS; attempt += 1) {
-    const raw = await runGenerate(cliPrompt);
-    if (raw !== null) {
-      const html = stripFences(raw);
+    const raw = await runClaudeRaw(cliPrompt, model);
+
+    if (!raw.error) {
+      const html = stripFences(raw.stdout);
       // HTML らしさの最低限チェック: 空・タグを含まないものは無効（リトライ対象）。
-      if (html && html.includes('<')) return html;
+      if (html && html.includes('<')) return { html };
+      // 応答はあるが HTML ではない（空・フェンスのみ等）。
+      lastReason = 'empty';
+      lastDetail = undefined;
+    } else if (isLimitFailure(raw)) {
+      lastReason = 'limit';
+      lastDetail = raw.error;
+      // 利用上限。まだ primary なら次回以降は fallback（Opus）へ切替える。
+      if (!switchedToFallback) {
+        switchedToFallback = true;
+        model = DEV_MOCKUP_FALLBACK_MODEL;
+        console.warn(
+          `[dev-mockup] sonnet limit hit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`,
+        );
+      }
+    } else if (raw.timedOut) {
+      lastReason = 'timeout';
+      lastDetail = raw.error;
+    } else {
+      lastReason = 'error';
+      lastDetail = raw.error;
     }
+
+    if (lastDetail) console.warn(`[dev-mockup] generate attempt ${attempt} failed: ${lastDetail}`);
     // 最終試行でなければバックオフして再試行。
     if (attempt < GENERATE_MAX_ATTEMPTS) await sleep(GENERATE_RETRY_BACKOFF_MS);
   }
-  return null;
+  return { html: null, reason: lastReason, detail: lastDetail };
 }
 
 /**
@@ -218,8 +315,9 @@ async function runGenerateJob(
   cliPrompt: string,
   save: { title: string; id?: string; prompt?: string },
 ): Promise<void> {
-  const html = await generateHtmlWithRetry(cliPrompt);
-  if (html) {
+  const result = await generateHtmlWithRetry(cliPrompt);
+  if (result.html) {
+    const html = result.html;
     // 生成成功。クライアントが離脱・通信失敗しても結果が残るよう、ストアへ自動保存する。
     // 保存に失敗してもジョブ自体は成功として html を返す（保存はベストエフォート）。
     let mockupId: string | undefined;
@@ -245,11 +343,11 @@ async function runGenerateJob(
     return;
   }
 
-  // 全試行失敗。
+  // 全試行失敗。原因を分類してユーザ向け文言を出し分ける。
   const job = jobs.get(jobId);
   if (job) {
     job.status = 'error';
-    job.error = GENERATE_FAILURE_MESSAGE;
+    job.error = GENERATE_FAILURE_MESSAGES[result.reason ?? 'error'];
   }
 }
 

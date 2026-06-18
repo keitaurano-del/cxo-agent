@@ -1023,6 +1023,16 @@ export const PLANNER_ESTIMATE_CACHE_FILE = join(INBOX_DATA_DIR, 'planner-estimat
 /** AI 生成 HTML モックアップの JSONL（last-wins by id）。 */
 export const DEV_MOCKUPS_FILE = join(INBOX_DATA_DIR, 'dev-mockups.jsonl');
 
+/**
+ * 開発ページ生成器の利用上限フォールバックモデル（ノートブック RAG と同方針）。
+ * 通常は NOTEBOOK_CLAUDE_MODEL（Sonnet）で生成するが、Sonnet 利用上限に当たって CLI が失敗
+ * （"You've hit your Sonnet limit · resets ..." 等）したとき、このモデル（既定 Opus）で再生成して
+ * エラー画面に落とさない。env DEV_MOCKUP_FALLBACK_MODEL で差し替え可。 */
+export const DEV_MOCKUP_FALLBACK_MODEL = env(
+  'DEV_MOCKUP_FALLBACK_MODEL',
+  NOTEBOOK_CLAUDE_FALLBACK_MODEL,
+);
+
 /** AI 見積りに使うモデル（haiku で安く。mood と同じ流儀。env で差し替え可）。 */
 export const PLANNER_ESTIMATE_MODEL = env('PLANNER_ESTIMATE_MODEL', AGENT_MOOD_MODEL);
 

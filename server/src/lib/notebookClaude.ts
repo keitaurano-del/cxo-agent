@@ -45,6 +45,21 @@ export function claudeInflightStatus(): { inflight: number; queued: number; limi
   return { inflight, queued: waiters.length, limit: Math.max(1, NOTEBOOK_CLAUDE_CONCURRENCY) };
 }
 
+/**
+ * claude CLI 起動を共有セマフォのスロット内で実行する（MC: 開発ページ生成器と同時実行枠を共有）。
+ * 共有 Anthropic アカウントを食い潰して利用上限エラーを誘発しないよう、ノートブック Q&A と
+ * 開発ページのモックアップ生成を同じ枠（NOTEBOOK_CLAUDE_CONCURRENCY）で直列化する。
+ * fn の解決/拒否に関わらず必ずスロットを返す。
+ */
+export async function withClaudeSlot<T>(fn: () => Promise<T>): Promise<T> {
+  await acquire();
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
+
 // ─── claude -p 起動 ───────────────────────────────────────
 
 const MAX_STDOUT_BYTES = 8 * 1024 * 1024; // 8MB 上限（巨大出力の暴走対策）。
