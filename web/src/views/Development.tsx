@@ -166,6 +166,7 @@ async function pollMockupJob(
   jobId: string,
   startFallback: string,
   sinceMs: number = Date.now(),
+  onPartial?: (partial: string) => void,
 ): Promise<JobResult> {
   const deadline = sinceMs + POLL_MAX_WAIT_MS;
   while (Date.now() < deadline) {
@@ -185,6 +186,7 @@ async function pollMockupJob(
     let data: {
       status?: string;
       html?: string;
+      partial?: string;
       error?: string;
       mockupId?: string;
       saved?: SavedScreen[];
@@ -193,6 +195,10 @@ async function pollMockupJob(
       data = (await pollRes.json()) as typeof data;
     } catch {
       continue;
+    }
+    // 生成途中の部分コードを逐次コールバック（ライブ表示用）。
+    if (data.status === 'generating' && typeof data.partial === 'string' && onPartial) {
+      onPartial(data.partial);
     }
     if (data.status === 'done') {
       const saved = Array.isArray(data.saved) ? data.saved : [];
@@ -231,6 +237,8 @@ export default function Development() {
   const pollingRef = useRef<Set<string>>(new Set());
   // 「作成中」カードの経過秒数表示用に 1 秒ごとに進む現在時刻。
   const [nowTick, setNowTick] = useState(() => Date.now());
+  // エディタに紐づくジョブの「生成中の部分コード」（ライブ表示用）。
+  const [streamCode, setStreamCode] = useState('');
 
   // エディタに紐づく進行中ジョブ（あればエディタ側の進捗バーと生成ボタン無効化に使う）。
   const editorJob = activeJobs.find((j) => j.attachToEditor) ?? null;
@@ -252,6 +260,8 @@ export default function Development() {
   // プレビューに反映する html（編集デバウンス用）。復元時は即プレビューも復元する。
   const [previewHtml, setPreviewHtml] = useState(bootDraft?.html ?? '');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ライブコード表示の自動スクロール用。
+  const streamPreRef = useRef<HTMLPreElement | null>(null);
 
   // html 変更 → 250ms デバウンスでプレビューへ反映。
   useEffect(() => {
@@ -305,7 +315,13 @@ export default function Development() {
       if (pollingRef.current.has(job.jobId)) continue;
       pollingRef.current.add(job.jobId);
       const fallback = job.mode === 'revise' ? '修正に失敗しました' : '生成に失敗しました';
-      pollMockupJob(job.jobId, fallback, job.startedAt)
+      pollMockupJob(
+        job.jobId,
+        fallback,
+        job.startedAt,
+        // エディタに紐づくジョブだけ、生成中の部分コードをライブ表示する。
+        job.attachToEditor ? (p) => setStreamCode(p) : undefined,
+      )
         .then((r) => {
           if (r.status === 'done') {
             // 完了時、そのジョブがエディタに紐づいているならエディタへ結果を反映する。
@@ -315,6 +331,7 @@ export default function Development() {
               setCurrentId(r.mockupId ?? r.saved[0]?.id ?? null);
               if (r.saved[0]?.title) setTitle(r.saved[0].title);
               if (job.mode === 'revise') setInstruction('');
+              setStreamCode('');
               setMobileTab('preview');
             }
             setNotice(
@@ -334,6 +351,7 @@ export default function Development() {
           // attachToEditor のジョブのみ赤エラーを出し、デタッチ済み（新規作成後）は静かに一覧更新。
           if (job.attachToEditor) {
             setError(e instanceof Error ? e.message : fallback);
+            setStreamCode('');
           } else {
             setNotice('完了した試作品は下の「保存済みモックアップ」をご確認ください。');
           }
@@ -353,6 +371,12 @@ export default function Development() {
     return () => clearTimeout(id);
   }, [notice]);
 
+  // ライブコードが伸びるたびに末尾へ自動スクロール（最新の行が見えるように）。
+  useEffect(() => {
+    const el = streamPreRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [streamCode]);
+
   // 新規生成。起票だけして「進行中ジョブ」に積む（完了はバックグラウンドのポーリングが捌く）。
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim() || generating) return;
@@ -367,7 +391,9 @@ export default function Development() {
         ...prev.map((j) => ({ ...j, attachToEditor: false })),
       ]);
       if (!title.trim()) setTitle(label);
-      setNotice('作成を開始しました。下の一覧に「作成中」で表示されます（新規作成で別のものも並行で作れます）。');
+      setStreamCode('');
+      setMobileTab('preview'); // 生成中のコードがライブで見えるプレビュー側へ。
+      setNotice('作成を開始しました。コードが書かれていく様子をプレビュー側に表示します。');
     } catch (e) {
       setError(e instanceof Error ? e.message : '生成に失敗しました');
     }
@@ -400,7 +426,9 @@ export default function Development() {
         },
         ...prev.map((j) => ({ ...j, attachToEditor: false })),
       ]);
-      setNotice('修正を開始しました。完了すると反映され、一覧にも自動保存されます。');
+      setStreamCode('');
+      setMobileTab('preview');
+      setNotice('修正を開始しました。コードが書かれていく様子をプレビュー側に表示します。');
     } catch (e) {
       setError(e instanceof Error ? e.message : '修正に失敗しました');
     }
@@ -487,6 +515,7 @@ export default function Development() {
     setPreviewHtml('');
     setCurrentId(null);
     setError(null);
+    setStreamCode('');
     // 進行中ジョブは消さない。エディタ紐付けだけ外し、一覧に「作成中」で見え続けるようにする。
     setActiveJobs((prev) => prev.map((j) => ({ ...j, attachToEditor: false })));
     setNotice('新規作成にしました。作成中のものは下の一覧に「作成中」で表示され続けます。');
@@ -764,10 +793,38 @@ export default function Development() {
           } min-h-0 min-w-0 flex-1 flex-col bg-surface-2 md:flex`}
         >
           <div className="flex items-center justify-between border-b border-border px-4 py-2">
-            <span className="text-xs font-semibold text-text-muted">プレビュー</span>
+            <span className="text-xs font-semibold text-text-muted">
+              {generating ? 'コードを生成中…' : 'プレビュー'}
+            </span>
+            {generating && (
+              <span
+                className="flex items-center gap-1.5 text-[11px]"
+                style={{ color: 'var(--mc-active)' }}
+              >
+                <Spinner /> {elapsed}秒
+              </span>
+            )}
           </div>
           <div className="min-h-0 flex-1 overflow-hidden p-3">
-            {previewHtml.trim() ? (
+            {generating ? (
+              // 生成中: claude が書いているコードをリアルタイムに流す（末尾自動スクロール）。
+              streamCode ? (
+                <pre
+                  ref={streamPreRef}
+                  className="h-full w-full overflow-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-surface px-3 py-2 font-mono text-[11px] leading-relaxed text-text"
+                >
+                  {streamCode}
+                  <span className="animate-pulse">▋</span>
+                </pre>
+              ) : (
+                <div className="flex h-full items-center justify-center p-6">
+                  <div className="flex items-center gap-2 text-xs text-text-muted">
+                    <Spinner />
+                    <span>コードの生成を待っています…</span>
+                  </div>
+                </div>
+              )
+            ) : previewHtml.trim() ? (
               <iframe
                 title="モックアッププレビュー"
                 srcDoc={previewHtml}

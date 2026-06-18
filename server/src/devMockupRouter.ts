@@ -2,7 +2,8 @@
 //
 //  POST   /api/dev/mockup/generate    : { prompt, baseHtml?, instruction? } → 202 { jobId }（非同期ジョブ）
 //  GET    /api/dev/mockup/job/:jobId  : ポーリング用。
-//      { status:'pending'|'generating'|'done'|'error', html?, mockupId?, error?, saved?:[{id,title}] }
+//      { status:'pending'|'generating'|'done'|'error', html?, partial?, mockupId?, error?, saved?:[{id,title}] }
+//      partial は生成途中の部分 HTML（ストリーム中）。クライアントはこれを逐次表示してコードをライブに見せる。
 //      新規生成も修正も「1 つの動くインタラクティブな単一 HTML プロトタイプ」を生成し、完了時に自動保存する。
 //      saved は後方互換のため単一画面でも [{id,title}] 1 件を入れる。
 //  GET    /api/dev/mockups          : { mockups: [{id,title,prompt,createdAt,updatedAt}] }（html 除く軽量）
@@ -15,7 +16,7 @@
 //   NUL バイトはプロンプトから除去し、execFile 自体も try/catch で囲って落とさない。
 // 保存先はすべて data/ 配下（.gitignore 済み）。
 
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 
@@ -132,42 +133,153 @@ interface RawRun {
 }
 
 /**
- * claude CLI を指定モデルで 1 回起動する。throw せず RawRun で返す。
+ * claude CLI を指定モデルで 1 回起動し、出力をトークン単位で逐次ストリームする。throw せず RawRun で返す。
+ *
+ * プレーンな `-p` は結果を最後に一括で吐く（＝逐次表示できない）ため、
+ * `--output-format stream-json --include-partial-messages --verbose` を使い、NDJSON の
+ * `content_block_delta` からテキスト差分を取り出して積み上げる。onChunk には「これまでの本文全文」を
+ * 都度渡す＝呼び出し側が書かれていくコードをライブ表示できる。
+ *
  * 共有セマフォ（ノートブック Q&A と同じ枠）の中で実行し、同時実行による利用上限エラーを抑える。
  * 失敗/タイムアウト/NUL ガード後の例外もすべて RawRun.error に集約する（サーバを落とさない）。
  */
-function runClaudeRaw(prompt: string, model: string): Promise<RawRun> {
-  // execFile は引数に NUL バイトがあると同期 throw する。想定外の制御文字でサーバを落とさないよう、
-  // (1) プロンプトから NUL を除去し、(2) execFile 自体も try/catch で囲う。
+function runClaudeRaw(
+  prompt: string,
+  model: string,
+  onChunk?: (accumulated: string) => void,
+): Promise<RawRun> {
+  // 引数に NUL バイトがあると spawn が throw し得る。想定外の制御文字でサーバを落とさないよう、
+  // (1) プロンプトから NUL を除去し、(2) spawn 自体も try/catch で囲う。
   const safePrompt = prompt.replace(/\x00/g, '');
   return withClaudeSlot(
     () =>
       new Promise<RawRun>((resolve) => {
+        let child: ReturnType<typeof spawn>;
         try {
-          execFile(
+          child = spawn(
             NOTEBOOK_CLAUDE_BIN,
-            ['--model', model, '-p', safePrompt],
-            { timeout: GENERATE_TIMEOUT_MS, maxBuffer: GENERATE_MAX_BUFFER, env: process.env },
-            (err, stdout, stderr) => {
-              const out = (stdout || '').toString();
-              if (err) {
-                const killed = (err as NodeJS.ErrnoException & { killed?: boolean }).killed;
-                const detail = stderr ? ` | ${String(stderr).slice(0, 500)}` : '';
-                resolve({
-                  stdout: out,
-                  timedOut: Boolean(killed),
-                  error: killed
-                    ? `claude タイムアウト（${Math.round(GENERATE_TIMEOUT_MS / 1000)}s）`
-                    : `claude 実行失敗: ${err.message}${detail}`,
-                });
-                return;
-              }
-              resolve({ stdout: out, timedOut: false });
-            },
+            [
+              '--model',
+              model,
+              '--output-format',
+              'stream-json',
+              '--include-partial-messages',
+              '--verbose',
+              '-p',
+              safePrompt,
+            ],
+            { env: process.env },
           );
         } catch (e) {
           resolve({ stdout: '', timedOut: false, error: `claude 起動失敗: ${(e as Error).message}` });
+          return;
         }
+
+        let body = ''; // content_block_delta を積み上げた本文（= 生成中の HTML）。
+        let resultText = ''; // result イベントの最終本文（delta が無い場合のフォールバック）。
+        let lineBuf = ''; // 行跨ぎ JSON のための未処理バッファ。
+        let stderr = '';
+        let limitError = ''; // 利用上限を示すイベントを拾ったら入れる（isLimitFailure 用）。
+        let resultError = ''; // result イベントが is_error のときの詳細。
+        let timedOut = false;
+        let settled = false;
+        const done = (r: RawRun): void => {
+          if (settled) return;
+          settled = true;
+          resolve(r);
+        };
+
+        const timer = setTimeout(() => {
+          timedOut = true;
+          child.kill('SIGTERM');
+        }, GENERATE_TIMEOUT_MS);
+
+        try {
+          child.stdin?.end();
+        } catch {
+          /* noop */
+        }
+
+        // NDJSON を 1 行ずつ解釈し、本文差分を積み上げる。
+        const handleLine = (line: string): void => {
+          const s = line.trim();
+          if (!s) return;
+          let o: Record<string, unknown>;
+          try {
+            o = JSON.parse(s) as Record<string, unknown>;
+          } catch {
+            return; // 壊れた/部分行は無視。
+          }
+          const type = o.type as string | undefined;
+          if (type === 'stream_event') {
+            const ev = (o.event ?? {}) as Record<string, unknown>;
+            if (ev.type === 'content_block_delta') {
+              const delta = (ev.delta ?? {}) as Record<string, unknown>;
+              const text = typeof delta.text === 'string' ? delta.text : '';
+              if (text && body.length + text.length <= GENERATE_MAX_BUFFER) {
+                body += text;
+                if (onChunk) onChunk(body);
+              }
+            }
+          } else if (type === 'result') {
+            if (typeof o.result === 'string') resultText = o.result;
+            if (o.is_error === true) {
+              resultError = `claude エラー: ${String(o.subtype ?? 'error')} ${String(o.result ?? '')}`.trim();
+            }
+          } else if (type === 'rate_limit_event') {
+            const info = (o.rate_limit_info ?? {}) as Record<string, unknown>;
+            // status が allowed 以外（rejected/blocked 等）なら利用上限とみなす。
+            if (typeof info.status === 'string' && info.status !== 'allowed') {
+              limitError = `rate limit: ${info.status}`;
+            }
+          }
+        };
+
+        child.stdout?.on('data', (chunk: Buffer) => {
+          lineBuf += chunk.toString();
+          let nl: number;
+          while ((nl = lineBuf.indexOf('\n')) !== -1) {
+            const line = lineBuf.slice(0, nl);
+            lineBuf = lineBuf.slice(nl + 1);
+            handleLine(line);
+          }
+        });
+        child.stderr?.on('data', (chunk: Buffer) => {
+          stderr += chunk.toString();
+        });
+
+        child.on('close', (code) => {
+          clearTimeout(timer);
+          if (lineBuf.trim()) handleLine(lineBuf); // 残りの最終行。
+          const out = body || resultText;
+          if (timedOut) {
+            done({
+              stdout: out,
+              timedOut: true,
+              error: `claude タイムアウト（${Math.round(GENERATE_TIMEOUT_MS / 1000)}s）`,
+            });
+            return;
+          }
+          // 利用上限・result エラーは error に載せる（isLimitFailure が error 文字列を見て fallback 判定）。
+          if (limitError) {
+            done({ stdout: out, timedOut: false, error: limitError });
+            return;
+          }
+          if (code !== 0) {
+            const detail = stderr ? ` | ${stderr.slice(0, 500)}` : '';
+            done({ stdout: out, timedOut: false, error: `claude 実行失敗（終了コード ${code}）${detail}` });
+            return;
+          }
+          if (resultError) {
+            done({ stdout: out, timedOut: false, error: resultError });
+            return;
+          }
+          done({ stdout: out, timedOut: false });
+        });
+        child.on('error', (err) => {
+          clearTimeout(timer);
+          done({ stdout: body || resultText, timedOut: false, error: `claude 実行失敗: ${err.message}` });
+        });
       }),
   );
 }
@@ -201,6 +313,8 @@ interface Job {
   status: JobStatus;
   /** 生成された HTML。 */
   html?: string;
+  /** 生成途中の部分 HTML（ストリーム中の最新 stdout。ライブ表示用）。 */
+  partial?: string;
   error?: string;
   /** 保存先 id（クライアントが currentId に反映できる）。 */
   mockupId?: string;
@@ -267,14 +381,17 @@ function sleep(ms: number): Promise<void> {
  *  - 失敗時は原因を分類（limit/timeout/empty/error）して返し、ユーザに出し分けできるようにする。
  * 成功した HTML を { html } で返す。全試行失敗なら { html:null, reason, detail }。
  */
-async function generateHtmlWithRetry(cliPrompt: string): Promise<GenResult> {
+async function generateHtmlWithRetry(
+  cliPrompt: string,
+  onChunk?: (accumulated: string) => void,
+): Promise<GenResult> {
   let model = NOTEBOOK_CLAUDE_MODEL; // primary（Sonnet）。利用上限検出で fallback（Opus）へ。
   let switchedToFallback = false;
   let lastReason: GenFailReason = 'error';
   let lastDetail: string | undefined;
 
   for (let attempt = 1; attempt <= GENERATE_MAX_ATTEMPTS; attempt += 1) {
-    const raw = await runClaudeRaw(cliPrompt, model);
+    const raw = await runClaudeRaw(cliPrompt, model, onChunk);
 
     if (!raw.error) {
       const html = stripFences(raw.stdout);
@@ -342,8 +459,15 @@ async function runGenerateJob(
   cliPrompt: string,
   save: { title: string; id?: string; prompt?: string },
 ): Promise<void> {
+  // 生成途中の stdout をジョブへ反映＝クライアントがポーリングでライブにコードを見られる。
+  const onChunk = (accumulated: string): void => {
+    const job = jobs.get(jobId);
+    if (!job || job.status === 'done' || job.status === 'error') return;
+    job.status = 'generating';
+    job.partial = accumulated;
+  };
   // 同時実行の食い合いを避けるため、生成は 1 本ずつ直列化する。
-  const result = await serializeDevGen(() => generateHtmlWithRetry(cliPrompt));
+  const result = await serializeDevGen(() => generateHtmlWithRetry(cliPrompt, onChunk));
   if (result.html) {
     const html = result.html;
     // 生成成功。クライアントが離脱・通信失敗しても結果が残るよう、ストアへ自動保存する。
@@ -449,6 +573,8 @@ function handleJob(req: Request, res: Response): void {
   res.json({
     status: job.status,
     html: job.html,
+    // 生成途中の部分コード（フェンスを除いて返す）。done になれば html を使うので不要。
+    partial: job.status === 'generating' && job.partial ? stripFences(job.partial) : undefined,
     mockupId: job.mockupId,
     error: job.error,
     saved: job.saved,
