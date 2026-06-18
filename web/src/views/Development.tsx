@@ -53,12 +53,18 @@ interface DraftState {
   currentId: string | null;
 }
 
-/** 進行中ジョブ（離脱・リロード後に再開するための最小情報）。 */
+/** 進行中ジョブ（「作成中」カード表示・離脱/リロード後の再開に使う）。 */
 interface JobState {
   jobId: string;
   mode: 'generate' | 'revise';
-  /** 起票時刻（ms）。POLL_MAX_WAIT_MS を超えた古いジョブは復元対象外。 */
+  /** 起票時刻（ms）。経過秒の起点。POLL_MAX_WAIT_MS を超えた古いジョブは復元対象外。 */
   startedAt: number;
+  /** 「作成中」カードに出す名前（生成=要望先頭 / 修正=指示先頭）。 */
+  label: string;
+  /** 完了時にエディタへ結果を反映するか。新規作成を押すと false になり、一覧表示だけ残る。 */
+  attachToEditor: boolean;
+  /** 修正対象の既存モックアップ id（あれば一覧の当該行は「作成中」カードに集約して隠す）。 */
+  targetId?: string;
 }
 
 function loadDraft(): DraftState | null {
@@ -81,18 +87,25 @@ function saveDraft(d: DraftState): void {
     /* localStorage 不可（プライベートブラウズ等）でも機能自体は壊さない。 */
   }
 }
-function loadJob(): JobState | null {
+/** 進行中ジョブ配列を読む。古い単一オブジェクト形式は無視（配列のみ受理）。期限切れは除外。 */
+function loadJobs(): JobState[] {
   try {
     const raw = localStorage.getItem(JOB_KEY);
-    return raw ? (JSON.parse(raw) as JobState) : null;
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const now = Date.now();
+    return (parsed as JobState[]).filter(
+      (j) => j && typeof j.jobId === 'string' && now - j.startedAt <= POLL_MAX_WAIT_MS,
+    );
   } catch {
-    return null;
+    return [];
   }
 }
-function saveJob(j: JobState | null): void {
+function saveJobs(jobs: JobState[]): void {
   try {
-    if (j) localStorage.setItem(JOB_KEY, JSON.stringify(j));
-    else localStorage.removeItem(JOB_KEY);
+    if (jobs.length === 0) localStorage.removeItem(JOB_KEY);
+    else localStorage.setItem(JOB_KEY, JSON.stringify(jobs));
   } catch {
     /* noop */
   }
@@ -197,20 +210,6 @@ async function pollMockupJob(
   return { status: 'timeout' };
 }
 
-/**
- * 起票してから完了までポーリングする（従来 runMockupJob 相当）。
- * onJobId で jobId を呼び出し側に渡し、離脱・リロードに備えて localStorage へ退避できるようにする。
- */
-async function runMockupJob(
-  body: Record<string, unknown>,
-  startFallback: string,
-  onJobId?: (jobId: string) => void,
-): Promise<JobResult> {
-  const jobId = await startMockupJob(body, startFallback);
-  onJobId?.(jobId);
-  return pollMockupJob(jobId, startFallback);
-}
-
 export default function Development() {
   // 起動時に localStorage からドラフトを 1 回だけ読む（離脱/リロードからの復元）。
   const [bootDraft] = useState(loadDraft);
@@ -222,10 +221,20 @@ export default function Development() {
   const [html, setHtml] = useState(bootDraft?.html ?? '');
 
   // 非同期/通知状態
-  const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // 進行中ジョブ（「作成中」として一覧に表示・離脱/リロードでも保持）。起動時に復元する。
+  const [activeJobs, setActiveJobs] = useState<JobState[]>(loadJobs);
+  // 既にポーリング中の jobId（多重ポーリング防止）。
+  const pollingRef = useRef<Set<string>>(new Set());
+  // 「作成中」カードの経過秒数表示用に 1 秒ごとに進む現在時刻。
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
+  // エディタに紐づく進行中ジョブ（あればエディタ側の進捗バーと生成ボタン無効化に使う）。
+  const editorJob = activeJobs.find((j) => j.attachToEditor) ?? null;
+  const generating = editorJob !== null;
 
   // 現在編集中のモックアップ id（保存済みを読み込んだ/保存した場合に入る）。
   const [currentId, setCurrentId] = useState<string | null>(bootDraft?.currentId ?? null);
@@ -233,8 +242,8 @@ export default function Development() {
   // スマホ幅(md未満)での表示ペイン切替。デスクトップ(md+)では無視され両ペイン横並び。
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit');
 
-  // 生成/修正中の経過秒数（進捗表示用）。generating が true の間だけ 1 秒間隔で加算する。
-  const [elapsed, setElapsed] = useState(0);
+  // エディタ側の進捗バー用の経過秒数（エディタに紐づくジョブの起点から算出）。
+  const elapsed = editorJob ? Math.max(0, Math.floor((nowTick - editorJob.startedAt) / 1000)) : 0;
 
   // 一覧
   const [mockups, setMockups] = useState<MockupSummary[]>([]);
@@ -276,59 +285,66 @@ export default function Development() {
     saveDraft({ prompt, instruction, title, html, currentId });
   }, [prompt, instruction, title, html, currentId]);
 
-  // マウント時に「進行中ジョブ」があれば再開する（生成中に離脱/リロードしても結果を取り戻す）。
-  // サーバ側ジョブはインメモリで 15 分保持されるため、その間ならジョブ ID から完了を取り直せる。
+  // 進行中ジョブ配列が変わるたびに localStorage へ退避する（離脱/リロードでも「作成中」を保持）。
   useEffect(() => {
-    const job = loadJob();
-    if (!job) return;
-    // 古すぎる（=サーバ TTL 切れの可能性）ジョブは追わない。掃除して終了。
-    if (Date.now() - job.startedAt > POLL_MAX_WAIT_MS) {
-      saveJob(null);
-      return;
-    }
-    const fallback = job.mode === 'revise' ? '修正に失敗しました' : '生成に失敗しました';
-    setGenerating(true);
-    setError(null);
-    setNotice('前回の生成を再開しています…');
-    pollMockupJob(job.jobId, fallback, job.startedAt)
-      .then((r) => {
-        if (r.status === 'done') {
-          setHtml(r.html);
-          setPreviewHtml(r.html);
-          setCurrentId(r.mockupId ?? r.saved[0]?.id ?? null);
-          if (r.saved[0]?.title) setTitle(r.saved[0].title);
-          setNotice('生成が完了しました（下の一覧にも自動保存済み）。');
-          setMobileTab('preview');
-        } else {
-          setNotice(
-            '生成に時間がかかっています。完了すると下の「保存済みモックアップ」に自動保存されます。',
-          );
-        }
-        loadList();
-      })
-      .catch(() => {
-        // 404（サーバ再起動等でジョブ消失）でも、完了済みなら一覧に自動保存されている。
-        // 怖いエラーは出さず、一覧を更新して案内する。
-        setNotice('前回の生成結果は下の「保存済みモックアップ」をご確認ください。');
-        loadList();
-      })
-      .finally(() => {
-        saveJob(null);
-        setGenerating(false);
-      });
-    // 初回マウント時のみ実行する（loadList は安定参照）。
-  }, [loadList]);
+    saveJobs(activeJobs);
+  }, [activeJobs]);
 
-  // 生成/修正中だけ経過秒数を 1 秒間隔で更新。停止時は 0 にリセットし interval を破棄。
+  // 進行中ジョブがある間だけ 1 秒ごとに現在時刻を進め、「作成中」カードの経過秒を更新する。
   useEffect(() => {
-    if (!generating) {
-      setElapsed(0);
-      return;
-    }
-    setElapsed(0);
-    const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
+    if (activeJobs.length === 0) return;
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [generating]);
+  }, [activeJobs.length]);
+
+  // 進行中ジョブをバックグラウンドでポーリングする。未ポーリングのジョブだけ拾って完了まで追う。
+  // ここで完了/失敗を捌くことで、生成は「エディタの async フロー」から切り離され、
+  // 新規作成・画面遷移・リロードをまたいでも進行→完了→一覧反映まで生き続ける。
+  useEffect(() => {
+    for (const job of activeJobs) {
+      if (pollingRef.current.has(job.jobId)) continue;
+      pollingRef.current.add(job.jobId);
+      const fallback = job.mode === 'revise' ? '修正に失敗しました' : '生成に失敗しました';
+      pollMockupJob(job.jobId, fallback, job.startedAt)
+        .then((r) => {
+          if (r.status === 'done') {
+            // 完了時、そのジョブがエディタに紐づいているならエディタへ結果を反映する。
+            if (job.attachToEditor) {
+              setHtml(r.html);
+              setPreviewHtml(r.html);
+              setCurrentId(r.mockupId ?? r.saved[0]?.id ?? null);
+              if (r.saved[0]?.title) setTitle(r.saved[0].title);
+              if (job.mode === 'revise') setInstruction('');
+              setMobileTab('preview');
+            }
+            setNotice(
+              job.mode === 'revise'
+                ? '修正が完了しました（一覧にも自動保存済み）。'
+                : `「${job.label}」が完成しました（一覧にも自動保存済み）。`,
+            );
+          } else {
+            setNotice(
+              '生成に時間がかかっています。完了すると下の「保存済みモックアップ」に自動保存されます。',
+            );
+          }
+          loadList();
+        })
+        .catch((e) => {
+          // 404（サーバ再起動等でジョブ消失）でも完了済みなら一覧に自動保存されている。
+          // attachToEditor のジョブのみ赤エラーを出し、デタッチ済み（新規作成後）は静かに一覧更新。
+          if (job.attachToEditor) {
+            setError(e instanceof Error ? e.message : fallback);
+          } else {
+            setNotice('完了した試作品は下の「保存済みモックアップ」をご確認ください。');
+          }
+          loadList();
+        })
+        .finally(() => {
+          pollingRef.current.delete(job.jobId);
+          setActiveJobs((prev) => prev.filter((j) => j.jobId !== job.jobId));
+        });
+    }
+  }, [activeJobs, loadList]);
 
   // 通知は数秒で自動的に消す。
   useEffect(() => {
@@ -337,48 +353,34 @@ export default function Development() {
     return () => clearTimeout(id);
   }, [notice]);
 
-  // 新規生成。
+  // 新規生成。起票だけして「進行中ジョブ」に積む（完了はバックグラウンドのポーリングが捌く）。
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim() || generating) return;
-    setGenerating(true);
     setError(null);
     setNotice(null);
+    const label = prompt.trim().slice(0, 40) || 'モックアップ';
     try {
-      const r = await runMockupJob({ prompt: prompt.trim() }, '生成に失敗しました', (jobId) =>
-        saveJob({ jobId, mode: 'generate', startedAt: Date.now() }),
-      );
-      if (r.status === 'timeout') {
-        setNotice(
-          '生成に時間がかかっています。完了すると下の「保存済みモックアップ」に自動保存されます。このページを離れても大丈夫です。',
-        );
-        loadList();
-        [15000, 30000, 60000, 90000].forEach((ms) => window.setTimeout(loadList, ms));
-      } else {
-        setHtml(r.html);
-        setPreviewHtml(r.html);
-        setCurrentId(r.mockupId ?? r.saved[0]?.id ?? null);
-        if (r.saved[0]?.title) setTitle(r.saved[0].title);
-        else if (!title.trim()) setTitle(prompt.trim().slice(0, 40));
-        setNotice('動く試作品を生成しました（下の一覧にも自動保存済み）。');
-        setMobileTab('preview');
-        loadList();
-      }
+      const jobId = await startMockupJob({ prompt: prompt.trim() }, '生成に失敗しました');
+      // 既存ジョブのエディタ紐付けを外し、この新ジョブをエディタに紐づけて先頭に積む。
+      setActiveJobs((prev) => [
+        { jobId, mode: 'generate', startedAt: Date.now(), label, attachToEditor: true },
+        ...prev.map((j) => ({ ...j, attachToEditor: false })),
+      ]);
+      if (!title.trim()) setTitle(label);
+      setNotice('作成を開始しました。下の一覧に「作成中」で表示されます（新規作成で別のものも並行で作れます）。');
     } catch (e) {
       setError(e instanceof Error ? e.message : '生成に失敗しました');
-    } finally {
-      saveJob(null);
-      setGenerating(false);
     }
-  }, [prompt, generating, title, loadList]);
+  }, [prompt, generating, title]);
 
-  // 反復修正。
+  // 反復修正。起票だけして「進行中ジョブ」に積む。
   const handleRevise = useCallback(async () => {
     if (!html.trim() || !instruction.trim() || generating) return;
-    setGenerating(true);
     setError(null);
     setNotice(null);
+    const label = `修正: ${instruction.trim().slice(0, 30)}`;
     try {
-      const r = await runMockupJob(
+      const jobId = await startMockupJob(
         {
           baseHtml: html,
           instruction: instruction.trim(),
@@ -386,30 +388,23 @@ export default function Development() {
           ...(title.trim() ? { title: title.trim() } : {}),
         },
         '修正に失敗しました',
-        (jobId) => saveJob({ jobId, mode: 'revise', startedAt: Date.now() }),
       );
-      if (r.status === 'timeout') {
-        setNotice(
-          '修正に時間がかかっています。完了すると下の「保存済みモックアップ」に自動保存されます。このページを離れても大丈夫です。',
-        );
-        loadList();
-        [15000, 30000, 60000, 90000].forEach((ms) => window.setTimeout(loadList, ms));
-      } else {
-        setHtml(r.html);
-        setPreviewHtml(r.html);
-        setInstruction('');
-        if (r.mockupId) setCurrentId(r.mockupId);
-        setNotice('モックアップを修正しました（下の一覧にも自動保存済み）。');
-        setMobileTab('preview');
-        loadList();
-      }
+      setActiveJobs((prev) => [
+        {
+          jobId,
+          mode: 'revise',
+          startedAt: Date.now(),
+          label,
+          attachToEditor: true,
+          ...(currentId ? { targetId: currentId } : {}),
+        },
+        ...prev.map((j) => ({ ...j, attachToEditor: false })),
+      ]);
+      setNotice('修正を開始しました。完了すると反映され、一覧にも自動保存されます。');
     } catch (e) {
       setError(e instanceof Error ? e.message : '修正に失敗しました');
-    } finally {
-      saveJob(null);
-      setGenerating(false);
     }
-  }, [html, instruction, generating, currentId, title, loadList]);
+  }, [html, instruction, generating, currentId, title]);
 
   // 保存（upsert）。
   const handleSave = useCallback(async () => {
@@ -492,10 +487,17 @@ export default function Development() {
     setPreviewHtml('');
     setCurrentId(null);
     setError(null);
-    saveJob(null);
-    setNotice('新規作成にしました。');
+    // 進行中ジョブは消さない。エディタ紐付けだけ外し、一覧に「作成中」で見え続けるようにする。
+    setActiveJobs((prev) => prev.map((j) => ({ ...j, attachToEditor: false })));
+    setNotice('新規作成にしました。作成中のものは下の一覧に「作成中」で表示され続けます。');
     setMobileTab('edit');
   }, []);
+
+  // 修正中（targetId 付き）の既存モックアップは一覧から隠し、「作成中」カードに集約する（重複表示防止）。
+  const revisingIds = new Set(
+    activeJobs.map((j) => j.targetId).filter((id): id is string => Boolean(id)),
+  );
+  const visibleMockups = mockups.filter((m) => !revisingIds.has(m.id));
 
   return (
     <div className="flex h-full flex-col">
@@ -681,19 +683,48 @@ export default function Development() {
             </section>
           )}
 
-          {/* 保存済み一覧 */}
+          {/* 保存済み一覧（先頭に「作成中」カードを出す） */}
           <section className="flex flex-col gap-2 border-t border-border pt-4">
             <div className="text-xs font-semibold text-text-muted">保存済みモックアップ</div>
+
+            {/* 作成中カード: 進行中ジョブを「作成中… N秒」で表示。新規作成・画面遷移後も出続ける。 */}
+            {activeJobs.length > 0 && (
+              <ul className="flex flex-col gap-1">
+                {activeJobs.map((job) => {
+                  const sec = Math.max(0, Math.floor((nowTick - job.startedAt) / 1000));
+                  return (
+                    <li
+                      key={job.jobId}
+                      className="flex items-center gap-2 rounded-lg border border-accent px-3 py-2"
+                      style={{ background: 'var(--mc-active-bg)' }}
+                    >
+                      <Spinner />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm text-text">
+                          {job.label || (job.mode === 'revise' ? '修正' : 'モックアップ')}
+                        </div>
+                        <div className="text-[10px]" style={{ color: 'var(--mc-active)' }}>
+                          作成中… {sec}秒（完了すると自動でここに保存されます）
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
             {listLoading ? (
               <div className="flex items-center gap-2 py-3 text-xs text-text-muted">
                 <Spinner />
                 <span>読み込み中…</span>
               </div>
-            ) : mockups.length === 0 ? (
-              <p className="py-2 text-xs text-text-faint">まだ保存されたモックアップはありません。</p>
+            ) : visibleMockups.length === 0 ? (
+              activeJobs.length === 0 && (
+                <p className="py-2 text-xs text-text-faint">まだ保存されたモックアップはありません。</p>
+              )
             ) : (
               <ul className="flex flex-col gap-1">
-                {mockups.map((m) => (
+                {visibleMockups.map((m) => (
                   <li
                     key={m.id}
                     className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${
