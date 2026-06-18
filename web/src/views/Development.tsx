@@ -216,6 +216,30 @@ async function pollMockupJob(
   return { status: 'timeout' };
 }
 
+// 生成中のライブ表示で「いま何をしているか」を、プログラミング未経験者にも分かる平易な日本語で示す。
+// 流れてきた HTML のどのセクションを書いているか（最後に登場したタグ）で大まかな段階を判定する。
+const STREAM_PHASES: { key: string; label: string }[] = [
+  { key: '<html', label: '📄 ページの土台（基本設定）を準備しています' },
+  { key: '<style', label: '🎨 見た目（色・配置・文字の大きさ）をデザインしています' },
+  { key: '<body', label: '🧱 画面に出す部品（文字・ボタン・入力欄など）を組み立てています' },
+  { key: '<script', label: '⚙️ ボタンを押したときなどの「動き」をプログラムしています' },
+];
+
+/** 流れてきたコードから現在の作業段階を平易な日本語で返す。 */
+function describeStreamPhase(code: string): string {
+  const lower = code.toLowerCase();
+  let best = '✍️ コードを書き始めています';
+  let bestIdx = -1;
+  for (const p of STREAM_PHASES) {
+    const idx = lower.lastIndexOf(p.key);
+    if (idx > bestIdx) {
+      bestIdx = idx;
+      best = p.label;
+    }
+  }
+  return best;
+}
+
 export default function Development() {
   // 起動時に localStorage からドラフトを 1 回だけ読む（離脱/リロードからの復元）。
   const [bootDraft] = useState(loadDraft);
@@ -809,13 +833,26 @@ export default function Development() {
             {generating ? (
               // 生成中: claude が書いているコードをリアルタイムに流す（末尾自動スクロール）。
               streamCode ? (
-                <pre
-                  ref={streamPreRef}
-                  className="h-full w-full overflow-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-surface px-3 py-2 font-mono text-[11px] leading-relaxed text-text"
-                >
-                  {streamCode}
-                  <span className="animate-pulse">▋</span>
-                </pre>
+                <div className="flex h-full flex-col gap-2">
+                  {/* いま何をしているかを平易な日本語で（未経験者向け） */}
+                  <div
+                    className="flex items-center gap-2 rounded-lg border border-accent px-3 py-2 text-xs font-semibold"
+                    style={{ background: 'var(--mc-active-bg)', color: 'var(--mc-active)' }}
+                  >
+                    <Spinner />
+                    <span>{describeStreamPhase(streamCode)}</span>
+                  </div>
+                  <p className="text-[10px] text-text-faint">
+                    ↓ AI が実際に書いているコードです（各部分の説明コメント付き）。完成すると下に実際の画面が出ます。
+                  </p>
+                  <pre
+                    ref={streamPreRef}
+                    className="min-h-0 w-full flex-1 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-surface px-3 py-2 font-mono text-[11px] leading-relaxed text-text"
+                  >
+                    {streamCode}
+                    <span className="animate-pulse">▋</span>
+                  </pre>
+                </div>
               ) : (
                 <div className="flex h-full items-center justify-center p-6">
                   <div className="flex items-center gap-2 text-xs text-text-muted">
