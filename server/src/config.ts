@@ -100,6 +100,10 @@ export const DELIVERABLES_CACHE_DIR = env(
  */
 export const NOTEBOOKS_DIR = env('NOTEBOOKS_DIR', join(INBOX_DATA_DIR, 'notebooks'));
 
+/** 開発ページの Figma ワイヤーフレーム画像の保存ルート（data/dev-wireframes/<jobId>/<n>.png）。
+ *  data/ 配下なので .gitignore 済み。生成ごとに jobId サブディレクトリを作る。 */
+export const DEV_WIREFRAMES_DIR = env('DEV_WIREFRAMES_DIR', join(INBOX_DATA_DIR, 'dev-wireframes'));
+
 /** ノートブックのソースアップロード 1 ファイルあたり最大バイト数（既定 2GB）。 */
 export const NOTEBOOK_UPLOAD_MAX_BYTES = envNum(
   'NOTEBOOK_UPLOAD_MAX_BYTES',

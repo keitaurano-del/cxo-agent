@@ -2987,3 +2987,21 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 受け入れ条件（DoD） | 設計レビュー通過・フェーズ採番。実装DoDは各フェーズで定義。 |
 | 依存 | docs/MC-250-planner-p4-design.md。MC-245/248/249。 |
 | 更新日 | 2026-06-16 |
+
+---
+
+## バッチ: 2026-06-19 開発ページ Figma ワイヤーフレーム連携（4段フロー）
+
+### MC-251 — 開発ページ: 思考→設計書→Figmaワイヤーフレーム→コーディングの4段フロー
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-251 |
+| タイトル | /dev 生成を「設計→Figmaワイヤーフレーム作成→それを元にコーディング」の多段フローに作り替え、ワイヤーフレームと設計をApollo画面・Backlog（保存一覧）に表示 |
+| 優先度 | P1 |
+| ステータス | REVIEW（2026-06-19 Masayoshi 駆動・実装＋実機E2E検証済・未コミット）。Keita 要望「まずFigmaでワイヤフレーム→Apolloに取り込む→それを元にコーディング。複数画面はその数だけワイヤーフレーム。Backlogに何を作ったか表示」。推奨A/B/C承認: A=生成ごと新規Figmaファイル / B=簡易デザインシステム込み / C=保存一覧（Backlog）に何を作ったか表示。**前提検証**: サーバ非対話 claude CLI→Figma MCP 接続成功(whoami=keita.urano/Pro)。**実装**: devMockupRouter を design→wireframe→code 多段化(runDesignFirstJob/runDesignStage・Figma失敗時はスキップしてコード生成へフォールバック)／devFigmaWireframes 統合／画像配信 GET /api/dev/wireframe/:dir/:file(数字.pngのみ・DEV_WIREFRAMES_DIR内限定)／store に designDoc・figmaFileUrl・wireframeDir・wireframeScreens 永続化／Development.tsx に段階ライブ表示(設計→Figma→コード)＋完成後 DesignPanel(Figmaリンク＋WF画像＋設計書)＋一覧🎨Figmaバッジ。**E2E検証**(実機:4317): 2画面メモアプリ生成→design8s→wireframe(新規Figmaファイル作成・2画面描画・PNG取込)→code→done 約6分。WF PNG2枚保存＋画像ルート200(image/png)/保存データに designDoc・figmaFileUrl(figma.com/design/xgOSzAGY..)・wireframeScreens2件/一覧に figmaFileUrl。**実描画**(Playwright/モバイルUA): 設計パネル・Figmaリンク・WF画像2枚(naturalWidth390で実描画)・🎨バッジ・動くプレビュー確認(/tmp/dev_4stage_preview.png)。server tsc0／web tsc -b＋vite build0。 |
+| 担当 | Masayoshi（駆動・実装・検証） |
+| 詳細 | devMockupRouter.ts: 生成ジョブを design→wireframe→code の多段化（Figma失敗時はスキップして従来コード生成にフォールバック）。devFigmaWireframes.ts を統合。ワイヤーフレーム画像配信ルート GET /api/dev/wireframe/:dir/:file。devMockupStore に designDoc/figmaFileUrl/wireframeDir/wireframeScreens を永続化。Development.tsx: 段階ライブ表示＋完成後にFigmaリンク・ワイヤーフレーム画像・設計書を表示、保存一覧（Backlog）に何を作ったか表示。 |
+| 受け入れ条件（DoD） | 4段フローが端から端まで動く・Figma失敗でもコードは生成される・ワイヤーフレーム画像とFigmaリンクがApollo画面に出る・保存一覧で何を作ったか分かる・build green＋実機で1本生成して検証。 |
+| 依存 | devFigmaWireframes.ts（既存）。Figma MCP 接続。 |
+| 更新日 | 2026-06-19 |

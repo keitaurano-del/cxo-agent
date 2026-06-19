@@ -25,6 +25,14 @@ export interface Mockup {
   html: string;
   /** 生成に使ったプロンプト（任意）。 */
   prompt?: string;
+  /** 設計書（作り方）。4段フローの設計ステージが生成（任意）。Backlog で「何を作ったか」を示す。 */
+  designDoc?: string;
+  /** Figma ワイヤーフレームファイルの URL（任意）。 */
+  figmaFileUrl?: string;
+  /** ワイヤーフレーム画像の保存ディレクトリ名（= 生成時の jobId）。画像配信のキー（任意）。 */
+  wireframeDir?: string;
+  /** 各画面のワイヤーフレーム（名前＋保存済み画像ファイル名）（任意）。 */
+  wireframeScreens?: { name: string; image?: string }[];
   /** 作成日時（ISO8601）。 */
   createdAt: string;
   /** 更新日時（ISO8601）。 */
@@ -107,6 +115,10 @@ export function upsertMockup(input: {
   title: string;
   html: string;
   prompt?: string;
+  designDoc?: string;
+  figmaFileUrl?: string;
+  wireframeDir?: string;
+  wireframeScreens?: { name: string; image?: string }[];
 }): Mockup {
   const now = new Date().toISOString();
   const map = readAll(DEV_MOCKUPS_FILE);
@@ -118,6 +130,28 @@ export function upsertMockup(input: {
     title: input.title,
     html: input.html,
     ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
+    // 設計・ワイヤーフレーム系は与えられた時だけ載せる。修正(revise)時は引き継ぎたいので
+    // 入力が無ければ既存値を温存する（上書きで消さない）。
+    ...(input.designDoc !== undefined
+      ? { designDoc: input.designDoc }
+      : existing?.designDoc !== undefined
+        ? { designDoc: existing.designDoc }
+        : {}),
+    ...(input.figmaFileUrl !== undefined
+      ? { figmaFileUrl: input.figmaFileUrl }
+      : existing?.figmaFileUrl !== undefined
+        ? { figmaFileUrl: existing.figmaFileUrl }
+        : {}),
+    ...(input.wireframeDir !== undefined
+      ? { wireframeDir: input.wireframeDir }
+      : existing?.wireframeDir !== undefined
+        ? { wireframeDir: existing.wireframeDir }
+        : {}),
+    ...(input.wireframeScreens !== undefined
+      ? { wireframeScreens: input.wireframeScreens }
+      : existing?.wireframeScreens !== undefined
+        ? { wireframeScreens: existing.wireframeScreens }
+        : {}),
     createdAt,
     updatedAt: now,
     // upsert は常に「生きている」状態にする（過去に削除済みでも復活）。

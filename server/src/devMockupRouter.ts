@@ -21,12 +21,15 @@
 
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { Router, type Request, type Response } from 'express';
 
 import {
   NOTEBOOK_CLAUDE_BIN,
   NOTEBOOK_CLAUDE_MODEL,
   DEV_MOCKUP_FALLBACK_MODEL,
+  DEV_WIREFRAMES_DIR,
 } from './config.js';
 import {
   deleteMockup,
@@ -34,6 +37,10 @@ import {
   listMockups,
   upsertMockup,
 } from './lib/devMockupStore.js';
+import {
+  generateFigmaWireframes,
+  type WireframeScreenSpec,
+} from './lib/devFigmaWireframes.js';
 import { withClaudeSlot } from './lib/notebookClaude.js';
 
 // ─── claude CLI（HTML 生成）──────────────────────────────────
@@ -66,12 +73,6 @@ const HTML_RULES = [
  * サーバは ---HTML--- で分割し、メモを “考え中” のライブ表示に、本文を保存用 HTML に使う。
  */
 const PLAN_MARKER = '---HTML---';
-const PLAN_RULES = [
-  '頭の中で考えるときも、できるだけ日本語で考えてください。',
-  `まず最初に、これから作る試作品の「作り方」を、プログラミング未経験の人にも分かる平易な日本語で 4〜8 行で説明してください。`,
-  '次の観点を簡潔に（箇条書き中心・短く・専門用語は避ける）: どんな画面か / 置く主な部品（ボタン・入力欄・一覧など）/ 主要ボタンを押すと何が起きるか / 配色や雰囲気の方針。',
-  `その「作り方」を書き終えたら、次の行に ${PLAN_MARKER} とだけ書いた行を 1 行入れ、その直後の行から、完成した単一 HTML ドキュメント本文だけを出力してください。`,
-].join('\n');
 
 /** インタラクティブな「動く試作品」を作らせるための共通指示。新規生成・修正の両方で結合する。 */
 const INTERACTIVE_RULES = [
@@ -90,21 +91,115 @@ const INTERACTIVE_RULES = [
   '生成を速く確実に終わらせるため、HTML を不必要に大きくしない（過剰な画面数・大量のダミーデータは避ける）。',
 ].join('\n');
 
-/**
- * 新規生成プロンプトを組み立てる。
- * 要望から「1 つの動くインタラクティブな単一 HTML プロトタイプ」を作らせる。
- */
-function buildGeneratePrompt(prompt: string): string {
+// ─── 4段フロー: 設計ステージ ──────────────────────────────
+//
+// 生成モードは「思考 → 設計書 → Figma ワイヤーフレーム → コーディング」の多段で進める。
+// 設計ステージは要望から (1) 平易な日本語の設計書（作り方）と (2) 画面リスト（JSON）を出させる。
+// 出力は「設計書 → ---SCREENS--- だけの行 → JSON」の順。サーバはこの境界で分割する。
+
+const SCREENS_MARKER = '---SCREENS---';
+
+/** 1 画面ぶきの仕様（設計ステージが洗い出す）。Figma・コードへ渡す。 */
+interface ScreenSpec {
+  name: string;
+  description: string;
+}
+
+/** 設計ステージのプロンプト（設計書＋画面リスト JSON を出させる）。 */
+function buildDesignPrompt(prompt: string): string {
   return [
-    'あなたは、動くインタラクティブな試作品を HTML で作るデザイナー兼フロントエンドエンジニアです。',
-    '次の要望に対して、実際に操作できる試作品を 1 つ作成してください。',
+    'あなたは、これから作る試作品の設計を行う UX デザイナー兼プランナーです。',
+    'まだコードは書きません。次の要望に対して「何を作るか」の設計を行ってください。',
     '',
     '要望:',
     prompt,
     '',
-    INTERACTIVE_RULES,
+    '頭の中で考えるときも、できるだけ日本語で考えてください。',
+    'まず「設計書」を、プログラミング未経験の人にも分かる平易な日本語で 5〜10 行で書いてください。',
+    '次の観点を簡潔に（箇条書き中心・専門用語は避ける）: 何のための画面/機能か / どんな画面が必要か（複数なら列挙）/',
+    '各画面に置く主な部品（ボタン・入力欄・一覧など）/ 主要ボタンを押すと何が起きるか / 配色や雰囲気の方針。',
     '',
-    PLAN_RULES,
+    `設計書を書き終えたら、次の行に ${SCREENS_MARKER} とだけ書いた行を 1 行入れ、その直後に`,
+    'この試作品に必要な画面を、次の厳密な JSON 配列だけで出力してください（説明文・コードフェンス内外いずれでも可）:',
+    '[',
+    '  { "name": "画面名（短く）", "description": "その画面に何を置き何ができるか 1〜2 文" }',
+    ']',
+    '画面は本当に必要な数だけ（1〜5 画面目安）。単一画面で十分なら 1 件でよい。',
+  ].join('\n');
+}
+
+/**
+ * 設計ステージ出力を「設計書（designDoc）」と「画面リスト（screens）」に分割する。
+ * マーカー未到達時は designDoc は全文・screens は []（＝まだ設計中）。
+ */
+function splitDesignScreens(out: string): { designDoc: string; screens: ScreenSpec[] } {
+  const text = out || '';
+  const idx = text.indexOf(SCREENS_MARKER);
+  if (idx === -1) return { designDoc: text.trim(), screens: [] };
+  const designDoc = text.slice(0, idx).trim();
+  const rest = text.slice(idx + SCREENS_MARKER.length);
+  // rest から JSON 配列を取り出す。```json フェンス優先、無ければ最初の [ … 最後の ]。
+  let jsonText = '';
+  const fence = rest.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) {
+    jsonText = fence[1].trim();
+  } else {
+    const open = rest.indexOf('[');
+    const close = rest.lastIndexOf(']');
+    if (open !== -1 && close > open) jsonText = rest.slice(open, close + 1);
+  }
+  const screens: ScreenSpec[] = [];
+  if (jsonText) {
+    try {
+      const arr = JSON.parse(jsonText) as unknown;
+      if (Array.isArray(arr)) {
+        for (const item of arr) {
+          const o = (item ?? {}) as Record<string, unknown>;
+          const name = typeof o.name === 'string' ? o.name.trim() : '';
+          const description = typeof o.description === 'string' ? o.description.trim() : '';
+          if (name) screens.push({ name, description });
+        }
+      }
+    } catch {
+      /* JSON 不正なら screens 空のまま（呼び出し側がフォールバックする）。 */
+    }
+  }
+  return { designDoc, screens };
+}
+
+/**
+ * 設計書＋画面リスト（＋Figma で作ったワイヤーフレームの有無）を元に、動く単一 HTML を作らせる。
+ * 設計は済んでいるので作り方メモ（PLAN_RULES）は付けず、HTML 本文だけを書かせる。
+ */
+function buildCodeFromDesignPrompt(
+  prompt: string,
+  designDoc: string,
+  screens: ScreenSpec[],
+  wireframed: boolean,
+): string {
+  const screenLines = screens.length
+    ? screens.map((s, i) => `${i + 1}. ${s.name}: ${s.description}`).join('\n')
+    : '（単一画面）';
+  return [
+    'あなたは、確定した設計を元に、動くインタラクティブな試作品を HTML で作るフロントエンドエンジニアです。',
+    '次の設計書と画面リストに忠実に、実際に操作できる試作品を 1 つ作成してください。',
+    '',
+    '元の要望:',
+    prompt,
+    '',
+    '設計書:',
+    designDoc || '（特になし）',
+    '',
+    `必要な画面（${screens.length || 1} 画面）:`,
+    screenLines,
+    wireframed
+      ? '\nこの設計を元に Figma で各画面のワイヤーフレームを作成済みです。レイアウト・情報設計は設計書と画面リストに沿わせてください。'
+      : '',
+    '',
+    '複数画面がある場合も、別ファイル・別ページに分けず、同一 HTML 内で JS により表示を切り替えること',
+    '（タブ・ビュー切替・モーダル等）。設計書の各画面をこの 1 つの試作品の中で行き来できるようにする。',
+    '',
+    INTERACTIVE_RULES,
     '',
     HTML_RULES,
   ].join('\n');
@@ -359,8 +454,12 @@ function isLimitFailure(r: RawRun): boolean {
 // ジョブはインメモリ（プロセス再起動で消える）。
 
 type JobStatus = 'pending' | 'generating' | 'done' | 'error';
+/** 多段フローの現在ステージ（設計→ワイヤーフレーム→コード）。修正(revise)では未使用。 */
+type JobStage = 'design' | 'wireframe' | 'code';
 interface Job {
   status: JobStatus;
+  /** 現在のステージ（4段フロー。クライアントが「いま何をしているか」を出し分けるのに使う）。 */
+  stage?: JobStage;
   /** 生成された HTML。 */
   html?: string;
   /** 生成途中の部分 HTML（ストリーム中の最新 stdout。ライブ表示用）。 */
@@ -369,6 +468,14 @@ interface Job {
   plan?: string;
   /** 生成途中の「AI の思考」（拡張思考。作り方より前段の、何をどう考えているか。ライブ表示用）。 */
   thinking?: string;
+  /** 設計書（作り方）。設計ステージが確定したもの。完成後も保持して「何を作ったか」を示す。 */
+  designDoc?: string;
+  /** 設計ステージが洗い出した画面リスト。 */
+  screens?: ScreenSpec[];
+  /** Figma ワイヤーフレーム結果（fileUrl ＋ 各画面の保存画像）。dir は画像配信のキー（=jobId）。 */
+  wireframe?: { fileUrl?: string; dir: string; screens: { name: string; image?: string }[] };
+  /** ワイヤーフレーム生成中の進捗メッセージ（ツール実行ベース。ライブ表示用）。 */
+  wireframeProgress?: string;
   error?: string;
   /** 保存先 id（クライアントが currentId に反映できる）。 */
   mockupId?: string;
@@ -571,6 +678,160 @@ async function runGenerateJob(
   }
 }
 
+// ─── 4段フロー: 設計→ワイヤーフレーム→コード ──────────────────
+//
+// 新規生成は単発ではなく「設計 → Figma ワイヤーフレーム → コーディング」の多段で進める。
+// 各ステージの途中経過（思考・設計書・ワイヤーフレーム進捗・書きかけコード）はジョブに反映し、
+// クライアントがポーリングでライブ表示する。Figma 失敗時はスキップして設計→コードへ続行する
+//（堅牢性優先＝Figma が不調でも HTML は出る）。修正(revise)は従来どおり単段（runGenerateJob）。
+
+/**
+ * 設計ステージ: 要望から設計書＋画面リストを生成する。途中経過（設計書・思考）をジョブに流す。
+ * 利用上限なら一度だけ fallback（Opus）へ切替えて再試行。完全失敗時は { designDoc:'', screens:[] }。
+ */
+async function runDesignStage(
+  jobId: string,
+  userPrompt: string,
+): Promise<{ designDoc: string; screens: ScreenSpec[] }> {
+  const onChunk = (accumulated: string, thinking: string): void => {
+    const job = jobs.get(jobId);
+    if (!job || job.status === 'done' || job.status === 'error') return;
+    // SCREENS マーカー前までが設計書。マーカー未到達なら全文を設計書として表示する。
+    const idx = accumulated.indexOf(SCREENS_MARKER);
+    const doc = (idx === -1 ? accumulated : accumulated.slice(0, idx)).trim();
+    job.plan = doc || undefined;
+    if (thinking) job.thinking = thinking;
+  };
+
+  let model = NOTEBOOK_CLAUDE_MODEL;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const raw = await runClaudeRaw(buildDesignPrompt(userPrompt), model, onChunk);
+    if (!raw.error) return splitDesignScreens(raw.stdout);
+    if (isLimitFailure(raw) && attempt === 1) {
+      model = DEV_MOCKUP_FALLBACK_MODEL;
+      console.warn(`[dev-mockup] design stage sonnet limit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`);
+      continue;
+    }
+    console.warn(`[dev-mockup] design stage failed: ${raw.error}`);
+    break;
+  }
+  return { designDoc: '', screens: [] };
+}
+
+/**
+ * 新規生成の多段ジョブ。設計→（Figma）→コードを直列で進め、完成 HTML を自動保存する。
+ * await しない前提。例外でサーバを落とさない。
+ */
+async function runDesignFirstJob(
+  jobId: string,
+  userPrompt: string,
+  save: { title: string; prompt?: string },
+): Promise<void> {
+  const setJob = (patch: Partial<Job>): void => {
+    const job = jobs.get(jobId);
+    if (!job || job.status === 'done' || job.status === 'error') return;
+    Object.assign(job, patch);
+  };
+
+  // 多段全体を dev 生成チェーンで直列化＝他の dev 生成の claude 呼び出しと混線させない。
+  await serializeDevGen(async () => {
+    {
+      const job = jobs.get(jobId);
+      if (job && job.status === 'pending') job.status = 'generating';
+    }
+
+    // ── ステージ1: 設計（思考＋設計書＋画面リスト）─────────────
+    setJob({ stage: 'design' });
+    const design = await runDesignStage(jobId, userPrompt);
+    const designDoc = design.designDoc;
+    // 画面が出せなければ単一画面として続行（設計が空でもコードは作る）。
+    const screens: ScreenSpec[] =
+      design.screens.length > 0 ? design.screens : [{ name: save.title, description: userPrompt }];
+    setJob({ designDoc: designDoc || undefined, screens, plan: designDoc || undefined });
+
+    // ── ステージ2: Figma ワイヤーフレーム（失敗時はスキップ）──────
+    setJob({ stage: 'wireframe', partial: undefined, wireframeProgress: '🎨 Figma でワイヤーフレームを作る準備をしています' });
+    const specs: WireframeScreenSpec[] = screens.map((s) => ({
+      name: s.name,
+      description: s.description,
+    }));
+    let wireframed = false;
+    let wf: Awaited<ReturnType<typeof generateFigmaWireframes>>;
+    try {
+      wf = await generateFigmaWireframes(
+        jobId,
+        save.title,
+        designDoc || userPrompt,
+        specs,
+        NOTEBOOK_CLAUDE_MODEL,
+        (msg) => setJob({ wireframeProgress: msg }),
+      );
+    } catch (e) {
+      wf = { ok: false, screens: [], error: (e as Error).message };
+    }
+    if (wf.ok && wf.screens.length > 0) {
+      wireframed = true;
+      setJob({
+        wireframe: {
+          fileUrl: wf.fileUrl,
+          dir: jobId,
+          screens: wf.screens.map((s) => ({ name: s.name, image: s.image })),
+        },
+        wireframeProgress: 'ワイヤーフレームができました。これを元にコードを作ります。',
+      });
+    } else {
+      console.warn(`[dev-mockup] figma wireframe skipped: ${wf.error ?? 'no screens'}`);
+      setJob({ wireframeProgress: 'ワイヤーフレームは省略し、設計を元に直接コードを作ります。' });
+    }
+
+    // ── ステージ3: コーディング ───────────────────────────────
+    setJob({ stage: 'code', partial: undefined });
+    const codePrompt = buildCodeFromDesignPrompt(userPrompt, designDoc, screens, wireframed);
+    const onCodeChunk = (accumulated: string, thinking: string): void => {
+      const job = jobs.get(jobId);
+      if (!job || job.status === 'done' || job.status === 'error') return;
+      // 設計は済んでいるので本文はそのまま HTML。フェンス前提の splitPlanHtml で安全に取り出す。
+      job.partial = splitPlanHtml(accumulated).html;
+      if (thinking) job.thinking = thinking;
+    };
+    const result = await generateHtmlWithRetry(codePrompt, onCodeChunk);
+
+    if (result.html) {
+      const html = result.html;
+      const cur = jobs.get(jobId);
+      let mockupId: string | undefined;
+      try {
+        const saved = upsertMockup({
+          title: save.title,
+          html,
+          prompt: save.prompt,
+          designDoc: designDoc || undefined,
+          ...(cur?.wireframe?.fileUrl ? { figmaFileUrl: cur.wireframe.fileUrl } : {}),
+          ...(wireframed ? { wireframeDir: jobId } : {}),
+          ...(wireframed && cur?.wireframe ? { wireframeScreens: cur.wireframe.screens } : {}),
+        });
+        mockupId = saved.id;
+      } catch {
+        /* html は返す（保存はベストエフォート）。 */
+      }
+      const job = jobs.get(jobId);
+      if (job) {
+        job.status = 'done';
+        job.html = html;
+        job.mockupId = mockupId;
+        if (mockupId) job.saved = [{ id: mockupId, title: save.title }];
+      }
+      return;
+    }
+
+    const job = jobs.get(jobId);
+    if (job) {
+      job.status = 'error';
+      job.error = GENERATE_FAILURE_MESSAGES[result.reason ?? 'error'];
+    }
+  });
+}
+
 // ─── ハンドラ ───────────────────────────────────────────
 
 /** POST /api/dev/mockup/generate — 非同期ジョブを起票し 202 { jobId } を即返す。 */
@@ -607,9 +868,8 @@ function handleGenerate(req: Request, res: Response): void {
   const explicitId = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : undefined;
 
   if (isGenerate) {
-    // 新規生成: 動くインタラクティブな単一 HTML を 1 本生成して自動保存。
-    const cliPrompt = buildGeneratePrompt(prompt.trim());
-    void runGenerateJob(jobId, cliPrompt, {
+    // 新規生成: 設計→Figmaワイヤーフレーム→コーディングの多段フローで進め、完成 HTML を自動保存。
+    void runDesignFirstJob(jobId, prompt.trim(), {
       title: explicitTitle || oneLine(prompt) || 'モックアップ',
       prompt: prompt.trim(),
     }).catch(onFatal);
@@ -643,6 +903,8 @@ function handleJob(req: Request, res: Response): void {
   const liveVisible = job.status === 'generating' || job.status === 'error';
   res.json({
     status: job.status,
+    // 4段フローの現在ステージ（design/wireframe/code）。クライアントの段階表示に使う。
+    stage: job.stage,
     html: job.html,
     // 生成途中の部分コード（フェンスを除いて返す）。done になれば html を使うので不要。
     partial: liveVisible && job.partial ? stripFences(job.partial) : undefined,
@@ -650,10 +912,39 @@ function handleJob(req: Request, res: Response): void {
     plan: liveVisible && job.plan ? job.plan : undefined,
     // 生成途中の「AI の思考」（拡張思考。最初のフェーズで何をどう考えているかを見せる）。
     thinking: liveVisible && job.thinking ? job.thinking : undefined,
+    // 設計書・画面リスト・ワイヤーフレームは done でも返す（完成画面で「何を作ったか」を示す）。
+    designDoc: job.designDoc,
+    screens: job.screens,
+    wireframe: job.wireframe,
+    // ワイヤーフレーム生成中の進捗（ライブ表示のみ）。
+    wireframeProgress: liveVisible ? job.wireframeProgress : undefined,
     mockupId: job.mockupId,
     error: job.error,
     saved: job.saved,
   });
+}
+
+/**
+ * GET /api/dev/wireframe/:dir/:file — 保存済みワイヤーフレーム PNG を配信する。
+ * dir は生成時の jobId（uuid: 英数字＋ハイフン）、file は数字.png のみ許可し、
+ * DEV_WIREFRAMES_DIR 配下から出ないようサニタイズする。auth ミドルウェア配下＝Cookie/Bearer 必須。
+ */
+function handleWireframeImage(req: Request, res: Response): void {
+  const dir = String(req.params.dir).replace(/[^a-zA-Z0-9-]/g, '');
+  const file = String(req.params.file).replace(/[^a-zA-Z0-9.-]/g, '');
+  // file は「数字.png」のみ（devFigmaWireframes が <画面番号>.png で保存する）。
+  if (!dir || !/^\d+\.png$/.test(file)) {
+    res.status(400).json({ error: 'invalid wireframe path' });
+    return;
+  }
+  const abs = join(DEV_WIREFRAMES_DIR, dir, file);
+  if (!existsSync(abs)) {
+    res.status(404).json({ error: 'wireframe not found' });
+    return;
+  }
+  res.type('png');
+  res.set('Cache-Control', 'private, max-age=3600');
+  res.sendFile(abs);
 }
 
 /** GET /api/dev/mockups — 軽量サマリ一覧（html 除く）。 */
@@ -707,6 +998,7 @@ export function devMockupRouter(): Router {
   const router = Router();
   router.post('/mockup/generate', handleGenerate);
   router.get('/mockup/job/:jobId', handleJob);
+  router.get('/wireframe/:dir/:file', handleWireframeImage);
   router.get('/mockups', handleList);
   router.get('/mockups/:id', handleGet);
   router.post('/mockups', handleUpsert);

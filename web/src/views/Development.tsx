@@ -4,15 +4,36 @@
 // 2ペイン（左=操作、右=プレビュー）。モバイルは縦積み。
 // プレビューは sandbox="allow-scripts"（allow-same-origin は付けない＝AI 生成 HTML を隔離）。
 // API: POST /api/dev/mockup/generate, GET/POST /api/dev/mockups, GET/DELETE /api/dev/mockups/:id。
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type ReactElement } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import { Spinner, EmptyState } from '../components/ui';
 import { SparkIcon, TrashIcon } from '../components/icons';
+
+interface WireframeScreen {
+  name: string;
+  image?: string;
+}
+/** 完成 or 生成中のワイヤーフレーム（Figma ファイル URL ＋ 各画面の画像）。dir は画像配信のキー。 */
+interface Wireframe {
+  fileUrl?: string;
+  dir: string;
+  screens: WireframeScreen[];
+}
+/** このプロトタイプの「作り方」: 設計書・画面リスト・Figma ワイヤーフレーム。 */
+interface DesignInfo {
+  designDoc?: string;
+  figmaFileUrl?: string;
+  wireframeDir?: string;
+  wireframeScreens?: WireframeScreen[];
+  screens?: { name: string; description?: string }[];
+}
 
 interface MockupSummary {
   id: string;
   title: string;
   prompt?: string;
+  /** Figma ワイヤーフレームを伴う場合の URL（一覧で「何を作ったか」の目印に使う）。 */
+  figmaFileUrl?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -51,6 +72,8 @@ interface DraftState {
   title: string;
   html: string;
   currentId: string | null;
+  /** 現在表示中プロトタイプの設計・ワイヤーフレーム（完成後/読込後に表示するため復元する）。 */
+  design?: DesignInfo | null;
 }
 
 /** 進行中ジョブ（「作成中」カード表示・離脱/リロード後の再開に使う）。 */
@@ -78,7 +101,7 @@ function loadDraft(): DraftState | null {
 function saveDraft(d: DraftState): void {
   try {
     // 何も入力されていない真っ白状態はキー自体を消す（ゴミを残さない）。
-    if (!d.prompt && !d.instruction && !d.title && !d.html && !d.currentId) {
+    if (!d.prompt && !d.instruction && !d.title && !d.html && !d.currentId && !d.design) {
       localStorage.removeItem(DRAFT_KEY);
     } else {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
@@ -122,8 +145,20 @@ interface SavedScreen {
 }
 
 type JobResult =
-  | { status: 'done'; html: string; mockupId?: string; saved: SavedScreen[] }
+  | { status: 'done'; html: string; mockupId?: string; saved: SavedScreen[]; design: DesignInfo }
   | { status: 'timeout' };
+
+/** ポーリングで運ぶ生成中のライブ状態（段階・設計・ワイヤーフレーム進捗を含む）。 */
+interface JobLive {
+  status: 'pending' | 'generating';
+  stage?: string;
+  partial: string;
+  plan: string;
+  thinking: string;
+  wireframeProgress: string;
+  wireframe?: Wireframe;
+  screens?: { name: string; description?: string }[];
+}
 
 /** 失敗時に「そこまでの内容」を運ぶための情報（思考・作り方・書きかけコード）。 */
 interface LiveSnapshot {
@@ -178,7 +213,7 @@ async function pollMockupJob(
   jobId: string,
   startFallback: string,
   sinceMs: number = Date.now(),
-  onProgress?: (status: string, partial: string, plan: string, thinking: string) => void,
+  onProgress?: (live: JobLive) => void,
 ): Promise<JobResult> {
   const deadline = sinceMs + POLL_MAX_WAIT_MS;
   while (Date.now() < deadline) {
@@ -197,10 +232,15 @@ async function pollMockupJob(
     if (!pollRes.ok) continue;
     let data: {
       status?: string;
+      stage?: string;
       html?: string;
       partial?: string;
       plan?: string;
       thinking?: string;
+      designDoc?: string;
+      screens?: { name: string; description?: string }[];
+      wireframe?: Wireframe;
+      wireframeProgress?: string;
       error?: string;
       mockupId?: string;
       saved?: SavedScreen[];
@@ -210,14 +250,19 @@ async function pollMockupJob(
     } catch {
       continue;
     }
-    // 進捗（順番待ち pending / 生成中 generating ＋部分コード）を逐次コールバック（ライブ表示用）。
+    // 進捗（順番待ち pending / 生成中 generating ＋段階・設計・ワイヤーフレーム）を逐次コールバック。
     if (onProgress && (data.status === 'pending' || data.status === 'generating')) {
-      onProgress(
-        data.status,
-        typeof data.partial === 'string' ? data.partial : '',
-        typeof data.plan === 'string' ? data.plan : '',
-        typeof data.thinking === 'string' ? data.thinking : '',
-      );
+      onProgress({
+        status: data.status,
+        stage: data.stage,
+        partial: typeof data.partial === 'string' ? data.partial : '',
+        plan: typeof data.plan === 'string' ? data.plan : '',
+        thinking: typeof data.thinking === 'string' ? data.thinking : '',
+        wireframeProgress:
+          typeof data.wireframeProgress === 'string' ? data.wireframeProgress : '',
+        wireframe: data.wireframe,
+        screens: Array.isArray(data.screens) ? data.screens : undefined,
+      });
     }
     if (data.status === 'done') {
       const saved = Array.isArray(data.saved) ? data.saved : [];
@@ -226,6 +271,13 @@ async function pollMockupJob(
         html: data.html ?? '',
         mockupId: data.mockupId,
         saved,
+        design: {
+          designDoc: data.designDoc,
+          figmaFileUrl: data.wireframe?.fileUrl,
+          wireframeDir: data.wireframe?.dir,
+          wireframeScreens: data.wireframe?.screens,
+          screens: data.screens,
+        },
       };
     }
     if (data.status === 'error') {
@@ -268,6 +320,79 @@ function describeStreamPhase(code: string): string {
   return best;
 }
 
+/** ワイヤーフレーム PNG の配信 URL（auth は Cookie で自動付与される）。 */
+function wireframeSrc(dir: string | undefined, image: string | undefined): string | null {
+  if (!dir || !image) return null;
+  return `/api/dev/wireframe/${encodeURIComponent(dir)}/${encodeURIComponent(image)}`;
+}
+
+/** ワイヤーフレーム画像のサムネイル一覧。dir + 各画面の image から配信 URL を組み立てる。 */
+function WireframeShots({
+  dir,
+  screens,
+}: {
+  dir: string | undefined;
+  screens: WireframeScreen[];
+}): ReactElement | null {
+  const shots = screens.filter((s) => s.image);
+  if (shots.length === 0) return null;
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {shots.map((s, i) => {
+        const src = wireframeSrc(dir, s.image);
+        return (
+          <figure key={`${s.name}-${i}`} className="flex flex-col gap-1">
+            {src && (
+              <img
+                src={src}
+                alt={s.name}
+                loading="lazy"
+                className="w-full rounded border border-border bg-white"
+              />
+            )}
+            <figcaption className="truncate text-center text-[10px] text-text-faint">
+              {s.name}
+            </figcaption>
+          </figure>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 完成/読込後に「このプロトタイプの作り方（設計書・Figma ワイヤーフレーム）」を表示する折りたたみパネル。 */
+function DesignPanel({ design }: { design: DesignInfo }): ReactElement {
+  return (
+    <details
+      open
+      className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted"
+    >
+      <summary className="cursor-pointer font-semibold text-text">
+        🎨 設計・ワイヤーフレーム（このプロトタイプの作り方）
+      </summary>
+      <div className="mt-2 flex flex-col gap-2">
+        {design.figmaFileUrl && (
+          <a
+            href={design.figmaFileUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex w-fit items-center gap-1 rounded border border-border px-2 py-1 text-[11px] hover:bg-surface-2"
+            style={{ color: 'var(--mc-accent)' }}
+          >
+            Figma でワイヤーフレームを開く ↗
+          </a>
+        )}
+        {design.wireframeScreens && design.wireframeScreens.length > 0 && (
+          <WireframeShots dir={design.wireframeDir} screens={design.wireframeScreens} />
+        )}
+        {design.designDoc && (
+          <div className="whitespace-pre-wrap leading-relaxed">{design.designDoc}</div>
+        )}
+      </div>
+    </details>
+  );
+}
+
 export default function Development() {
   // 起動時に localStorage からドラフトを 1 回だけ読む（離脱/リロードからの復元）。
   const [bootDraft] = useState(loadDraft);
@@ -304,6 +429,16 @@ export default function Development() {
   } | null>(null);
   // エディタに紐づくジョブのサーバ状態（'' | 'pending'=順番待ち | 'generating'=生成中）。
   const [streamStatus, setStreamStatus] = useState<'' | 'pending' | 'generating'>('');
+  // 4段フローの現在ステージ（design=設計 / wireframe=Figma / code=コーディング）。
+  const [stage, setStage] = useState<'' | 'design' | 'wireframe' | 'code'>('');
+  // ワイヤーフレーム生成中の進捗メッセージ（ツール実行ベース）。
+  const [wireframeProgress, setWireframeProgress] = useState('');
+  // 生成中に出来たワイヤーフレーム（画面が揃うとここに入る）。
+  const [liveWireframe, setLiveWireframe] = useState<Wireframe | null>(null);
+  // 設計ステージが洗い出した画面リスト（ライブ表示用）。
+  const [liveScreens, setLiveScreens] = useState<{ name: string; description?: string }[]>([]);
+  // 現在表示中プロトタイプの設計・ワイヤーフレーム（完成後/読込後に「何を作ったか」を表示）。
+  const [design, setDesign] = useState<DesignInfo | null>(bootDraft?.design ?? null);
 
   // エディタに紐づく進行中ジョブ（あればエディタ側の進捗バーと生成ボタン無効化に使う）。
   const editorJob = activeJobs.find((j) => j.attachToEditor) ?? null;
@@ -357,8 +492,8 @@ export default function Development() {
 
   // 入力・生成結果・選択中 id が変わるたびに localStorage へ退避する（離脱/リロード復元用）。
   useEffect(() => {
-    saveDraft({ prompt, instruction, title, html, currentId });
-  }, [prompt, instruction, title, html, currentId]);
+    saveDraft({ prompt, instruction, title, html, currentId, design });
+  }, [prompt, instruction, title, html, currentId, design]);
 
   // 進行中ジョブ配列が変わるたびに localStorage へ退避する（離脱/リロードでも「作成中」を保持）。
   useEffect(() => {
@@ -384,13 +519,17 @@ export default function Development() {
         job.jobId,
         fallback,
         job.startedAt,
-        // エディタに紐づくジョブだけ、進捗（順番待ち/生成中）と部分コードをライブ表示する。
+        // エディタに紐づくジョブだけ、進捗（段階/順番待ち/生成中・設計・ワイヤーフレーム）をライブ表示する。
         job.attachToEditor
-          ? (status, p, plan, thinking) => {
-              setStreamStatus(status as 'pending' | 'generating');
-              setStreamCode(p);
-              setStreamPlan(plan);
-              setStreamThinking(thinking);
+          ? (live) => {
+              setStreamStatus(live.status);
+              setStreamCode(live.partial);
+              setStreamPlan(live.plan);
+              setStreamThinking(live.thinking);
+              setStage((live.stage as '' | 'design' | 'wireframe' | 'code') ?? '');
+              setWireframeProgress(live.wireframeProgress);
+              setLiveWireframe(live.wireframe ?? null);
+              if (live.screens) setLiveScreens(live.screens);
             }
           : undefined,
       )
@@ -403,10 +542,22 @@ export default function Development() {
               setCurrentId(r.mockupId ?? r.saved[0]?.id ?? null);
               if (r.saved[0]?.title) setTitle(r.saved[0].title);
               if (job.mode === 'revise') setInstruction('');
+              // 完成した設計・ワイヤーフレームを「何を作ったか」として保持（修正時は内容があれば更新）。
+              if (job.mode === 'generate') {
+                setDesign(
+                  r.design.designDoc || r.design.wireframeScreens?.length || r.design.figmaFileUrl
+                    ? r.design
+                    : null,
+                );
+              }
               setStreamCode('');
               setStreamPlan('');
               setStreamThinking('');
               setStreamStatus('');
+              setStage('');
+              setWireframeProgress('');
+              setLiveWireframe(null);
+              setLiveScreens([]);
               setFailedRun(null);
               setMobileTab('preview');
             }
@@ -440,6 +591,10 @@ export default function Development() {
             setStreamPlan('');
             setStreamThinking('');
             setStreamStatus('');
+            setStage('');
+            setWireframeProgress('');
+            setLiveWireframe(null);
+            setLiveScreens([]);
           } else {
             setNotice('完了した試作品は下の「保存済みモックアップ」をご確認ください。');
           }
@@ -482,10 +637,15 @@ export default function Development() {
       setStreamCode('');
       setStreamPlan('');
       setStreamThinking('');
+      setStage('design');
+      setWireframeProgress('');
+      setLiveWireframe(null);
+      setLiveScreens([]);
+      setDesign(null);
       setFailedRun(null);
       setStreamStatus('pending');
-      setMobileTab('preview'); // 生成中のコードがライブで見えるプレビュー側へ。
-      setNotice('作成を開始しました。コードが書かれていく様子をプレビュー側に表示します。');
+      setMobileTab('preview'); // 生成の進み具合がライブで見えるプレビュー側へ。
+      setNotice('作成を開始しました。設計→ワイヤーフレーム→コードの順に進む様子をプレビュー側に表示します。');
     } catch (e) {
       setError(e instanceof Error ? e.message : '生成に失敗しました');
     }
@@ -521,6 +681,7 @@ export default function Development() {
       setStreamCode('');
       setStreamPlan('');
       setStreamThinking('');
+      setStage('code');
       setFailedRun(null);
       setStreamStatus('pending');
       setMobileTab('preview');
@@ -568,7 +729,16 @@ export default function Development() {
       const res = await fetch(`/api/dev/mockups/${encodeURIComponent(id)}`);
       if (!res.ok) throw new Error(await readError(res, '読み込みに失敗しました'));
       const data = (await res.json()) as {
-        mockup?: { id: string; title: string; html: string; prompt?: string };
+        mockup?: {
+          id: string;
+          title: string;
+          html: string;
+          prompt?: string;
+          designDoc?: string;
+          figmaFileUrl?: string;
+          wireframeDir?: string;
+          wireframeScreens?: WireframeScreen[];
+        };
       };
       const m = data.mockup;
       if (!m) throw new Error('読み込みに失敗しました');
@@ -578,6 +748,17 @@ export default function Development() {
       setPreviewHtml(m.html);
       setPrompt(m.prompt ?? '');
       setInstruction('');
+      // 設計・ワイヤーフレームがあれば「何を作ったか」として表示する。無ければクリア。
+      setDesign(
+        m.designDoc || m.figmaFileUrl || m.wireframeScreens?.length
+          ? {
+              designDoc: m.designDoc,
+              figmaFileUrl: m.figmaFileUrl,
+              wireframeDir: m.wireframeDir,
+              wireframeScreens: m.wireframeScreens,
+            }
+          : null,
+      );
       setMobileTab('preview');
       setNotice(`「${m.title}」を読み込みました。`);
     } catch (e) {
@@ -616,6 +797,11 @@ export default function Development() {
     setStreamPlan('');
     setStreamThinking('');
     setStreamStatus('');
+    setStage('');
+    setWireframeProgress('');
+    setLiveWireframe(null);
+    setLiveScreens([]);
+    setDesign(null);
     setFailedRun(null);
     // 進行中ジョブは消さない。エディタ紐付けだけ外し、一覧に「作成中」で見え続けるようにする。
     setActiveJobs((prev) => prev.map((j) => ({ ...j, attachToEditor: false })));
@@ -867,7 +1053,18 @@ export default function Development() {
                       className="min-w-0 flex-1 text-left"
                       title={m.title}
                     >
-                      <div className="truncate text-sm text-text">{m.title}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-sm text-text">{m.title}</span>
+                        {m.figmaFileUrl && (
+                          <span
+                            className="shrink-0 rounded px-1 text-[9px] font-semibold"
+                            style={{ background: 'var(--mc-active-bg)', color: 'var(--mc-active)' }}
+                            title="Figma ワイヤーフレームあり"
+                          >
+                            🎨 Figma
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[10px] text-text-faint">
                         {new Date(m.updatedAt).toLocaleString('ja-JP')}
                       </div>
@@ -895,7 +1092,13 @@ export default function Development() {
         >
           <div className="flex items-center justify-between border-b border-border px-4 py-2">
             <span className="text-xs font-semibold text-text-muted">
-              {generating ? 'コードを生成中…' : 'プレビュー'}
+              {generating
+                ? stage === 'design'
+                  ? '① 設計書を作成中…'
+                  : stage === 'wireframe'
+                    ? '② Figma でワイヤーフレーム作成中…'
+                    : '③ コードを生成中…'
+                : 'プレビュー'}
             </span>
             {generating && (
               <span
@@ -908,7 +1111,44 @@ export default function Development() {
           </div>
           <div className="min-h-0 flex-1 overflow-hidden p-3">
             {generating ? (
-              // 生成中: claude が書いているコードをリアルタイムに流す（末尾自動スクロール）。
+              stage === 'wireframe' ? (
+                // ステージ②: Figma でワイヤーフレームを作成中。進捗と画面リスト、出来た分の画像を表示。
+                <div className="flex h-full flex-col gap-2 overflow-auto">
+                  <div
+                    className="flex items-center gap-2 rounded-lg border border-accent px-3 py-2 text-xs font-semibold"
+                    style={{ background: 'var(--mc-active-bg)', color: 'var(--mc-active)' }}
+                  >
+                    <Spinner />
+                    <span>{wireframeProgress || '🎨 Figma でワイヤーフレームを作っています…'}</span>
+                  </div>
+                  <p className="text-[10px] text-text-faint">
+                    設計を元に Figma 上で各画面のワイヤーフレーム（下書き）を作成しています。出来たらこの後、それを元にコードを作ります。
+                  </p>
+                  {liveScreens.length > 0 && (
+                    <div className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
+                      <div className="mb-1 font-semibold text-text">作成する画面（{liveScreens.length}）</div>
+                      <ul className="list-disc pl-4 leading-relaxed">
+                        {liveScreens.map((s, i) => (
+                          <li key={`${s.name}-${i}`}>
+                            <span className="text-text">{s.name}</span>
+                            {s.description ? `：${s.description}` : ''}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {liveWireframe && (
+                    <WireframeShots dir={liveWireframe.dir} screens={liveWireframe.screens} />
+                  )}
+                  {streamPlan && (
+                    <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
+                      <summary className="cursor-pointer font-semibold">📐 設計書</summary>
+                      <div className="mt-1 whitespace-pre-wrap leading-relaxed">{streamPlan}</div>
+                    </details>
+                  )}
+                  <p className="text-[11px] text-text-faint">経過 {elapsed} 秒</p>
+                </div>
+              ) : // 生成中: claude が書いているコードをリアルタイムに流す（末尾自動スクロール）。
               streamCode ? (
                 <div className="flex h-full flex-col gap-2">
                   {/* いま何をしているかを平易な日本語で（未経験者向け） */}
@@ -928,12 +1168,31 @@ export default function Development() {
                   )}
                   {streamPlan && (
                     <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
-                      <summary className="cursor-pointer font-semibold">📝 AI が考えた「作り方」</summary>
+                      <summary className="cursor-pointer font-semibold">📐 設計書</summary>
                       <div className="mt-1 whitespace-pre-wrap leading-relaxed">{streamPlan}</div>
                     </details>
                   )}
+                  {liveWireframe && (liveWireframe.fileUrl || liveWireframe.screens.some((s) => s.image)) && (
+                    <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
+                      <summary className="cursor-pointer font-semibold">🎨 Figma ワイヤーフレーム</summary>
+                      <div className="mt-2 flex flex-col gap-2">
+                        {liveWireframe.fileUrl && (
+                          <a
+                            href={liveWireframe.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex w-fit items-center gap-1 rounded border border-border px-2 py-1 hover:bg-surface-2"
+                            style={{ color: 'var(--mc-accent)' }}
+                          >
+                            Figma で開く ↗
+                          </a>
+                        )}
+                        <WireframeShots dir={liveWireframe.dir} screens={liveWireframe.screens} />
+                      </div>
+                    </details>
+                  )}
                   <p className="text-[10px] text-text-faint">
-                    ↓ AI が実際に書いているコードです（各部分の説明コメント付き）。完成すると下に実際の画面が出ます。
+                    ↓ ワイヤーフレームを元に AI が書いているコードです（各部分の説明コメント付き）。完成すると下に実際の画面が出ます。
                   </p>
                   <pre
                     ref={streamPreRef}
@@ -951,7 +1210,7 @@ export default function Development() {
                     style={{ background: 'var(--mc-active-bg)', color: 'var(--mc-active)' }}
                   >
                     <Spinner />
-                    <span>📝 AI が作り方（設計）を考えています…</span>
+                    <span>📐 設計書を作成しています（何を作るか・必要な画面を整理）…</span>
                   </div>
                   {streamThinking && (
                     <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
@@ -960,7 +1219,7 @@ export default function Development() {
                     </details>
                   )}
                   <p className="text-[10px] text-text-faint">
-                    まず作る内容を整理しています。これを書き終えると、続けてコードを書き始めます。
+                    まず「何を作るか」と必要な画面を整理しています。この後 Figma でワイヤーフレームを描き、それを元にコードを書きます。
                   </p>
                   <pre
                     ref={streamPreRef}
@@ -1056,17 +1315,30 @@ export default function Development() {
                 )}
               </div>
             ) : previewHtml.trim() ? (
-              <iframe
-                title="モックアッププレビュー"
-                srcDoc={previewHtml}
-                // AI 生成 HTML を隔離: スクリプトは許可するが same-origin は付けない。
-                sandbox="allow-scripts"
-                className="h-full w-full rounded-lg border border-border bg-white"
-              />
+              // 完成: 上に「設計・ワイヤーフレーム（作り方）」があれば畳んで出し、下に動くプレビュー。
+              <div className="flex h-full flex-col gap-2 overflow-hidden">
+                {design && (
+                  <div className="max-h-[45%] shrink-0 overflow-auto">
+                    <DesignPanel design={design} />
+                  </div>
+                )}
+                <iframe
+                  title="モックアッププレビュー"
+                  srcDoc={previewHtml}
+                  // AI 生成 HTML を隔離: スクリプトは許可するが same-origin は付けない。
+                  sandbox="allow-scripts"
+                  className="min-h-0 w-full flex-1 rounded-lg border border-border bg-white"
+                />
+              </div>
+            ) : design ? (
+              // HTML は無いが設計・ワイヤーフレームだけある（稀）→ 作り方パネルだけ表示。
+              <div className="h-full overflow-auto">
+                <DesignPanel design={design} />
+              </div>
             ) : (
               <div className="flex h-full items-center justify-center p-6">
                 <EmptyState>
-                  左の入力欄に作りたい画面を説明して「生成」を押すと、ここにプレビューが表示されます。
+                  左の入力欄に作りたい画面を説明して「生成」を押すと、設計 → Figma ワイヤーフレーム → 動くプレビュー の順でここに表示されます。
                 </EmptyState>
               </div>
             )}
