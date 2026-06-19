@@ -487,8 +487,15 @@ interface Job {
 /** jobId → Job。インメモリのみ。 */
 const jobs = new Map<string, Job>();
 
-/** ジョブの保持期間（15 分）。これより古いものは破棄する。 */
+/** 完了/失敗ジョブの保持期間（15 分）。クライアントは完了後すぐ取りに来るのでこれで十分。 */
 const JOB_TTL_MS = 15 * 60_000;
+
+/**
+ * 実行中（pending/generating）ジョブの絶対上限（万一スタックした時の安全弁）。
+ * 多段フロー1本の最大実行時間（設計＋Figma 最大10分＋コード最大8分）に順番待ちを足しても
+ * 収まる長さにする。これ未満は TTL で消さない＝「順番待ち/長い Figma 工程の最中に消えて
+ * 404 になる」事故を防ぐ。 */
+const JOB_ACTIVE_MAX_MS = 40 * 60_000;
 
 /**
  * サーバ側リトライ: 最大試行回数と試行間バックオフ。エッジ上限から外れたので安全に複数回試せる。
@@ -522,11 +529,18 @@ const GENERATE_FAILURE_MESSAGES: Record<GenFailReason, string> = {
 /** 互換用エイリアス（汎用失敗時のデフォルト文言）。 */
 const GENERATE_FAILURE_MESSAGE = GENERATE_FAILURE_MESSAGES.error;
 
-/** TTL を過ぎたジョブを破棄する（アクセス時に呼ぶ・サーバを汚さない）。 */
+/**
+ * 古いジョブを破棄する（アクセス時に呼ぶ・サーバを汚さない）。
+ * 実行中（pending/generating）は TTL では消さない＝順番待ちや長い Figma 工程の最中に
+ * 消えてポーリングが 404（「もう一度お試しください」）になる事故を防ぐ。
+ * 終了済み（done/error）は TTL（15分）で掃除。実行中も絶対上限を超えたら安全に破棄する。
+ */
 function sweepExpiredJobs(): void {
   const now = Date.now();
   for (const [id, job] of jobs) {
-    if (now - job.createdAt > JOB_TTL_MS) jobs.delete(id);
+    const age = now - job.createdAt;
+    const active = job.status === 'pending' || job.status === 'generating';
+    if (active ? age > JOB_ACTIVE_MAX_MS : age > JOB_TTL_MS) jobs.delete(id);
   }
 }
 
