@@ -61,10 +61,37 @@ interface MediaMeta {
   createdAt: string;
 }
 
+// ─── ぴよログ取り込み API 型（サーバ契約に対応）────────────────
+interface PiyologEvent {
+  time: string; // "HH:MM"
+  kind: string; // formula/breast/pee/poop/sleep/wake/bath/weight/height/temp/foot/other
+  text: string;
+}
+
+interface PiyologSummary {
+  breastMilk?: string;
+  formula?: string;
+  sleep?: string;
+  pee?: string;
+  poop?: string;
+}
+
+interface PiyologDay {
+  date: string; // YYYY-MM-DD
+  ageLabel?: string;
+  events: PiyologEvent[];
+  summary?: PiyologSummary;
+  weights: { time: string; kg: number }[];
+  heights: { time: string; cm: number }[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 interface DiaryResponse {
   generatedAt: string;
   entries: DiaryEntry[];
   media: MediaMeta[];
+  piyolog?: PiyologDay[];
 }
 
 // ─── Google 連携 API 型（MC-233 Phase2/3 サーバ契約に対応）─────────
@@ -567,6 +594,33 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
     return m;
   }, [data]);
 
+  // ぴよログ（新しい日が上）。タイムライン表示用。
+  const piyologDays = useMemo(() => {
+    const days = [...(data?.piyolog ?? [])];
+    days.sort((a, b) => b.date.localeCompare(a.date));
+    return days;
+  }, [data]);
+
+  // 体重グラフへ渡すエントリ: 手動エントリ＋ぴよログ各日の体重をマージ（1日1点）。
+  // 手動の weightKg がある日はそのまま。無い日にぴよログの最後（最新時刻）の体重を注入する。
+  // 手動 memo 等があるエントリには weightKg だけ足し、手動エントリが無ければ合成エントリを作る。
+  const chartEntries = useMemo(() => {
+    const byDate = new Map<string, DiaryEntry>();
+    for (const e of data?.entries ?? []) byDate.set(e.date, { ...e });
+    for (const day of data?.piyolog ?? []) {
+      if (day.weights.length === 0) continue;
+      const lastWeight = day.weights.reduce((acc, w) => (w.time >= acc.time ? w : acc));
+      const existing = byDate.get(day.date);
+      if (existing) {
+        // 手動 weightKg が無ければぴよログの体重を補う（あれば手動を優先）。
+        if (typeof existing.weightKg !== 'number') existing.weightKg = lastWeight.kg;
+      } else {
+        byDate.set(day.date, { date: day.date, weightKg: lastWeight.kg });
+      }
+    }
+    return Array.from(byDate.values());
+  }, [data]);
+
   const goPrevMonth = () =>
     setView((v) => (v.month === 0 ? { year: v.year - 1, month: 11 } : { ...v, month: v.month - 1 }));
   const goNextMonth = () =>
@@ -604,6 +658,9 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
             pushToast={pushToast}
           />
         )}
+
+        {/* ぴよログのエクスポートテキストを貼り付けて取り込む。 */}
+        <PiyologImportPanel onImported={fetchData} pushToast={pushToast} />
       </DiarySettingsModal>
 
       <ResourceState loading={loading} error={error} hasData={!!data}>
@@ -641,10 +698,14 @@ export default function BabyDiary({ embedded = false }: { embedded?: boolean } =
           />
         </div>
 
-        {/* 体重グラフ（母子手帳ふう・標準体重帯つき）。データ0件でも帯と軸を表示する。 */}
+        {/* 体重グラフ（母子手帳ふう・標準体重帯つき）。データ0件でも帯と軸を表示する。
+            手動エントリ＋ぴよログの体重をマージした点を描く。 */}
         <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
-          <WeightGrowthChart entries={data?.entries ?? []} />
+          <WeightGrowthChart entries={chartEntries} />
         </section>
+
+        {/* ぴよログのタイムライン（取り込みがあるときだけ表示）。 */}
+        <PiyologTimeline days={piyologDays} />
       </ResourceState>
     </div>
   );
@@ -2986,6 +3047,178 @@ function MediaSection({
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ぴよログ取り込みパネル（設定モーダル内）────────────────────
+// ぴよログのエクスポートテキストを貼り付けて取り込む。POST /api/baby-diary/piyolog/import。
+function PiyologImportPanel({
+  onImported,
+  pushToast,
+}: {
+  onImported: () => Promise<void> | void;
+  pushToast: (kind: ToastKind, text: string) => void;
+}) {
+  const [text, setText] = useState('');
+  const [importing, setImporting] = useState(false);
+
+  const onImport = useCallback(async () => {
+    const body = text.trim();
+    if (!body) {
+      pushToast('error', 'ぴよログのテキストを貼り付けてください');
+      return;
+    }
+    setImporting(true);
+    try {
+      const res = await fetch('/api/baby-diary/piyolog/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: body }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(j?.error ?? `HTTP ${res.status}`);
+      }
+      const j = (await res.json()) as { days: number; events: number; weights: number };
+      pushToast('success', `${j.days}日・${j.events}件を取り込みました`);
+      setText('');
+      await onImported();
+    } catch (err) {
+      pushToast('error', `取り込みに失敗しました: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setImporting(false);
+    }
+  }, [text, onImported, pushToast]);
+
+  return (
+    <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-text-muted">
+          <UploadIcon width={16} height={16} />
+        </span>
+        <h2 className="text-base font-bold text-text">ぴよログ取り込み</h2>
+      </div>
+      <p className="mb-3 text-xs text-text-muted">
+        ぴよログのアプリで書き出したテキストを貼り付けて取り込みます。授乳・睡眠などの記録がタイムラインに表示され、体重は成長グラフに反映されます。
+      </p>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={6}
+        placeholder="ぴよログの「テキストで送る」などで書き出したテキストをここに貼り付けてください。"
+        className="w-full resize-y rounded-md border border-border bg-bg p-2 text-xs text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
+      />
+      <div className="mt-2 flex justify-end">
+        <button
+          type="button"
+          onClick={() => void onImport()}
+          disabled={importing || text.trim() === ''}
+          className="rounded-md bg-accent px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+        >
+          {importing ? '取り込み中…' : '取り込む'}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+// ─── ぴよログ タイムライン表示 ────────────────────────────────
+// kind → アイコン（絵文字）。
+const PIYOLOG_KIND_ICON: Record<string, string> = {
+  formula: '🍼',
+  breast: '🤱',
+  pee: '💧',
+  poop: '💩',
+  sleep: '😴',
+  wake: '☀️',
+  bath: '🛁',
+  weight: '⚖️',
+  height: '📏',
+  temp: '🌡️',
+  foot: '👣',
+  other: '・',
+};
+
+// 曜日（日本語）。
+const JP_WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+
+/** YYYY-MM-DD → "M/D(曜)"。 */
+function formatPiyologDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const wd = new Date(y, m - 1, d).getDay();
+  return `${m}/${d}(${JP_WEEKDAYS[wd] ?? ''})`;
+}
+
+function PiyologTimeline({ days }: { days: PiyologDay[] }) {
+  if (days.length === 0) return null;
+  return (
+    <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+      <h2 className="mb-3 text-base font-bold text-text">ぴよログ</h2>
+      <div className="flex flex-col gap-3">
+        {days.map((day, idx) => (
+          <PiyologDayCard key={day.date} day={day} defaultOpen={idx === 0} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PiyologDayCard({ day, defaultOpen }: { day: PiyologDay; defaultOpen: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  // 合計チップ（生文字列）。
+  const chips: { label: string; value: string }[] = [];
+  const s = day.summary;
+  if (s?.breastMilk) chips.push({ label: '母乳', value: s.breastMilk });
+  if (s?.formula) chips.push({ label: 'ミルク', value: s.formula });
+  if (s?.sleep) chips.push({ label: '睡眠', value: s.sleep });
+  if (s?.pee) chips.push({ label: 'おしっこ', value: s.pee });
+  if (s?.poop) chips.push({ label: 'うんち', value: s.poop });
+
+  return (
+    <div className="rounded-lg border border-border bg-bg">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full flex-col gap-1.5 rounded-lg px-3 py-2 text-left hover:bg-surface-2"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-text">{formatPiyologDate(day.date)}</span>
+          {day.ageLabel && <span className="text-[11px] text-text-faint">{day.ageLabel}</span>}
+          <span className="ml-auto text-[11px] text-text-faint">
+            {day.events.length}件 {open ? '−' : '＋'}
+          </span>
+        </div>
+        {chips.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {chips.map((c) => (
+              <span
+                key={c.label}
+                className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] text-text-muted"
+                title={c.value}
+              >
+                {c.value}
+              </span>
+            ))}
+          </div>
+        )}
+      </button>
+
+      {open && (
+        <ol className="flex flex-col gap-0.5 border-t border-border px-3 py-2">
+          {day.events.map((ev, i) => (
+            <li key={`${ev.time}-${i}`} className="flex items-baseline gap-2 text-xs">
+              <span className="w-10 shrink-0 tabular-nums text-text-faint">{ev.time}</span>
+              <span aria-hidden className="w-4 shrink-0 text-center">
+                {PIYOLOG_KIND_ICON[ev.kind] ?? PIYOLOG_KIND_ICON.other}
+              </span>
+              <span className="min-w-0 flex-1 text-text">{ev.text}</span>
+            </li>
+          ))}
+        </ol>
       )}
     </div>
   );

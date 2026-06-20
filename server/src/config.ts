@@ -907,6 +907,9 @@ export const BABY_DIARY_ENTRIES_FILE = join(BABY_DIARY_DIR, 'baby-diary-entries.
 /** メディアメタの JSONL（append・論理削除）。 */
 export const BABY_DIARY_MEDIA_FILE = join(BABY_DIARY_DIR, 'baby-diary-media.jsonl');
 
+/** ぴよログ取り込みの日次レコード JSONL（last-wins by date・論理削除は deleted フラグ）。 */
+export const BABY_PIYOLOG_FILE = join(BABY_DIARY_DIR, 'baby-piyolog-days.jsonl');
+
 // ─── 育児相談チャット「すくすく」の会話履歴 ────────────────────────
 // 育児チャットの会話履歴をサーバ側に蓄積する（端末をまたいで過去の質問が残る）。
 // 単一の会話スレッド（個人/世帯用ダッシュボードなので分岐不要）を追記専用で保存する。

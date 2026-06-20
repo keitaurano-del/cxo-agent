@@ -39,6 +39,11 @@ import {
   upsertEntry,
   type MediaMeta,
 } from './lib/babyDiaryStore.js';
+import {
+  listPiyologDays,
+  parsePiyolog,
+  upsertPiyologDay,
+} from './lib/babyPiyologStore.js';
 
 // ─── バリデーション ─────────────────────────────────────────
 
@@ -269,13 +274,77 @@ function streamThumb(res: Response, thumbAbs: string): void {
 
 // ─── ハンドラ ───────────────────────────────────────────
 
-/** GET /api/baby-diary — エントリ＋メディアの一覧。 */
+/** GET /api/baby-diary — エントリ＋メディア＋ぴよログ日次の一覧。 */
 function handleList(_req: Request, res: Response): void {
   res.json({
     generatedAt: new Date().toISOString(),
     entries: listEntries(),
     media: listMedia(),
+    piyolog: listPiyologDays(),
   });
+}
+
+/**
+ * POST /api/baby-diary/piyolog/import — ぴよログのエクスポートテキストを取り込む。
+ *
+ * body { text: string } を parsePiyolog でパースし、各日を upsertPiyologDay で保存する。
+ * さらに各日の体重を既存の体重グラフ（baby-diary-entries.jsonl）へ反映する:
+ *   その日に weights があれば最後（最新時刻）の体重を該当 date の DiaryEntry に upsert する。
+ *   ただし既存エントリの memo/milestone/heightCm を消さないよう、listEntries で既存を引いて
+ *   それらを同梱した上で weightKg（＋heights 最後があれば heightCm）だけ更新する
+ *   （upsertEntry は渡したフィールドだけのレコードを last-wins 追記するため、必ず既存値を同梱する）。
+ * text が空 / パース 0 件なら 400。レスポンス { days, events, weights }。
+ */
+function handlePiyologImport(req: Request, res: Response): void {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const text = body.text;
+  if (typeof text !== 'string' || text.trim() === '') {
+    res.status(400).json({ error: 'text is required (PiyoLog export text)' });
+    return;
+  }
+
+  const days = parsePiyolog(text);
+  if (days.length === 0) {
+    res.status(400).json({ error: 'no parseable days found in text' });
+    return;
+  }
+
+  // 既存の体重グラフエントリを date 索引化（memo/milestone/heightCm を引き継ぐため）。
+  const existingByDate = new Map<string, ReturnType<typeof listEntries>[number]>();
+  for (const e of listEntries()) existingByDate.set(e.date, e);
+
+  let eventCount = 0;
+  let weightCount = 0;
+  for (const day of days) {
+    upsertPiyologDay(day);
+    eventCount += day.events.length;
+
+    if (day.weights.length > 0) {
+      // その日の最後（最新時刻）の体重をグラフへ反映。weights は time 昇順とは限らないので最大時刻を選ぶ。
+      const lastWeight = day.weights.reduce((acc, w) => (w.time >= acc.time ? w : acc));
+      const lastHeight =
+        day.heights.length > 0
+          ? day.heights.reduce((acc, h) => (h.time >= acc.time ? h : acc))
+          : undefined;
+      const existing = existingByDate.get(day.date);
+      upsertEntry({
+        date: day.date,
+        // 既存の memo/milestone/heightCm を消さないよう同梱（undefined なら省略）。
+        ...(existing?.memo !== undefined ? { memo: existing.memo } : {}),
+        ...(existing?.milestone !== undefined ? { milestone: existing.milestone } : {}),
+        // heightCm はぴよログ身長があればそれを優先、無ければ既存値を維持。
+        ...(lastHeight !== undefined
+          ? { heightCm: lastHeight.cm }
+          : existing?.heightCm !== undefined
+            ? { heightCm: existing.heightCm }
+            : {}),
+        weightKg: lastWeight.kg,
+      });
+      weightCount++;
+    }
+  }
+
+  res.json({ days: days.length, events: eventCount, weights: weightCount });
 }
 
 /** POST /api/baby-diary/entry — date キーで upsert。 */
@@ -606,6 +675,7 @@ function handleMaintenance(_req: Request, res: Response): void {
 export function babyDiaryRouter(): Router {
   const router = Router();
   router.get('/', handleList);
+  router.post('/piyolog/import', handlePiyologImport);
   router.post('/entry', handleUpsertEntry);
   router.delete('/entry/:date', handleDeleteEntry);
   router.post('/media', (req, res) => void handleUploadMedia(req, res));
