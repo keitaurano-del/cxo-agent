@@ -82,6 +82,8 @@ interface DraftState {
   useWireframe?: boolean;
   /** 実装仕様書（Markdown。生成/読込したら復元する）。 */
   spec?: string | null;
+  /** コード学習（Markdown。TS実装＋構造化解説。生成/読込したら復元する）。MC-256。 */
+  codeLesson?: string | null;
 }
 
 /** 進行中ジョブ（「作成中」カード表示・離脱/リロード後の再開に使う）。 */
@@ -459,6 +461,10 @@ export default function Development() {
   const [spec, setSpec] = useState<string | null>(bootDraft?.spec ?? null);
   // 実装仕様書の生成中フラグ。
   const [specBusy, setSpecBusy] = useState(false);
+  // コード学習（TS実装＋①始まり②各部の役割③ルールの構造化解説。MC-256）。生成/読込で入る。
+  const [codeLesson, setCodeLesson] = useState<string | null>(bootDraft?.codeLesson ?? null);
+  // コード学習の生成中フラグ。
+  const [lessonBusy, setLessonBusy] = useState(false);
 
   // エディタに紐づく進行中ジョブ（あればエディタ側の進捗バーと生成ボタン無効化に使う）。
   const editorJob = activeJobs.find((j) => j.attachToEditor) ?? null;
@@ -514,8 +520,8 @@ export default function Development() {
 
   // 入力・生成結果・選択中 id が変わるたびに localStorage へ退避する（離脱/リロード復元用）。
   useEffect(() => {
-    saveDraft({ prompt, instruction, title, html, currentId, design, useWireframe, spec });
-  }, [prompt, instruction, title, html, currentId, design, useWireframe, spec]);
+    saveDraft({ prompt, instruction, title, html, currentId, design, useWireframe, spec, codeLesson });
+  }, [prompt, instruction, title, html, currentId, design, useWireframe, spec, codeLesson]);
 
   // 進行中ジョブ配列が変わるたびに localStorage へ退避する（離脱/リロードでも「作成中」を保持）。
   useEffect(() => {
@@ -675,6 +681,7 @@ export default function Development() {
       setLiveScreens([]);
       setDesign(null);
       setSpec(null);
+      setCodeLesson(null);
       setFailedRun(null);
       setStreamStatus('pending');
       setStage('design');
@@ -777,6 +784,7 @@ export default function Development() {
           wireframeDir?: string;
           wireframeScreens?: WireframeScreen[];
           implSpec?: string;
+          codeLesson?: string;
         };
       };
       const m = data.mockup;
@@ -788,6 +796,7 @@ export default function Development() {
       setPrompt(m.prompt ?? '');
       setInstruction('');
       setSpec(m.implSpec ?? null);
+      setCodeLesson(m.codeLesson ?? null);
       // 設計・ワイヤーフレームがあれば「何を作ったか」として表示する。無ければクリア。
       setDesign(
         m.designDoc || m.figmaFileUrl || m.wireframeScreens?.length
@@ -848,6 +857,51 @@ export default function Development() {
       setSpecBusy(false);
     }
   }, [currentId, specBusy, generating]);
+
+  // コードを読む（解説付き）を作る（MC-256）。保存済みモックが対象。TS実装＋構造化解説を
+  // 生成し、生成中の本文をライブ表示して完了で確定・保存する。handleMakeSpec と同じ機構。
+  const handleMakeCodeLesson = useCallback(async () => {
+    if (!currentId || lessonBusy || generating) return;
+    setLessonBusy(true);
+    setError(null);
+    setNotice('コードの解説を作成中です（1〜2分かかります）…');
+    try {
+      const startRes = await fetch(
+        `/api/dev/mockups/${encodeURIComponent(currentId)}/code-lesson`,
+        { method: 'POST' },
+      );
+      if (!startRes.ok) throw new Error(await readError(startRes, 'コード解説の作成に失敗しました'));
+      const { jobId } = (await startRes.json()) as { jobId?: string };
+      if (!jobId) throw new Error('コード解説の作成に失敗しました');
+      const deadline = Date.now() + POLL_MAX_WAIT_MS;
+      while (Date.now() < deadline) {
+        await sleep(POLL_INTERVAL_MS);
+        let r: Response;
+        try {
+          r = await fetch(`/api/dev/mockup/job/${encodeURIComponent(jobId)}`);
+        } catch {
+          continue;
+        }
+        if (!r.ok) continue;
+        let d: { status?: string; codeLesson?: string; error?: string };
+        try {
+          d = (await r.json()) as typeof d;
+        } catch {
+          continue;
+        }
+        if (typeof d.codeLesson === 'string' && d.codeLesson) setCodeLesson(d.codeLesson); // ライブ更新
+        if (d.status === 'done') {
+          setNotice('コードの解説ができました。下に表示しています。');
+          break;
+        }
+        if (d.status === 'error') throw new Error(d.error || 'コード解説の作成に失敗しました');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'コード解説の作成に失敗しました');
+    } finally {
+      setLessonBusy(false);
+    }
+  }, [currentId, lessonBusy, generating]);
 
   // 削除。
   const handleDelete = useCallback(
@@ -912,6 +966,7 @@ export default function Development() {
     setLiveScreens([]);
     setDesign(null);
     setSpec(null);
+    setCodeLesson(null);
     setFailedRun(null);
     // 進行中ジョブは消さない。エディタ紐付けだけ外し、一覧に「作成中」で見え続けるようにする。
     setActiveJobs((prev) => prev.map((j) => ({ ...j, attachToEditor: false })));
@@ -1150,6 +1205,36 @@ export default function Development() {
                 <pre className="max-h-80 w-full overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-surface px-3 py-2 text-[11px] leading-relaxed text-text">
                   {spec}
                   {specBusy && <span className="animate-pulse">▋</span>}
+                </pre>
+              )}
+            </section>
+          )}
+
+          {/* コードを読む（学習）— TS実装＋①始まり②各部の役割③ルールの構造化解説（MC-256） */}
+          {html.trim() && (
+            <section className="flex flex-col gap-2 border-t border-border pt-4">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-semibold text-text-muted">コードを読む（学習）</label>
+                <button
+                  type="button"
+                  onClick={handleMakeCodeLesson}
+                  disabled={lessonBusy || generating || !currentId}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  title={currentId ? '' : 'まず保存してください'}
+                >
+                  {lessonBusy ? <Spinner /> : null}
+                  {lessonBusy ? '作成中…' : codeLesson ? '作り直す' : 'コードを読む（解説付き）'}
+                </button>
+              </div>
+              <p className="text-[10px] text-text-faint">
+                この試作品の機能を題材に、TypeScript の実装コードと、それを読むための解説（①始まり ②各部の役割
+                ③ルール）を作ります。コードのどの部分が何をしているかを対応づけて、未経験でも読めるように説明します。
+                {!currentId && ' まず保存してから作成できます。'}
+              </p>
+              {codeLesson && (
+                <pre className="max-h-96 w-full overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-surface px-3 py-2 font-mono text-[11px] leading-relaxed text-text">
+                  {codeLesson}
+                  {lessonBusy && <span className="animate-pulse">▋</span>}
                 </pre>
               )}
             </section>

@@ -36,6 +36,7 @@ import {
   getMockup,
   listMockups,
   listReferenceMockups,
+  setCodeLesson,
   setImplSpec,
   setRating,
   upsertMockup,
@@ -625,6 +626,8 @@ interface Job {
   wireframeProgress?: string;
   /** 実装仕様書（Markdown）。spec 生成ジョブが書き込む（MC-253）。生成中はライブに伸びる。 */
   spec?: string;
+  /** コード学習（Markdown）。codeLesson 生成ジョブが書き込む（MC-256）。生成中はライブに伸びる。 */
+  codeLesson?: string;
   error?: string;
   /** 保存先 id（クライアントが currentId に反映できる）。 */
   mockupId?: string;
@@ -1022,6 +1025,135 @@ async function runSpecJob(
   });
 }
 
+// ─── コードを読む（学習）の生成（MC-256・発注者がコードを読めるようになるための学習モード）──
+
+/** コード学習生成 1 回あたりのタイムアウト（コード＋解説。仕様書と同程度なので 4 分）。 */
+const CODE_LESSON_TIMEOUT_MS = 240_000;
+
+/** コードと解説の境界マーカー。モデルはこの行を境に「TS実装コード → 構造化解説」の順で出す。 */
+const CODE_LESSON_MARKER = '---EXPLAIN---';
+
+/**
+ * モック（要望＋設計書＋HTML）から「TypeScript 実装コード ＋ 構造化された日本語解説」を書かせるプロンプト（MC-256）。
+ * 発注者（非エンジニア）が「コードを読めるようになる」ための学習教材を作るのが目的。
+ * 言語は TypeScript 固定。解説は ①始まり ②各部の役割 ③ルール の順で、コードと対応づけて教える。
+ * 平易・段階的（まず流れ→次に「この注釈＝型＝ルール」を重ねる）。難しい構文（ジェネリクス等）は後回し。
+ */
+function buildCodeLessonPrompt(appTitle: string, prompt: string, designDoc: string, html: string): string {
+  return [
+    'あなたは、プログラミング未経験の発注者に「コードの読み方」を教える、やさしいプログラミング講師です。',
+    '次の試作品（モック）の主要な機能を題材に、(A) TypeScript の実装コードと、(B) それを読むための',
+    '構造化された日本語の解説を作ってください。発注者がこれを読んで「コードってこう読むのか」と分かるのが目的です。',
+    '',
+    `アプリ名: ${appTitle}`,
+    '元の要望:',
+    prompt || '（なし）',
+    '',
+    '設計書（あれば）:',
+    designDoc || '（なし）',
+    '',
+    '【出力の順序】まず TypeScript の実装コードだけを ```ts コードフェンスで出力してください。',
+    `そのコードフェンスを閉じたら、次の行に ${CODE_LESSON_MARKER} とだけ書いた行を 1 行入れ、その後に解説を書きます。`,
+    '',
+    '【(A) TypeScript コードのルール】',
+    '- 言語は TypeScript に固定。この題材の「主要な動作」を表す、現実的だが読みやすい実装にすること',
+    '  （例: 検索なら入力を受けて結果配列を返す関数、登録ならデータを作って保存する関数など）。',
+    '- 関数は 3〜6 個程度の小さなまとまりに分け、それぞれ役割が一目で分かる名前を付ける。',
+    '- 型注釈（: string など）と型定義（type / interface）を素直に書く。ただしジェネリクス等の難しい構文は避け、',
+    '  どうしても要るときだけ最小限に。外部ライブラリに依存しない自己完結したコードにする。',
+    '- 各関数の直前に、何をする関数かを 1 行の日本語コメントで添える。',
+    '',
+    '【(B) 解説のルール】次の 3 つを、必ずこの順番で、## 見出しを付けて書くこと。',
+    'プログラミング未経験者が読んで分かるよう、専門用語は使うたびに平易な言い換えを添えること。',
+    'まずコードの流れを普通の言葉で追い、そのうえで「この注釈＝型＝ルール」だと段階的に重ねること。',
+    '',
+    '## ① 始まり（どこから始まるか）',
+    'このコードがどこから動き出すか（エントリポイント＝入口）を説明する。「まずこの関数が呼ばれて…」のように、',
+    '処理が始まる場所と、そこから何が起きるかの全体の流れを平易に書く。',
+    '',
+    '## ② 各部の役割（ここで何をしているか）',
+    '関数やまとまりごとに「この関数＝〇〇をする部分」という形で、どの部分が何をしているかを対応づけて説明する。',
+    '必ず実際の関数名・型名を引用し（例: 「`searchItems` という関数 ＝ 検索する部分」）、',
+    'どの解説がどのコードに対応するか読者が分かるようにすること。',
+    '',
+    '## ③ ルール（どういうルールで動いているか）',
+    '型注釈・型定義（: string や interface など）が「このデータはこの形でなければならない、という約束（ルール）」',
+    'であることを、実例を引用して説明する。命名やコメントなどの書き方の決まりも、なぜそうするかと一緒に平易に伝える。',
+    '',
+    '日本語で書くこと。コード（A）は (B) の解説と必ず対応させること。',
+    '',
+    '対象モックの HTML（題材の機能を把握するため・必要な範囲で参照）:',
+    html.slice(0, 16000),
+  ].join('\n');
+}
+
+/**
+ * コード学習（TS実装＋構造化解説）を生成してジョブと store に保存する（MC-256）。
+ * 生成中の本文を job.codeLesson にストリームする。runSpecJob と同じ機構（jobs / handleJob / TTL）を再利用。
+ * await しない前提・throw しない。出力（コード ```ts … --- EXPLAIN --- 解説）はそのまま Markdown として保存する。
+ */
+async function runCodeLessonJob(
+  jobId: string,
+  mockupId: string,
+  appTitle: string,
+  prompt: string,
+  designDoc: string,
+  html: string,
+): Promise<void> {
+  // マーカー行を、フロントで読みやすい見出しに置き換えて 1 本の Markdown にする。
+  const toMarkdown = (raw: string): string =>
+    raw.replace(CODE_LESSON_MARKER, '\n# 解説（コードの読み方）\n');
+
+  const onChunk = (accumulated: string): void => {
+    const job = jobs.get(jobId);
+    if (!job || job.status === 'done' || job.status === 'error') return;
+    job.status = 'generating';
+    job.codeLesson = accumulated ? toMarkdown(accumulated) : undefined;
+  };
+
+  await serializeDevGen(async () => {
+    const j = jobs.get(jobId);
+    if (j && j.status === 'pending') j.status = 'generating';
+
+    let model = NOTEBOOK_CLAUDE_MODEL;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const raw = await runClaudeRaw(
+        buildCodeLessonPrompt(appTitle, prompt, designDoc, html),
+        model,
+        onChunk,
+        CODE_LESSON_TIMEOUT_MS,
+      );
+      if (!raw.error) {
+        const lesson = toMarkdown(raw.stdout.trim()).trim();
+        if (lesson) {
+          try {
+            setCodeLesson(mockupId, lesson);
+          } catch {
+            /* 保存はベストエフォート。 */
+          }
+          const job = jobs.get(jobId);
+          if (job) {
+            job.status = 'done';
+            job.codeLesson = lesson;
+          }
+          return;
+        }
+      } else if (isLimitFailure(raw) && attempt === 1) {
+        model = DEV_MOCKUP_FALLBACK_MODEL;
+        console.warn(`[dev-lesson] sonnet limit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`);
+        continue;
+      }
+      console.warn(`[dev-lesson] lesson attempt ${attempt} failed: ${raw.error ?? 'empty'}`);
+      if (attempt < 2) await sleep(GENERATE_RETRY_BACKOFF_MS);
+    }
+    const job = jobs.get(jobId);
+    if (job) {
+      job.status = 'error';
+      job.error = 'コード解説の生成に失敗しました。少し待ってもう一度お試しください。';
+    }
+  });
+}
+
 /**
  * 新規生成の多段ジョブ。設計→（Figma）→コードを直列で進め、完成 HTML を自動保存する。
  * await しない前提。例外でサーバを落とさない。
@@ -1289,6 +1421,8 @@ function handleJob(req: Request, res: Response): void {
     wireframeProgress: liveVisible ? job.wireframeProgress : undefined,
     // 実装仕様書（spec 生成ジョブ）。生成中も done でも返す（ライブに伸びて完成で確定）。
     spec: job.spec,
+    // コード学習（codeLesson 生成ジョブ）。生成中も done でも返す（ライブに伸びて完成で確定）。
+    codeLesson: job.codeLesson,
     mockupId: job.mockupId,
     error: job.error,
     saved: job.saved,
@@ -1410,6 +1544,38 @@ function handleImplSpec(req: Request, res: Response): void {
   res.status(202).json({ jobId });
 }
 
+/**
+ * POST /api/dev/mockups/:id/code-lesson — コード学習（TS実装＋構造化解説）の生成ジョブを起票し
+ * 202 { jobId } を返す（MC-256）。進捗・結果は GET /mockup/job/:jobId の codeLesson フィールドで取得する。
+ * 保存先 store にも codeLesson を残す。impl-spec と同じ非同期ジョブ機構を再利用。
+ */
+function handleCodeLesson(req: Request, res: Response): void {
+  sweepExpiredJobs();
+  const id = String(req.params.id);
+  const mockup = getMockup(id);
+  if (!mockup) {
+    res.status(404).json({ error: 'mockup not found' });
+    return;
+  }
+  const jobId = randomUUID();
+  jobs.set(jobId, { status: 'pending', createdAt: Date.now() });
+  void runCodeLessonJob(
+    jobId,
+    id,
+    mockup.title,
+    mockup.prompt ?? '',
+    mockup.designDoc ?? '',
+    mockup.html ?? '',
+  ).catch(() => {
+    const job = jobs.get(jobId);
+    if (job) {
+      job.status = 'error';
+      job.error = 'コード解説の生成に失敗しました。';
+    }
+  });
+  res.status(202).json({ jobId });
+}
+
 // ─── Router 組み立て ─────────────────────────────────────
 
 /** /api/dev 配下のルータを返す。index.ts で auth ミドルウェア配下に mount する。 */
@@ -1423,6 +1589,7 @@ export function devMockupRouter(): Router {
   router.post('/mockups', handleUpsert);
   router.post('/mockups/:id/rating', handleRating);
   router.post('/mockups/:id/impl-spec', handleImplSpec);
+  router.post('/mockups/:id/code-lesson', handleCodeLesson);
   router.delete('/mockups/:id', handleDelete);
   return router;
 }

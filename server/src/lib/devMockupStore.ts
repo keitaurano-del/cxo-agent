@@ -37,6 +37,8 @@ export interface Mockup {
   rating?: 'up' | 'down';
   /** 実装仕様書（Markdown）。モックから本番化するための設計（データモデル/バック要否/API等）。MC-253。 */
   implSpec?: string;
+  /** コード学習（Markdown）。TS実装コード＋①始まり②各部の役割③ルールの構造化解説。発注者がコードを読めるようにする。MC-256。 */
+  codeLesson?: string;
   /** 作成日時（ISO8601）。 */
   createdAt: string;
   /** 更新日時（ISO8601）。 */
@@ -159,6 +161,7 @@ export function upsertMockup(input: {
     // 評価・実装仕様書は upsert では引き継ぐ（再保存・修正で消さない）。設定は専用関数で行う。
     ...(existing?.rating !== undefined ? { rating: existing.rating } : {}),
     ...(existing?.implSpec !== undefined ? { implSpec: existing.implSpec } : {}),
+    ...(existing?.codeLesson !== undefined ? { codeLesson: existing.codeLesson } : {}),
     createdAt,
     updatedAt: now,
     // upsert は常に「生きている」状態にする（過去に削除済みでも復活）。
@@ -205,6 +208,18 @@ export function setImplSpec(id: string, implSpec: string): Mockup | undefined {
   const existing = readAll(DEV_MOCKUPS_FILE).get(id);
   if (!existing || existing.deleted) return undefined;
   const rec: Mockup = { ...existing, implSpec, updatedAt: new Date().toISOString() };
+  appendRecord(DEV_MOCKUPS_FILE, rec);
+  return strip(rec);
+}
+
+/**
+ * コード学習（Markdown）を保存する（MC-256）。既存レコードを保ったまま codeLesson だけ更新して追記する。
+ * 存在しない id は undefined。設定後の公開形を返す。
+ */
+export function setCodeLesson(id: string, codeLesson: string): Mockup | undefined {
+  const existing = readAll(DEV_MOCKUPS_FILE).get(id);
+  if (!existing || existing.deleted) return undefined;
+  const rec: Mockup = { ...existing, codeLesson, updatedAt: new Date().toISOString() };
   appendRecord(DEV_MOCKUPS_FILE, rec);
   return strip(rec);
 }
