@@ -455,6 +455,8 @@ export default function Development() {
 
   // スマホ幅(md未満)での表示ペイン切替。デスクトップ(md+)では無視され両ペイン横並び。
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit');
+  // プレビューを画面いっぱいに出す全画面モード（スマホで試作品を大きく見るため）。
+  const [fullscreen, setFullscreen] = useState(false);
 
   // エディタ側の進捗バー用の経過秒数（エディタに紐づくジョブの起点から算出）。
   const elapsed = editorJob ? Math.max(0, Math.floor((nowTick - editorJob.startedAt) / 1000)) : 0;
@@ -1182,13 +1184,23 @@ export default function Development() {
                       : '③ コードを生成中…'
                 : 'プレビュー'}
             </span>
-            {generating && (
+            {generating ? (
               <span
                 className="flex items-center gap-1.5 text-[11px]"
                 style={{ color: 'var(--mc-active)' }}
               >
                 <Spinner /> {elapsed}秒
               </span>
+            ) : (
+              previewHtml.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setFullscreen(true)}
+                  className="rounded border border-border px-2 py-0.5 text-[11px] text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+                >
+                  ⛶ 全画面
+                </button>
+              )
             )}
           </div>
           <div className="min-h-0 flex-1 overflow-hidden p-3">
@@ -1427,6 +1439,36 @@ export default function Development() {
           </div>
         </div>
       </div>
+
+      {/* 全画面プレビュー: スマホで試作品を画面いっぱいに表示する。✕ で閉じる。セーフエリア対応。 */}
+      {fullscreen && previewHtml.trim() && (
+        <div
+          className="fixed inset-0 z-[60] flex flex-col bg-white"
+          style={{
+            paddingTop: 'env(safe-area-inset-top)',
+            paddingBottom: 'env(safe-area-inset-bottom)',
+          }}
+        >
+          <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-2">
+            <span className="truncate text-xs font-semibold text-text-muted">
+              {title || 'プレビュー'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setFullscreen(false)}
+              className="shrink-0 rounded border border-border px-3 py-1 text-xs font-semibold text-text transition-colors hover:bg-surface-2"
+            >
+              ✕ 閉じる
+            </button>
+          </div>
+          <iframe
+            title="モックアッププレビュー（全画面）"
+            srcDoc={previewHtml}
+            sandbox="allow-scripts"
+            className="min-h-0 w-full flex-1 border-0 bg-white"
+          />
+        </div>
+      )}
     </div>
   );
 }
