@@ -52,6 +52,10 @@ import { withClaudeSlot } from './lib/notebookClaude.js';
  *  「コード段で諦めるまでの最大待ち時間」になる。 */
 const GENERATE_TIMEOUT_MS = 420_000;
 
+/** 仕上げレビュー(P2)専用の短いタイムアウト。レビューは「速い時だけ磨く」ベストエフォートなので、
+ *  長く待たない。超えたら元 HTML を保持してすぐ完了させる（重い割に無改善で待たせるのを防ぐ）。 */
+const REVIEW_TIMEOUT_MS = 180_000;
+
 /** HTML は大きくなり得るため maxBuffer を広めに取る（8MB）。 */
 const GENERATE_MAX_BUFFER = 8 * 1024 * 1024;
 
@@ -365,6 +369,7 @@ function runClaudeRaw(
   prompt: string,
   model: string,
   onChunk?: (accumulated: string, thinking: string) => void,
+  timeoutMs: number = GENERATE_TIMEOUT_MS,
 ): Promise<RawRun> {
   // 引数に NUL バイトがあると spawn が throw し得る。想定外の制御文字でサーバを落とさないよう、
   // (1) プロンプトから NUL を除去し、(2) spawn 自体も try/catch で囲う。
@@ -411,7 +416,7 @@ function runClaudeRaw(
         const timer = setTimeout(() => {
           timedOut = true;
           child.kill('SIGTERM');
-        }, GENERATE_TIMEOUT_MS);
+        }, timeoutMs);
 
         try {
           child.stdin?.end();
@@ -481,7 +486,7 @@ function runClaudeRaw(
             done({
               stdout: out,
               timedOut: true,
-              error: `claude タイムアウト（${Math.round(GENERATE_TIMEOUT_MS / 1000)}s）`,
+              error: `claude タイムアウト（${Math.round(timeoutMs / 1000)}s）`,
             });
             return;
           }
@@ -826,7 +831,7 @@ async function runReviewStage(jobId: string, html: string): Promise<string | nul
 
   let model = NOTEBOOK_CLAUDE_MODEL;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const raw = await runClaudeRaw(buildReviewPrompt(html), model, onChunk);
+    const raw = await runClaudeRaw(buildReviewPrompt(html), model, onChunk, REVIEW_TIMEOUT_MS);
     if (!raw.error) {
       const improved = stripFences(splitPlanHtml(raw.stdout).html);
       // 劣化ガード: HTML として妥当か＋元の 60% 以上の分量か（丸ごと短く壊していないか）。
