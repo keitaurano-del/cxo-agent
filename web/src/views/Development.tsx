@@ -432,7 +432,7 @@ export default function Development() {
   // エディタに紐づくジョブのサーバ状態（'' | 'pending'=順番待ち | 'generating'=生成中）。
   const [streamStatus, setStreamStatus] = useState<'' | 'pending' | 'generating'>('');
   // 4段フローの現在ステージ（design=設計 / wireframe=Figma / code=コーディング）。
-  const [stage, setStage] = useState<'' | 'design' | 'wireframe' | 'code'>('');
+  const [stage, setStage] = useState<'' | 'design' | 'wireframe' | 'code' | 'review'>('');
   // ワイヤーフレーム生成中の進捗メッセージ（ツール実行ベース）。
   const [wireframeProgress, setWireframeProgress] = useState('');
   // 生成中に出来たワイヤーフレーム（画面が揃うとここに入る）。
@@ -530,7 +530,7 @@ export default function Development() {
               setStreamCode(live.partial);
               setStreamPlan(live.plan);
               setStreamThinking(live.thinking);
-              setStage((live.stage as '' | 'design' | 'wireframe' | 'code') ?? '');
+              setStage((live.stage as '' | 'design' | 'wireframe' | 'code' | 'review') ?? '');
               setWireframeProgress(live.wireframeProgress);
               setLiveWireframe(live.wireframe ?? null);
               if (live.screens) setLiveScreens(live.screens);
@@ -1126,7 +1126,9 @@ export default function Development() {
                   ? '① 設計書を作成中…'
                   : stage === 'wireframe'
                     ? '② Figma でワイヤーフレーム作成中…'
-                    : '③ コードを生成中…'
+                    : stage === 'review'
+                      ? '④ デザインを点検して仕上げ中…'
+                      : '③ コードを生成中…'
                 : 'プレビュー'}
             </span>
             {generating && (

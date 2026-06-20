@@ -250,6 +250,38 @@ function buildCodeFromDesignPrompt(
   ].join('\n');
 }
 
+/**
+ * 仕上げレビュー（MC-252 P2）のプロンプト。生成済み HTML をデザインルーブリックで自己点検し、
+ * 機能・内容・文言は一切変えずに「見た目と画面構成」だけを基準に寄せて改善した HTML 全体を返させる。
+ * 出力は HTML 本文のみ（説明・フェンス禁止）。
+ */
+function buildReviewPrompt(html: string): string {
+  return [
+    'あなたは、できあがった HTML 試作品の「デザイン仕上げ（design review）」を行うシニア UI デザイナーです。',
+    '次の HTML を下のチェックリストで点検し、引っかかる点だけを直して、改善後の HTML 全体を返してください。',
+    '',
+    '厳守: 機能・JavaScript の挙動・文言・データ・画面構成（どんな部品があるか）は変えないこと。',
+    '変えてよいのは見た目（配色・余白・サイズ・整列・階層・角丸・影・状態表現）だけ。新機能や別画面を足さない。',
+    'すでに良い箇所はそのまま残す。ゼロから作り直さない（差分は最小限）。',
+    '',
+    'チェックリスト（外れていれば直す）:',
+    '- 本文は16px(1rem)以上 / 行間1.5 / 見出しはサイズと太さで階層がある',
+    '- 余白は8pxグリッド(4/8/12/16/24/32/48)で一貫・不揃いや過密が無い',
+    '- 本文のコントラストが背景に対し4.5:1以上、境界線/アイコン/UI部品は3:1以上（薄いグレー文字を白地に置かない）',
+    '- 1画面で目立つ主アクションは1つ / ボタンに primary/secondary/text の強弱がある',
+    '- カードやシートは面の色で背景と差がつく（影だけに頼らない）',
+    '- 押せる要素は最小48px・要素間8px以上 / 主要操作は親指の届く下部',
+    '- 色だけで状態を示さない（必ずアイコンや文言を添える）/ 必要なら空・エラー状態がある',
+    '- 過度なアニメーション(>500ms)や自動で動き続けるものが無い',
+    '- 可能なら配色・余白は CSS 変数(:root のトークン)に整理して一貫させる',
+    '',
+    HTML_RULES,
+    '',
+    '点検対象の HTML:',
+    html,
+  ].join('\n');
+}
+
 /** 反復修正のプロンプトを組み立てる（baseHtml 全体を修正指示で書き換え、HTML 全体を返す）。 */
 function buildRevisePrompt(baseHtml: string, instruction: string): string {
   return [
@@ -502,8 +534,8 @@ function isLimitFailure(r: RawRun): boolean {
 // ジョブはインメモリ（プロセス再起動で消える）。
 
 type JobStatus = 'pending' | 'generating' | 'done' | 'error';
-/** 多段フローの現在ステージ（設計→ワイヤーフレーム→コード）。修正(revise)では未使用。 */
-type JobStage = 'design' | 'wireframe' | 'code';
+/** 多段フローの現在ステージ（設計→ワイヤーフレーム→コード→仕上げレビュー）。修正(revise)では未使用。 */
+type JobStage = 'design' | 'wireframe' | 'code' | 'review';
 interface Job {
   status: JobStatus;
   /** 現在のステージ（4段フロー。クライアントが「いま何をしているか」を出し分けるのに使う）。 */
@@ -781,6 +813,41 @@ async function runDesignStage(
 }
 
 /**
+ * 仕上げレビュー（MC-252 P2）。生成済み HTML をデザインルーブリックで自己点検し、見た目だけ改善した
+ * HTML を返す。失敗・劣化（空/タグ無し/極端に短い）時は null を返し、呼び出し側は元 HTML を保持する。
+ * 改善後の HTML をストリームで job.partial に流す（ライブ表示）。
+ */
+async function runReviewStage(jobId: string, html: string): Promise<string | null> {
+  const onChunk = (accumulated: string): void => {
+    const job = jobs.get(jobId);
+    if (!job || job.status === 'done' || job.status === 'error') return;
+    job.partial = splitPlanHtml(accumulated).html;
+  };
+
+  let model = NOTEBOOK_CLAUDE_MODEL;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const raw = await runClaudeRaw(buildReviewPrompt(html), model, onChunk);
+    if (!raw.error) {
+      const improved = stripFences(splitPlanHtml(raw.stdout).html);
+      // 劣化ガード: HTML として妥当か＋元の 60% 以上の分量か（丸ごと短く壊していないか）。
+      if (improved && improved.includes('<') && improved.length >= html.length * 0.6) {
+        return improved;
+      }
+      console.warn('[dev-mockup] review stage output rejected (too short / invalid) → keep original');
+      return null;
+    }
+    if (isLimitFailure(raw) && attempt === 1) {
+      model = DEV_MOCKUP_FALLBACK_MODEL;
+      console.warn(`[dev-mockup] review stage sonnet limit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`);
+      continue;
+    }
+    console.warn(`[dev-mockup] review stage failed: ${raw.error} → keep original`);
+    break;
+  }
+  return null;
+}
+
+/**
  * 新規生成の多段ジョブ。設計→（Figma）→コードを直列で進め、完成 HTML を自動保存する。
  * await しない前提。例外でサーバを落とさない。
  */
@@ -863,7 +930,15 @@ async function runDesignFirstJob(
     const result = await generateHtmlWithRetry(codePrompt, onCodeChunk);
 
     if (result.html) {
-      const html = result.html;
+      let html = result.html;
+      // ── ステージ4: 仕上げレビュー（丁寧モードのみ・MC-252 P2）─────────
+      // ルーブリックで自己点検→見た目だけ微修正。高速モード(useWireframe=false)では省いて速さを保つ。
+      // 失敗・劣化時は元 HTML を保持（runReviewStage が null を返す）。
+      if (useWireframe) {
+        setJob({ stage: 'review', partial: html, wireframeProgress: undefined });
+        const improved = await runReviewStage(jobId, html);
+        if (improved) html = improved;
+      }
       const cur = jobs.get(jobId);
       let mockupId: string | undefined;
       try {
