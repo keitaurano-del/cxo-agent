@@ -174,6 +174,8 @@ interface LiveSnapshot {
 /** Error にそこまでの内容を載せて投げるための拡張。catch 側が拾って画面に残す。 */
 interface JobError extends Error {
   live?: LiveSnapshot;
+  /** ジョブが見つからない(404)＝期限切れ/消失。赤エラーにせず静かに片付けるための印。 */
+  notFound?: boolean;
 }
 
 /**
@@ -231,7 +233,10 @@ async function pollMockupJob(
       continue;
     }
     if (pollRes.status === 404) {
-      throw new Error('もう一度お試しください');
+      // ジョブが見つからない＝期限切れ/サーバ再起動等で消失。完了していれば一覧に自動保存済み。
+      const err = new Error('この生成は見つかりませんでした') as JobError;
+      err.notFound = true;
+      throw err;
     }
     if (!pollRes.ok) continue;
     let data: {
@@ -443,8 +448,9 @@ export default function Development() {
   const [liveScreens, setLiveScreens] = useState<{ name: string; description?: string }[]>([]);
   // 現在表示中プロトタイプの設計・ワイヤーフレーム（完成後/読込後に「何を作ったか」を表示）。
   const [design, setDesign] = useState<DesignInfo | null>(bootDraft?.design ?? null);
-  // Figma ワイヤーフレーム工程を行うか（OFF=高速モード：設計→コードのみで 1〜2 分）。既定 ON。
-  const [useWireframe, setUseWireframe] = useState<boolean>(bootDraft?.useWireframe ?? true);
+  // Figma ワイヤーフレーム工程を行うか（OFF=高速モード：設計→コードのみで速い）。
+  // 既定 OFF（高速）。Figma は遅く詰まりやすいため、まず確実に出る高速を既定にし、必要時にONにする。
+  const [useWireframe, setUseWireframe] = useState<boolean>(bootDraft?.useWireframe ?? false);
 
   // エディタに紐づく進行中ジョブ（あればエディタ側の進捗バーと生成ボタン無効化に使う）。
   const editorJob = activeJobs.find((j) => j.attachToEditor) ?? null;
@@ -582,6 +588,13 @@ export default function Development() {
           loadList();
         })
         .catch((e: unknown) => {
+          // 404（期限切れ/サーバ再起動でジョブ消失）は失敗ではない＝完了していれば一覧に自動保存済み。
+          // 古いジョブ（前回セッションからの復元等）が消えていた場合に赤エラーを出さず、静かに一覧更新する。
+          if ((e as JobError).notFound) {
+            setNotice('前回の作成中ジョブは見つかりませんでした。完了していれば下の一覧にあります。');
+            loadList();
+            return;
+          }
           // 404（サーバ再起動等でジョブ消失）でも完了済みなら一覧に自動保存されている。
           // attachToEditor のジョブのみ赤エラーを出し、デタッチ済み（新規作成後）は静かに一覧更新。
           if (job.attachToEditor) {
