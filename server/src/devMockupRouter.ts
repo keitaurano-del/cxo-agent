@@ -320,6 +320,31 @@ function buildReviewPrompt(html: string): string {
   ].join('\n');
 }
 
+/**
+ * 高速モード（Figma なし）用の単一呼び出しプロンプト。設計ステージを分けず、要望から直接 HTML を作らせる。
+ * 設計は頭の中で素早く済ませてすぐ書き始めるよう促し、2 回の AI 呼び出しを 1 回に圧縮して速くする。
+ * 設計システム・手本・自己チェックは付与して品質は保つ。
+ */
+function buildFastGeneratePrompt(prompt: string, referenceGuidance: string): string {
+  return [
+    'あなたは、動くインタラクティブな試作品を HTML で作るデザイナー兼フロントエンドエンジニアです。',
+    '次の要望に対して、実際に操作できる試作品を 1 つ作成してください。',
+    '設計は頭の中で手短に済ませ、長く考え込まずにすぐ作り始めること（速さを優先）。',
+    '',
+    '要望:',
+    prompt,
+    '',
+    INTERACTIVE_RULES,
+    '',
+    DESIGN_SYSTEM_RULES,
+    ...(referenceGuidance ? ['', referenceGuidance] : []),
+    '',
+    DESIGN_SELF_CHECK,
+    '',
+    HTML_RULES,
+  ].join('\n');
+}
+
 /** 反復修正のプロンプトを組み立てる（baseHtml 全体を修正指示で書き換え、HTML 全体を返す）。 */
 function buildRevisePrompt(baseHtml: string, instruction: string): string {
   return [
@@ -907,6 +932,43 @@ async function runDesignFirstJob(
     {
       const job = jobs.get(jobId);
       if (job && job.status === 'pending') job.status = 'generating';
+    }
+
+    // ── 高速モード（Figma なし）: 設計とコードを 1 回の AI 呼び出しに圧縮 ─────────
+    // 設計ステージを分けず要望から直接 HTML を作る。2 呼び出し→1 呼び出しで実質半分の時間に。
+    if (!useWireframe) {
+      setJob({ stage: 'code', partial: undefined });
+      const referenceGuidance = buildReferenceGuidance();
+      const fastPrompt = buildFastGeneratePrompt(userPrompt, referenceGuidance);
+      const onChunk = (accumulated: string, thinking: string): void => {
+        const job = jobs.get(jobId);
+        if (!job || job.status === 'done' || job.status === 'error') return;
+        job.partial = splitPlanHtml(accumulated).html;
+        if (thinking) job.thinking = thinking;
+      };
+      const fast = await generateHtmlWithRetry(fastPrompt, onChunk);
+      if (fast.html) {
+        let mockupId: string | undefined;
+        try {
+          mockupId = upsertMockup({ title: save.title, html: fast.html, prompt: save.prompt }).id;
+        } catch {
+          /* html は返す（保存はベストエフォート）。 */
+        }
+        const job = jobs.get(jobId);
+        if (job) {
+          job.status = 'done';
+          job.html = fast.html;
+          job.mockupId = mockupId;
+          if (mockupId) job.saved = [{ id: mockupId, title: save.title }];
+        }
+      } else {
+        const job = jobs.get(jobId);
+        if (job) {
+          job.status = 'error';
+          job.error = GENERATE_FAILURE_MESSAGES[fast.reason ?? 'error'];
+        }
+      }
+      return;
     }
 
     // ── ステージ1: 設計（思考＋設計書＋画面リスト）─────────────
