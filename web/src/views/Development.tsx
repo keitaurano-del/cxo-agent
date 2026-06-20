@@ -78,6 +78,8 @@ interface DraftState {
   design?: DesignInfo | null;
   /** Figma ワイヤーフレーム工程を行うか（OFF=高速モード）。 */
   useWireframe?: boolean;
+  /** 実装仕様書（Markdown。生成/読込したら復元する）。 */
+  spec?: string | null;
 }
 
 /** 進行中ジョブ（「作成中」カード表示・離脱/リロード後の再開に使う）。 */
@@ -451,6 +453,10 @@ export default function Development() {
   // Figma ワイヤーフレーム工程を行うか（OFF=高速モード：設計→コードのみで速い）。
   // 既定 OFF（高速）。Figma は遅く詰まりやすいため、まず確実に出る高速を既定にし、必要時にONにする。
   const [useWireframe, setUseWireframe] = useState<boolean>(bootDraft?.useWireframe ?? false);
+  // 実装仕様書（モック→本番化の設計。MC-253）。生成/読込で入る。
+  const [spec, setSpec] = useState<string | null>(bootDraft?.spec ?? null);
+  // 実装仕様書の生成中フラグ。
+  const [specBusy, setSpecBusy] = useState(false);
 
   // エディタに紐づく進行中ジョブ（あればエディタ側の進捗バーと生成ボタン無効化に使う）。
   const editorJob = activeJobs.find((j) => j.attachToEditor) ?? null;
@@ -506,8 +512,8 @@ export default function Development() {
 
   // 入力・生成結果・選択中 id が変わるたびに localStorage へ退避する（離脱/リロード復元用）。
   useEffect(() => {
-    saveDraft({ prompt, instruction, title, html, currentId, design, useWireframe });
-  }, [prompt, instruction, title, html, currentId, design, useWireframe]);
+    saveDraft({ prompt, instruction, title, html, currentId, design, useWireframe, spec });
+  }, [prompt, instruction, title, html, currentId, design, useWireframe, spec]);
 
   // 進行中ジョブ配列が変わるたびに localStorage へ退避する（離脱/リロードでも「作成中」を保持）。
   useEffect(() => {
@@ -666,6 +672,7 @@ export default function Development() {
       setLiveWireframe(null);
       setLiveScreens([]);
       setDesign(null);
+      setSpec(null);
       setFailedRun(null);
       setStreamStatus('pending');
       setStage('design');
@@ -767,6 +774,7 @@ export default function Development() {
           figmaFileUrl?: string;
           wireframeDir?: string;
           wireframeScreens?: WireframeScreen[];
+          implSpec?: string;
         };
       };
       const m = data.mockup;
@@ -777,6 +785,7 @@ export default function Development() {
       setPreviewHtml(m.html);
       setPrompt(m.prompt ?? '');
       setInstruction('');
+      setSpec(m.implSpec ?? null);
       // 設計・ワイヤーフレームがあれば「何を作ったか」として表示する。無ければクリア。
       setDesign(
         m.designDoc || m.figmaFileUrl || m.wireframeScreens?.length
@@ -794,6 +803,49 @@ export default function Development() {
       setError(e instanceof Error ? e.message : '読み込みに失敗しました');
     }
   }, []);
+
+  // 実装仕様書を作る（MC-253）。保存済みモックが対象。生成中の本文をライブ表示し、完了で確定・保存。
+  const handleMakeSpec = useCallback(async () => {
+    if (!currentId || specBusy || generating) return;
+    setSpecBusy(true);
+    setError(null);
+    setNotice('実装仕様書を作成中です（1〜2分かかります）…');
+    try {
+      const startRes = await fetch(`/api/dev/mockups/${encodeURIComponent(currentId)}/impl-spec`, {
+        method: 'POST',
+      });
+      if (!startRes.ok) throw new Error(await readError(startRes, '実装仕様書の作成に失敗しました'));
+      const { jobId } = (await startRes.json()) as { jobId?: string };
+      if (!jobId) throw new Error('実装仕様書の作成に失敗しました');
+      const deadline = Date.now() + POLL_MAX_WAIT_MS;
+      while (Date.now() < deadline) {
+        await sleep(POLL_INTERVAL_MS);
+        let r: Response;
+        try {
+          r = await fetch(`/api/dev/mockup/job/${encodeURIComponent(jobId)}`);
+        } catch {
+          continue;
+        }
+        if (!r.ok) continue;
+        let d: { status?: string; spec?: string; error?: string };
+        try {
+          d = (await r.json()) as typeof d;
+        } catch {
+          continue;
+        }
+        if (typeof d.spec === 'string' && d.spec) setSpec(d.spec); // ライブ更新
+        if (d.status === 'done') {
+          setNotice('実装仕様書ができました。下に表示しています。');
+          break;
+        }
+        if (d.status === 'error') throw new Error(d.error || '実装仕様書の作成に失敗しました');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '実装仕様書の作成に失敗しました');
+    } finally {
+      setSpecBusy(false);
+    }
+  }, [currentId, specBusy, generating]);
 
   // 削除。
   const handleDelete = useCallback(
@@ -857,6 +909,7 @@ export default function Development() {
     setLiveWireframe(null);
     setLiveScreens([]);
     setDesign(null);
+    setSpec(null);
     setFailedRun(null);
     // 進行中ジョブは消さない。エディタ紐付けだけ外し、一覧に「作成中」で見え続けるようにする。
     setActiveJobs((prev) => prev.map((j) => ({ ...j, attachToEditor: false })));
@@ -1068,6 +1121,35 @@ export default function Development() {
                   {currentId ? '上書き保存' : '保存'}
                 </button>
               </div>
+            </section>
+          )}
+
+          {/* 実装仕様書（モック→本番化の橋渡し・MC-253） */}
+          {html.trim() && (
+            <section className="flex flex-col gap-2 border-t border-border pt-4">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-semibold text-text-muted">実装仕様書（本番化の設計）</label>
+                <button
+                  type="button"
+                  onClick={handleMakeSpec}
+                  disabled={specBusy || generating || !currentId}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  title={currentId ? '' : 'まず保存してください'}
+                >
+                  {specBusy ? <Spinner /> : null}
+                  {specBusy ? '作成中…' : spec ? '作り直す' : '実装仕様書を作る'}
+                </button>
+              </div>
+              <p className="text-[10px] text-text-faint">
+                データモデル・バックエンドの要否・API/テーブル案・実装ステップ・推奨スタックまで、本番化のための設計をまとめます。
+                {!currentId && ' まず保存してから作成できます。'}
+              </p>
+              {spec && (
+                <pre className="max-h-80 w-full overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-surface px-3 py-2 text-[11px] leading-relaxed text-text">
+                  {spec}
+                  {specBusy && <span className="animate-pulse">▋</span>}
+                </pre>
+              )}
             </section>
           )}
 

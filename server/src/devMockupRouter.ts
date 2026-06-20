@@ -36,6 +36,7 @@ import {
   getMockup,
   listMockups,
   listReferenceMockups,
+  setImplSpec,
   setRating,
   upsertMockup,
 } from './lib/devMockupStore.js';
@@ -620,6 +621,8 @@ interface Job {
   wireframe?: { fileUrl?: string; dir: string; screens: { name: string; image?: string }[] };
   /** ワイヤーフレーム生成中の進捗メッセージ（ツール実行ベース。ライブ表示用）。 */
   wireframeProgress?: string;
+  /** 実装仕様書（Markdown）。spec 生成ジョブが書き込む（MC-253）。生成中はライブに伸びる。 */
+  spec?: string;
   error?: string;
   /** 保存先 id（クライアントが currentId に反映できる）。 */
   mockupId?: string;
@@ -911,6 +914,112 @@ async function runReviewStage(jobId: string, html: string): Promise<string | nul
   return null;
 }
 
+// ─── 実装仕様書の生成（MC-253・モック→本番化の橋渡し）──────────────
+
+/** 実装仕様書生成 1 回あたりのタイムアウト（仕様書はコードより軽いので 4 分で十分）。 */
+const SPEC_TIMEOUT_MS = 240_000;
+
+/**
+ * モック（要望＋設計書＋HTML）から「実装仕様書」を書かせるプロンプト。
+ * フロントだけの試作を、バックエンド込みの本番アプリにするための設計を Markdown で出させる。
+ * 既存スタック（React+Vite+Tailwind / Supabase or Node+Express / Render+GitHub Actions）を前提に推奨する。
+ */
+function buildImplSpecPrompt(appTitle: string, prompt: string, designDoc: string, html: string): string {
+  return [
+    'あなたは、動く HTML 試作品（モックアップ）を本番のアプリに仕立てるテックリードです。',
+    '次のモックを「フロントエンド＋バックエンド込みで本番リリースする」ための実装仕様書を Markdown で書いてください。',
+    'プログラミングに詳しくない発注者でも全体像が分かり、かつエンジニア/AIがそのまま実装に着手できる具体度にすること。',
+    '',
+    `アプリ名: ${appTitle}`,
+    '元の要望:',
+    prompt || '（なし）',
+    '',
+    '設計書（あれば）:',
+    designDoc || '（なし）',
+    '',
+    '次の構成で、過不足なく具体的に書くこと（各見出しは ## で）:',
+    '1. 概要 — 何のアプリで、誰のどんな課題を解決するか（2〜3行）',
+    '2. 画面と主な機能 — モックにある画面・操作を箇条書きで',
+    '3. データモデル — 必要なエンティティと項目（名前・型・必須/任意・関係）を表で。永続化が要るデータを明確に',
+    '4. バックエンドの要否と構成 — 保存/認証/共有・同期/外部API/課金/通知 の要否を判断し、推奨構成を選ぶ:',
+    '   - 推奨A: Supabase 中心（Postgres＋認証〔マジックリンク〕＋ストレージ＋行レベル権限、重い処理だけ Edge Functions）。多くのアプリはこれで足りる。',
+    '   - 推奨B: 自前 Node+Express＋DB（複雑なサーバ処理・バッチ・LLM 呼び出しが要る時）。',
+    '   どちらが適切かを理由つきで選ぶ。',
+    '5. API / テーブル設計 — 主要なエンドポイント（または Supabase テーブル＋RLS 方針）の一覧。リクエスト/レスポンスの要点',
+    '6. 認証・権限 — ログイン方式とデータの見える範囲',
+    '7. 実装ステップ — フロント / バックエンド / リリース の順で、着手できる粒度のチェックリスト',
+    '8. 推奨スタックとリリース — フロント=React+Vite+Tailwind、バック=上の選択、ホスティング=Render/Vercel＋Supabase、CI/CD=GitHub Actions（main push で自動デプロイ）。モバイル中心なら PWA 化も触れる',
+    '9. 留意点 / 未確定事項 — 課金・法規・スケール・要確認の論点',
+    '',
+    'コードは書かない（仕様書のみ）。冗長にせず、判断と具体値を重視すること。日本語で書くこと。',
+    '',
+    '対象モックの HTML（構造把握用・必要な範囲で参照）:',
+    html.slice(0, 16000),
+  ].join('\n');
+}
+
+/**
+ * 実装仕様書を生成してジョブと store に保存する（MC-253）。生成中の本文を job.spec にストリームする。
+ * 既存の非同期ジョブ機構（jobs / handleJob / TTL）を再利用。await しない前提・throw しない。
+ */
+async function runSpecJob(
+  jobId: string,
+  mockupId: string,
+  appTitle: string,
+  prompt: string,
+  designDoc: string,
+  html: string,
+): Promise<void> {
+  const onChunk = (accumulated: string): void => {
+    const job = jobs.get(jobId);
+    if (!job || job.status === 'done' || job.status === 'error') return;
+    job.status = 'generating';
+    job.spec = accumulated || undefined;
+  };
+
+  await serializeDevGen(async () => {
+    const j = jobs.get(jobId);
+    if (j && j.status === 'pending') j.status = 'generating';
+
+    let model = NOTEBOOK_CLAUDE_MODEL;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const raw = await runClaudeRaw(
+        buildImplSpecPrompt(appTitle, prompt, designDoc, html),
+        model,
+        onChunk,
+        SPEC_TIMEOUT_MS,
+      );
+      if (!raw.error) {
+        const spec = stripFences(raw.stdout).trim();
+        if (spec) {
+          try {
+            setImplSpec(mockupId, spec);
+          } catch {
+            /* 保存はベストエフォート。 */
+          }
+          const job = jobs.get(jobId);
+          if (job) {
+            job.status = 'done';
+            job.spec = spec;
+          }
+          return;
+        }
+      } else if (isLimitFailure(raw) && attempt === 1) {
+        model = DEV_MOCKUP_FALLBACK_MODEL;
+        console.warn(`[dev-spec] sonnet limit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`);
+        continue;
+      }
+      console.warn(`[dev-spec] spec attempt ${attempt} failed: ${raw.error ?? 'empty'}`);
+      if (attempt < 2) await sleep(GENERATE_RETRY_BACKOFF_MS);
+    }
+    const job = jobs.get(jobId);
+    if (job) {
+      job.status = 'error';
+      job.error = '実装仕様書の生成に失敗しました。少し待ってもう一度お試しください。';
+    }
+  });
+}
+
 /**
  * 新規生成の多段ジョブ。設計→（Figma）→コードを直列で進め、完成 HTML を自動保存する。
  * await しない前提。例外でサーバを落とさない。
@@ -1176,6 +1285,8 @@ function handleJob(req: Request, res: Response): void {
     wireframe: job.wireframe,
     // ワイヤーフレーム生成中の進捗（ライブ表示のみ）。
     wireframeProgress: liveVisible ? job.wireframeProgress : undefined,
+    // 実装仕様書（spec 生成ジョブ）。生成中も done でも返す（ライブに伸びて完成で確定）。
+    spec: job.spec,
     mockupId: job.mockupId,
     error: job.error,
     saved: job.saved,
@@ -1266,6 +1377,37 @@ function handleRating(req: Request, res: Response): void {
   res.json({ mockup });
 }
 
+/**
+ * POST /api/dev/mockups/:id/impl-spec — 実装仕様書の生成ジョブを起票し 202 { jobId } を返す（MC-253）。
+ * 進捗・結果は GET /mockup/job/:jobId の spec フィールドで取得する。保存先 store にも実装仕様書を残す。
+ */
+function handleImplSpec(req: Request, res: Response): void {
+  sweepExpiredJobs();
+  const id = String(req.params.id);
+  const mockup = getMockup(id);
+  if (!mockup) {
+    res.status(404).json({ error: 'mockup not found' });
+    return;
+  }
+  const jobId = randomUUID();
+  jobs.set(jobId, { status: 'pending', createdAt: Date.now() });
+  void runSpecJob(
+    jobId,
+    id,
+    mockup.title,
+    mockup.prompt ?? '',
+    mockup.designDoc ?? '',
+    mockup.html ?? '',
+  ).catch(() => {
+    const job = jobs.get(jobId);
+    if (job) {
+      job.status = 'error';
+      job.error = '実装仕様書の生成に失敗しました。';
+    }
+  });
+  res.status(202).json({ jobId });
+}
+
 // ─── Router 組み立て ─────────────────────────────────────
 
 /** /api/dev 配下のルータを返す。index.ts で auth ミドルウェア配下に mount する。 */
@@ -1278,6 +1420,7 @@ export function devMockupRouter(): Router {
   router.get('/mockups/:id', handleGet);
   router.post('/mockups', handleUpsert);
   router.post('/mockups/:id/rating', handleRating);
+  router.post('/mockups/:id/impl-spec', handleImplSpec);
   router.delete('/mockups/:id', handleDelete);
   return router;
 }

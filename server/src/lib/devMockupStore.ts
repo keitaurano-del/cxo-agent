@@ -35,6 +35,8 @@ export interface Mockup {
   wireframeScreens?: { name: string; image?: string }[];
   /** Keita の評価（👍=up / 👎=down）。up は次の生成の「手本」に使う（MC-252 P3 フライホイール）。 */
   rating?: 'up' | 'down';
+  /** 実装仕様書（Markdown）。モックから本番化するための設計（データモデル/バック要否/API等）。MC-253。 */
+  implSpec?: string;
   /** 作成日時（ISO8601）。 */
   createdAt: string;
   /** 更新日時（ISO8601）。 */
@@ -154,8 +156,9 @@ export function upsertMockup(input: {
       : existing?.wireframeScreens !== undefined
         ? { wireframeScreens: existing.wireframeScreens }
         : {}),
-    // 評価は upsert では引き継ぐ（再保存・修正で消さない）。設定は setRating で行う。
+    // 評価・実装仕様書は upsert では引き継ぐ（再保存・修正で消さない）。設定は専用関数で行う。
     ...(existing?.rating !== undefined ? { rating: existing.rating } : {}),
+    ...(existing?.implSpec !== undefined ? { implSpec: existing.implSpec } : {}),
     createdAt,
     updatedAt: now,
     // upsert は常に「生きている」状態にする（過去に削除済みでも復活）。
@@ -192,6 +195,18 @@ export function listReferenceMockups(limit = 2): Mockup[] {
   }
   out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return out.slice(0, limit);
+}
+
+/**
+ * 実装仕様書（Markdown）を保存する（MC-253）。既存レコードを保ったまま implSpec だけ更新して追記する。
+ * 存在しない id は undefined。設定後の公開形を返す。
+ */
+export function setImplSpec(id: string, implSpec: string): Mockup | undefined {
+  const existing = readAll(DEV_MOCKUPS_FILE).get(id);
+  if (!existing || existing.deleted) return undefined;
+  const rec: Mockup = { ...existing, implSpec, updatedAt: new Date().toISOString() };
+  appendRecord(DEV_MOCKUPS_FILE, rec);
+  return strip(rec);
 }
 
 /** 指定 id のモックアップを論理削除する（deleted:true を追記）。存在しなくても冪等に成功扱い。 */
