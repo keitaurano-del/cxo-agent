@@ -33,6 +33,8 @@ export interface Mockup {
   wireframeDir?: string;
   /** 各画面のワイヤーフレーム（名前＋保存済み画像ファイル名）（任意）。 */
   wireframeScreens?: { name: string; image?: string }[];
+  /** Keita の評価（👍=up / 👎=down）。up は次の生成の「手本」に使う（MC-252 P3 フライホイール）。 */
+  rating?: 'up' | 'down';
   /** 作成日時（ISO8601）。 */
   createdAt: string;
   /** 更新日時（ISO8601）。 */
@@ -152,6 +154,8 @@ export function upsertMockup(input: {
       : existing?.wireframeScreens !== undefined
         ? { wireframeScreens: existing.wireframeScreens }
         : {}),
+    // 評価は upsert では引き継ぐ（再保存・修正で消さない）。設定は setRating で行う。
+    ...(existing?.rating !== undefined ? { rating: existing.rating } : {}),
     createdAt,
     updatedAt: now,
     // upsert は常に「生きている」状態にする（過去に削除済みでも復活）。
@@ -159,6 +163,35 @@ export function upsertMockup(input: {
   };
   appendRecord(DEV_MOCKUPS_FILE, rec);
   return strip(rec);
+}
+
+/**
+ * 評価（👍 up / 👎 down / 解除 null）を設定する。既存レコードを保ったまま rating だけ更新して追記する。
+ * 存在しない id は何もしない。設定後の公開形を返す（無ければ undefined）。
+ */
+export function setRating(id: string, rating: 'up' | 'down' | null): Mockup | undefined {
+  const existing = readAll(DEV_MOCKUPS_FILE).get(id);
+  if (!existing || existing.deleted) return undefined;
+  const rec: Mockup = { ...existing, updatedAt: new Date().toISOString() };
+  if (rating === null) delete rec.rating;
+  else rec.rating = rating;
+  appendRecord(DEV_MOCKUPS_FILE, rec);
+  return strip(rec);
+}
+
+/**
+ * 「手本」に使う up 評価済みモックアップ（html 含む）を新しい順で最大 limit 件返す（MC-252 P3）。
+ * 生成プロンプトに少数の good example として差し込み、モデルに良いデザインを真似させる。
+ */
+export function listReferenceMockups(limit = 2): Mockup[] {
+  const map = readAll(DEV_MOCKUPS_FILE);
+  const out: Mockup[] = [];
+  for (const rec of map.values()) {
+    if (rec.deleted || rec.rating !== 'up') continue;
+    out.push(strip(rec));
+  }
+  out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return out.slice(0, limit);
 }
 
 /** 指定 id のモックアップを論理削除する（deleted:true を追記）。存在しなくても冪等に成功扱い。 */

@@ -34,6 +34,8 @@ interface MockupSummary {
   prompt?: string;
   /** Figma ワイヤーフレームを伴う場合の URL（一覧で「何を作ったか」の目印に使う）。 */
   figmaFileUrl?: string;
+  /** Keita の評価。👍=次の生成の手本に使われる。 */
+  rating?: 'up' | 'down';
   createdAt: string;
   updatedAt: string;
 }
@@ -795,6 +797,32 @@ export default function Development() {
     [currentId, loadList],
   );
 
+  // 評価（👍/👎）。同じ評価をもう一度押すと解除。👍 は次の生成の「手本」に使われる。
+  const handleRate = useCallback(
+    async (id: string, current: 'up' | 'down' | undefined, next: 'up' | 'down') => {
+      const rating = current === next ? null : next;
+      try {
+        const res = await fetch(`/api/dev/mockups/${encodeURIComponent(id)}/rating`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating }),
+        });
+        if (!res.ok) throw new Error(await readError(res, '評価に失敗しました'));
+        setNotice(
+          rating === 'up'
+            ? '👍 手本に登録しました。次の生成からこのデザインを参考にします。'
+            : rating === 'down'
+              ? '👎 を記録しました。'
+              : '評価を解除しました。',
+        );
+        loadList();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : '評価に失敗しました');
+      }
+    },
+    [loadList],
+  );
+
   // 新規作成: 入力・コード・プレビュー・選択中 id をすべてクリアして白紙に戻す。
   // 生成物は一覧に自動保存済みのため、ここで消えても「保存済みモックアップ」から再度開ける。
   const handleNew = useCallback(() => {
@@ -1097,6 +1125,29 @@ export default function Development() {
                       <div className="text-[10px] text-text-faint">
                         {new Date(m.updatedAt).toLocaleString('ja-JP')}
                       </div>
+                    </button>
+                    {/* 👍/👎 評価。👍=次の生成の手本に使う。同じ評価を再押下で解除。 */}
+                    <button
+                      type="button"
+                      onClick={() => void handleRate(m.id, m.rating, 'up')}
+                      aria-label={`「${m.title}」を手本にする（👍）`}
+                      title="👍 手本にする（次の生成で参考にします）"
+                      className={`shrink-0 rounded p-1 text-sm transition-colors hover:bg-surface-2 ${
+                        m.rating === 'up' ? '' : 'opacity-40 hover:opacity-100'
+                      }`}
+                    >
+                      👍
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleRate(m.id, m.rating, 'down')}
+                      aria-label={`「${m.title}」に👎`}
+                      title="👎 いまいち"
+                      className={`shrink-0 rounded p-1 text-sm transition-colors hover:bg-surface-2 ${
+                        m.rating === 'down' ? '' : 'opacity-40 hover:opacity-100'
+                      }`}
+                    >
+                      👎
                     </button>
                     <button
                       type="button"

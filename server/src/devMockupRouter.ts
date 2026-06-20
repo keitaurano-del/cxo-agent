@@ -35,6 +35,8 @@ import {
   deleteMockup,
   getMockup,
   listMockups,
+  listReferenceMockups,
+  setRating,
   upsertMockup,
 } from './lib/devMockupStore.js';
 import {
@@ -213,14 +215,45 @@ function splitDesignScreens(out: string): { designDoc: string; screens: ScreenSp
 }
 
 /**
+ * Keita が 👍 した過去の試作品（手本）から「参考スタイル」ガイダンスを組み立てる（MC-252 P3）。
+ * 全 HTML はプロンプトを肥大させるので入れず、各手本の :root デザイントークン＋設計書要約だけを
+ * 抜き出して「この雰囲気・トークンに寄せて（内容はコピーしない）」と差し込む。手本が無ければ ''。
+ */
+function buildReferenceGuidance(): string {
+  const refs = listReferenceMockups(2);
+  if (refs.length === 0) return '';
+  const blocks = refs.map((m, i) => {
+    const root = (m.html || '').match(/:root\s*\{[\s\S]*?\}/);
+    const tokens = root ? root[0] : '（トークン定義なし）';
+    const doc = (m.designDoc || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+    return [
+      `手本${i + 1}「${m.title}」${doc ? `: ${doc}` : ''}`,
+      '  使っていたデザイントークン:',
+      tokens
+        .split('\n')
+        .map((l) => `  ${l.trim()}`)
+        .join('\n'),
+    ].join('\n');
+  });
+  return [
+    '【参考にする手本（Keita が良いと評価したデザイン）】',
+    '次の試作品の配色・トークン・余白・トーンの雰囲気を参考に、似た質感で作ってください。',
+    'ただし内容・レイアウト・機能はあくまで今回の要望と設計書に従い、手本の中身はコピーしないこと。',
+    ...blocks,
+  ].join('\n');
+}
+
+/**
  * 設計書＋画面リスト（＋Figma で作ったワイヤーフレームの有無）を元に、動く単一 HTML を作らせる。
  * 設計は済んでいるので作り方メモ（PLAN_RULES）は付けず、HTML 本文だけを書かせる。
+ * referenceGuidance には 👍 手本のスタイル参考（あれば）を渡す。
  */
 function buildCodeFromDesignPrompt(
   prompt: string,
   designDoc: string,
   screens: ScreenSpec[],
   wireframed: boolean,
+  referenceGuidance: string,
 ): string {
   const screenLines = screens.length
     ? screens.map((s, i) => `${i + 1}. ${s.name}: ${s.description}`).join('\n')
@@ -247,6 +280,7 @@ function buildCodeFromDesignPrompt(
     INTERACTIVE_RULES,
     '',
     DESIGN_SYSTEM_RULES,
+    ...(referenceGuidance ? ['', referenceGuidance] : []),
     '',
     DESIGN_SELF_CHECK,
     '',
@@ -924,7 +958,15 @@ async function runDesignFirstJob(
 
     // ── ステージ3: コーディング ───────────────────────────────
     setJob({ stage: 'code', partial: undefined });
-    const codePrompt = buildCodeFromDesignPrompt(userPrompt, designDoc, screens, wireframed);
+    // 👍 手本があればスタイル参考としてプロンプトに差し込む（MC-252 P3 フライホイール）。
+    const referenceGuidance = buildReferenceGuidance();
+    const codePrompt = buildCodeFromDesignPrompt(
+      userPrompt,
+      designDoc,
+      screens,
+      wireframed,
+      referenceGuidance,
+    );
     const onCodeChunk = (accumulated: string, thinking: string): void => {
       const job = jobs.get(jobId);
       if (!job || job.status === 'done' || job.status === 'error') return;
@@ -1145,6 +1187,23 @@ function handleDelete(req: Request, res: Response): void {
   res.json({ ok: true, id });
 }
 
+/**
+ * POST /api/dev/mockups/:id/rating — { rating: 'up'|'down'|null } で評価を設定（MC-252 P3）。
+ * up の試作品は次の生成で「手本」として参照される。null で評価解除。
+ */
+function handleRating(req: Request, res: Response): void {
+  const id = String(req.params.id);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const r = body.rating;
+  const rating: 'up' | 'down' | null = r === 'up' || r === 'down' ? r : null;
+  const mockup = setRating(id, rating);
+  if (!mockup) {
+    res.status(404).json({ error: 'mockup not found' });
+    return;
+  }
+  res.json({ mockup });
+}
+
 // ─── Router 組み立て ─────────────────────────────────────
 
 /** /api/dev 配下のルータを返す。index.ts で auth ミドルウェア配下に mount する。 */
@@ -1156,6 +1215,7 @@ export function devMockupRouter(): Router {
   router.get('/mockups', handleList);
   router.get('/mockups/:id', handleGet);
   router.post('/mockups', handleUpsert);
+  router.post('/mockups/:id/rating', handleRating);
   router.delete('/mockups/:id', handleDelete);
   return router;
 }
