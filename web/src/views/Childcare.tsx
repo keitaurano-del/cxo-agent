@@ -781,6 +781,122 @@ function VaccineScheduleSection({ now }: { now: Date }) {
   );
 }
 
+// ─── セクション（新）: 相談メモ（育児チャットの Q&A をトピック別に整理）──────
+// 育児ガイドを開いたとき GET /api/childcare/guide-notes を呼ぶ。サーバ側で「前回まとめ以降の
+// 新しい相談だけ」を差分処理してトピック別の要点に整理し、永続キャッシュから返す。
+// まだ相談が無いときは空状態を出す。更新中（generating）はローディングを出し、少し待って再取得する。
+interface GuideNoteTopic {
+  topic: string;
+  title: string;
+  points: string[];
+}
+interface GuideNotesResponse {
+  topics: GuideNoteTopic[];
+  updatedAt: string | null;
+  generating: boolean;
+}
+
+function formatUpdatedAt(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString('ja-JP', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function ConsultationNotesSection() {
+  const [topics, setTopics] = useState<GuideNoteTopic[]>([]);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  // 初回ロード中（まだ一度もデータを受け取っていない）。
+  const [loading, setLoading] = useState(true);
+  // 取得失敗（致命ではなく、本文は隠してリトライ案内のみ出す）。
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const fetchNotes = async (isRetry: boolean) => {
+      try {
+        const res = await fetch('/api/childcare/guide-notes', {
+          headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as GuideNotesResponse;
+        if (cancelled) return;
+        setTopics(Array.isArray(data.topics) ? data.topics : []);
+        setUpdatedAt(typeof data.updatedAt === 'string' ? data.updatedAt : null);
+        setFailed(false);
+        setLoading(false);
+        // 裏で差分更新中（別リクエストが統合中）なら、少し待ってもう一度取りに行く。
+        if (data.generating && !isRetry) {
+          retryTimer = setTimeout(() => void fetchNotes(true), 5000);
+        }
+      } catch {
+        if (cancelled) return;
+        setFailed(true);
+        setLoading(false);
+      }
+    };
+
+    void fetchNotes(false);
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, []);
+
+  const updatedLabel = formatUpdatedAt(updatedAt);
+
+  return (
+    <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+      <SectionTitle hint="育児チャット「すくすく」での相談を、トピック別に要点整理しています。ガイドを開くたびに新しい相談を反映します。">
+        📝 相談メモ（育児チャットの記録）
+      </SectionTitle>
+
+      {loading ? (
+        <div className="flex items-center gap-2 rounded-md border border-border bg-bg px-3 py-3 text-xs text-text-muted">
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-text-muted border-t-transparent" />
+          相談メモを整理しています…
+        </div>
+      ) : failed ? (
+        <p className="rounded-md border border-border bg-bg px-3 py-3 text-xs text-text-muted">
+          相談メモの読み込みに失敗しました。少し時間をおいて再度お試しください。
+        </p>
+      ) : topics.length === 0 ? (
+        <p className="rounded-md border border-border bg-bg px-3 py-3 text-xs leading-relaxed text-text-muted">
+          育児チャットで相談すると、ここに要点が整理されてたまっていきます。
+        </p>
+      ) : (
+        <>
+          <ul className="flex flex-col gap-2">
+            {topics.map((t) => (
+              <li key={t.topic} className="rounded-md border border-border bg-bg px-3 py-3">
+                <p className="text-sm font-semibold text-text">{t.title}</p>
+                <ul className="mt-1 list-disc pl-5 text-xs leading-relaxed text-text-muted">
+                  {t.points.map((p, i) => (
+                    <li key={i}>{p}</li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+          {updatedLabel && (
+            <p className="mt-2 text-[11px] text-text-faint">最終更新: {updatedLabel}</p>
+          )}
+        </>
+      )}
+      <Note>
+        育児チャットの相談を一般的な目安として整理したものです。健康上の心配や緊急時は小児科・小児救急電話相談（#8000）にご相談ください。
+      </Note>
+    </section>
+  );
+}
+
 // ─── 育児ガイド本体（従来の /childcare の中身。タブシェル配下に描画）──
 function ChildcareGuide() {
   // クライアントの現在日を基準に算出（マウント時に固定）。
@@ -792,6 +908,8 @@ function ChildcareGuide() {
       <NextMilestoneSection now={now} />
       <GrowthSection now={now} />
       <UpcomingSection now={now} />
+      {/* 相談メモ（育児チャットの Q&A をトピック別に整理）。本体の静的コンテンツの上に置く。 */}
+      <ConsultationNotesSection />
       {/* PC（lg〜）は2分割（CSS マルチカラムのメイソンリー）、モバイルは1列。
           各ラッパに break-inside-avoid を当て、カードが列をまたいで割れないようにする。 */}
       <div className="columns-1 gap-4 lg:columns-2">

@@ -919,6 +919,17 @@ export const CHILDCARE_CHAT_FILE = env(
   join(INBOX_DATA_DIR, 'childcare-chat.jsonl'),
 );
 
+/**
+ * 育児ガイド「相談メモ」の永続キャッシュ（JSON 単一ファイル）。
+ * 育児チャットの Q&A をトピック別に整理したメモ＋差分処理マーカ（最後に処理した
+ * assistant メッセージ id / 処理件数）を保持する。育児ガイドを開いたとき、新規相談が
+ * あれば差分だけ AI 統合してここを更新し、無ければ即返す（軽量化）。
+ */
+export const CHILDCARE_GUIDE_NOTES_FILE = env(
+  'CHILDCARE_GUIDE_NOTES_FILE',
+  join(INBOX_DATA_DIR, 'childcare-guide-notes.json'),
+);
+
 // ─── 育児チャットの送信メディア（画像・動画アップロード）────────────
 // チャット入力欄から添付された画像/動画を <id>-<safe-name> でフラット保存する。
 // babyDiaryRouter のメディア保存作法に倣う（multer diskStorage・MIME 検証・サイズ上限）。

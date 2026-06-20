@@ -241,6 +241,30 @@ export function listMessages(): ChatMessage[] {
   return liveMessages().map(toPublic);
 }
 
+/** id 付きの会話履歴エントリ（相談メモの差分処理がメッセージ id をマーカに使うため）。 */
+export interface ChatEntry {
+  id: string;
+  role: ChatRole;
+  content: string;
+  status: ChatStatus;
+  ts: string;
+}
+
+/**
+ * 生きている会話履歴を id 付き・時系列で返す（相談メモの差分処理用）。
+ * 公開形（listMessages）は id を落とすので、差分カーソルにメッセージ id を使う
+ * 相談メモ生成のためにこの id 付きビューを別途提供する。media は不要なので含めない。
+ */
+export function listResolvedEntries(): ChatEntry[] {
+  return liveMessages().map((r) => ({
+    id: r.id,
+    role: r.role,
+    content: r.content,
+    status: r.status,
+    ts: r.ts,
+  }));
+}
+
 /** ランダムな一意 ID を採番する（メッセージ id / jobId 共用）。 */
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
