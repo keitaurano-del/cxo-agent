@@ -788,6 +788,7 @@ async function runDesignFirstJob(
   jobId: string,
   userPrompt: string,
   save: { title: string; prompt?: string },
+  useWireframe: boolean,
 ): Promise<void> {
   const setJob = (patch: Partial<Job>): void => {
     const job = jobs.get(jobId);
@@ -811,39 +812,42 @@ async function runDesignFirstJob(
       design.screens.length > 0 ? design.screens : [{ name: save.title, description: userPrompt }];
     setJob({ designDoc: designDoc || undefined, screens, plan: designDoc || undefined });
 
-    // ── ステージ2: Figma ワイヤーフレーム（失敗時はスキップ）──────
-    setJob({ stage: 'wireframe', partial: undefined, wireframeProgress: '🎨 Figma でワイヤーフレームを作る準備をしています' });
-    const specs: WireframeScreenSpec[] = screens.map((s) => ({
-      name: s.name,
-      description: s.description,
-    }));
+    // ── ステージ2: Figma ワイヤーフレーム（任意・失敗時はスキップ）──────
+    // useWireframe=false（高速モード）なら Figma 工程ごと飛ばし、設計→コードへ直行する。
     let wireframed = false;
-    let wf: Awaited<ReturnType<typeof generateFigmaWireframes>>;
-    try {
-      wf = await generateFigmaWireframes(
-        jobId,
-        save.title,
-        designDoc || userPrompt,
-        specs,
-        NOTEBOOK_CLAUDE_MODEL,
-        (msg) => setJob({ wireframeProgress: msg }),
-      );
-    } catch (e) {
-      wf = { ok: false, screens: [], error: (e as Error).message };
-    }
-    if (wf.ok && wf.screens.length > 0) {
-      wireframed = true;
-      setJob({
-        wireframe: {
-          fileUrl: wf.fileUrl,
-          dir: jobId,
-          screens: wf.screens.map((s) => ({ name: s.name, image: s.image })),
-        },
-        wireframeProgress: 'ワイヤーフレームができました。これを元にコードを作ります。',
-      });
-    } else {
-      console.warn(`[dev-mockup] figma wireframe skipped: ${wf.error ?? 'no screens'}`);
-      setJob({ wireframeProgress: 'ワイヤーフレームは省略し、設計を元に直接コードを作ります。' });
+    if (useWireframe) {
+      setJob({ stage: 'wireframe', partial: undefined, wireframeProgress: '🎨 Figma でワイヤーフレームを作る準備をしています' });
+      const specs: WireframeScreenSpec[] = screens.map((s) => ({
+        name: s.name,
+        description: s.description,
+      }));
+      let wf: Awaited<ReturnType<typeof generateFigmaWireframes>>;
+      try {
+        wf = await generateFigmaWireframes(
+          jobId,
+          save.title,
+          designDoc || userPrompt,
+          specs,
+          NOTEBOOK_CLAUDE_MODEL,
+          (msg) => setJob({ wireframeProgress: msg }),
+        );
+      } catch (e) {
+        wf = { ok: false, screens: [], error: (e as Error).message };
+      }
+      if (wf.ok && wf.screens.length > 0) {
+        wireframed = true;
+        setJob({
+          wireframe: {
+            fileUrl: wf.fileUrl,
+            dir: jobId,
+            screens: wf.screens.map((s) => ({ name: s.name, image: s.image })),
+          },
+          wireframeProgress: 'ワイヤーフレームができました。これを元にコードを作ります。',
+        });
+      } else {
+        console.warn(`[dev-mockup] figma wireframe skipped: ${wf.error ?? 'no screens'}`);
+        setJob({ wireframeProgress: 'ワイヤーフレームは省略し、設計を元に直接コードを作ります。' });
+      }
     }
 
     // ── ステージ3: コーディング ───────────────────────────────
@@ -904,6 +908,9 @@ function handleGenerate(req: Request, res: Response): void {
   const prompt = typeof body.prompt === 'string' ? body.prompt : '';
   const baseHtml = typeof body.baseHtml === 'string' ? body.baseHtml : '';
   const instruction = typeof body.instruction === 'string' ? body.instruction : '';
+  // Figma ワイヤーフレーム工程の有無（高速モード）。既定 true＝Figma 先行フロー。
+  // false なら設計→コードへ直行し 1〜2 分で出る。明示的に false の時だけ無効。
+  const useWireframe = body.wireframe !== false;
 
   // モード判定: baseHtml + instruction が両方あれば反復修正、prompt のみなら新規生成。
   // どちらも「1 つの動くインタラクティブな単一 HTML」を生成する。
@@ -931,10 +938,15 @@ function handleGenerate(req: Request, res: Response): void {
 
   if (isGenerate) {
     // 新規生成: 設計→Figmaワイヤーフレーム→コーディングの多段フローで進め、完成 HTML を自動保存。
-    void runDesignFirstJob(jobId, prompt.trim(), {
-      title: explicitTitle || oneLine(prompt) || 'モックアップ',
-      prompt: prompt.trim(),
-    }).catch(onFatal);
+    void runDesignFirstJob(
+      jobId,
+      prompt.trim(),
+      {
+        title: explicitTitle || oneLine(prompt) || 'モックアップ',
+        prompt: prompt.trim(),
+      },
+      useWireframe,
+    ).catch(onFatal);
   } else {
     // 修正: 単一画面。自動保存用のタイトルと対象 id を決める。
     const autoTitle = explicitTitle || (instruction.trim() ? `修正: ${oneLine(instruction)}` : 'モックアップ');

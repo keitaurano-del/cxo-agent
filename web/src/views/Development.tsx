@@ -74,6 +74,8 @@ interface DraftState {
   currentId: string | null;
   /** 現在表示中プロトタイプの設計・ワイヤーフレーム（完成後/読込後に表示するため復元する）。 */
   design?: DesignInfo | null;
+  /** Figma ワイヤーフレーム工程を行うか（OFF=高速モード）。 */
+  useWireframe?: boolean;
 }
 
 /** 進行中ジョブ（「作成中」カード表示・離脱/リロード後の再開に使う）。 */
@@ -439,6 +441,8 @@ export default function Development() {
   const [liveScreens, setLiveScreens] = useState<{ name: string; description?: string }[]>([]);
   // 現在表示中プロトタイプの設計・ワイヤーフレーム（完成後/読込後に「何を作ったか」を表示）。
   const [design, setDesign] = useState<DesignInfo | null>(bootDraft?.design ?? null);
+  // Figma ワイヤーフレーム工程を行うか（OFF=高速モード：設計→コードのみで 1〜2 分）。既定 ON。
+  const [useWireframe, setUseWireframe] = useState<boolean>(bootDraft?.useWireframe ?? true);
 
   // エディタに紐づく進行中ジョブ（あればエディタ側の進捗バーと生成ボタン無効化に使う）。
   const editorJob = activeJobs.find((j) => j.attachToEditor) ?? null;
@@ -492,8 +496,8 @@ export default function Development() {
 
   // 入力・生成結果・選択中 id が変わるたびに localStorage へ退避する（離脱/リロード復元用）。
   useEffect(() => {
-    saveDraft({ prompt, instruction, title, html, currentId, design });
-  }, [prompt, instruction, title, html, currentId, design]);
+    saveDraft({ prompt, instruction, title, html, currentId, design, useWireframe });
+  }, [prompt, instruction, title, html, currentId, design, useWireframe]);
 
   // 進行中ジョブ配列が変わるたびに localStorage へ退避する（離脱/リロードでも「作成中」を保持）。
   useEffect(() => {
@@ -627,7 +631,10 @@ export default function Development() {
     setNotice(null);
     const label = prompt.trim().slice(0, 40) || 'モックアップ';
     try {
-      const jobId = await startMockupJob({ prompt: prompt.trim() }, '生成に失敗しました');
+      const jobId = await startMockupJob(
+        { prompt: prompt.trim(), wireframe: useWireframe },
+        '生成に失敗しました',
+      );
       // 既存ジョブのエディタ紐付けを外し、この新ジョブをエディタに紐づけて先頭に積む。
       setActiveJobs((prev) => [
         { jobId, mode: 'generate', startedAt: Date.now(), label, attachToEditor: true },
@@ -644,12 +651,17 @@ export default function Development() {
       setDesign(null);
       setFailedRun(null);
       setStreamStatus('pending');
+      setStage('design');
       setMobileTab('preview'); // 生成の進み具合がライブで見えるプレビュー側へ。
-      setNotice('作成を開始しました。設計→ワイヤーフレーム→コードの順に進む様子をプレビュー側に表示します。');
+      setNotice(
+        useWireframe
+          ? '作成を開始しました。設計→ワイヤーフレーム→コードの順に進む様子をプレビュー側に表示します。'
+          : '作成を開始しました（高速モード）。設計→コードの順に進みます。',
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : '生成に失敗しました');
     }
-  }, [prompt, generating, title]);
+  }, [prompt, generating, title, useWireframe]);
 
   // 反復修正。起票だけして「進行中ジョブ」に積む。
   const handleRevise = useCallback(async () => {
@@ -899,6 +911,23 @@ export default function Development() {
               rows={4}
               className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
             />
+            {/* Figma ワイヤーフレーム工程の ON/OFF。ON=設計→Figma下書き→コード（丁寧・数分）、
+                OFF=設計→コード（高速・1〜2分）。Keita がその場で速度と丁寧さを選べる。 */}
+            <label className="flex cursor-pointer items-start gap-2 text-xs text-text-muted">
+              <input
+                type="checkbox"
+                checked={useWireframe}
+                onChange={(e) => setUseWireframe(e.target.checked)}
+                disabled={generating}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--mc-accent)]"
+              />
+              <span>
+                Figma でワイヤーフレームも作る（より丁寧・数分かかります）
+                <span className="block text-[10px] text-text-faint">
+                  オフにすると設計→コードだけで素早く作ります（1〜2分）
+                </span>
+              </span>
+            </label>
             <button
               type="button"
               onClick={handleGenerate}
@@ -907,7 +936,7 @@ export default function Development() {
               style={{ background: 'var(--mc-accent)', color: 'var(--mc-bg)' }}
             >
               {generating ? <Spinner /> : <SparkIcon width={16} height={16} />}
-              {generating ? '生成中…' : '生成'}
+              {generating ? '生成中…' : useWireframe ? '生成（設計＋Figma）' : '生成（高速）'}
             </button>
 
             {/* 生成/修正中の進捗。経過秒＋推定90秒ベースの簡易バー。 */}
