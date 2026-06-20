@@ -533,6 +533,21 @@ export function BabyIcon(props: IconProps) {
   );
 }
 
+// 茶事（/chaji）ナビ用。抹茶茶碗＋立ちのぼる湯気で「茶の湯」を表す。単色 path で他アイコンに合わせる。
+export function ChajiIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      {/* 茶碗（下すぼまりの椀） */}
+      <path d="M4 11h16l-1.4 6.2A3 3 0 0 1 15.7 19.5H8.3A3 3 0 0 1 5.4 17.2z" />
+      {/* 口縁のライン */}
+      <path d="M4 11h16" />
+      {/* 立ちのぼる湯気 */}
+      <path d="M9 7.5c0-1 1-1.4 1-2.4S9 3.6 9 2.6" />
+      <path d="M13 7.5c0-1 1-1.4 1-2.4S13 3.6 13 2.6" />
+    </svg>
+  );
+}
+
 // 成長日記（/baby-diary, MC-233）ナビ用。開いたノート＋しおりリボンで「日記」を表す。
 export function DiaryIcon(props: IconProps) {
   return (

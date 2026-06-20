@@ -975,6 +975,19 @@ export const CHILDCARE_CHAT_MEDIA_MAX_FILES = envNum('CHILDCARE_CHAT_MEDIA_MAX_F
  */
 export const CHILDCARE_ASSISTANT_MEDIA_MAX = envNum('CHILDCARE_ASSISTANT_MEDIA_MAX', 2);
 
+// ─── 茶事チャット（表千家の茶道アドバイザー）の会話履歴 ────────────────
+// 茶事ページ（Chaji）の「茶事チャット」から開く、表千家の茶道アドバイザーとの相談履歴。
+// 育児チャット（childcareChatStore）の作法をそのまま踏襲し、別 JSONL ファイルに蓄積する
+// （端末をまたいで過去の質問が残る）。単一の会話スレッドを追記専用で保存する。
+// data/ 配下（.gitignore 済み・ランタイムデータ）。画像アップロードは茶事では扱わない。
+//   data/chaji-chat.jsonl : 1 行 = 1 メッセージ（role/content/ts/id、論理クリアは cleared マーカ行）
+
+/** 茶事チャット会話履歴の JSONL（追記専用・全消去は cleared マーカ）。 */
+export const CHAJI_CHAT_FILE = env(
+  'CHAJI_CHAT_FILE',
+  join(INBOX_DATA_DIR, 'chaji-chat.jsonl'),
+);
+
 /**
  * Gemini 画像生成モデル（図解生成用、通称 Nano Banana 系）。
  * generativelanguage v1beta の :generateContent で responseModalities=IMAGE を要求する。

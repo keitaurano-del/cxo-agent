@@ -96,6 +96,7 @@ import { chatRouter, agentMessageHandler, autonomousTickHandler } from './chatRo
 import { navOrderRouter } from './navOrderRouter.js';
 import { babyDiaryRouter } from './babyDiaryRouter.js';
 import { childcareChatRouter } from './childcareChatRouter.js';
+import { chajiChatRouter } from './chajiChatRouter.js';
 import { googleRouter } from './googleRouter.js';
 import { plannerRouter } from './plannerRouter.js';
 import { devMockupRouter } from './devMockupRouter.js';
@@ -1370,6 +1371,14 @@ app.use('/api/baby-diary', babyDiaryRouter());
 // GET /chat/media/:id で配信。画像は best-effort で すくすく が Read して見る（診断はしない）。
 // 一般育児知識のみ・赤ちゃんの個別データは渡さない。auth ミドルウェア配下＝Cookie/Bearer 必須。
 app.use('/api/childcare', childcareChatRouter());
+
+// ─── 茶事チャット（表千家の茶道アドバイザー）──────────────────────────────
+// 茶事ページ（Chaji）の「茶事チャット」から開く、表千家の茶道アドバイザー AI。
+// POST /api/chaji/chat に { messages } を渡すと回答する（SSE or JSON）。テキストのみ。
+// 会話履歴はサーバ側 JSONL（data/chaji-chat.jsonl）に蓄積し GET /chat/history で復元する。
+// 表千家の作法に則り、事実は WebSearch で出典を確認（出典必須・捏造厳禁）。育児チャットを踏襲。
+// auth ミドルウェア配下＝Cookie/Bearer 必須。
+app.use('/api/chaji', chajiChatRouter());
 
 // ─── Google 連携（成長日記 MC-233 Phase2/3）──────────────────────
 // 成長日記から Google Calendar（予定の読み書き）・Google Photos Picker（写真取り込み）を
