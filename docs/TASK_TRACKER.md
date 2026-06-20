@@ -3052,8 +3052,8 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-255 |
 | タイトル | 成長日記（BabyDiary）にある「やること（締切ToDo＝行政手続き＋健診）」をすべて「スケジュール」（Schedule）へ移動。成長日記からは外し、スケジュール側に表示する |
 | 優先度 | P2 |
-| ステータス | TODO（2026-06-20 Keita 依頼・Son 起票）。Keita「成長日記にあるタスクを全部スケジュールに移動して。成長日記に関連するものは全部移行でOK」。**対象**=成長日記の「やること（締切）」ブロック＝`ADMIN_PROCEDURES`＋`CHECKUP_ITEMS`（childcareData.ts・出生届/児童手当/各種健診などBIRTH_DATEからの計算で算出する締切ToDo。BabyDiary.tsx の TodoRow/やること表示 ≈ L1342-1452,1776-2044）。**移設先**=Schedule.tsx。**残すもの**=成長日記の日記入力・写真/動画・体重グラフ（タスクではない）。**設計方針(案)**: スケジュールに「育児やること（締切）」セクション（または dueIso でカレンダーにピン留め表示）を追加し、各項目に既存の「予定に追加/Googleカレンダーへ追加」アクションを維持。BabyDiary 側の やること ブロックは撤去。内部モデル（読み取り専用マイルストーン表示／Google Tasks 扱い／専用APIのいずれか）はソラ判断でよい。担当=ソラ(dev-apollo)直接委譲。注意: ソラが childcare 系を継続編集中＝共有ツリー状態を見つつ実装。 |
-| 担当 | dev-apollo（ソラ） |
+| ステータス | DONE（2026-06-21 Son 実装ディスパッチ→実機検証→push）。Keita「成長日記にあるタスクを全部スケジュールに移動して。成長日記に関連するものは全部移行でOK」。**実装**: BabyDiary.tsx から admin/checkup 締切ToDo 一式を撤去（`ADMIN_PROCEDURES`/`CHECKUP_ITEMS` import・`DueTodo`/`DUE_TODOS`/`todosForDate`・カレンダー「締切」バッジ・凡例・選択日の「やること」ブロック・`TodoRow` を削除。dangling 参照ゼロを grep 確認）。Schedule.tsx に「育児やること(締切)」セクション新設＝`upcomingDueItems()` を締切順表示、各行に 行政/健診 バッジ・締切日(`formatJpDate`)・目安・あとN日カウントダウン・「予定に追加（Googleカレンダーへ追加）」（既存 POST /api/google/calendar/events を踏襲・追加先セレクタは複数アカウント時のみ）。残すもの=日記/写真/体重グラフは不変。web build green（tsc+vite 0err）。commit db41c85。**Son 実機検証（OpenClawブラウザ）**: スケジュール画面に「育児やること(締切)」カード＝出生届(あと2日)等が締切順＋「予定に追加」ボタン＋追加先(keita.urano@gmail.com)を確認／育児→成長日記はカレンダー・日記・写真健在で「締切」バッジ消失を確認。検証後 push（b26c6c0..db41c85）。 |
+| 担当 | dev-apollo（ソラ）→ 実装は Son ディスパッチの subagent |
 | 受け入れ条件（DoD） | 成長日記の「やること（締切ToDo＝手続き＋健診）」がスケジュールに表示される。成長日記からは当該ブロックが消える。日記/写真/体重グラフは成長日記に残存。締切順・「予定に追加」動作維持。build green＋実機（OpenClawブラウザ）検証。 |
 | 依存 | なし（MC-233 育児基盤・既存 childcareData の上） |
 | 更新日 | 2026-06-20 |
