@@ -95,6 +95,7 @@ import { startWatch } from './watch.js';
 import { chatRouter, agentMessageHandler, autonomousTickHandler } from './chatRouter.js';
 import { navOrderRouter } from './navOrderRouter.js';
 import { babyDiaryRouter } from './babyDiaryRouter.js';
+import { childcareChatRouter } from './childcareChatRouter.js';
 import { googleRouter } from './googleRouter.js';
 import { plannerRouter } from './plannerRouter.js';
 import { devMockupRouter } from './devMockupRouter.js';
@@ -1360,6 +1361,15 @@ app.use('/api/nav-order', navOrderRouter());
 // POST media=multipart アップロード / GET media/:id=実体配信 / DELETE media/:id=削除。
 // 保存先はすべて data/ 配下（.gitignore 済み）。auth ミドルウェア配下＝Cookie/Bearer 必須。
 app.use('/api/baby-diary', babyDiaryRouter());
+
+// ─── 育児相談チャット「すくすく」──────────────────────────────────
+// 育児ページ（Childcare）の「育児チャット」タブ／右下 FAB から開く、育児専門アドバイザー AI。
+// POST /api/childcare/chat に { messages, media? } を渡すと回答する（SSE or JSON）。
+// 会話履歴はサーバ側 JSONL（data/childcare-chat.jsonl）に蓄積し GET /chat/history で復元する。
+// 送信メディア（画像/動画）は POST /chat/upload で data/childcare-chat-media/ に保存し、
+// GET /chat/media/:id で配信。画像は best-effort で すくすく が Read して見る（診断はしない）。
+// 一般育児知識のみ・赤ちゃんの個別データは渡さない。auth ミドルウェア配下＝Cookie/Bearer 必須。
+app.use('/api/childcare', childcareChatRouter());
 
 // ─── Google 連携（成長日記 MC-233 Phase2/3）──────────────────────
 // 成長日記から Google Calendar（予定の読み書き）・Google Photos Picker（写真取り込み）を

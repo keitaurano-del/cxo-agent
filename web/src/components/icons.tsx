@@ -427,6 +427,20 @@ export function ChatIcon(props: IconProps) {
   );
 }
 
+// 育児相談チャット（吹き出し＋ハート）。育児ページの FAB / 「すくすく」用。
+export function ChildcareChatIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z" />
+      <path
+        d="M12 14.2c-1.7-1.2-3-2.2-3-3.6a1.6 1.6 0 0 1 3-.8 1.6 1.6 0 0 1 3 .8c0 1.4-1.3 2.4-3 3.6z"
+        fill="currentColor"
+        stroke="none"
+      />
+    </svg>
+  );
+}
+
 // ハッシュ（チャンネルを表す # 記号）。
 export function HashIcon(props: IconProps) {
   return (

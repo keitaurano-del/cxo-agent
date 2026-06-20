@@ -72,11 +72,27 @@ export interface ClaudeRunResult {
   error?: string;
 }
 
-/** claude に渡す共通 CLI 引数（モデル指定込み）。model を明示指定（フォールバック対応）。 */
-function claudeArgs(prompt: string, notebookDir: string, model: string): string[] {
+/**
+ * claude に渡す共通 CLI 引数（モデル指定込み）。model を明示指定（フォールバック対応）。
+ * allowedTools を渡すと `--allowedTools` で追加の組み込みツール（WebSearch/WebFetch 等）を許可する。
+ * 既存の呼び出し（notebook 等）は allowedTools 無しで呼ぶため、従来の挙動は一切変わらない。
+ */
+function claudeArgs(
+  prompt: string,
+  notebookDir: string,
+  model: string,
+  allowedTools?: string[],
+): string[] {
   // cwd=notebookDir で起動 + --add-dir でノートブックディレクトリを明示追加。
   // デフォルトでは cwd のみ許可されるが、--add-dir で確実に閉じ込める。
-  return ['--model', model, '--add-dir', notebookDir, '-p', prompt];
+  const args = ['--model', model, '--add-dir', notebookDir];
+  if (allowedTools && allowedTools.length > 0) {
+    // カンマ区切りで許可ツールを足す（例: "WebSearch,WebFetch"）。
+    // これは当チャット専用の opt-in。既定では渡らないので他の呼び出しに影響しない。
+    args.push('--allowedTools', allowedTools.join(','));
+  }
+  args.push('-p', prompt);
+  return args;
 }
 
 /**
@@ -118,17 +134,24 @@ function looksLikeLimitOnly(text: string): boolean {
   return residual.length === 0;
 }
 
+/** claude 起動オプション（当チャット専用の opt-in 機能。既定では未指定）。 */
+export interface ClaudeRunOptions {
+  /** 許可する組み込みツール（例: ['WebSearch', 'WebFetch']）。未指定なら従来どおり何も足さない。 */
+  allowedTools?: string[];
+}
+
 /** execFile ベースの 1 回ぶんの実行（指定モデル）。失敗は throw せず result で返す。 */
 function runClaudeOnce(
   notebookDir: string,
   prompt: string,
   model: string,
+  opts?: ClaudeRunOptions,
 ): Promise<ClaudeRunResult> {
   return new Promise<ClaudeRunResult>((res) => {
     void acquire().then(() => {
       const child = execFile(
         NOTEBOOK_CLAUDE_BIN,
-        claudeArgs(prompt, notebookDir, model),
+        claudeArgs(prompt, notebookDir, model, opts?.allowedTools),
         {
           cwd: notebookDir,
           timeout: NOTEBOOK_CLAUDE_TIMEOUT_MS,
@@ -163,13 +186,17 @@ function runClaudeOnce(
  * 失敗・タイムアウトは throw せず { ok:false, error } で返す（呼び出し側で部分劣化 200）。
  * 通常は primary（Sonnet）で実行し、利用上限による失敗時のみ fallback（Opus）で 1 回だけ再実行する（MC-202①）。
  */
-export async function runClaude(notebookDir: string, prompt: string): Promise<ClaudeRunResult> {
-  const primary = await runClaudeOnce(notebookDir, prompt, NOTEBOOK_CLAUDE_MODEL);
+export async function runClaude(
+  notebookDir: string,
+  prompt: string,
+  opts?: ClaudeRunOptions,
+): Promise<ClaudeRunResult> {
+  const primary = await runClaudeOnce(notebookDir, prompt, NOTEBOOK_CLAUDE_MODEL, opts);
   if (primary.ok || !isLimitFailure(primary)) return primary;
   console.warn(
     `[notebook-claude] sonnet limit hit → fallback to opus (${NOTEBOOK_CLAUDE_FALLBACK_MODEL})`,
   );
-  return runClaudeOnce(notebookDir, prompt, NOTEBOOK_CLAUDE_FALLBACK_MODEL);
+  return runClaudeOnce(notebookDir, prompt, NOTEBOOK_CLAUDE_FALLBACK_MODEL, opts);
 }
 
 /**
@@ -180,6 +207,7 @@ export async function runClaudeStream(
   notebookDir: string,
   prompt: string,
   onChunk: (text: string) => void,
+  opts?: ClaudeRunOptions,
 ): Promise<ClaudeRunResult> {
   // 1 回目（primary=Sonnet）は本文を呼び出し側へ素通しでストリームしようとする。ただし
   // 利用上限で失敗したときは fallback（Opus）で再ストリームしたいので、二重送信を避けるため
@@ -203,6 +231,7 @@ export async function runClaudeStream(
     prompt,
     NOTEBOOK_CLAUDE_MODEL,
     guardedOnChunk,
+    opts,
   );
   if (primary.ok || !isLimitFailure(primary)) return primary;
   if (emittedBody) {
@@ -212,7 +241,7 @@ export async function runClaudeStream(
   console.warn(
     `[notebook-claude] sonnet limit hit → fallback to opus (${NOTEBOOK_CLAUDE_FALLBACK_MODEL})`,
   );
-  return runClaudeStreamOnce(notebookDir, prompt, NOTEBOOK_CLAUDE_FALLBACK_MODEL, onChunk);
+  return runClaudeStreamOnce(notebookDir, prompt, NOTEBOOK_CLAUDE_FALLBACK_MODEL, onChunk, opts);
 }
 
 /** spawn ベースの 1 回ぶんのストリーム実行（指定モデル）。失敗は throw せず result で返す。 */
@@ -221,10 +250,11 @@ function runClaudeStreamOnce(
   prompt: string,
   model: string,
   onChunk: (text: string) => void,
+  opts?: ClaudeRunOptions,
 ): Promise<ClaudeRunResult> {
   return new Promise<ClaudeRunResult>((res) => {
     void acquire().then(() => {
-      const child = spawn(NOTEBOOK_CLAUDE_BIN, claudeArgs(prompt, notebookDir, model), {
+      const child = spawn(NOTEBOOK_CLAUDE_BIN, claudeArgs(prompt, notebookDir, model, opts?.allowedTools), {
         cwd: notebookDir,
         env: process.env,
       });

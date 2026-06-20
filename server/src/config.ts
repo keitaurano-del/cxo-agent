@@ -907,6 +907,91 @@ export const BABY_DIARY_ENTRIES_FILE = join(BABY_DIARY_DIR, 'baby-diary-entries.
 /** メディアメタの JSONL（append・論理削除）。 */
 export const BABY_DIARY_MEDIA_FILE = join(BABY_DIARY_DIR, 'baby-diary-media.jsonl');
 
+// ─── 育児相談チャット「すくすく」の会話履歴 ────────────────────────
+// 育児チャットの会話履歴をサーバ側に蓄積する（端末をまたいで過去の質問が残る）。
+// 単一の会話スレッド（個人/世帯用ダッシュボードなので分岐不要）を追記専用で保存する。
+// babyDiaryStore と同じく data/ 配下（.gitignore 済み・ランタイムデータ）。
+//   data/childcare-chat.jsonl : 1 行 = 1 メッセージ（role/content/ts/id、論理クリアは cleared マーカ行）
+
+/** 育児チャット会話履歴の JSONL（追記専用・全消去は cleared マーカ）。 */
+export const CHILDCARE_CHAT_FILE = env(
+  'CHILDCARE_CHAT_FILE',
+  join(INBOX_DATA_DIR, 'childcare-chat.jsonl'),
+);
+
+// ─── 育児チャットの送信メディア（画像・動画アップロード）────────────
+// チャット入力欄から添付された画像/動画を <id>-<safe-name> でフラット保存する。
+// babyDiaryRouter のメディア保存作法に倣う（multer diskStorage・MIME 検証・サイズ上限）。
+// data/ 配下なので .gitignore 済み・ランタイムデータ。
+
+/** 育児チャット添付メディアの保存ディレクトリ。 */
+export const CHILDCARE_CHAT_MEDIA_DIR = env(
+  'CHILDCARE_CHAT_MEDIA_DIR',
+  join(INBOX_DATA_DIR, 'childcare-chat-media'),
+);
+
+/**
+ * 育児チャット添付の画像 1 枚あたり最大バイト数（既定 10MB）。
+ * 画像は AI が読む（マルチモーダル）想定なので過大ファイルを避ける。
+ */
+export const CHILDCARE_CHAT_IMAGE_MAX_BYTES = envNum(
+  'CHILDCARE_CHAT_IMAGE_MAX_BYTES',
+  10 * 1024 * 1024,
+);
+
+/**
+ * 育児チャット添付の動画 1 本あたり最大バイト数（既定 50MB）。
+ * 動画は AI が内容解析しない（受領・表示のみ）。妥当な上限で受ける。
+ */
+export const CHILDCARE_CHAT_VIDEO_MAX_BYTES = envNum(
+  'CHILDCARE_CHAT_VIDEO_MAX_BYTES',
+  50 * 1024 * 1024,
+);
+
+/** 育児チャット添付の 1 リクエストあたり最大ファイル数。 */
+export const CHILDCARE_CHAT_MEDIA_MAX_FILES = envNum('CHILDCARE_CHAT_MEDIA_MAX_FILES', 5);
+
+// ─── 育児チャットのアシスタント側メディア返却（フェーズ2）──────────────
+// すくすくが返す参考動画（YouTube・oEmbed 検証）/ 生成図解（Gemini）/ Web 実在画像（検証＋取込）。
+// 捏造防止のため、外部 URL は必ずサーバ側で実在検証してから添付し、検証 NG は黙って落とす。
+
+/**
+ * 1 応答あたりに添付できるアシスタント側メディアの最大点数（既定 2）。
+ * 乱用防止のため少数に絞る（systemPrompt でも抑制するが、ハード上限としても効かせる）。
+ */
+export const CHILDCARE_ASSISTANT_MEDIA_MAX = envNum('CHILDCARE_ASSISTANT_MEDIA_MAX', 2);
+
+/**
+ * Gemini 画像生成モデル（図解生成用、通称 Nano Banana 系）。
+ * generativelanguage v1beta の :generateContent で responseModalities=IMAGE を要求する。
+ */
+export const CHILDCARE_GEMINI_IMAGE_MODEL = env(
+  'CHILDCARE_GEMINI_IMAGE_MODEL',
+  'gemini-2.5-flash-image',
+);
+
+/**
+ * Web 実在画像を取り込む際の 1 枚あたり最大バイト数（既定 8MB）。
+ * これを超える画像は安定性・通信負荷の観点から添付しない。
+ */
+export const CHILDCARE_WEB_IMAGE_MAX_BYTES = envNum(
+  'CHILDCARE_WEB_IMAGE_MAX_BYTES',
+  8 * 1024 * 1024,
+);
+
+/**
+ * Web 実在画像として取り込みを許可するホストの許可リスト（信頼できる公的・専門ソース）。
+ * こども家庭庁・厚労省・成育医療センター・小児科学会・自治体（go.jp / lg.jp）等に限定する。
+ * カンマ区切りの env で上書き可。サブドメイン含めて末尾一致で判定する。
+ */
+export const CHILDCARE_WEB_IMAGE_ALLOWED_HOSTS = env(
+  'CHILDCARE_WEB_IMAGE_ALLOWED_HOSTS',
+  'cfa.go.jp,mhlw.go.jp,ncchd.go.jp,jpeds.or.jp,go.jp,lg.jp',
+)
+  .split(',')
+  .map((h) => h.trim().toLowerCase())
+  .filter((h) => h.length > 0);
+
 /** メディア実体の保存ディレクトリ（<id>-<safe-name> でフラット保存）。 */
 export const BABY_DIARY_MEDIA_DIR = env('BABY_DIARY_MEDIA_DIR', join(BABY_DIARY_DIR, 'baby-diary-media'));
 

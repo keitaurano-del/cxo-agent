@@ -317,6 +317,44 @@ body {
   accent-color: var(--mc-accent);
 }
 
+/* 育児チャット「すくすく」の返答バブル用 — 吹き出しに収まるよう余白を詰める。
+   見出しは段落と同じ前後余白に抑え、先頭/末尾要素のマージンを潰す。 */
+.mc-chat-markdown {
+  font-size: 0.875rem;
+  line-height: 1.65;
+}
+.mc-chat-markdown > :first-child {
+  margin-top: 0;
+}
+.mc-chat-markdown > :last-child {
+  margin-bottom: 0;
+}
+.mc-chat-markdown h1,
+.mc-chat-markdown h2,
+.mc-chat-markdown h3,
+.mc-chat-markdown h4 {
+  font-size: 0.95rem;
+  margin: 0.8em 0 0.35em;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.mc-chat-markdown ul,
+.mc-chat-markdown ol {
+  margin: 0.4em 0;
+  padding-left: 1.25em;
+}
+.mc-chat-markdown li {
+  margin: 0.15em 0;
+}
+/* 出典リンク（[タイトル](URL)）が長い URL でも吹き出し内で折り返すようにする。 */
+.mc-chat-markdown a {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.mc-chat-markdown p {
+  margin: 0.45em 0;
+}
+
 /* Obsidian callout（> [!info] 等）— 種別色付きブロック */
 .mc-callout {
   border-left: 4px solid var(--mc-callout-color, var(--mc-accent));

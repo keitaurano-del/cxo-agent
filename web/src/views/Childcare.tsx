@@ -3,10 +3,18 @@
 // 行政手続き／健診・予防接種を静的 curated データから描画する。
 // 医療・制度情報は「目安／要確認」を徹底（断定しない）。AI/RAG 連携は後続フェーズ。
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PageHeader } from '../components/PageHeader';
-import { BabyIcon, CloseIcon, DiaryIcon } from '../components/icons';
+import ChatMarkdown from '../components/ChatMarkdown';
+import {
+  BabyIcon,
+  ChildcareChatIcon,
+  CloseIcon,
+  DiaryIcon,
+  ImageFileIcon,
+  SendIcon,
+} from '../components/icons';
 import BabyDiary from './BabyDiary';
 import {
   BIRTH_DATE,
@@ -811,25 +819,717 @@ function ChildcareGuide() {
   );
 }
 
-type ChildcareTab = 'guide' | 'diary';
+// ─── 育児相談チャット「すくすく」 ─────────────────────────────────────
+// 専用タブ「育児チャット」と右下 FAB の両方から開く。どちらも同じサーバ履歴を共有する
+// （正本は data/childcare-chat.jsonl）。タブはチャット UI と過去の会話履歴を主役にした画面、
+// FAB は他タブ（成長日記・育児ガイド）からチャットへ素早く飛ぶ導線（タブへ遷移）。
+//
+// - 会話履歴はサーバ側 JSONL を正本に蓄積し（GET /api/childcare/chat/history で復元）、
+//   localStorage は端末ローカルのキャッシュ/フォールバックとして併用する。
+//   マウント/オープン時にサーバ履歴を取り込むので、リロード・別端末・再オープンで過去の質問が残る。
+// - アシスタント返答は Markdown として整形して表示（ChatMarkdown）。ユーザー発言は素のテキスト。
+// - 入力欄から画像/動画を添付・アップロードできる（POST /chat/upload → 送信時に media 参照を付与）。
+//   メディアはチャットに表示し（画像インライン・動画 <video>）、履歴にも残る。
+// - 赤ちゃんの個別データは一切渡さない（育児専門知識の一般的な範囲のみ）。
+type SukuRole = 'user' | 'assistant';
+interface SukuMedia {
+  id: string;
+  // 'image'/'video' は実体配信、'youtube' は埋め込み（返信側の参考動画）。
+  kind: 'image' | 'video' | 'youtube';
+  url: string;
+  mime: string;
+  name?: string;
+  size?: number;
+  // 出所: 'upload'=保護者添付 / 'generated'=すくすく生成図解 / 'web'=検証済み YouTube・公式画像。
+  source?: 'upload' | 'generated' | 'web';
+  // キャプション（なぜおすすめか・図解の説明）。
+  caption?: string;
+  // YouTube 埋め込み用の videoId（kind==='youtube' のとき）。
+  videoId?: string;
+  // 出典・帰属表示用 URL（YouTube 視聴元 / 画像の出典ページ）。
+  sourceUrl?: string;
+  // 出典タイトル（帰属表示に使う）。
+  sourceTitle?: string;
+}
+// 生成状態。'pending'=生成中（考え中…）/ 'done'=完了 / 'error'=失敗（丁寧メッセージ確定）。
+type SukuStatus = 'pending' | 'done' | 'error';
+interface SukuMessage {
+  role: SukuRole;
+  content: string;
+  media?: SukuMedia[];
+  // assistant のみ pending/error を取りうる（省略時は done 相当）。
+  status?: SukuStatus;
+  // ジョブ相関キー（pending を job ステータスで解決するため）。
+  jobId?: string;
+}
 
-/** 初期タブ判定: prop 優先。既定は 'diary'（成長日記）。?tab=guide のときだけ 'guide'。 */
+const SUKU_STORAGE_KEY = 'apollo.childcareChat.history.v1';
+const SUKU_WELCOME =
+  'すくすくです。乳幼児育児の専門アドバイザーとして、お悩みにお答えします。睡眠・寝かしつけ、授乳・離乳食、月齢ごとの発達の目安、生活リズム、関わり方など、お気軽にご相談ください。写真や動画を添付してご相談いただくこともできます（一般的な目安としてご案内します）。';
+
+const SUKU_SAFETY_NOTE =
+  '一般的な育児情報の目安です。健康上の心配や緊急時は小児科・小児救急電話相談（#8000）にご相談ください。写真からの診断はいたしません。';
+
+/** メッセージ配列を検証・正規化する（サーバ/localStorage どちらの入力にも使う）。 */
+function normalizeMessages(parsed: unknown): SukuMessage[] {
+  if (!Array.isArray(parsed)) return [];
+  const out: SukuMessage[] = [];
+  for (const m of parsed) {
+    const role = (m as SukuMessage)?.role;
+    const content = (m as SukuMessage)?.content;
+    if ((role !== 'user' && role !== 'assistant') || typeof content !== 'string') continue;
+    const msg: SukuMessage = { role, content };
+    const status = (m as SukuMessage)?.status;
+    if (status === 'pending' || status === 'error' || status === 'done') msg.status = status;
+    const jobId = (m as SukuMessage)?.jobId;
+    if (typeof jobId === 'string' && jobId) msg.jobId = jobId;
+    const media = (m as SukuMessage)?.media;
+    if (Array.isArray(media)) {
+      const list = media.filter((x): x is SukuMedia => {
+        if (!x || typeof (x as SukuMedia).id !== 'string') return false;
+        const k = (x as SukuMedia).kind;
+        if (k === 'image' || k === 'video') {
+          return typeof (x as SukuMedia).url === 'string';
+        }
+        // YouTube は埋め込みのため videoId が要る（url は視聴ページ）。
+        if (k === 'youtube') {
+          return typeof (x as SukuMedia).videoId === 'string' && !!(x as SukuMedia).videoId;
+        }
+        return false;
+      });
+      if (list.length > 0) msg.media = list;
+    }
+    out.push(msg);
+  }
+  return out;
+}
+
+/** 末尾の pending な assistant バブルを確定メッセージで置き換える（無ければ末尾に追加）。 */
+function replaceLastPending(list: SukuMessage[], finalMsg: SukuMessage): SukuMessage[] {
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const m = list[i];
+    if (m.role === 'assistant' && m.status === 'pending') {
+      const out = list.slice();
+      out[i] = finalMsg;
+      return out;
+    }
+  }
+  return [...list, finalMsg];
+}
+
+/** localStorage から会話履歴を復元する（壊れていれば空配列）。 */
+function loadSukuHistory(): SukuMessage[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(SUKU_STORAGE_KEY);
+    if (!raw) return [];
+    return normalizeMessages(JSON.parse(raw) as unknown);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * すくすくチャットの状態とロジックを 1 箇所に集約するフック。
+ * タブ表示と FAB モーダルの両方がこのフックを使い、同じサーバ履歴・送信処理を共有する。
+ * （ただし正本はサーバなので、別インスタンス間の即時同期まではしない。各々マウント時に復元する。）
+ */
+function useSukuChat() {
+  const [messages, setMessages] = useState<SukuMessage[]>(() => loadSukuHistory());
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // 送信前に添付したメディア（アップロード済みで参照を保持）。
+  const [pending, setPending] = useState<SukuMedia[]>([]);
+  // ストリーミング中のアシスタント部分応答（確定前のテキスト）。
+  const [streaming, setStreaming] = useState<string | null>(null);
+  // 進行中ジョブがあるか（pending を解決するためのポーリング駆動に使う）。
+  const [hasPending, setHasPending] = useState(false);
+  // ストリーミング購読が生きているか（生きている間はポーリング resync を抑止して二重描画を避ける）。
+  const streamingRef = useRef(false);
+
+  // 履歴を localStorage に永続化する（端末キャッシュ。正本はサーバ）。
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(SUKU_STORAGE_KEY, JSON.stringify(messages));
+    } catch {
+      /* 容量超過等は無視（チャットは継続できる） */
+    }
+  }, [messages]);
+
+  // messages に pending の assistant があるかを監視し、ポーリングのオン/オフを切り替える。
+  useEffect(() => {
+    setHasPending(messages.some((m) => m.role === 'assistant' && m.status === 'pending'));
+  }, [messages]);
+
+  /** サーバ保存の会話履歴を取り込んで表示を置き換える（正本）。失敗時はキャッシュのまま。 */
+  const restore = useCallback(async () => {
+    try {
+      const res = await fetch('/api/childcare/chat/history', {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { messages?: unknown };
+      // ストリーミング購読が生きている間はサーバ resync で上書きしない（逐次表示を優先）。
+      if (streamingRef.current) return;
+      setMessages(normalizeMessages(data.messages));
+    } catch {
+      /* 取得失敗時は localStorage キャッシュのまま継続 */
+    }
+  }, []);
+
+  // pending が残っている間、サーバ履歴をポーリングして done/error に解決する。
+  // 接続が切れて「通信に失敗しました」を出す代わりに、ここでサーバの結果を取りに行く。
+  useEffect(() => {
+    if (!hasPending) return;
+    let stopped = false;
+    const tick = async () => {
+      if (stopped || streamingRef.current) return;
+      await restore();
+    };
+    const timer = setInterval(() => void tick(), 4000);
+    // タブ復帰・アプリ再オープン時にも即座に取り直す（visibilitychange）。
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void tick();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [hasPending, restore]);
+
+  /** ファイル選択 → サーバへアップロードして pending に追加する。 */
+  const upload = useCallback(async (files: FileList | File[]) => {
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      for (const f of list) form.append('files', f);
+      const res = await fetch('/api/childcare/chat/upload', { method: 'POST', body: form });
+      const data = (await res.json().catch(() => ({}))) as { media?: SukuMedia[]; error?: string };
+      if (!res.ok) {
+        setError(data.error || 'アップロードに失敗しました。');
+        return;
+      }
+      const added = Array.isArray(data.media) ? data.media : [];
+      setPending((prev) => [...prev, ...added]);
+    } catch {
+      setError('アップロードに失敗しました。通信状況をご確認ください。');
+    } finally {
+      setUploading(false);
+    }
+  }, []);
+
+  const removePending = useCallback((id: string) => {
+    setPending((prev) => prev.filter((m) => m.id !== id));
+  }, []);
+
+  /**
+   * 送信。テキストか添付メディアのどちらかがあれば送れる。
+   * AI 生成はサーバ側でバックグラウンド実行され、結果はサーバに永続化される。SSE が繋がっている間は
+   * 逐次表示するが、完了の正本はサーバ。接続が切れても「通信に失敗しました」で確定せず、pending の
+   * ままにして history ポーリング／タブ復帰で結果を取りに行く（画面を離れて戻っても回答が出る）。
+   */
+  const send = useCallback(async () => {
+    const text = input.trim();
+    const media = pending;
+    if ((!text && media.length === 0) || sending) return;
+
+    const userMsg: SukuMessage = { role: 'user', content: text || '（画像/動画を添付しました）' };
+    if (media.length > 0) userMsg.media = media;
+    // user 発言＋「すくすくが考えています…」の pending バブルを楽観表示する（正本はサーバ）。
+    const pendingAssistant: SukuMessage = { role: 'assistant', content: '', status: 'pending' };
+    const next: SukuMessage[] = [...messages, userMsg];
+    setMessages([...next, pendingAssistant]);
+    setInput('');
+    setPending([]);
+    setError(null);
+    setSending(true);
+    setStreaming('');
+    streamingRef.current = true;
+
+    let acc = '';
+    let resolved = false; // done を受け取って表示を確定できたか。
+    try {
+      const res = await fetch('/api/childcare/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        body: JSON.stringify({
+          // サーバは末尾 user テキストに答える。content は空でない値を渡す。
+          messages: next.map((m) => ({ role: m.role, content: m.content })),
+          media,
+        }),
+      });
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      let finalAnswer: string | null = null;
+      let finalMedia: SukuMedia[] = [];
+      let finalStatus: SukuStatus = 'done';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let evt: {
+            type?: string;
+            text?: string;
+            answer?: string;
+            media?: unknown;
+            status?: SukuStatus;
+          } = {};
+          try {
+            evt = JSON.parse(line.slice(6)) as typeof evt;
+          } catch {
+            continue;
+          }
+          if (evt.type === 'chunk' && typeof evt.text === 'string') {
+            acc += evt.text;
+            setStreaming(acc);
+          } else if (evt.type === 'done') {
+            // done の answer は記法を除去済みの整形本文。media は検証/生成済みのみ確定。
+            finalAnswer = typeof evt.answer === 'string' && evt.answer ? evt.answer : acc;
+            if (evt.status === 'error') finalStatus = 'error';
+            if (Array.isArray(evt.media)) {
+              const norm = normalizeMessages([{ role: 'assistant', content: '', media: evt.media }]);
+              finalMedia = norm[0]?.media ?? [];
+            }
+            resolved = true;
+          }
+        }
+      }
+      const answer = (finalAnswer ?? acc).trim();
+      if (resolved && answer) {
+        // 完了を受け取れた → pending バブルを確定本文で置き換える。
+        const assistantMsg: SukuMessage = { role: 'assistant', content: answer, status: finalStatus };
+        if (finalMedia.length > 0) assistantMsg.media = finalMedia;
+        setMessages((prev) => replaceLastPending(prev, assistantMsg));
+      } else {
+        // done を受け取れずストリームが切れた（接続断・途中終了）。失敗扱いにせず pending を残し、
+        // ポーリング／タブ復帰でサーバの確定結果を取りに行く。
+        streamingRef.current = false;
+        void restore();
+      }
+    } catch {
+      // 通信が確立できなかった／途中で切れた。エラー確定せず pending のまま、サーバ結果を待つ。
+      streamingRef.current = false;
+      void restore();
+    } finally {
+      setStreaming(null);
+      setSending(false);
+      streamingRef.current = false;
+    }
+  }, [input, pending, sending, messages, restore]);
+
+  const clearHistory = useCallback(() => {
+    setMessages([]);
+    setStreaming(null);
+    setPending([]);
+    // サーバ側の蓄積も論理クリアする（失敗しても表示はクリア済みのまま）。
+    void fetch('/api/childcare/chat/history', { method: 'DELETE' }).catch(() => {
+      /* 通信失敗時はローカルのみクリア */
+    });
+  }, []);
+
+  return {
+    messages,
+    input,
+    setInput,
+    sending,
+    uploading,
+    error,
+    pending,
+    streaming,
+    restore,
+    upload,
+    removePending,
+    send,
+    clearHistory,
+  };
+}
+
+type SukuChat = ReturnType<typeof useSukuChat>;
+
+// ─── 入力バー（テキスト＋メディア添付）。タブ・モーダル共通 ─────────────
+function SukuComposer({ chat }: { chat: SukuChat }) {
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const canSend = (chat.input.trim().length > 0 || chat.pending.length > 0) && !chat.sending;
+  return (
+    <div className="border-t border-border px-3 py-3">
+      {/* 添付プレビュー（送信前） */}
+      {chat.pending.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {chat.pending.map((m) => (
+            <div
+              key={m.id}
+              className="relative overflow-hidden rounded-md border border-border bg-surface-2"
+            >
+              {m.kind === 'image' ? (
+                <img src={m.url} alt={m.name ?? '添付画像'} className="h-16 w-16 object-cover" />
+              ) : (
+                <div className="flex h-16 w-16 flex-col items-center justify-center gap-1 px-1 text-center">
+                  <span aria-hidden className="text-base">🎬</span>
+                  <span className="line-clamp-1 text-[9px] text-text-muted">動画</span>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => chat.removePending(m.id)}
+                aria-label="添付を削除"
+                className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-bg/80 text-text-muted hover:text-text"
+              >
+                <CloseIcon width={12} height={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {chat.error && <p className="mb-1.5 px-1 text-[11px] text-blocked">{chat.error}</p>}
+      <div className="flex items-end gap-2">
+        {/* メディア添付ボタン */}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif,image/heic,video/mp4,video/quicktime,video/webm"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = e.target.files;
+            if (files && files.length > 0) void chat.upload(files);
+            e.target.value = '';
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={chat.uploading || chat.sending}
+          aria-label="画像・動画を添付"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {chat.uploading ? (
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-text-muted border-t-transparent" />
+          ) : (
+            <ImageFileIcon width={18} height={18} />
+          )}
+        </button>
+        <textarea
+          value={chat.input}
+          onChange={(e) => chat.setInput(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter で送信（Shift+Enter で改行）。
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              if (canSend) void chat.send();
+            }
+          }}
+          rows={1}
+          placeholder="育児のお悩みを入力…"
+          aria-label="メッセージを入力"
+          className="max-h-28 min-h-[40px] flex-1 resize-none rounded-md border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
+        />
+        <button
+          type="button"
+          onClick={() => void chat.send()}
+          disabled={!canSend}
+          aria-label="送信"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <SendIcon width={18} height={18} />
+        </button>
+      </div>
+      <p className="mt-1.5 px-1 text-[10px] leading-relaxed text-text-faint">{SUKU_SAFETY_NOTE}</p>
+    </div>
+  );
+}
+
+// ─── メッセージ一覧（タブ・モーダル共通） ──────────────────────────────
+function SukuMessageList({
+  chat,
+  scrollRef,
+}: {
+  chat: SukuChat;
+  scrollRef: (el: HTMLDivElement | null) => void;
+}) {
+  return (
+    <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+      {/* ウェルカム（常に先頭に表示） */}
+      <SukuBubble role="assistant">
+        <ChatMarkdown body={SUKU_WELCOME} />
+      </SukuBubble>
+      {chat.messages.map((m, i) => {
+        // ストリーミング中は末尾 pending を二重表示しない（streaming バブルが受け持つ）。
+        const isLast = i === chat.messages.length - 1;
+        if (
+          m.role === 'assistant' &&
+          m.status === 'pending' &&
+          isLast &&
+          chat.streaming !== null
+        ) {
+          return null;
+        }
+        return (
+          <SukuBubble key={i} role={m.role} media={m.media}>
+            {m.role === 'assistant' ? (
+              m.status === 'pending' ? (
+                <SukuThinking />
+              ) : (
+                <ChatMarkdown body={m.content} />
+              )
+            ) : (
+              <span className="whitespace-pre-wrap break-words">{m.content}</span>
+            )}
+          </SukuBubble>
+        );
+      })}
+      {chat.streaming !== null && (
+        <SukuBubble role="assistant">
+          {chat.streaming.length > 0 ? (
+            <ChatMarkdown body={chat.streaming} />
+          ) : (
+            <SukuThinking />
+          )}
+        </SukuBubble>
+      )}
+    </div>
+  );
+}
+
+// ─── 「すくすくが考えています…」インジケータ（pending / ストリーム待ち共通） ──
+function SukuThinking() {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-text-muted">
+      <span className="inline-flex items-center gap-1" aria-hidden>
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-text-muted" />
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-text-muted [animation-delay:0.15s]" />
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-text-muted [animation-delay:0.3s]" />
+      </span>
+      <span className="text-xs">すくすくが考えています…</span>
+    </span>
+  );
+}
+
+// ─── 育児チャットタブ（チャット UI と履歴が主役の画面） ───────────────
+// マウント時にサーバ履歴を復元して時系列表示する。FAB と同じサーバ履歴を共有。
+function ChildcareChatTab() {
+  const chat = useSukuChat();
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // マウント時にサーバ履歴を取り込む（リロード・別端末・再オープンで過去の質問が並ぶ）。
+  useEffect(() => {
+    void chat.restore();
+    // restore は安定参照（useCallback）。初回のみ実行する。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 新しいメッセージ・ストリーム更新で最下部へスクロール。
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chat.messages, chat.streaming]);
+
+  return (
+    <div className="mx-auto flex h-full max-w-3xl flex-col">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span
+            aria-hidden
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent"
+          >
+            <ChildcareChatIcon width={20} height={20} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-text">すくすくに相談</p>
+            <p className="truncate text-[11px] text-text-muted">育児専門アドバイザー・過去の相談も残ります</p>
+          </div>
+        </div>
+        {chat.messages.length > 0 && (
+          <button
+            type="button"
+            onClick={chat.clearHistory}
+            className="shrink-0 rounded-md px-2 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+          >
+            履歴を消去
+          </button>
+        )}
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-bg">
+        <SukuMessageList chat={chat} scrollRef={(el) => (scrollRef.current = el)} />
+        <SukuComposer chat={chat} />
+      </div>
+    </div>
+  );
+}
+
+// ─── 育児チャット FAB（他タブからチャットタブへ飛ぶ導線） ──────────────
+// FAB はタップで「育児チャット」タブへ遷移する（パネル展開でなくタブへ寄せ、履歴を主役に）。
+function ChildcareChatFab({ onOpen, hidden }: { onOpen: () => void; hidden?: boolean }) {
+  if (hidden) return null;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label="育児相談チャット「すくすく」を開く"
+      className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-accent/30 bg-accent text-bg shadow-lg transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg md:bottom-6 md:right-6"
+    >
+      <ChildcareChatIcon width={26} height={26} />
+    </button>
+  );
+}
+
+// ─── すくすくチャットの吹き出し ──────────────────────────────────
+function SukuBubble({
+  role,
+  media,
+  children,
+}: {
+  role: SukuRole;
+  media?: SukuMedia[];
+  children: ReactNode;
+}) {
+  const isUser = role === 'user';
+  // 返信側メディア（YouTube 埋め込み・図解・公式画像）は窮屈にならないよう少し広めの吹き出しにする。
+  const hasMedia = !!media && media.length > 0;
+  const widthClass = !isUser && hasMedia ? 'max-w-[92%] sm:max-w-[28rem]' : 'max-w-[85%]';
+  return (
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={`${widthClass} break-words rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
+          isUser
+            ? 'rounded-br-sm bg-accent text-bg'
+            : 'rounded-bl-sm border border-border bg-surface text-text'
+        }`}
+      >
+        {/* 添付メディア。保護者の添付（画像/動画）と、すくすくの返却（YouTube/生成図解/公式画像）。 */}
+        {media && media.length > 0 && (
+          <div className="mb-1.5 flex flex-col gap-2">
+            {media.map((m) => (
+              <SukuMediaItem key={m.id} media={m} />
+            ))}
+          </div>
+        )}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── すくすくチャットの 1 メディア（画像/動画/YouTube 埋め込み） ──────────
+// 種別ごとに描画する。
+//   - youtube: youtube-nocookie の iframe 埋め込み（aspect-video）。キャプション・出典を添える。
+//   - image  : インライン画像。生成図解/公式画像はキャプション・出典リンクを添える。
+//   - video  : 保護者添付の動画（<video>）。
+// XSS/安全: iframe は youtube-nocookie ドメイン固定。画像 src は検証済み自前配信 URL か添付 URL のみ。
+function SukuMediaItem({ media: m }: { media: SukuMedia }) {
+  if (m.kind === 'youtube' && m.videoId) {
+    return (
+      <figure className="m-0">
+        <div className="overflow-hidden rounded-md border border-black/10 bg-black/5">
+          <iframe
+            className="aspect-video w-full"
+            src={`https://www.youtube-nocookie.com/embed/${m.videoId}`}
+            title={m.sourceTitle ?? m.caption ?? '参考動画'}
+            loading="lazy"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
+        {(m.caption || m.sourceTitle) && (
+          <figcaption className="mt-1 text-[11px] leading-snug text-text-muted">
+            {m.caption && <span>{m.caption}</span>}
+            {m.sourceUrl && (
+              <>
+                {m.caption && ' '}
+                <a
+                  href={m.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-dotted underline-offset-2 hover:text-text"
+                >
+                  {m.sourceTitle ?? 'YouTube で見る'}
+                </a>
+              </>
+            )}
+          </figcaption>
+        )}
+      </figure>
+    );
+  }
+
+  if (m.kind === 'image') {
+    return (
+      <figure className="m-0">
+        <a href={m.url} target="_blank" rel="noopener noreferrer">
+          <img
+            src={m.url}
+            alt={m.caption ?? m.name ?? (m.source === 'generated' ? '図解' : '画像')}
+            loading="lazy"
+            className="max-h-72 max-w-full rounded-md border border-black/10 object-contain"
+          />
+        </a>
+        {(m.caption || m.sourceUrl) && (
+          <figcaption className="mt-1 text-[11px] leading-snug text-text-muted">
+            {m.caption && <span>{m.caption}</span>}
+            {m.source === 'web' && m.sourceUrl && (
+              <>
+                {m.caption && ' '}
+                <a
+                  href={m.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-dotted underline-offset-2 hover:text-text"
+                >
+                  出典
+                </a>
+              </>
+            )}
+          </figcaption>
+        )}
+      </figure>
+    );
+  }
+
+  // 動画（保護者添付）。
+  return (
+    <video
+      src={m.url}
+      controls
+      preload="metadata"
+      className="max-h-60 max-w-full rounded-md border border-black/10"
+    />
+  );
+}
+
+type ChildcareTab = 'chat' | 'guide' | 'diary';
+
+/** 初期タブ判定: prop 優先。既定は 'diary'（成長日記）。?tab=guide / ?tab=chat を尊重。 */
 function resolveInitialTab(initialTab?: ChildcareTab): ChildcareTab {
   if (initialTab) return initialTab;
   if (typeof window !== 'undefined') {
-    const { search } = window.location;
-    if (new URLSearchParams(search).get('tab') === 'guide') return 'guide';
+    const t = new URLSearchParams(window.location.search).get('tab');
+    if (t === 'guide') return 'guide';
+    if (t === 'chat') return 'chat';
   }
   // 育児メニュータップ（/childcare）・/baby-diary とも成長日記を先に出す。
   return 'diary';
 }
 
-// ─── タブバー（育児ガイド / 成長日記）。既存の下線アクティブ流儀に合わせる ──
+// ─── タブバー（成長日記 / 育児ガイド / 育児チャット）。下線アクティブ流儀 ──
 function ChildcareTabBar({ tab, onChange }: { tab: ChildcareTab; onChange: (t: ChildcareTab) => void }) {
-  // 成長日記を先頭に（育児メニュータップで成長日記が先に来るよう、タブ順も先頭に揃える）。
   const tabs: { id: ChildcareTab; label: string; icon: ReactNode }[] = [
     { id: 'diary', label: '成長日記', icon: <DiaryIcon width={16} height={16} /> },
     { id: 'guide', label: '育児ガイド', icon: <BabyIcon width={16} height={16} /> },
+    { id: 'chat', label: '育児チャット', icon: <ChildcareChatIcon width={16} height={16} /> },
   ];
   return (
     <div className="flex border-b border-border px-4 md:px-6" role="tablist" aria-label="育児ページのタブ">
@@ -862,9 +1562,10 @@ export default function Childcare({ initialTab }: { initialTab?: ChildcareTab } 
 
   const changeTab = (next: ChildcareTab) => {
     setTab(next);
-    // URL をタブに同期（リロードでタブ維持・履歴は汚さない）。成長日記が既定なので guide だけ ?tab=guide。
+    // URL をタブに同期（リロードでタブ維持・履歴は汚さない）。成長日記が既定。
     if (typeof window !== 'undefined') {
-      const url = next === 'guide' ? '/childcare?tab=guide' : '/childcare';
+      const url =
+        next === 'guide' ? '/childcare?tab=guide' : next === 'chat' ? '/childcare?tab=chat' : '/childcare';
       window.history.replaceState(null, '', url);
     }
   };
@@ -873,13 +1574,21 @@ export default function Childcare({ initialTab }: { initialTab?: ChildcareTab } 
     <div className="flex h-full flex-col">
       <PageHeader
         title="育児"
-        subtitle="第一子（男の子）の生後経過・手続き・健診の目安と、毎日の成長日記をまとめます。"
+        subtitle="第一子（男の子）の生後経過・手続き・健診の目安、毎日の成長日記、育児相談チャットをまとめます。"
         fetchedAt={undefined}
       />
       <ChildcareTabBar tab={tab} onChange={changeTab} />
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
-        {tab === 'guide' ? <ChildcareGuide /> : <BabyDiary embedded />}
+        {tab === 'guide' ? (
+          <ChildcareGuide />
+        ) : tab === 'chat' ? (
+          <ChildcareChatTab />
+        ) : (
+          <BabyDiary embedded />
+        )}
       </div>
+      {/* チャットタブ以外のときだけ FAB を出す（タップで育児チャットタブへ遷移）。 */}
+      <ChildcareChatFab hidden={tab === 'chat'} onOpen={() => changeTab('chat')} />
     </div>
   );
 }
