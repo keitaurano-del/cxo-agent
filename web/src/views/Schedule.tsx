@@ -19,6 +19,14 @@ import {
   TrashIcon,
   UploadIcon,
 } from '../components/icons';
+import {
+  upcomingDueItems,
+  formatJpDate,
+  daysUntil,
+  ADMIN_CAPTION,
+  CHECKUP_CAPTION,
+} from './childcareData';
+import type { AdminProcedure, CheckupItem } from './childcareData';
 
 // ─── API 型（サーバ契約に対応。BabyDiary の対応型と同一）──────────
 interface GoogleAccount {
@@ -956,6 +964,13 @@ export default function Schedule() {
             />
           )}
 
+          {/* 育児やること（締切）: 行政手続き＋健診の締切リスト（MC-255 で成長日記から移設）。 */}
+          <ChildcareTodos
+            accounts={accounts}
+            applyAccount={applyAccount}
+            onSelectAccount={setApplyAccount}
+          />
+
           {/* アカウント凡例（接続済みのとき） */}
           {hasAccounts && <AccountLegend accounts={accounts} accountColors={accountColors} />}
 
@@ -1600,6 +1615,166 @@ function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode
         );
       })}
     </div>
+  );
+}
+
+// ─── 育児やること（締切）: 行政手続き＋健診の締切リスト ──────────
+// 成長日記から移設（MC-255）。ADMIN_PROCEDURES + CHECKUP_ITEMS を締切が近い順に並べ、
+// 各行に「予定に追加（Googleカレンダーへ追加）」を出す（POST /api/google/calendar/events）。
+// 接続が無いときはリストのみ（追加ボタンは出さない）。
+function ChildcareTodos({
+  accounts,
+  applyAccount,
+  onSelectAccount,
+}: {
+  accounts: GoogleAccount[];
+  applyAccount: string;
+  onSelectAccount: (email: string) => void;
+}) {
+  // 締切が近い順（昇順）。childcareData の helper をそのまま使う。
+  const items = useMemo(() => upcomingDueItems(), []);
+  // 追加先アカウント（プラン登録と同じ applyAccount を共有。既定＝先頭）。
+  const account = applyAccount || accounts[0]?.email || null;
+  const connected = accounts.length > 0;
+  // 行ごとの完了・エラーをまとめて控えめに表示する。
+  const [notice, setNotice] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  return (
+    <section className="flex flex-col gap-3 rounded-lg border border-review/40 bg-surface p-3 md:p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-1.5 text-sm font-bold text-text">
+          <span className="inline-flex items-center rounded-full bg-review-bg px-1.5 py-0.5 text-[10px] font-bold leading-none text-review">
+            締切
+          </span>
+          育児やること（締切）
+        </h2>
+        {/* 追加先アカウント選択（複数接続時のみ） */}
+        {accounts.length > 1 && (
+          <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-text-muted">
+            追加先
+            <select
+              value={account ?? ''}
+              onChange={(e) => onSelectAccount(e.target.value)}
+              className="rounded-md border border-border bg-bg px-2 py-1 text-[12px] text-text"
+            >
+              {accounts.map((a) => (
+                <option key={a.email} value={a.email}>
+                  {a.email}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+
+      <ul className="flex flex-col gap-1.5">
+        {items.map((item) => (
+          <ChildcareTodoRow
+            key={item.id}
+            item={item}
+            account={connected ? account : null}
+            onNotice={setNotice}
+            onError={setErrorMsg}
+          />
+        ))}
+      </ul>
+
+      {/* 完了/エラー（控えめ・inline。プラン登録と同じ流儀） */}
+      {notice && (
+        <div className="flex items-start gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-[11px] text-accent">
+          <CheckIcon width={13} height={13} className="mt-px shrink-0" />
+          <span>{notice}</span>
+        </div>
+      )}
+      {errorMsg && (
+        <div className="rounded-md border border-blocked/50 bg-blocked/10 px-2.5 py-1.5 text-[11px] text-blocked">
+          {errorMsg}
+        </div>
+      )}
+
+      {/* 注記（行政＝役所/保険者、健診＝自治体/医療機関で要確認）。 */}
+      <p className="text-[10px] leading-relaxed text-text-faint">
+        {ADMIN_CAPTION}
+        <br />
+        {CHECKUP_CAPTION}
+      </p>
+    </section>
+  );
+}
+
+// 締切1件の行。締切日・目安注記つきで、接続時のみ「予定に追加」を出す。
+function ChildcareTodoRow({
+  item,
+  account,
+  onNotice,
+  onError,
+}: {
+  item: AdminProcedure | CheckupItem;
+  account: string | null;
+  onNotice: (msg: string) => void;
+  onError: (msg: string) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState(false);
+  const left = daysUntil(item.dueIso);
+
+  const addToCalendar = async () => {
+    if (!account) return;
+    setAdding(true);
+    onError('');
+    try {
+      const res = await fetch('/api/google/calendar/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account,
+          summary: item.title,
+          date: item.dueIso,
+          description: item.kind === 'admin' ? '行政手続き（育児）' : '健診（育児）',
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setAdded(true);
+      onNotice(`「${item.title}」をGoogleカレンダーに追加しました`);
+    } catch (err) {
+      onError(`カレンダー追加に失敗しました: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  return (
+    <li className="flex flex-col gap-1 rounded-md border border-review/40 bg-bg px-2.5 py-2 sm:flex-row sm:items-center sm:gap-2">
+      <span className="inline-flex shrink-0 items-center rounded-full bg-review-bg px-1.5 py-0.5 text-[10px] font-bold leading-none text-review">
+        {item.kind === 'admin' ? '行政' : '健診'}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-text">{item.title}</p>
+        <p className="mt-0.5 text-[11px] text-text-muted">
+          <span className="font-semibold">{formatJpDate(item.dueIso)}</span>
+          {item.isEstimate && <span className="ml-1 text-text-faint">（目安）</span>}
+          <span className="ml-1 text-text-faint">
+            {left > 0 ? `あと${left}日` : left === 0 ? '本日' : `${-left}日超過`}
+          </span>
+        </p>
+        {item.dueNote && (
+          <p className="mt-0.5 text-[10px] leading-snug text-text-faint">{item.dueNote}</p>
+        )}
+      </div>
+      {/* 接続済みのときのみ表示。アカウント未接続なら非表示。 */}
+      {account && (
+        <button
+          type="button"
+          onClick={() => void addToCalendar()}
+          disabled={adding || added}
+          title={`${item.dueIso} の予定としてGoogleカレンダーに追加`}
+          className="inline-flex shrink-0 items-center gap-1 self-start rounded-md border border-border px-2 py-1 text-[10px] font-medium text-text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50 sm:self-auto"
+        >
+          {added ? '追加済み' : adding ? '追加中…' : '予定に追加（Googleカレンダーへ追加）'}
+        </button>
+      )}
+    </li>
   );
 }
 

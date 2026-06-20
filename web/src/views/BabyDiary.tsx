@@ -27,8 +27,6 @@ import {
   todayIso,
   ageMonthsDecimal,
   ageWeeksDecimal,
-  ADMIN_PROCEDURES,
-  CHECKUP_ITEMS,
 } from './childcareData';
 import {
   MALE_WEIGHT_PERCENTILES,
@@ -164,24 +162,6 @@ interface TasksError {
 interface TasksResponse {
   tasks: GoogleTask[];
   errors?: TasksError[];
-}
-
-// ─── ToDo（締切）ソース: 行政手続き＋健診を {id,title,dueIso} に正規化 ──
-interface DueTodo {
-  id: string;
-  title: string;
-  dueIso: string;
-  kind: 'admin' | 'checkup';
-}
-
-const DUE_TODOS: DueTodo[] = [
-  ...ADMIN_PROCEDURES.map((p) => ({ id: p.id, title: p.title, dueIso: p.dueIso, kind: 'admin' as const })),
-  ...CHECKUP_ITEMS.map((c) => ({ id: c.id, title: c.title, dueIso: c.dueIso, kind: 'checkup' as const })),
-];
-
-/** 指定 ISO 日付が締切の ToDo を返す。 */
-function todosForDate(iso: string): DueTodo[] {
-  return DUE_TODOS.filter((t) => t.dueIso === iso);
 }
 
 // ─── 日付ユーティリティ（JST 基準の YYYY-MM-DD を文字列演算で扱う）──
@@ -1400,7 +1380,6 @@ function CalendarSection({
           const hasEntry = entryByDate.has(iso);
           const media = mediaByDate.get(iso) ?? [];
           const firstImage = media.find((m) => m.kind === 'image');
-          const todos = todosForDate(iso);
           const gEvents = eventsByDate.get(iso) ?? [];
           const gTasks = tasksByDate.get(iso) ?? [];
           const weekday = (lead + day - 1) % 7;
@@ -1410,7 +1389,7 @@ function CalendarSection({
               key={iso}
               type="button"
               onClick={() => onSelect(iso)}
-              aria-label={`${formatJpDate(iso)}${hasEntry ? '・記録あり' : ''}${todos.length ? '・やること' : ''}`}
+              aria-label={`${formatJpDate(iso)}${hasEntry ? '・記録あり' : ''}`}
               aria-pressed={isSelected}
               className={`relative flex aspect-square flex-col items-stretch overflow-hidden rounded-md border p-1 text-left transition-colors ${
                 isSelected
@@ -1459,16 +1438,8 @@ function CalendarSection({
                 </span>
               )}
 
-              {/* 下部バッジ群（締切・記録ドット）。画像が無いときに余白を取る。 */}
+              {/* 下部バッジ群（記録ドット・Google予定/タスク）。画像が無いときに余白を取る。 */}
               <span className={`mt-auto flex flex-wrap items-center gap-0.5 ${firstImage ? 'pt-0.5' : ''}`}>
-                {todos.length > 0 && (
-                  <span
-                    className="inline-flex items-center rounded-full bg-review-bg px-1 text-[8px] font-bold leading-tight text-review"
-                    title={todos.map((t) => t.title).join('・')}
-                  >
-                    締切
-                  </span>
-                )}
                 {hasEntry && (
                   <span
                     aria-hidden
@@ -1526,9 +1497,6 @@ function CalendarSection({
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-faint">
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" aria-hidden /> 記録あり
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="rounded-full bg-review-bg px-1 text-[8px] font-bold text-review">締切</span> やること
         </span>
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-text-muted" aria-hidden /> Google予定（色＝アカウント）
@@ -1796,7 +1764,6 @@ function DayDetailSection({
   onChanged: () => Promise<void> | void;
   pushToast: (kind: ToastKind, text: string) => void;
 }) {
-  const todos = todosForDate(date);
   // 取り込み/書き出しの対象（visible が0なら null）。visible が1つなら自動的にそれ。
   const activeAccount = accountsConnected ? importTarget : null;
 
@@ -1831,26 +1798,6 @@ function DayDetailSection({
             accountColors={accountColors}
             onChange={onSelectImportTarget}
           />
-        )}
-      </div>
-
-      {/* やること（締切 ToDo） */}
-      <div>
-        <h3 className="mb-1.5 text-sm font-bold text-text">やること（締切）</h3>
-        {todos.length === 0 ? (
-          <p className="text-xs text-text-faint">なし</p>
-        ) : (
-          <ul className="flex flex-col gap-1.5">
-            {todos.map((t) => (
-              <TodoRow
-                key={t.id}
-                todo={t}
-                date={date}
-                activeAccount={accountsConnected ? activeAccount : null}
-                pushToast={pushToast}
-              />
-            ))}
-          </ul>
         )}
       </div>
 
@@ -2040,67 +1987,6 @@ function ImportTargetSelect({
         ))}
       </select>
     </label>
-  );
-}
-
-// ─── ToDo 行（Googleカレンダーへ書き出しボタン付き）─────────────
-function TodoRow({
-  todo,
-  date,
-  activeAccount,
-  pushToast,
-}: {
-  todo: DueTodo;
-  date: string;
-  activeAccount: string | null;
-  pushToast: (kind: ToastKind, text: string) => void;
-}) {
-  const [adding, setAdding] = useState(false);
-  const [added, setAdded] = useState(false);
-
-  const addToCalendar = async () => {
-    if (!activeAccount) return;
-    setAdding(true);
-    try {
-      const res = await fetch('/api/google/calendar/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          account: activeAccount,
-          summary: todo.title,
-          date: todo.dueIso,
-          description: todo.kind === 'admin' ? '行政手続き（成長日記）' : '健診（成長日記）',
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setAdded(true);
-      pushToast('success', `「${todo.title}」をGoogleカレンダーに追加しました`);
-    } catch (err) {
-      pushToast('error', `カレンダー追加に失敗しました: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  return (
-    <li className="flex items-center gap-2 rounded-md border border-review/40 bg-bg px-2.5 py-1.5">
-      <span className="inline-flex shrink-0 items-center rounded-full bg-review-bg px-1.5 py-0.5 text-[10px] font-bold leading-none text-review">
-        {todo.kind === 'admin' ? '行政' : '健診'}
-      </span>
-      <span className="min-w-0 flex-1 text-xs font-medium text-text">{todo.title}</span>
-      {/* 締切が選択日と一致するときのみ表示（todosForDate で保証済み）。アカウント未接続なら非表示。 */}
-      {activeAccount && (
-        <button
-          type="button"
-          onClick={() => void addToCalendar()}
-          disabled={adding || added}
-          title={`${date} の予定としてGoogleカレンダーに追加`}
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] font-medium text-text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
-        >
-          {added ? '追加済み' : adding ? '追加中…' : 'Googleカレンダーへ追加'}
-        </button>
-      )}
-    </li>
   );
 }
 
