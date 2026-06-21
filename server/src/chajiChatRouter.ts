@@ -2,29 +2,53 @@
 //
 // 茶事ページ（Chaji）の「茶事チャット」から開く、表千家の茶道に特化したアドバイザーとの対話
 // エンドポイント。育児チャット「すくすく」（childcareChatRouter）の設計をそのまま踏襲する。
-// 茶事チャットはテキストのみ（画像/動画アップロードは扱わない）。
+// 送信側のメディア（画像/動画）添付に対応する（childcare のユーザー添付側をミラー）。画像は
+// マルチモーダルでアドバイザーが見て表千家の文脈でコメントできる（best-effort: claude CLI に
+// 画像パスを渡して Read させる）。動画は受領・表示のみ（内容解析はしない）。
 //   - 会話履歴をサーバ側 JSONL（data/chaji-chat.jsonl）に蓄積する（chajiChatStore）。
 //     端末・リロードをまたいで過去の質問が残る。クライアントの localStorage はキャッシュ扱い。
 //   - 応答生成時は直近の履歴を文脈として渡し、過去のやり取りを踏まえて続けて答えられる。
 //
 // AI 応答は notebookClaude.ts の runClaudeStream（claude -p ベース）を流用する。
-// cwd は CXO_ROOT（既存ディレクトリ）を渡す。
+// cwd は CXO_ROOT（既存ディレクトリ）を渡し、画像 Read のためにメディア保存ディレクトリ
+// （CXO_ROOT/data/chaji-chat-media/）配下のファイルを読ませる（CXO_ROOT 配下なので既定で許可）。
 //
 // 出典リンク機能: このチャット専用に claude へ WebSearch/WebFetch を許可し
 // （CHAJI_ALLOWED_TOOLS → runClaudeStream の opts.allowedTools）、アドバイザーが実際に
 // 実在ページを検索・取得して確認した URL だけを「## 出典」セクションに引用できるようにする。
+// 添付画像を見るために Read も許可する（当チャット専用の opt-in）。
 // systemPrompt で捏造リンクを厳禁し、確認できる出典が無ければリンクを出さない。
 // この allowedTools は当チャット専用の opt-in で、notebook 等の既存 claude 呼び出しには渡らない。
 //
 // ルート（index.ts で auth ミドルウェア配下に /api/chaji で mount）:
-//   POST   /chat              { messages: [...] } → SSE ストリーム or JSON
-//   GET    /chat/history      → { messages: [{ role, content }] }（サーバ保存の会話履歴）
+//   POST   /chat              { messages: [...], media?: [...] } → SSE ストリーム or JSON
+//   GET    /chat/history      → { messages: [{ role, content, media? }] }（サーバ保存の会話履歴）
 //   GET    /chat/job/:id      → 単一ジョブの現在状態
 //   DELETE /chat/history      → { ok: true }（会話を論理クリア）
+//   POST   /chat/upload       multipart files[] → { ok, media: [{ id, kind, url, mime, name, size }] }
+//   GET    /chat/media/:id    → メディア実体をストリーム配信（Range 対応）
+
+import { randomUUID } from 'node:crypto';
+import {
+  createReadStream,
+  mkdirSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+  unlinkSync,
+} from 'node:fs';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { Router, type Request, type Response } from 'express';
+import multer from 'multer';
 
-import { CXO_ROOT } from './config.js';
+import {
+  CHAJI_CHAT_IMAGE_MAX_BYTES,
+  CHAJI_CHAT_MEDIA_DIR,
+  CHAJI_CHAT_MEDIA_MAX_FILES,
+  CHAJI_CHAT_VIDEO_MAX_BYTES,
+  CXO_ROOT,
+} from './config.js';
 import {
   clearMessages,
   finalizeAssistant,
@@ -32,6 +56,7 @@ import {
   listMessages,
   recentContext,
   startExchange,
+  type ChatMedia,
 } from './lib/chajiChatStore.js';
 import { runClaudeStream } from './lib/notebookClaude.js';
 
@@ -77,6 +102,12 @@ export const CHAJI_SYSTEM_PROMPT = [
   '- 適切に改行・段落を分け、長い文章の塊にしないでください。',
   '- ただし冒頭から見出しで始める必要はありません。軽い相談には数文の自然な文章で、丁寧に答えてください。体裁は内容量に合わせて調整します。',
   '',
+  '【画像・動画の取り扱い】',
+  '- 生徒が画像（写真）を添付した場合、その画像を見て、茶碗・所作・しつらえ・道具（棗・茶杓・茶筅・帛紗など）・床の花・和菓子などについて、表千家の文脈で一般的なコメントをしてかまいません。気づいた点や、表千家の作法・季節の趣向に照らした一般的な見方をやさしく伝えてください。',
+  '- ただし写真から断定や捏造はしないでください。作者・銘・年代・窯元・流派などは、写真だけでは確かなことは言えません。「写真だけでは断定できません」と前置きし、分かる範囲の一般的な見方に留め、確かなことはお稽古の先生や所有者・箱書き等でご確認いただくよう添えてください。写真に写っていないことを推測で事実のように述べてはいけません。',
+  '- 所作（点前の姿勢・帛紗さばき・茶碗の扱いなど）の写真には、表千家の作法に照らした一般的な気づきを穏やかに伝えてかまいませんが、流派が異なる作法と混同しないよう注意し、最終的にはお稽古の先生に倣う旨を添えてください。',
+  '- 動画が添付された場合、内容の詳細な解析はできません。気になる点があれば、その様子や所作を文章で教えていただくよう、やさしくお願いしてください。',
+  '',
   '【出典の提示（事実を述べる回答には必ず Web 検索で確認した出典を付ける）】',
   '- あなたは WebSearch / WebFetch ツールを使えます。',
   '- 茶道の事実・知識を一つでも含む回答（歴史・人物・年代、流派ごとの作法の違い、点前や所作の手順、道具の名称・由来、茶事の構成、炉と風炉の時期、用語の意味など）では、原則として必ず WebSearch で信頼できる情報源を検索し、必要なら WebFetch でページ内容を取得して確認してから答えてください。「できるだけ」ではありません。事実を述べるなら検索して出典を付ける、が原則です。',
@@ -104,9 +135,10 @@ export const CHAJI_SYSTEM_PROMPT = [
 /**
  * 茶事チャットで claude に許可する組み込みツール。
  * WebSearch / WebFetch を許可して、アドバイザーが実際に実在ページを検索・取得して出典を確認できるようにする。
+ * Read を許可して、生徒が添付した画像ファイルを開いて見られるようにする（マルチモーダル）。
  * これは当チャット専用の opt-in。notebook 等の既存 claude 呼び出しには渡さないので挙動は変わらない。
  */
-const CHAJI_ALLOWED_TOOLS = ['WebSearch', 'WebFetch'];
+const CHAJI_ALLOWED_TOOLS = ['WebSearch', 'WebFetch', 'Read'];
 
 // 応答生成時に文脈として渡すサーバ保存履歴の上限件数（トークン肥大の抑止）。
 const SERVER_CONTEXT_LIMIT = 30;
@@ -121,6 +153,48 @@ interface ChatMessageInput {
 // 会話履歴・1 メッセージ長の上限（暴走・過大プロンプト抑止）。
 const MAX_MESSAGES = 40;
 const MAX_CONTENT_CHARS = 4000;
+
+// ─── 許可 MIME（画像 / 動画）────────────────────────────────
+const IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/heic']);
+const VIDEO_MIME = new Set(['video/mp4', 'video/quicktime', 'video/webm']);
+
+/** MIME から種別を判定。許可外は null。 */
+function kindOf(mime: string): 'image' | 'video' | null {
+  const m = (mime || '').toLowerCase().split(';')[0].trim();
+  if (IMAGE_MIME.has(m)) return 'image';
+  if (VIDEO_MIME.has(m)) return 'video';
+  return null;
+}
+
+/** 添付メディア参照の入力を検証・正規化する（POST /chat の media フィールド）。 */
+function parseMedia(body: unknown): ChatMedia[] {
+  const raw = (body as { media?: unknown } | null)?.media;
+  if (!Array.isArray(raw)) return [];
+  const out: ChatMedia[] = [];
+  for (const m of raw) {
+    const id = (m as { id?: unknown })?.id;
+    const kind = (m as { kind?: unknown })?.kind;
+    const url = (m as { url?: unknown })?.url;
+    const mime = (m as { mime?: unknown })?.mime;
+    if (typeof id !== 'string' || !id) continue;
+    if (kind !== 'image' && kind !== 'video') continue;
+    if (typeof url !== 'string' || !url) continue;
+    const item: ChatMedia = {
+      id,
+      kind,
+      url,
+      mime: typeof mime === 'string' ? mime : '',
+      source: 'upload',
+    };
+    const name = (m as { name?: unknown })?.name;
+    const size = (m as { size?: unknown })?.size;
+    if (typeof name === 'string') item.name = name.slice(0, 200);
+    if (typeof size === 'number' && Number.isFinite(size)) item.size = size;
+    out.push(item);
+    if (out.length >= CHAJI_CHAT_MEDIA_MAX_FILES) break;
+  }
+  return out;
+}
 
 /** リクエスト body の messages を検証・正規化する。不正なら null を返す。 */
 function parseMessages(body: unknown): ChatMessageInput[] | null {
@@ -143,6 +217,146 @@ function parseMessages(body: unknown): ChatMessageInput[] | null {
   return trimmed;
 }
 
+// ─── メディア実体パスの安全解決（パストラバーサル防止）──────────
+// childcareChatRouter の resolveMediaPath / isInside / realpath 方式を踏襲する。
+
+let mediaRoot: string | null = null;
+function chatMediaRoot(): string {
+  if (mediaRoot) return mediaRoot;
+  try {
+    mediaRoot = realpathSync(CHAJI_CHAT_MEDIA_DIR);
+  } catch {
+    mediaRoot = resolve(CHAJI_CHAT_MEDIA_DIR);
+  }
+  return mediaRoot;
+}
+
+/** target が base 配下か（境界文字付きで prefix 詐称を防ぐ）。 */
+function isInside(base: string, target: string): boolean {
+  if (target === base) return true;
+  const rel = relative(base, target);
+  return rel !== '' && !rel.startsWith('..' + sep) && rel !== '..' && !isAbsolute(rel);
+}
+
+/**
+ * 保存名（<id>-<safe-name>）を CHAJI_CHAT_MEDIA_DIR 配下の安全な絶対パスに解決する。
+ * 区切り/絶対パスを弾いてから resolve・realpath で配下を確認する。配下外・不在は null。
+ */
+function resolveMediaPath(filename: string): string | null {
+  if (!filename || filename.includes('/') || filename.includes('\\') || isAbsolute(filename)) {
+    return null;
+  }
+  const root = chatMediaRoot();
+  const abs = resolve(root, filename);
+  if (!isInside(root, abs)) return null;
+  try {
+    const real = realpathSync(abs);
+    if (!isInside(root, real)) return null;
+    return real;
+  } catch {
+    return null;
+  }
+}
+
+/** ファイル名のパス区切り・制御文字を無害化する（babyDiary の sanitize に準拠）。 */
+function sanitizeName(name: string): string {
+  const base = (name || 'media')
+    .replace(/[\\/]/g, '_')
+    .replace(/\.\./g, '_')
+    .replace(/^\./, '_')
+    .replace(/[ -]/g, '_')
+    .slice(0, 120);
+  return base || 'media';
+}
+
+// id → 保存名の対応を multer 処理後に引くため、filename コールバックで採番して req に記録する。
+interface UploadIdEntry {
+  id: string;
+  filename: string;
+  kind: 'image' | 'video';
+}
+
+// 画像と動画で上限が異なるため、上限は「大きい方（動画）」を multer の limits に設定し、
+// 画像が画像上限を超えるケースは fileFilter 後の保存後チェックで弾く。
+const MEDIA_MAX_BYTES = Math.max(CHAJI_CHAT_IMAGE_MAX_BYTES, CHAJI_CHAT_VIDEO_MAX_BYTES);
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination(_req, _file, cb) {
+      mkdirSync(CHAJI_CHAT_MEDIA_DIR, { recursive: true });
+      cb(null, CHAJI_CHAT_MEDIA_DIR);
+    },
+    filename(req, file, cb) {
+      const kind = kindOf(file.mimetype);
+      const id = randomUUID();
+      const safe = sanitizeName(file.originalname);
+      const filename = `${id}-${safe}`;
+      const bag = ((req as Request & { _chatMediaIds?: UploadIdEntry[] })._chatMediaIds ??= []);
+      bag.push({ id, filename, kind: kind ?? 'image' });
+      cb(null, filename);
+    },
+  }),
+  limits: { fileSize: MEDIA_MAX_BYTES, files: CHAJI_CHAT_MEDIA_MAX_FILES },
+  fileFilter(_req, file, cb) {
+    if (!kindOf(file.mimetype)) {
+      cb(new Error('対応していない形式です（画像: png/jpeg/webp/gif/heic、動画: mp4/mov/webm）。'));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
+const uploadFiles = upload.array('files', CHAJI_CHAT_MEDIA_MAX_FILES);
+
+/** id プレフィックスで保存ディレクトリ内の実ファイル絶対パスを探す（保存名が原名依存で揺れる対策）。 */
+function findImagePathsById(images: ChatMedia[]): string[] {
+  const root = chatMediaRoot();
+  const out: string[] = [];
+  let entries: string[] = [];
+  try {
+    entries = readdirSync(root);
+  } catch {
+    return out;
+  }
+  for (const img of images) {
+    const match = entries.find((f) => f.startsWith(`${img.id}-`));
+    if (match) {
+      const abs = resolveMediaPath(match);
+      if (abs) out.push(abs);
+    }
+  }
+  return out;
+}
+
+/**
+ * 画像添付があるときに、最後の user 発言に「画像を Read して見るよう」指示する補足を足す。
+ * claude CLI は CXO_ROOT 配下のファイルを Read できる。メディアは CXO_ROOT/data/chaji-chat-media/
+ * に保存されているので、その絶対パスを渡して読ませる。動画は内容解析できない旨を伝える。
+ */
+function buildImageHint(media: ChatMedia[]): string {
+  const images = media.filter((m) => m.kind === 'image');
+  const videos = media.filter((m) => m.kind === 'video');
+  const parts: string[] = [];
+  if (images.length > 0) {
+    // 保存名は <id>-<原名> で原名依存に揺れるため、id プレフィックスで実ファイルを探す。
+    const resolved = findImagePathsById(images);
+    if (resolved.length > 0) {
+      parts.push(
+        '',
+        '【添付画像について】生徒が次の画像を添付しました。Read ツールでこれらの画像ファイルを開いて内容を確認し、茶碗・所作・しつらえ・道具・床の花・和菓子などについて表千家の文脈で一般的なコメントをしてください。ただし写真だけで作者・銘・年代・流派などを断定したり、写っていないことを推測で事実のように述べたりは絶対にしないでください（前述の「画像・動画の取り扱い」を厳守）。',
+        ...resolved.map((p) => `- 画像ファイル: ${p}`),
+      );
+    }
+  }
+  if (videos.length > 0) {
+    parts.push(
+      '',
+      '【添付動画について】生徒が動画を添付しましたが、動画の内容解析はできません。気になる所作や様子は文章で教えていただくよう、やさしくお願いしてください。',
+    );
+  }
+  return parts.join('\n');
+}
+
 /** systemPrompt + 会話履歴から claude -p に渡す 1 本のプロンプトを組む。 */
 function buildPrompt(messages: ChatMessageInput[]): string {
   const lines = [CHAJI_SYSTEM_PROMPT, '', '--- これまでの会話 ---'];
@@ -158,7 +372,10 @@ function buildPrompt(messages: ChatMessageInput[]): string {
  * 正本はサーバ保存の会話履歴（chajiChatStore）。直近 SERVER_CONTEXT_LIMIT 件を文脈とし、
  * その末尾にクライアントが今送ってきた新しい user 発言を必ず置く（最後の質問に答える）。
  */
-function buildContext(clientMessages: ChatMessageInput[]): { context: ChatMessageInput[]; userText: string } {
+function buildContext(
+  clientMessages: ChatMessageInput[],
+  media: ChatMedia[],
+): { context: ChatMessageInput[]; userText: string } {
   // クライアント payload は parseMessages で末尾 user 保証済み。
   const userText = clientMessages[clientMessages.length - 1]?.content ?? '';
   // サーバ保存の直近履歴。末尾が今回の user と重複している場合は落とす（多重保存防止）。
@@ -170,7 +387,10 @@ function buildContext(clientMessages: ChatMessageInput[]): { context: ChatMessag
   ) {
     stored.pop();
   }
-  return { context: [...stored, { role: 'user', content: userText }], userText };
+  // 画像/動画の補足は最後の user 発言に連結する（プロンプト末尾の指示として効く）。
+  const hint = media.length > 0 ? buildImageHint(media) : '';
+  const lastUser = hint ? `${userText}\n${hint}` : userText;
+  return { context: [...stored, { role: 'user', content: lastUser }], userText };
 }
 
 /** SSE イベントを 1 行書き出す。 */
@@ -314,13 +534,15 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // 正本のサーバ履歴を文脈にし、末尾に今回の user 発言を置く。
-  const { context, userText } = buildContext(messages);
+  const media = parseMedia(req.body);
+
+  // 正本のサーバ履歴を文脈にし、末尾に今回の user 発言（＋画像補足）を置く。
+  const { context, userText } = buildContext(messages, media);
   const prompt = buildPrompt(context);
   const wantsStream = (req.headers.accept ?? '').includes('text/event-stream');
 
   // user を即永続化し、assistant の pending エントリを作る（ここで質問は失われなくなる）。
-  const { jobId, assistantId } = startExchange(userText);
+  const { jobId, assistantId } = startExchange(userText, media.length > 0 ? media : undefined);
 
   // 生成はバックグラウンドで走らせる（res の生死に依存しない）。await しない。
   void runJob(jobId, assistantId, prompt);
@@ -392,6 +614,7 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   res.status(200).json({
     jobId,
     answer: finished.content,
+    media: finished.media ?? [],
     status: finished.status ?? 'done',
     ...(finished.status === 'error' ? { errorKind: 'engine_error' } : {}),
   });
@@ -423,6 +646,7 @@ function handleJob(req: Request, res: Response): void {
       jobId: id,
       status: found.status ?? 'done',
       answer: found.content,
+      media: found.media ?? [],
     });
   } catch {
     res.status(500).json({ error: 'failed to read job' });
@@ -439,11 +663,189 @@ function handleClear(_req: Request, res: Response): void {
   }
 }
 
+/** multer を Promise 化。サイズ/枚数超過・MIME reject は適切なステータスで返して false。 */
+function runMediaUpload(req: Request, res: Response): Promise<boolean> {
+  return new Promise((done) => {
+    uploadFiles(req, res, (err: unknown) => {
+      if (err) {
+        if (err instanceof multer.MulterError) {
+          if (err.code === 'LIMIT_FILE_SIZE') {
+            const mb = Math.round(MEDIA_MAX_BYTES / (1024 * 1024));
+            res.status(413).json({ error: `ファイルサイズが上限（${mb}MB）を超えています。`, code: err.code });
+            done(false);
+            return;
+          }
+          res.status(400).json({ error: err.message, code: err.code });
+          done(false);
+          return;
+        }
+        res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+        done(false);
+        return;
+      }
+      done(true);
+    });
+  });
+}
+
+// POST /chat/upload — 画像/動画をアップロードしてメディア参照を返す（保存のみ。送信は POST /chat）。
+async function handleUpload(req: Request, res: Response): Promise<void> {
+  mkdirSync(CHAJI_CHAT_MEDIA_DIR, { recursive: true });
+  const ok = await runMediaUpload(req, res);
+  if (!ok) return;
+
+  const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+  const idBag = (req as Request & { _chatMediaIds?: UploadIdEntry[] })._chatMediaIds ?? [];
+  if (files.length === 0) {
+    res.status(400).json({ error: 'ファイルがありません（フィールド名は "files" を使用してください）。' });
+    return;
+  }
+
+  const out: ChatMedia[] = [];
+  for (const f of files) {
+    const kind = kindOf(f.mimetype);
+    if (!kind) continue;
+    // 画像は画像上限で個別に弾く（multer limits は動画基準の大きい上限のため）。
+    const abs = f.path ?? join(CHAJI_CHAT_MEDIA_DIR, f.filename);
+    let size = f.size;
+    try { size = statSync(abs).size; } catch { /* use f.size */ }
+    if (kind === 'image' && size > CHAJI_CHAT_IMAGE_MAX_BYTES) {
+      try { unlinkSync(abs); } catch { /* 無視 */ }
+      const mb = Math.round(CHAJI_CHAT_IMAGE_MAX_BYTES / (1024 * 1024));
+      res.status(413).json({ error: `画像のサイズが上限（${mb}MB）を超えています。` });
+      return;
+    }
+    const entry = idBag.find((e) => e.filename === f.filename);
+    const id = entry?.id ?? randomUUID();
+    out.push({
+      id,
+      kind,
+      url: `/api/chaji/chat/media/${encodeURIComponent(id)}`,
+      mime: f.mimetype,
+      name: f.originalname,
+      size,
+      source: 'upload',
+    });
+  }
+
+  if (out.length === 0) {
+    res.status(400).json({ error: '保存できるメディアがありませんでした。' });
+    return;
+  }
+  res.status(201).json({ ok: true, media: out });
+}
+
+/** id プレフィックスで保存ディレクトリ内の実ファイル名を探す。 */
+function findFilenameById(id: string): string | null {
+  const root = chatMediaRoot();
+  try {
+    const entries = readdirSync(root);
+    return entries.find((f) => f.startsWith(`${id}-`)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// GET /chat/media/:id — メディア実体をストリーム配信（Range 対応＝動画シーク）。
+function handleStreamMedia(req: Request, res: Response): void {
+  const id = String(req.params.id ?? '');
+  // id は UUID 想定。区切り等が混ざる不正は弾く。
+  if (!id || id.includes('/') || id.includes('\\') || id.includes('..')) {
+    res.status(400).json({ error: 'invalid id' });
+    return;
+  }
+  const filename = findFilenameById(id);
+  if (!filename) {
+    res.status(404).json({ error: 'media not found' });
+    return;
+  }
+  const abs = resolveMediaPath(filename);
+  if (!abs) {
+    res.status(404).json({ error: 'media file not found' });
+    return;
+  }
+  let total = 0;
+  try {
+    const st = statSync(abs);
+    if (!st.isFile()) {
+      res.status(404).json({ error: 'media file not found' });
+      return;
+    }
+    total = st.size;
+  } catch {
+    res.status(404).json({ error: 'media file not found' });
+    return;
+  }
+  const mime = mimeOf(filename);
+  res.type(mime);
+  res.set('Cache-Control', 'private, max-age=300');
+  res.set('Accept-Ranges', 'bytes');
+
+  const onErr = (stream: ReturnType<typeof createReadStream>) =>
+    stream.on('error', () => {
+      if (!res.headersSent) res.status(500).json({ error: 'failed to read media' });
+      else res.destroy();
+    });
+
+  const range = req.headers.range;
+  const m = typeof range === 'string' ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null;
+  if (m && total > 0) {
+    let start = m[1] === '' ? 0 : Number(m[1]);
+    let end = m[2] === '' ? total - 1 : Number(m[2]);
+    if (!Number.isFinite(start) || start < 0) start = 0;
+    if (!Number.isFinite(end) || end >= total) end = total - 1;
+    if (start > end || start >= total) {
+      res.status(416).set('Content-Range', `bytes */${total}`).end();
+      return;
+    }
+    res.status(206);
+    res.set('Content-Range', `bytes ${start}-${end}/${total}`);
+    res.set('Content-Length', String(end - start + 1));
+    const stream = createReadStream(abs, { start, end });
+    onErr(stream);
+    stream.pipe(res);
+    return;
+  }
+
+  res.set('Content-Length', String(total));
+  const stream = createReadStream(abs);
+  onErr(stream);
+  stream.pipe(res);
+}
+
+/** 保存名（<id>-<original>）の拡張子から MIME を推定する（許可セット限定）。 */
+function mimeOf(filename: string): string {
+  const ext = filename.toLowerCase().split('.').pop() ?? '';
+  switch (ext) {
+    case 'png':
+      return 'image/png';
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'webp':
+      return 'image/webp';
+    case 'gif':
+      return 'image/gif';
+    case 'heic':
+      return 'image/heic';
+    case 'mp4':
+      return 'video/mp4';
+    case 'mov':
+      return 'video/quicktime';
+    case 'webm':
+      return 'video/webm';
+    default:
+      return 'application/octet-stream';
+  }
+}
+
 export function chajiChatRouter(): Router {
   const router = Router();
   router.get('/chat/history', (req, res) => handleHistory(req, res));
   router.get('/chat/job/:id', (req, res) => handleJob(req, res));
   router.delete('/chat/history', (req, res) => handleClear(req, res));
+  router.post('/chat/upload', (req, res) => void handleUpload(req, res));
+  router.get('/chat/media/:id', (req, res) => handleStreamMedia(req, res));
   router.post('/chat', (req, res) => void handleChat(req, res));
   return router;
 }

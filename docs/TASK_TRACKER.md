@@ -3083,3 +3083,16 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 受け入れ条件（DoD） | サイドメニュー「茶事」表示。基礎知識ガイドが表千家準拠・成り立ち/歴史中心・出典明記（実在URL・捏造なし）。すくすく式チャットが表千家ペルソナで稼働し出典提示。既存 /childcare 無改変。build green＋実機（OpenClawブラウザ）検証。 |
 | 依存 | MC-141（チャット基盤）/ MC-233 系（すくすく）踏襲 |
 | 更新日 | 2026-06-21 |
+
+### MC-258 — 茶事チャットにメディア添付（すくすくと同じく画像/動画を貼れるように）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-258 |
+| タイトル | 茶事チャット（/api/chaji）を、すくすく（childcareChatRouter）と同様にユーザーからの画像/動画添付に対応させる。アドバイザーが添付画像を見てコメントできるようにする |
+| 優先度 | P2 |
+| ステータス | DONE（2026-06-21 Son 実装委譲→自己検証グリーン・本番反映済み）。Keita依頼「茶事チャットは、すくすくと同じくメディアもはれるようにして」。実装は subagent、検証・commit・反映は Son。スコープ=ユーザー添付側（upload/保存/配信＋アドバイザーが画像を Read して閲覧）。アシスタント側の参考メディア提案（youtube/gen-image/web-image）は対象外。**実装**: config に CHAJI_CHAT_MEDIA_DIR/IMAGE_MAX/VIDEO_MAX/MEDIA_MAX_FILES（childcare 同値・別dir data/chaji-chat-media）、chajiChatStore を ChatMedia 対応、chajiChatRouter に POST /chat/upload・GET /chat/media/:id（Range・パストラバーサル防止 realpath/isInside）・POST /chat で media[] 受領、CHAJI_ALLOWED_TOOLS に Read 追加＋buildImageHint で添付画像の絶対パスを user 発言へ連結（捏造/断定禁止のガード文付き）、system prompt に画像取扱節。Chaji.tsx に添付ボタン＋ステージングサムネ（個別削除・createObjectURL/revoke・MC-102/103 配慮）＋吹き出し画像/動画表示。childcareChatRouter.ts は未編集。**検証**: server tsc 0・web build green・mission-control 再起動 healthz 200・API（upload 201→media配信200/Range206→media付POST→アドバイザーが画像をRead して茶碗・抹茶・泡を正確描写＋「イラストゆえ銘/年代は断定不可」とガード遵守）・実機（OpenClawブラウザ）で添付ボタン→ステージングサムネ→送信→ユーザー吹き出しに画像インライン表示→応答 done を一気通貫で確認。既存 /childcare 非改変。 |
+| 担当 | subagent（Son ディスパッチ）→ 検証・反映は Son |
+| 受け入れ条件（DoD） | 茶事チャットで画像/動画を添付して送信でき、サムネが出る。アドバイザーが添付画像を見て表千家の文脈でコメントできる（捏造・診断はしない方針は維持）。childcare の upload/media-serve/staging UI を踏襲。server tsc 0・web build green・実機（OpenClawブラウザ）で添付→送信→閲覧を確認。既存 /childcare 無改変。 |
+| 依存 | MC-257（茶事）/ MC-95・MC-100〜103（childcare メディア・ステージングUI）踏襲 |
+| 更新日 | 2026-06-21 |

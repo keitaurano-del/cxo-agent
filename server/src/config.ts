@@ -988,6 +988,39 @@ export const CHAJI_CHAT_FILE = env(
   join(INBOX_DATA_DIR, 'chaji-chat.jsonl'),
 );
 
+// ─── 茶事チャットのユーザー添付メディア（画像/動画）──────────────────────
+// 育児チャット（CHILDCARE_CHAT_MEDIA_*）の作法をそのまま踏襲し、茶事専用の別ディレクトリ・
+// 別上限で受ける（childcare とディレクトリを分けて干渉させない）。data/ 配下なので .gitignore
+// 済み・ランタイムデータ。画像は AI（claude）が Read して表千家の文脈でコメントできる想定、
+// 動画は受領・表示のみ（内容解析はしない）。
+
+/** 茶事チャット添付メディアの保存ディレクトリ（childcare とは別ディレクトリ）。 */
+export const CHAJI_CHAT_MEDIA_DIR = env(
+  'CHAJI_CHAT_MEDIA_DIR',
+  join(INBOX_DATA_DIR, 'chaji-chat-media'),
+);
+
+/**
+ * 茶事チャット添付の画像 1 枚あたり最大バイト数（既定 10MB）。
+ * 画像は AI が読む（マルチモーダル）想定なので過大ファイルを避ける。
+ */
+export const CHAJI_CHAT_IMAGE_MAX_BYTES = envNum(
+  'CHAJI_CHAT_IMAGE_MAX_BYTES',
+  10 * 1024 * 1024,
+);
+
+/**
+ * 茶事チャット添付の動画 1 本あたり最大バイト数（既定 50MB）。
+ * 動画は AI が内容解析しない（受領・表示のみ）。妥当な上限で受ける。
+ */
+export const CHAJI_CHAT_VIDEO_MAX_BYTES = envNum(
+  'CHAJI_CHAT_VIDEO_MAX_BYTES',
+  50 * 1024 * 1024,
+);
+
+/** 茶事チャット添付の 1 リクエストあたり最大ファイル数。 */
+export const CHAJI_CHAT_MEDIA_MAX_FILES = envNum('CHAJI_CHAT_MEDIA_MAX_FILES', 5);
+
 /**
  * Gemini 画像生成モデル（図解生成用、通称 Nano Banana 系）。
  * generativelanguage v1beta の :generateContent で responseModalities=IMAGE を要求する。

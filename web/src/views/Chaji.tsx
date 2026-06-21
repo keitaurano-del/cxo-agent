@@ -2,17 +2,22 @@
 //
 // 育児ページ（Childcare）の「育児チャット すくすく」を踏襲する。上部に「基礎知識ガイド」を
 // 表示する領域、下部にチャット UI（茶事チャット）をタブで切り替える。チャットクライアントは
-// 育児のものを踏襲し、API base を /api/chaji に向ける。茶事チャットはテキストのみ（画像添付なし）。
+// 育児のものを踏襲し、API base を /api/chaji に向ける。茶事チャットは、ユーザー（生徒）が画像/
+// 動画を添付して送れる（childcare のユーザー添付側をミラー）。画像はアドバイザーが見て表千家の
+// 文脈でコメントでき、動画は受領・表示のみ。
 //
 // - 会話履歴はサーバ側 JSONL（data/chaji-chat.jsonl）を正本に蓄積し（GET /api/chaji/chat/history
 //   で復元）、localStorage は端末ローカルのキャッシュ/フォールバックとして併用する。
 // - アシスタント返答は Markdown として整形して表示（ChatMarkdown）。ユーザー発言は素のテキスト。
+// - 添付メディアは送信前に POST /api/chaji/chat/upload で先にサーバへ保存し、サーバ配信 URL を
+//   ステージングのサムネにそのまま使う（createObjectURL を使わずリークを避ける＝MC-102/103 の教訓）。
+//   送信時に media 参照を本文に添える。吹き出しには添付画像（インライン）/動画（<video>）を表示。
 // - 基礎知識ガイド本文は chajiData.CHAJI_GUIDE_MARKDOWN（プレースホルダ）を ChatMarkdown で描画。
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import ChatMarkdown from '../components/ChatMarkdown';
-import { ChajiIcon, ChildcareChatIcon, SendIcon } from '../components/icons';
+import { ChajiIcon, ChildcareChatIcon, CloseIcon, ImageFileIcon, SendIcon } from '../components/icons';
 import { CHAJI_GUIDE_MARKDOWN } from './chajiData';
 
 // ─── 基礎知識ガイド（プレースホルダ Markdown を描画）────────────────────
@@ -40,11 +45,26 @@ function ChajiGuide() {
 // ─── 茶事チャット（表千家の茶道アドバイザー）─────────────────────────────
 // 育児チャット「すくすく」のクライアントを踏襲（API base を /api/chaji に）。テキストのみ。
 type ChajiRole = 'user' | 'assistant';
+// 添付メディア参照（生徒の画像/動画アップロード）。childcare の SukuMedia のユーザー添付側を踏襲。
+interface ChajiMedia {
+  id: string;
+  // 'image' はインライン表示・AI が見られる、'video' は <video> 表示（AI は内容解析しない）。
+  kind: 'image' | 'video';
+  // 配信 URL（GET /api/chaji/chat/media/:id）。ステージングのサムネにもそのまま使う。
+  url: string;
+  mime: string;
+  name?: string;
+  size?: number;
+  // 出所。茶事チャットでは常に 'upload'（生徒がアップロードした添付）。
+  source?: 'upload';
+}
 // 生成状態。'pending'=生成中（考え中…）/ 'done'=完了 / 'error'=失敗（丁寧メッセージ確定）。
 type ChajiStatus = 'pending' | 'done' | 'error';
 interface ChajiMessage {
   role: ChajiRole;
   content: string;
+  // 添付メディア（無ければ省略）。
+  media?: ChajiMedia[];
   // assistant のみ pending/error を取りうる（省略時は done 相当）。
   status?: ChajiStatus;
   // ジョブ相関キー（pending を job ステータスで解決するため）。
@@ -71,6 +91,16 @@ function normalizeMessages(parsed: unknown): ChajiMessage[] {
     if (status === 'pending' || status === 'error' || status === 'done') msg.status = status;
     const jobId = (m as ChajiMessage)?.jobId;
     if (typeof jobId === 'string' && jobId) msg.jobId = jobId;
+    const media = (m as ChajiMessage)?.media;
+    if (Array.isArray(media)) {
+      const list = media.filter((x): x is ChajiMedia => {
+        if (!x || typeof (x as ChajiMedia).id !== 'string') return false;
+        const k = (x as ChajiMedia).kind;
+        if (k !== 'image' && k !== 'video') return false;
+        return typeof (x as ChajiMedia).url === 'string';
+      });
+      if (list.length > 0) msg.media = list;
+    }
     out.push(msg);
   }
   return out;
@@ -109,7 +139,10 @@ function useChajiChat() {
   const [messages, setMessages] = useState<ChajiMessage[]>(() => loadChajiHistory());
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 送信前に添付したメディア（アップロード済みで参照を保持）。
+  const [pending, setPending] = useState<ChajiMedia[]>([]);
   // ストリーミング中のアシスタント部分応答（確定前のテキスト）。
   const [streaming, setStreaming] = useState<string | null>(null);
   // 進行中ジョブがあるか（pending を解決するためのポーリング駆動に使う）。
@@ -170,22 +203,53 @@ function useChajiChat() {
     };
   }, [hasPending, restore]);
 
+  /** ファイル選択 → サーバへアップロードして pending に追加する。 */
+  const upload = useCallback(async (files: FileList | File[]) => {
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      for (const f of list) form.append('files', f);
+      const res = await fetch('/api/chaji/chat/upload', { method: 'POST', body: form });
+      const data = (await res.json().catch(() => ({}))) as { media?: ChajiMedia[]; error?: string };
+      if (!res.ok) {
+        setError(data.error || 'アップロードに失敗しました。');
+        return;
+      }
+      const added = Array.isArray(data.media) ? data.media : [];
+      setPending((prev) => [...prev, ...added]);
+    } catch {
+      setError('アップロードに失敗しました。通信状況をご確認ください。');
+    } finally {
+      setUploading(false);
+    }
+  }, []);
+
+  const removePending = useCallback((id: string) => {
+    setPending((prev) => prev.filter((m) => m.id !== id));
+  }, []);
+
   /**
-   * 送信。テキストがあれば送れる。
+   * 送信。テキストか添付メディアのどちらかがあれば送れる。
    * AI 生成はサーバ側でバックグラウンド実行され、結果はサーバに永続化される。SSE が繋がっている間は
    * 逐次表示するが、完了の正本はサーバ。接続が切れても「通信に失敗しました」で確定せず、pending の
    * ままにして history ポーリング／タブ復帰で結果を取りに行く（画面を離れて戻っても回答が出る）。
    */
   const send = useCallback(async () => {
     const text = input.trim();
-    if (!text || sending) return;
+    const media = pending;
+    if ((!text && media.length === 0) || sending) return;
 
-    const userMsg: ChajiMessage = { role: 'user', content: text };
+    const userMsg: ChajiMessage = { role: 'user', content: text || '（画像/動画を添付しました）' };
+    if (media.length > 0) userMsg.media = media;
     // user 発言＋「考えています…」の pending バブルを楽観表示する（正本はサーバ）。
     const pendingAssistant: ChajiMessage = { role: 'assistant', content: '', status: 'pending' };
     const next: ChajiMessage[] = [...messages, userMsg];
     setMessages([...next, pendingAssistant]);
     setInput('');
+    setPending([]);
     setError(null);
     setSending(true);
     setStreaming('');
@@ -200,6 +264,7 @@ function useChajiChat() {
         body: JSON.stringify({
           // サーバは末尾 user テキストに答える。content は空でない値を渡す。
           messages: next.map((m) => ({ role: m.role, content: m.content })),
+          media,
         }),
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -253,29 +318,100 @@ function useChajiChat() {
       setSending(false);
       streamingRef.current = false;
     }
-  }, [input, sending, messages, restore]);
+  }, [input, pending, sending, messages, restore]);
 
   const clearHistory = useCallback(() => {
     setMessages([]);
     setStreaming(null);
+    setPending([]);
     // サーバ側の蓄積も論理クリアする（失敗しても表示はクリア済みのまま）。
     void fetch('/api/chaji/chat/history', { method: 'DELETE' }).catch(() => {
       /* 通信失敗時はローカルのみクリア */
     });
   }, []);
 
-  return { messages, input, setInput, sending, error, streaming, restore, send, clearHistory };
+  return {
+    messages,
+    input,
+    setInput,
+    sending,
+    uploading,
+    error,
+    pending,
+    streaming,
+    restore,
+    upload,
+    removePending,
+    send,
+    clearHistory,
+  };
 }
 
 type ChajiChat = ReturnType<typeof useChajiChat>;
 
-// ─── 入力バー（テキストのみ）──────────────────────────────────────────
+// ─── 入力バー（テキスト＋メディア添付）──────────────────────────────────
 function ChajiComposer({ chat }: { chat: ChajiChat }) {
-  const canSend = chat.input.trim().length > 0 && !chat.sending;
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const canSend = (chat.input.trim().length > 0 || chat.pending.length > 0) && !chat.sending;
   return (
     <div className="border-t border-border px-3 py-3">
+      {/* 添付プレビュー（送信前のステージング）。サムネはサーバ配信 URL を使う（object URL を作らない）。 */}
+      {chat.pending.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {chat.pending.map((m) => (
+            <div
+              key={m.id}
+              className="relative overflow-hidden rounded-md border border-border bg-surface-2"
+            >
+              {m.kind === 'image' ? (
+                <img src={m.url} alt={m.name ?? '添付画像'} className="h-16 w-16 object-cover" />
+              ) : (
+                <div className="flex h-16 w-16 flex-col items-center justify-center gap-1 px-1 text-center">
+                  <span aria-hidden className="text-base">🎬</span>
+                  <span className="line-clamp-1 text-[9px] text-text-muted">動画</span>
+                </div>
+              )}
+              {/* 削除ボタン。当たり判定を大きく・常時高コントラストにする（MC-102/103 の教訓）。 */}
+              <button
+                type="button"
+                onClick={() => chat.removePending(m.id)}
+                aria-label="添付を削除"
+                className="absolute right-0.5 top-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white shadow-sm hover:bg-black/85"
+              >
+                <CloseIcon width={13} height={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       {chat.error && <p className="mb-1.5 px-1 text-[11px] text-blocked">{chat.error}</p>}
       <div className="flex items-end gap-2">
+        {/* メディア添付ボタン */}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif,image/heic,video/mp4,video/quicktime,video/webm"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = e.target.files;
+            if (files && files.length > 0) void chat.upload(files);
+            e.target.value = '';
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={chat.uploading || chat.sending}
+          aria-label="画像・動画を添付"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {chat.uploading ? (
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-text-muted border-t-transparent" />
+          ) : (
+            <ImageFileIcon width={18} height={18} />
+          )}
+        </button>
         <textarea
           value={chat.input}
           onChange={(e) => chat.setInput(e.target.value)}
@@ -327,7 +463,7 @@ function ChajiMessageList({
           return null;
         }
         return (
-          <ChajiBubble key={i} role={m.role}>
+          <ChajiBubble key={i} role={m.role} media={m.media}>
             {m.role === 'assistant' ? (
               m.status === 'pending' ? (
                 <ChajiThinking />
@@ -364,20 +500,69 @@ function ChajiThinking() {
 }
 
 // ─── 吹き出し ────────────────────────────────────────────────────────
-function ChajiBubble({ role, children }: { role: ChajiRole; children: ReactNode }) {
+function ChajiBubble({
+  role,
+  media,
+  children,
+}: {
+  role: ChajiRole;
+  media?: ChajiMedia[];
+  children: ReactNode;
+}) {
   const isUser = role === 'user';
+  // 添付画像/動画があるバブルは窮屈にならないよう少し広めにする。
+  const hasMedia = !!media && media.length > 0;
+  const widthClass = hasMedia ? 'max-w-[92%] sm:max-w-[24rem]' : 'max-w-[85%]';
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[85%] break-words rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
+        className={`${widthClass} break-words rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
           isUser
             ? 'rounded-br-sm bg-accent text-bg'
             : 'rounded-bl-sm border border-border bg-surface text-text'
         }`}
       >
+        {/* 添付メディア（生徒の画像/動画）。 */}
+        {hasMedia && (
+          <div className="mb-1.5 flex flex-col gap-2">
+            {media!.map((m) => (
+              <ChajiMediaItem key={m.id} media={m} />
+            ))}
+          </div>
+        )}
         {children}
       </div>
     </div>
+  );
+}
+
+// ─── 茶事チャットの 1 メディア（生徒添付の画像/動画）──────────────────────
+//   - image: インライン画像（クリックで原寸を別タブで開く）。
+//   - video: 添付動画（<video controls>）。
+// 画像 src は自前配信 URL（GET /api/chaji/chat/media/:id）のみ。
+function ChajiMediaItem({ media: m }: { media: ChajiMedia }) {
+  if (m.kind === 'image') {
+    return (
+      <figure className="m-0">
+        <a href={m.url} target="_blank" rel="noopener noreferrer">
+          <img
+            src={m.url}
+            alt={m.name ?? '画像'}
+            loading="lazy"
+            className="max-h-72 max-w-full rounded-md border border-black/10 object-contain"
+          />
+        </a>
+      </figure>
+    );
+  }
+  // 動画（生徒添付）。内容解析はしないが、表示・再生はできる。
+  return (
+    <video
+      src={m.url}
+      controls
+      preload="metadata"
+      className="max-h-60 max-w-full rounded-md border border-black/10"
+    />
   );
 }
 
