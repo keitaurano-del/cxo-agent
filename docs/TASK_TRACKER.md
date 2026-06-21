@@ -3109,3 +3109,18 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 受け入れ条件（DoD） | 茶事ページの基礎知識ガイドタブ表示中、右下にチャットFABが常設表示され、タップで茶事チャットタブへ遷移。チャットタブ表示中はFAB非表示（育児と同挙動）。リロード・タブ往復後も会話履歴が残る。web build green・実機（OpenClawブラウザ）で確認。既存 /childcare 無改変。 |
 | 依存 | MC-257/MC-258（茶事）/ childcare の FAB 導線踏襲 |
 | 更新日 | 2026-06-21 |
+
+### MC-260 — 「仕事」メニュー新設: ECL/PMO 学習・壁打ちチャット＋ナレッジ蓄積ツール（/work）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-260 |
+| タイトル | サイドメニューに「仕事」(/work) を新設。Keita のメガバンク ECL システム導入 PMO 案件向けに、①学習・壁打ちチャット（ECL概要/システム実装/与信・銀行・DB・PMO知識・出典付き）②ナレッジ管理（チャット履歴＋現場インプットをAIが体系化して蓄積・PMO知見の資産化）を提供する |
+| 優先度 | P1 |
+| ステータス | DONE（2026-06-22 Son 実装・実機検証・本番反映）。backend（workChatRouter/workKnowledgeRouter/workChatStore/workKnowledgeStore＋config/index.ts mount）・frontend（Work.tsx 3タブ＋WorkIcon＋App.tsx nav/route＋概要本文）実装。**検証**: 隔離インスタンス(:4319)で 知識CRUD・バリデーション(400)・チャットSSE背景ジョブ＋履歴永続＋出典付き回答・AI体系化(JSON抽出) すべてグリーン。web/server tsc・vite build グリーン。本番(:4317) restart 後 /api/work/* がJSON 200 で稼働、apollomansion.com/work で3タブ（概要/壁打ち/ナレッジ）の描画・本文レンダリングを OpenClaw ブラウザで目視確認。コミット 867f0a5・7eb5304。childcareChatRouter のソラ未コミットWIP は stash 退避して本番に巻き込まず復元（無改変）。 |
+| 担当 | subagent（Son ディスパッチ）→ 設計・検証・反映は Son |
+| 設計（API契約） | **chat（chajiChatRouter 踏襲）**: POST /api/work/chat（SSE/JSON・WebSearch出典必須persona）、GET /chat/history、GET /chat/job/:id、DELETE /chat/history。正本 data/work-chat.jsonl。**knowledge**: GET /api/work/knowledge（一覧）、POST /knowledge（作成）、PUT /knowledge/:id（更新）、DELETE /knowledge/:id、POST /knowledge/structure（生インプット→claude が {title,category,tags,body(markdown)} のドラフトに体系化・未保存）。正本 data/work-knowledge.jsonl。KnowledgeEntry={id,title,category,tags[],body,source('manual'|'ai'),createdAt,updatedAt}。カテゴリ例=ECL/会計基準・システム実装・与信管理・銀行業務・データベース・PMO・その他。config に WORK_CHAT_FILE/WORK_KNOWLEDGE_FILE。index.ts で /api/work mount。 |
+| 設計（UI・Work.tsx） | タブ: ①概要（ECL/本ツールのオリエンテーション・Son が本文執筆）②壁打ち（チャット・茶事チャット踏襲＝履歴永続・出典表示・右下FAB）③ナレッジ（一覧カード・検索/カテゴリ絞り込み・新規作成・「インプットを貼る→AIで体系化」ドラフト→確認して保存・編集・削除）。WorkIcon 追加・App.tsx に nav/route。 |
+| 受け入れ条件（DoD） | サイドメニュー「仕事」表示。壁打ちチャットが ECL/銀行/PMO persona で稼働・事実に出典提示・履歴永続。ナレッジの作成/AI体系化/保存/編集/削除/一覧/検索が動作し永続。server tsc 0・web build green・実機（OpenClawブラウザ）で一気通貫確認。既存メニュー（特に /childcare・/chaji）無改変。 |
+| 依存 | MC-257/258/259（茶事チャット基盤）/ MC-233系（すくすく） |
+| 更新日 | 2026-06-22 |
