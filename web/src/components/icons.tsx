@@ -548,6 +548,18 @@ export function ChajiIcon(props: IconProps) {
   );
 }
 
+// 仕事（/work, MC-260）ナビ用。ブリーフケース（取っ手付きの鞄）で「仕事・業務」を表す。単色 path で他アイコンに合わせる。
+export function WorkIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3" y="7.5" width="18" height="12" rx="2" />
+      <path d="M9 7.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5" />
+      <path d="M3 12.5h18" />
+      <path d="M11 12.5h2" />
+    </svg>
+  );
+}
+
 // 成長日記（/baby-diary, MC-233）ナビ用。開いたノート＋しおりリボンで「日記」を表す。
 export function DiaryIcon(props: IconProps) {
   return (

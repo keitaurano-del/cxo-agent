@@ -988,6 +988,23 @@ export const CHAJI_CHAT_FILE = env(
   join(INBOX_DATA_DIR, 'chaji-chat.jsonl'),
 );
 
+// ─── 仕事（ECL/PMO 学習・壁打ちチャット＋ナレッジ）MC-260 ──────────────────
+// 新サイドメニュー「仕事」(/work) のバックエンドデータ正本。茶事チャットの追記専用 JSONL を踏襲し、
+// テキストのみの学習・壁打ちチャット履歴（work-chat.jsonl）と、ナレッジ蓄積（work-knowledge.jsonl）を
+// それぞれ別 JSONL ファイルに保存する。いずれも data/ 配下（.gitignore 済み・ランタイムデータ）。
+
+/** 仕事チャット会話履歴の JSONL（追記専用・全消去は cleared マーカ。テキストのみ）。 */
+export const WORK_CHAT_FILE = env(
+  'WORK_CHAT_FILE',
+  join(INBOX_DATA_DIR, 'work-chat.jsonl'),
+);
+
+/** 仕事ナレッジの JSONL（追記イベント方式・create/update は last-wins、delete はトムストーン）。 */
+export const WORK_KNOWLEDGE_FILE = env(
+  'WORK_KNOWLEDGE_FILE',
+  join(INBOX_DATA_DIR, 'work-knowledge.jsonl'),
+);
+
 // ─── 茶事チャットのユーザー添付メディア（画像/動画）──────────────────────
 // 育児チャット（CHILDCARE_CHAT_MEDIA_*）の作法をそのまま踏襲し、茶事専用の別ディレクトリ・
 // 別上限で受ける（childcare とディレクトリを分けて干渉させない）。data/ 配下なので .gitignore

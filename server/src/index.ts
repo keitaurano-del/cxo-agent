@@ -97,6 +97,8 @@ import { navOrderRouter } from './navOrderRouter.js';
 import { babyDiaryRouter } from './babyDiaryRouter.js';
 import { childcareChatRouter } from './childcareChatRouter.js';
 import { chajiChatRouter } from './chajiChatRouter.js';
+import { workChatRouter } from './workChatRouter.js';
+import { workKnowledgeRouter } from './workKnowledgeRouter.js';
 import { googleRouter } from './googleRouter.js';
 import { plannerRouter } from './plannerRouter.js';
 import { devMockupRouter } from './devMockupRouter.js';
@@ -1379,6 +1381,15 @@ app.use('/api/childcare', childcareChatRouter());
 // 表千家の作法に則り、事実は WebSearch で出典を確認（出典必須・捏造厳禁）。育児チャットを踏襲。
 // auth ミドルウェア配下＝Cookie/Bearer 必須。
 app.use('/api/chaji', chajiChatRouter());
+
+// ─── 仕事（ECL/PMO 学習・壁打ちチャット＋ナレッジ蓄積）MC-260 ──────────────
+// 新サイドメニュー「仕事」(/work)。メガバンクの ECL（予想信用損失）システム導入 PMO 案件向け。
+//   - 学習・壁打ちチャット（テキストのみ・SSE/JSON・出典は WebSearch で確認）= workChatRouter
+//   - ナレッジ蓄積（CRUD ＋ runClaude による体系化ドラフト）= workKnowledgeRouter
+// 両ルーターはパスが /chat* と /knowledge* で衝突しないので同じ /api/work prefix で mount する。
+// auth ミドルウェア配下＝Cookie/Bearer 必須。会話履歴・ナレッジは data/ 配下 JSONL に蓄積。
+app.use('/api/work', workChatRouter());
+app.use('/api/work', workKnowledgeRouter());
 
 // ─── Google 連携（成長日記 MC-233 Phase2/3）──────────────────────
 // 成長日記から Google Calendar（予定の読み書き）・Google Photos Picker（写真取り込み）を

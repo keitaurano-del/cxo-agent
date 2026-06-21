@@ -17,6 +17,7 @@ import {
   TerminalIcon,
   BabyIcon,
   ChajiIcon,
+  WorkIcon,
   ClockIcon,
   CodeIcon,
   SunIcon,
@@ -37,6 +38,7 @@ const DocumentsTabs = lazy(() => import('./views/DocumentsTabs'));
 const PlanUsage = lazy(() => import('./views/PlanUsage'));
 const Childcare = lazy(() => import('./views/Childcare'));
 const Chaji = lazy(() => import('./views/Chaji'));
+const Work = lazy(() => import('./views/Work'));
 const Schedule = lazy(() => import('./views/Schedule'));
 const Development = lazy(() => import('./views/Development'));
 const Terminal = lazy(() => import('./views/Terminal'));
@@ -157,6 +159,7 @@ const NAV: NavItem[] = [
   { to: '/deliverables', label: 'ドキュメント', shortLabel: 'ドキュ', icon: <DocumentsIcon /> },
   { to: '/childcare', label: '育児', shortLabel: '育児', icon: <BabyIcon /> },
   { to: '/chaji', label: '茶事', shortLabel: '茶事', icon: <ChajiIcon /> },
+  { to: '/work', label: '仕事', shortLabel: '仕事', icon: <WorkIcon /> },
   { to: '/schedule', label: 'スケジュール', shortLabel: '予定', icon: <ClockIcon /> },
   { to: '/dev', label: '開発', shortLabel: '開発', icon: <CodeIcon /> },
   // 成長日記は独立ナビから外し、育児ページ内の「成長日記」タブに統合した（/baby-diary は後方互換で残す）。
@@ -494,6 +497,7 @@ export default function App() {
               <Route path="/notebooks" element={<DocumentsTabs initialTab="rag" />} />
               <Route path="/childcare" element={<Childcare />} />
               <Route path="/chaji" element={<Chaji />} />
+              <Route path="/work" element={<Work />} />
               {/* 旧 /baby-diary は育児ページの「成長日記」タブに着地（古いリンク/ブックマーク互換）。 */}
               <Route path="/baby-diary" element={<Childcare initialTab="diary" />} />
               <Route path="/schedule" element={<Schedule />} />
