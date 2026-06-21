@@ -3096,3 +3096,16 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 受け入れ条件（DoD） | 茶事チャットで画像/動画を添付して送信でき、サムネが出る。アドバイザーが添付画像を見て表千家の文脈でコメントできる（捏造・診断はしない方針は維持）。childcare の upload/media-serve/staging UI を踏襲。server tsc 0・web build green・実機（OpenClawブラウザ）で添付→送信→閲覧を確認。既存 /childcare 無改変。 |
 | 依存 | MC-257（茶事）/ MC-95・MC-100〜103（childcare メディア・ステージングUI）踏襲 |
 | 更新日 | 2026-06-21 |
+
+### MC-259 — 茶事ページに右下常設チャットFAB（育児と同じ導線）＋履歴保持の確認
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-259 |
+| タイトル | 茶事ページに、育児ページと同じ右下常設のチャットFAB（タップで茶事チャットタブへ遷移）を追加。チャット履歴は引き続き保持されること |
+| 優先度 | P2 |
+| ステータス | DONE（2026-06-21 Son 実装委譲→自己検証グリーン・本番反映済み）。Keita依頼「チャットアイコンは茶事ページでは右下に常設して。育児ページと同じく。チャットの履歴は残してほしい」。実装は subagent、検証・反映は Son。**FAB**=childcare の ChildcareChatFab を踏襲し Chaji.tsx に ChajiChatFab を追加（基礎知識ガイドタブ表示中だけ右下に常設・タップで茶事チャットタブへ changeTab・チャットタブ中は hidden）。className/aria は childcare と同等、アイコンは既存 ChildcareChatIcon 流用。Chaji.tsx 1ファイルのみ変更。**履歴**=茶事チャットは元々 localStorage（apollo.chajiChat.history.v1）＋サーバJSONL（data/chaji-chat.jsonl・GET /chat/history 復元）で保持済み。今回は非破壊（自動消去なし）。**検証**: web build green・実機（OpenClawブラウザ）で①ガイドタブ右下に青FAB表示②タップで /chaji?tab=chat へ遷移③チャットタブでFAB非表示④メッセージ送信→フルリロード後もユーザー発言が残存（履歴保持）を確認。既存 /childcare 非改変。 |
+| 担当 | subagent（Son ディスパッチ）→ 検証・反映は Son |
+| 受け入れ条件（DoD） | 茶事ページの基礎知識ガイドタブ表示中、右下にチャットFABが常設表示され、タップで茶事チャットタブへ遷移。チャットタブ表示中はFAB非表示（育児と同挙動）。リロード・タブ往復後も会話履歴が残る。web build green・実機（OpenClawブラウザ）で確認。既存 /childcare 無改変。 |
+| 依存 | MC-257/MC-258（茶事）/ childcare の FAB 導線踏襲 |
+| 更新日 | 2026-06-21 |

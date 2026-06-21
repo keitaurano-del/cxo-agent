@@ -617,6 +617,22 @@ function ChajiChatTab() {
   );
 }
 
+// ─── 茶事チャット FAB（他タブからチャットタブへ飛ぶ導線）──────────────────
+// 育児ページの ChildcareChatFab を踏襲。タップで「茶事チャット」タブへ遷移する（hidden で非表示）。
+function ChajiChatFab({ onOpen, hidden }: { onOpen: () => void; hidden?: boolean }) {
+  if (hidden) return null;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label="茶事の相談チャットを開く"
+      className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-accent/30 bg-accent text-bg shadow-lg transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg md:bottom-6 md:right-6"
+    >
+      <ChildcareChatIcon width={26} height={26} />
+    </button>
+  );
+}
+
 type ChajiTab = 'guide' | 'chat';
 
 /** 初期タブ判定: prop 優先。既定は 'guide'（基礎知識ガイド）。?tab=chat を尊重。 */
@@ -685,6 +701,8 @@ export default function Chaji({ initialTab }: { initialTab?: ChajiTab } = {}) {
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
         {tab === 'chat' ? <ChajiChatTab /> : <ChajiGuide />}
       </div>
+      {/* チャットタブ以外のときだけ FAB を出す（タップで茶事チャットタブへ遷移）。 */}
+      <ChajiChatFab hidden={tab === 'chat'} onOpen={() => changeTab('chat')} />
     </div>
   );
 }
