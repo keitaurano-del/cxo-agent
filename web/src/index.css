@@ -604,3 +604,58 @@ body {
   color: var(--mc-accent);
   white-space: nowrap;
 }
+
+/*
+ * News 没入（全画面）モード — タブバー/ヘッダ/日付セレクタ/検索/ハンバーガー等の
+ * 周辺 chrome を全部隠し、記事本文だけを viewport いっぱいに表示する。
+ * 色は全て var(--mc-*)。font-size は本文側 mc-news が rem/em で --font-scale 追従。
+ */
+.mc-news-immersive {
+  position: fixed;
+  inset: 0;
+  z-index: 60; /* BottomNav ハンバーガー(z-50) より上に重ねて確実に被せる */
+  display: flex;
+  flex-direction: column;
+  background: var(--mc-bg);
+}
+/* 没入中はスクロールロックを body に掛ける（解除時に確実に戻す） */
+body.mc-news-immersive-lock {
+  overflow: hidden;
+}
+/* 閉じるボタン（右上に浮かせる）。ハンバーガーと干渉しないよう本体内右上に配置 */
+.mc-news-immersive-close {
+  position: absolute;
+  top: max(0.75rem, env(safe-area-inset-top));
+  right: max(0.75rem, env(safe-area-inset-right));
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  height: 2.5rem;
+  padding: 0 0.85rem;
+  border-radius: 0.625rem;
+  border: 1px solid var(--mc-border);
+  background: var(--mc-surface);
+  color: var(--mc-text);
+  font-size: 0.8125rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+}
+.mc-news-immersive-close:hover {
+  background: var(--mc-surface-3);
+}
+/* 本文スクロール領域。横パディングは適度に、上は閉じるボタンを避けて確保 */
+.mc-news-immersive-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: calc(max(0.75rem, env(safe-area-inset-top)) + 3.25rem)
+    max(1rem, env(safe-area-inset-right)) max(1.5rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
+}
+/* モバイルは画面幅いっぱい、広い画面では読みやすい幅に制限して中央寄せ */
+.mc-news-immersive-scroll .mc-news {
+  max-width: 48rem;
+  margin: 0 auto;
+}
