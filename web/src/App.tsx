@@ -557,6 +557,18 @@ export default function App() {
                   </span>
                   <span>設定</span>
                 </button>
+                {/* 再読み込み（リロード）。モバイルのメニューからページ全体を再読み込みする。 */}
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  aria-label="ページを再読み込み"
+                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-text-muted hover:bg-surface-2 hover:text-text"
+                >
+                  <span className="shrink-0" aria-hidden>
+                    <RestoreIcon />
+                  </span>
+                  <span>再読み込み</span>
+                </button>
               </>
             )}
           />
