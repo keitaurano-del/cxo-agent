@@ -20,6 +20,7 @@ import {
   WorkIcon,
   ClockIcon,
   CodeIcon,
+  RestoreIcon,
   SunIcon,
   MoonIcon,
   SettingsIcon,
@@ -325,6 +326,18 @@ function Sidebar({
             {connected ? 'ライブ接続中' : 'ポーリング更新中'}
           </span>
         </div>
+        {/* 再読み込み（リロード）ボタン。サイドメニュー最下部・ページ全体を再読み込みする。 */}
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          aria-label="ページを再読み込み"
+          className="flex items-center gap-2 text-[11px] text-text-muted hover:text-text rounded px-1 -ml-1 py-0.5 transition-colors"
+        >
+          <span aria-hidden>
+            <RestoreIcon width={13} height={13} />
+          </span>
+          <span>再読み込み</span>
+        </button>
       </div>
     </aside>
   );
