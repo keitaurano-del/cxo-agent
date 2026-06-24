@@ -49,6 +49,8 @@ import {
   CHILDCARE_CHAT_VIDEO_MAX_BYTES,
   CXO_ROOT,
 } from './config.js';
+import { listEntries } from './lib/babyDiaryStore.js';
+import { listPiyologDays, type PiyologDay } from './lib/babyPiyologStore.js';
 import {
   clearMessages,
   finalizeAssistant,
@@ -169,10 +171,17 @@ export const SUKUSUKU_SYSTEM_PROMPT = [
   '- 重要: メディアは「あれば添える」程度です。検証で実在が確認できないものは自動的に落ちます。落ちることを前提に、本文は「参考になりそうな動画も探しましたが見つかりませんでした」等と自然に流せるように書き、メディアが無くても回答が完結するようにしてください。メディアの有無で本文が破綻しないようにしてください。',
   '- メディア記法は安全ガードレール（診断しない・#8000 案内）や出典の捏造禁止の方針を一切変えません。',
   '',
+  '【この家庭の赤ちゃんの記録（ぴよログ）を踏まえる】',
+  '- あなたには、この家庭の赤ちゃんのぴよログ（育児記録）の要約が、システム側から「赤ちゃんの記録（ぴよログ要約）」というブロックで渡されます（会話の前段に置かれます）。',
+  '- 質問に関連するときは、その記録を踏まえて、この子に合わせた具体的なアドバイスをしてください。例: 月齢に対する授乳・睡眠・おむつの一般的な目安とこの子の実際の記録を比べる、体重・身長の推移にふれる、いまの生活リズムに合った提案をする、など。',
+  '- 一般的な目安（事実）を述べるときは出典ルールに従って公的ソースのリンクを付け、この子の記録に基づく個別の話と両立させてください。例:「この子の昨日の睡眠合計は◯時間で、この月齢の一般的な目安は△△時間です〔出典リンク〕。記録を見るとおおむね目安の範囲です」のように、実際の数値（記録由来）と一般目安（出典付き）を分けて示します。',
+  '- 記録の数値はあくまで参考です。記録から医療診断や異常の断定は絶対にしないでください。気になる増減（体重が増えない・授乳量が大きく減った等）や症状がうかがえるときは、一般的な目安を添えつつ「記録だけでは判断できません」と前置きし、小児科・保健師・#8000 への相談を案内してください（前述の安全ガードレールを厳守）。',
+  '- 記録が無い、または日数が少ない場合は「まだ記録が少ない」前提で、無理に推測や断定をしないでください。一般的な目安を案内しつつ、必要なら記録を続けることをやさしく促してください。',
+  '- 記録と無関係な一般的な相談（離乳食の開始時期、制度・手続き、グッズの選び方など）には、これまでどおり一般的な知識として答えてください。記録に無理に結びつけないでください。',
+  '',
   '【その他】',
   '- 必ず日本語で回答してください。',
   '- 提供された会話履歴の文脈を踏まえて、自然に続けて答えてください。',
-  '- このチャットには赤ちゃんの個別データ（育児日記・成長記録）は渡されません。一般的な知識の範囲で答えてください。',
 ].join('\n');
 
 /**
@@ -350,9 +359,211 @@ const upload = multer({
 
 const uploadFiles = upload.array('files', CHILDCARE_CHAT_MEDIA_MAX_FILES);
 
-/** systemPrompt + 会話履歴から claude -p に渡す 1 本のプロンプトを組む。 */
+// ─── ぴよログ要約コンテキスト（この家庭の赤ちゃんの記録を踏まえた個別回答用）──────
+//
+// listPiyologDays() / listEntries() の生データはイベントが日あたり 40〜50 行と重い。
+// トークン肥大を避けるため、直近 N 日の「日次サマリ中心」に要約したコンテキストブロックを
+// systemPrompt の直後に注入する。含める情報:
+//   - 月齢/日齢（最新日の ageLabel）
+//   - 直近の日次サマリ（授乳=母乳分/ミルク回数・量、睡眠合計、おむつ回数）
+//   - 体重・身長の推移（最古・最新・件数）
+//   - 最新日だけイベントを少し詳しめ（生活リズムの参考、件数は絞る）
+//   - 成長日記（memo/milestone）の直近補完
+// データが無い/少ない場合は「記録が少ない」前提を明示し、推測を促さない。
+
+/** 要約に含める直近日数（日次サマリ）。新生児はイベントが多いので 14 日に抑える。 */
+const PIYOLOG_CONTEXT_DAYS = 14;
+/** 最新日に詳しめに載せるイベントの最大件数（生活リズムの参考）。 */
+const PIYOLOG_LATEST_EVENT_LIMIT = 16;
+
+/** "母乳合計 左 75分 / 右 75分" 等の生サマリ行から接頭辞ラベルを落として値だけ返す。 */
+function summaryValue(line: string | undefined): string {
+  if (!line) return '';
+  // "○合計" 接頭辞を除いた残りを値として使う（無ければ行そのまま）。
+  return line.replace(/^\S*合計\s*/, '').trim() || line.trim();
+}
+
+/** 値文字列に「0でない実績」が含まれるか（"0回 0ml"・"0分"・"0時間0分" 等を実績なしと判定する）。 */
+function hasNonZero(value: string): boolean {
+  if (!value) return false;
+  // 数字を全て取り出し、どれか 1 つでも 0 でなければ実績ありとみなす。
+  const nums = value.match(/\d+(?:\.\d+)?/g);
+  if (!nums) return false;
+  return nums.some((n) => Number(n) > 0);
+}
+
+/**
+ * 1 日分のサマリを 1 行に圧縮する（授乳・睡眠・おむつ）。
+ * 授乳・睡眠・おむつがすべて実質ゼロでイベントも無い日は「記録なし（未記録の可能性）」に倒す。
+ * （入院中などでぴよログ未記録の日が "母乳0分/睡眠0時間" として残り、睡眠0時間等を異常と誤読
+ *  させないため。計測のみ残っている日は体重/身長だけ載せる。）
+ */
+function summarizeDayLine(day: PiyologDay): string {
+  const s = day.summary ?? {};
+  const parts: string[] = [];
+  const breast = summaryValue(s.breastMilk);
+  const formula = summaryValue(s.formula);
+  const sleep = summaryValue(s.sleep);
+  const pee = summaryValue(s.pee);
+  const poop = summaryValue(s.poop);
+  const careActivity =
+    hasNonZero(breast) || hasNonZero(formula) || hasNonZero(sleep) || hasNonZero(pee) || hasNonZero(poop);
+  const nonMeasureEvents = day.events.filter((e) => e.kind !== 'weight' && e.kind !== 'height');
+
+  const label = day.ageLabel ? `${day.date}（${day.ageLabel}）` : day.date;
+  const w = day.weights?.[day.weights.length - 1];
+  const h = day.heights?.[day.heights.length - 1];
+
+  // 授乳・睡眠・おむつの実績もケアイベントも無い日 → 未記録扱い（計測値だけ添える）。
+  if (!careActivity && nonMeasureEvents.length === 0) {
+    const measure: string[] = [];
+    if (w) measure.push(`体重 ${w.kg}kg`);
+    if (h) measure.push(`身長 ${h.cm}cm`);
+    const tail = measure.length > 0 ? `（記録なし／${measure.join(' / ')}）` : '記録なし（未記録の可能性）';
+    return `- ${label}: ${tail}`;
+  }
+
+  if (hasNonZero(breast)) parts.push(`母乳 ${breast}`);
+  if (hasNonZero(formula)) parts.push(`ミルク ${formula}`);
+  if (hasNonZero(sleep)) parts.push(`睡眠 ${sleep}`);
+  if (hasNonZero(pee)) parts.push(`おしっこ ${pee}`);
+  if (hasNonZero(poop)) parts.push(`うんち ${poop}`);
+  if (w) parts.push(`体重 ${w.kg}kg`);
+  if (h) parts.push(`身長 ${h.cm}cm`);
+  return `- ${label}: ${parts.length > 0 ? parts.join(' / ') : '記録あり（詳細なし）'}`;
+}
+
+/** 体重・身長の推移行（最古→最新と件数）を作る。データが無ければ空文字。 */
+function trendLine(
+  days: PiyologDay[],
+  kind: 'weights' | 'heights',
+  unit: 'kg' | 'cm',
+  label: string,
+): string {
+  const points: { date: string; v: number }[] = [];
+  for (const d of days) {
+    for (const m of d[kind]) {
+      points.push({ date: d.date, v: kind === 'weights' ? (m as { kg: number }).kg : (m as { cm: number }).cm });
+    }
+  }
+  if (points.length === 0) return '';
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (points.length === 1) {
+    return `- ${label}: ${last.v}${unit}（${last.date}・記録1件）`;
+  }
+  const diff = Math.round((last.v - first.v) * 100) / 100;
+  const sign = diff > 0 ? `+${diff}` : `${diff}`;
+  return `- ${label}: ${first.v}${unit}（${first.date}）→ ${last.v}${unit}（${last.date}）／変化 ${sign}${unit}・記録${points.length}件`;
+}
+
+/**
+ * 成長日記（babyDiaryStore）から直近の memo/milestone を補完行として拾う。
+ * 同じ赤ちゃんの記録。余裕があれば月齢/成長の補強に使う（任意）。
+ */
+function diaryHighlightLines(): string[] {
+  let entries: ReturnType<typeof listEntries>;
+  try {
+    entries = listEntries();
+  } catch {
+    return [];
+  }
+  const recent = entries.slice(-PIYOLOG_CONTEXT_DAYS);
+  const out: string[] = [];
+  for (const e of recent) {
+    const bits: string[] = [];
+    if (e.milestone) bits.push(`記念: ${e.milestone}`);
+    if (e.memo) bits.push(e.memo.replace(/\s+/g, ' ').slice(0, 60));
+    if (typeof e.weightKg === 'number') bits.push(`体重 ${e.weightKg}kg`);
+    if (typeof e.heightCm === 'number') bits.push(`身長 ${e.heightCm}cm`);
+    if (bits.length > 0) out.push(`- ${e.date}: ${bits.join(' / ')}`);
+  }
+  return out;
+}
+
+/**
+ * ぴよログ＋成長日記から「赤ちゃんの記録（ぴよログ要約）」コンテキストブロックを組む。
+ * トークン肥大を避けて要約（直近 PIYOLOG_CONTEXT_DAYS 日の日次サマリ中心）。記録が無い/少ない
+ * 場合はその旨を明示し、すくすくが無理に推測しないよう前提を添える。例外時は空文字（回答は止めない）。
+ */
+function buildPiyologContext(): string {
+  let allDays: PiyologDay[] = [];
+  try {
+    allDays = listPiyologDays();
+  } catch {
+    allDays = [];
+  }
+  const diaryLines = diaryHighlightLines();
+
+  // ぴよログも成長日記も無い → 記録なしの前提だけ伝える。
+  if (allDays.length === 0 && diaryLines.length === 0) {
+    return [
+      '--- 赤ちゃんの記録（ぴよログ要約）---',
+      'この家庭の赤ちゃんの記録（ぴよログ・成長日記）はまだ登録されていません。記録が無い前提で、一般的な目安として答えてください（個別の推測や断定はしないでください）。',
+      '--- 記録ここまで ---',
+    ].join('\n');
+  }
+
+  const recent = allDays.slice(-PIYOLOG_CONTEXT_DAYS);
+  const latest = allDays[allDays.length - 1];
+
+  const lines: string[] = ['--- 赤ちゃんの記録（ぴよログ要約。この子に合わせて踏まえてください）---'];
+
+  // 月齢/日齢。
+  if (latest?.ageLabel) {
+    lines.push(`【月齢・日齢】最新の記録日 ${latest.date} 時点で「${latest.ageLabel}」。`);
+  }
+
+  // 記録が少ないときの注意（日数が少ない＝推測しすぎない前提）。
+  if (allDays.length > 0 && allDays.length < 3) {
+    lines.push(
+      `※ ぴよログの記録はまだ ${allDays.length} 日分と少ないです。傾向の断定は避け、一般的な目安を中心に答えてください。`,
+    );
+  }
+
+  // 日次サマリ（直近）。
+  if (recent.length > 0) {
+    lines.push('', `【直近 ${recent.length} 日の日次サマリ（授乳・睡眠・おむつ・計測）】`);
+    for (const d of recent) lines.push(summarizeDayLine(d));
+  }
+
+  // 体重・身長の推移。
+  const wTrend = trendLine(allDays, 'weights', 'kg', '体重の推移');
+  const hTrend = trendLine(allDays, 'heights', 'cm', '身長の推移');
+  if (wTrend || hTrend) {
+    lines.push('', '【体重・身長の推移】');
+    if (wTrend) lines.push(wTrend);
+    if (hTrend) lines.push(hTrend);
+  }
+
+  // 最新日だけイベントを少し詳しめ（生活リズムの参考）。件数を絞る。
+  if (latest && latest.events.length > 0) {
+    const evs = latest.events.slice(0, PIYOLOG_LATEST_EVENT_LIMIT);
+    lines.push('', `【最新日 ${latest.date} の主な記録（時刻順・抜粋）】`);
+    for (const e of evs) lines.push(`- ${e.time} ${e.text}`);
+    if (latest.events.length > evs.length) {
+      lines.push(`- （ほか ${latest.events.length - evs.length} 件）`);
+    }
+  }
+
+  // 成長日記の補完（memo/milestone）。
+  if (diaryLines.length > 0) {
+    lines.push('', '【成長日記のメモ（直近・保護者の記録）】');
+    lines.push(...diaryLines);
+  }
+
+  lines.push(
+    '',
+    '※ 上記はこの家庭の実際の記録です。関連する質問にはこの記録を踏まえて具体的に答えてください。ただし数値から医療診断・異常の断定はせず、気になる点は一般的な目安を添えつつ受診・#8000 を案内してください。',
+    '--- 記録ここまで ---',
+  );
+  return lines.join('\n');
+}
+
+/** systemPrompt + ぴよログ要約 + 会話履歴から claude -p に渡す 1 本のプロンプトを組む。 */
 function buildPrompt(messages: ChatMessageInput[]): string {
-  const lines = [SUKUSUKU_SYSTEM_PROMPT, '', '--- これまでの会話 ---'];
+  const piyologContext = buildPiyologContext();
+  const lines = [SUKUSUKU_SYSTEM_PROMPT, '', piyologContext, '', '--- これまでの会話 ---'];
   for (const m of messages) {
     lines.push(`${m.role === 'user' ? '保護者' : 'すくすく'}: ${m.content}`);
   }
