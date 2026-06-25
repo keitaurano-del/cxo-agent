@@ -14,7 +14,7 @@ import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { PageHeader } from '../components/PageHeader';
 import { Spinner, EmptyState } from '../components/ui';
-import { ExpandIcon, CloseIcon } from '../components/icons';
+import { ExpandIcon, CloseIcon, LinkIcon } from '../components/icons';
 import Mermaid from '../components/Mermaid';
 
 function stripFrontmatter(md: string): string {
@@ -213,7 +213,21 @@ export default function News() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="📰 ニュース" subtitle={`${selected} のブリーフィング`} />
+      <PageHeader
+        title="📰 ニュース"
+        subtitle={`${selected} のブリーフィング`}
+        right={
+          <a
+            href="https://gikai.team-mir.ai/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20"
+          >
+            <LinkIcon width={13} height={13} aria-hidden />
+            みらい会議
+          </a>
+        }
+      />
 
       {/* 日付セレクター */}
       <div className="border-b border-border px-4 py-2 md:px-6">
