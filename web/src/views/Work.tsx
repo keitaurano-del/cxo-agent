@@ -1094,11 +1094,13 @@ function WorkGlossaryTab() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const ord = (c: GlossaryCategory) => GLOSSARY_CATEGORIES.indexOf(c);
     return WORK_GLOSSARY.filter((t) => {
       if (catFilter !== 'all' && t.category !== catFilter) return false;
       if (!q) return true;
       return `${t.term} ${t.reading ?? ''} ${t.meaning} ${t.usage}`.toLowerCase().includes(q);
-    });
+      // 「すべて」表示でもカテゴリ順にまとまるよう安定ソートする（同カテゴリ内は定義順）。
+    }).sort((a, b) => ord(a.category) - ord(b.category));
   }, [query, catFilter]);
 
   const catCounts = useMemo(() => {
