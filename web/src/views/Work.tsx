@@ -20,12 +20,14 @@ import {
   PlusIcon,
   SearchIcon,
   SendIcon,
+  SheetIcon,
   SparkIcon,
   TagIcon,
   TextFileIcon,
   TrashIcon,
 } from '../components/icons';
 import { WORK_OVERVIEW_MARKDOWN } from './workData';
+import { WORK_PIVOT_MARKDOWN } from './workPivotGuide';
 import { WORK_GLOSSARY, GLOSSARY_CATEGORIES, type GlossaryCategory } from './workGlossary';
 
 // ナレッジのカテゴリ既定リスト（server: workKnowledgeStore.KNOWLEDGE_CATEGORIES と一致させる）。
@@ -58,6 +60,25 @@ function WorkOverview() {
           日本の 2030 年 4 月 ECL 移行の具体（会計基準の最終内容・適用範囲・経過措置・確定スケジュール等）は
           流動的・未確定な部分があります。壁打ちでも、確定していない事項は「要確認」として扱います。
         </p>
+      </section>
+    </div>
+  );
+}
+
+// ─── ピボットタブ（Excel ピボットの使い方ガイド）──────────────────────
+function WorkPivotTab() {
+  return (
+    <div className="mx-auto flex max-w-3xl flex-col gap-4">
+      <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+        <div className="mb-3">
+          <h2 className="text-base font-bold text-text">Excel ピボットの使い方</h2>
+          <p className="mt-1 text-xs text-text-muted">
+            ECL の集計・点検に役立つピボットテーブルの使い方ガイドです。練習用 Excel はドキュメントの「大手町」フォルダにあります。
+          </p>
+        </div>
+        <div className="mc-markdown">
+          <ChatMarkdown body={WORK_PIVOT_MARKDOWN} />
+        </div>
       </section>
     </div>
   );
@@ -1177,12 +1198,19 @@ function WorkGlossaryTab() {
 }
 
 // ─── タブ統括 ────────────────────────────────────────────────────────
-type WorkTab = 'overview' | 'chat' | 'knowledge' | 'glossary';
+type WorkTab = 'overview' | 'chat' | 'knowledge' | 'glossary' | 'pivot';
 
 function resolveInitialTab(): WorkTab {
   if (typeof window !== 'undefined') {
     const t = new URLSearchParams(window.location.search).get('tab');
-    if (t === 'chat' || t === 'knowledge' || t === 'glossary' || t === 'overview') return t;
+    if (
+      t === 'chat' ||
+      t === 'knowledge' ||
+      t === 'glossary' ||
+      t === 'pivot' ||
+      t === 'overview'
+    )
+      return t;
   }
   return 'overview';
 }
@@ -1193,6 +1221,7 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
     { id: 'chat', label: '壁打ち', icon: <ChatIcon width={16} height={16} /> },
     { id: 'knowledge', label: 'ナレッジ', icon: <NotebookIcon width={16} height={16} /> },
     { id: 'glossary', label: '単語帳', icon: <TextFileIcon width={16} height={16} /> },
+    { id: 'pivot', label: 'ピボット', icon: <SheetIcon width={16} height={16} /> },
   ];
   return (
     <div className="flex border-b border-border px-4 md:px-6" role="tablist" aria-label="仕事ページのタブ">
@@ -1246,6 +1275,8 @@ export default function Work() {
           <WorkKnowledgeTab />
         ) : tab === 'glossary' ? (
           <WorkGlossaryTab />
+        ) : tab === 'pivot' ? (
+          <WorkPivotTab />
         ) : (
           <WorkOverview />
         )}
