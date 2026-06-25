@@ -22,9 +22,11 @@ import {
   SendIcon,
   SparkIcon,
   TagIcon,
+  TextFileIcon,
   TrashIcon,
 } from '../components/icons';
 import { WORK_OVERVIEW_MARKDOWN } from './workData';
+import { WORK_GLOSSARY, GLOSSARY_CATEGORIES, type GlossaryCategory } from './workGlossary';
 
 // ナレッジのカテゴリ既定リスト（server: workKnowledgeStore.KNOWLEDGE_CATEGORIES と一致させる）。
 const WORK_CATEGORIES = [
@@ -1083,13 +1085,102 @@ function EmptyKnowledge({ onCreate, onStructure }: { onCreate: () => void; onStr
   );
 }
 
+// ─── 単語帳 ──────────────────────────────────────────────────────────
+// 銀行・会計（ECL）・データ/システム・PMO・本案件の用語を、意味と「使う場面」つきで一覧する。
+// 静的データ（workGlossary）を検索・カテゴリ絞り込みして表示する読み取り専用タブ。
+function WorkGlossaryTab() {
+  const [query, setQuery] = useState('');
+  const [catFilter, setCatFilter] = useState<GlossaryCategory | 'all'>('all');
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return WORK_GLOSSARY.filter((t) => {
+      if (catFilter !== 'all' && t.category !== catFilter) return false;
+      if (!q) return true;
+      return `${t.term} ${t.reading ?? ''} ${t.meaning} ${t.usage}`.toLowerCase().includes(q);
+    });
+  }, [query, catFilter]);
+
+  const catCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of WORK_GLOSSARY) m.set(t.category, (m.get(t.category) ?? 0) + 1);
+    return m;
+  }, []);
+
+  return (
+    <div className="mx-auto flex max-w-3xl flex-col gap-4">
+      <div>
+        <h2 className="text-base font-bold text-text">単語帳</h2>
+        <p className="mt-0.5 text-[11px] text-text-muted">
+          銀行・会計（ECL）・データ／システム・PMO・本案件の用語を、意味と「使う場面」つきで一覧（
+          {WORK_GLOSSARY.length} 語）
+        </p>
+      </div>
+
+      {/* 検索 */}
+      <div className="relative">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-faint">
+          <SearchIcon width={15} height={15} />
+        </span>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="単語・意味・使う場面で検索…"
+          className="w-full rounded-md border border-border bg-surface py-2 pl-9 pr-3 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
+        />
+      </div>
+
+      {/* カテゴリフィルタ */}
+      <div className="flex flex-wrap gap-1.5">
+        <FilterChip
+          active={catFilter === 'all'}
+          onClick={() => setCatFilter('all')}
+          label={`すべて (${WORK_GLOSSARY.length})`}
+        />
+        {GLOSSARY_CATEGORIES.filter((c) => catCounts.has(c)).map((c) => (
+          <FilterChip
+            key={c}
+            active={catFilter === c}
+            onClick={() => setCatFilter(c)}
+            label={`${c} (${catCounts.get(c)})`}
+          />
+        ))}
+      </div>
+
+      {/* 一覧 */}
+      {filtered.length === 0 ? (
+        <p className="py-8 text-center text-sm text-text-muted">該当する用語がありません。</p>
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {filtered.map((t) => (
+            <div key={t.term} className="rounded-lg border border-border bg-surface p-4">
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <h3 className="text-sm font-bold text-text">{t.term}</h3>
+                {t.reading && <span className="text-[11px] text-text-faint">{t.reading}</span>}
+                <span className="ml-auto">
+                  <CategoryBadge category={t.category} />
+                </span>
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-text">{t.meaning}</p>
+              <div className="mt-2 flex gap-2 rounded-md border border-border bg-surface-2/50 px-3 py-2">
+                <span className="shrink-0 text-[11px] font-bold text-accent">使う場面</span>
+                <span className="text-[12px] leading-relaxed text-text-muted">{t.usage}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── タブ統括 ────────────────────────────────────────────────────────
-type WorkTab = 'overview' | 'chat' | 'knowledge';
+type WorkTab = 'overview' | 'chat' | 'knowledge' | 'glossary';
 
 function resolveInitialTab(): WorkTab {
   if (typeof window !== 'undefined') {
     const t = new URLSearchParams(window.location.search).get('tab');
-    if (t === 'chat' || t === 'knowledge' || t === 'overview') return t;
+    if (t === 'chat' || t === 'knowledge' || t === 'glossary' || t === 'overview') return t;
   }
   return 'overview';
 }
@@ -1099,6 +1190,7 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
     { id: 'overview', label: '概要', icon: <InfoIcon width={16} height={16} /> },
     { id: 'chat', label: '壁打ち', icon: <ChatIcon width={16} height={16} /> },
     { id: 'knowledge', label: 'ナレッジ', icon: <NotebookIcon width={16} height={16} /> },
+    { id: 'glossary', label: '単語帳', icon: <TextFileIcon width={16} height={16} /> },
   ];
   return (
     <div className="flex border-b border-border px-4 md:px-6" role="tablist" aria-label="仕事ページのタブ">
@@ -1150,6 +1242,8 @@ export default function Work() {
           <WorkChatTab />
         ) : tab === 'knowledge' ? (
           <WorkKnowledgeTab />
+        ) : tab === 'glossary' ? (
+          <WorkGlossaryTab />
         ) : (
           <WorkOverview />
         )}
