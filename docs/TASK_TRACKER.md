@@ -3124,3 +3124,16 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 受け入れ条件（DoD） | サイドメニュー「仕事」表示。壁打ちチャットが ECL/銀行/PMO persona で稼働・事実に出典提示・履歴永続。ナレッジの作成/AI体系化/保存/編集/削除/一覧/検索が動作し永続。server tsc 0・web build green・実機（OpenClawブラウザ）で一気通貫確認。既存メニュー（特に /childcare・/chaji）無改変。 |
 | 依存 | MC-257/258/259（茶事チャット基盤）/ MC-233系（すくすく） |
 | 更新日 | 2026-06-22 |
+
+### MC-261 — 仕事/ピボットタブを SVG 図解で「実操作がイメージできる」よう作り替え
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-261 |
+| タイトル | /work「ピボット」タブを文字だけ（WORK_PIVOT_MARKDOWN を ChatMarkdown 描画）から、Excel ピボットの実操作を再現する SVG 図解＋手順テキストの交互構成へ作り替える。ChatMarkdown は rehype-raw 無しで raw HTML/SVG をテキスト化するため、図は React コンポーネント（workPivotDiagrams.tsx）として実装。最低5枚（before→afterクロス集計／リボン[挿入]→[ピボットテーブル]／フィールドペイン4ボックス／値フィールドの設定メニュー／完成＋スライサー）。 |
+| 優先度 | P1 |
+| ステータス | DONE（2026-06-27 ソラ 本番反映）。新規 web/src/views/workPivotDiagrams.tsx（SVG図解8枚）・Work.tsx の WorkPivotTab を図＋テキスト交互構成に組み替え。色は --mc-* トークンのみ・viewBox レスポンシブ・各図 role=img+aria-label。**本番公開**: Keita 承認済みで vite build 単体（tsc を経由せず＝別エージェントの Deliverables.tsx WIP を巻き込まない方式B）で web/dist を更新。配信バンドル Work-8lhqRqIi.js に pivot 図のマーカー（arrow-fieldpane / 4つのボックスの役割 / auto-start-reverse）が乗っていることを確認、:4317 から HTTP 200・index→entry(index-LuZTzWd5.js)→Work チャンクの参照チェーンも確認。**実レンダリング**: Playwright で /work?tab=pivot を実機レンダ＝SVG 38個・pageerror 0、生データ80行→クロス集計の before/after 図が表示されることをスクショで目視確認。web のみ変更のため mission-control.service restart 不要。**検証（実装時）**: server/web tsc green・eslint（リポ全体）0 error。 |
+| 担当 | dev-apollo（ソラ） |
+| 受け入れ条件（DoD） | ピボットタブで Excel 実操作の流れ（生データ→クロス集計、リボン操作、フィールド配置、集計方法変更、完成＋スライサー）が SVG 図で判読できる。ダーク/ライト両テーマで見える。390px で崩れない。UI 文言は中立丁寧体。他タブ無改変。tsc/eslint green。 |
+| 依存 | MC-260（/work 基盤）。 |
+| 更新日 | 2026-06-27 |

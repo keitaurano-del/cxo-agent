@@ -27,7 +27,24 @@ import {
   TrashIcon,
 } from '../components/icons';
 import { WORK_OVERVIEW_MARKDOWN } from './workData';
-import { WORK_PIVOT_MARKDOWN } from './workPivotGuide';
+import {
+  PIVOT_INTRO_MD,
+  PIVOT_STEPS_INTRO_MD,
+  PIVOT_STEP_INSERT_MD,
+  PIVOT_STEP_FIELDS_MD,
+  PIVOT_AGG_INTRO_MD,
+  PIVOT_RESULT_INTRO_MD,
+  PIVOT_TIPS_MD,
+  PIVOT_PRACTICE_MD,
+} from './workPivotGuide';
+import {
+  PivotBeforeAfterDiagram,
+  PivotBoxRolesDiagram,
+  PivotRibbonDiagram,
+  PivotFieldPaneDiagram,
+  PivotValueSettingsDiagram,
+  PivotResultDiagram,
+} from './workPivotDiagrams';
 import { WORK_GLOSSARY, GLOSSARY_CATEGORIES, type GlossaryCategory } from './workGlossary';
 
 // ナレッジのカテゴリ既定リスト（server: workKnowledgeStore.KNOWLEDGE_CATEGORIES と一致させる）。
@@ -66,6 +83,9 @@ function WorkOverview() {
 }
 
 // ─── ピボットタブ（Excel ピボットの使い方ガイド）──────────────────────
+// 1 枚の長い Markdown ではなく、説明文（ChatMarkdown）と SVG 図解（workPivotDiagrams）を
+// 交互に並べて、Excel の実操作を「見ただけで手が動く」レベルでイメージできるようにする（MC-261）。
+// ChatMarkdown は rehype-raw 無しで raw SVG をテキスト化するため、図は React コンポーネントで実装。
 function WorkPivotTab() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4">
@@ -73,11 +93,35 @@ function WorkPivotTab() {
         <div className="mb-3">
           <h2 className="text-base font-bold text-text">Excel ピボットの使い方</h2>
           <p className="mt-1 text-xs text-text-muted">
-            ECL の集計・点検に役立つピボットテーブルの使い方ガイドです。練習用 Excel はドキュメントの「大手町」フォルダにあります。
+            ECL の集計・点検に役立つピボットテーブルの使い方を、図解で順番に説明します。練習用 Excel はドキュメントの「大手町」フォルダにあります。
           </p>
         </div>
         <div className="mc-markdown">
-          <ChatMarkdown body={WORK_PIVOT_MARKDOWN} />
+          {/* イントロ → 図1: before→after のクロス集計 */}
+          <ChatMarkdown body={PIVOT_INTRO_MD} />
+          <PivotBeforeAfterDiagram />
+
+          {/* 手順導入 → 図2: リボン［挿入］→［ピボットテーブル］ */}
+          <ChatMarkdown body={PIVOT_STEPS_INTRO_MD} />
+          <PivotRibbonDiagram />
+          <ChatMarkdown body={PIVOT_STEP_INSERT_MD} />
+
+          {/* 図3: フィールドペイン（4ボックスへドラッグ） → 役割の概念図 */}
+          <PivotFieldPaneDiagram />
+          <ChatMarkdown body={PIVOT_STEP_FIELDS_MD} />
+          <PivotBoxRolesDiagram />
+
+          {/* 集計方法の変更 → 図4: 値フィールドの設定 */}
+          <ChatMarkdown body={PIVOT_AGG_INTRO_MD} />
+          <PivotValueSettingsDiagram />
+
+          {/* 完成イメージ → 図5: クロス集計＋スライサー */}
+          <ChatMarkdown body={PIVOT_RESULT_INTRO_MD} />
+          <PivotResultDiagram />
+
+          {/* よく使う操作・使いどころ・練習ファイル */}
+          <ChatMarkdown body={PIVOT_TIPS_MD} />
+          <ChatMarkdown body={PIVOT_PRACTICE_MD} />
         </div>
       </section>
     </div>
