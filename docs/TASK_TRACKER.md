@@ -3137,3 +3137,16 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 受け入れ条件（DoD） | ピボットタブで Excel 実操作の流れ（生データ→クロス集計、リボン操作、フィールド配置、集計方法変更、完成＋スライサー）が SVG 図で判読できる。ダーク/ライト両テーマで見える。390px で崩れない。UI 文言は中立丁寧体。他タブ無改変。tsc/eslint green。 |
 | 依存 | MC-260（/work 基盤）。 |
 | 更新日 | 2026-06-27 |
+
+### MC-262 — Apollo ロゴ（A×ロケット）を左上ブランドマークに採用
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-262 |
+| タイトル | Keita 承認デザイン（ロケット型の「A」＝窓/フィン/炎）を Apollo の左上ブランドマークに採用。Son がベクター化。**ファビコン（ブックマーク用）は Son が実装・本番反映済み**（web/index.html に link 追加＋ web/public・web/dist に favicon.svg/favicon-16/32.png/apple-touch-icon.png、apollomansion.com で 200 配信確認）。**本タスクは左上マークの結線のみ**: icons.tsx に ApolloMark 追加＋ App.tsx サイドバー左上の GridIcon 1 箇所を差し替え。詳細スペック＝ artifacts/apollo-logo/IMPLEMENT-MC-262.md。 |
+| 優先度 | P2 |
+| ステータス | TODO（Son 起票・2026-06-27）。App.tsx/icons.tsx はソラが編集中のため Son は触らず委譲。方式B（vite build 単体）で同梱デプロイ希望。 |
+| 担当 | dev-apollo（ソラ） |
+| 受け入れ条件（DoD） | 左上ブランドが A×ロケットの ApolloMark になる（accent 追従・ライト/ダーク可）。ナビ "ダッシュボード" の GridIcon は不変。22px で鼻/窓/炎が判別。実機レンダ確認。 |
+| 依存 | なし |
+| 更新日 | 2026-06-27 |
