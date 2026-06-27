@@ -3145,7 +3145,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-262 |
 | タイトル | Keita 承認デザイン（ロケット型の「A」＝窓/フィン/炎）を Apollo の左上ブランドマークに採用。Son がベクター化。**ファビコン（ブックマーク用）は Son が実装・本番反映済み**（web/index.html に link 追加＋ web/public・web/dist に favicon.svg/favicon-16/32.png/apple-touch-icon.png、apollomansion.com で 200 配信確認）。**本タスクは左上マークの結線のみ**: icons.tsx に ApolloMark 追加＋ App.tsx サイドバー左上の GridIcon 1 箇所を差し替え。詳細スペック＝ artifacts/apollo-logo/IMPLEMENT-MC-262.md。 |
 | 優先度 | P2 |
-| ステータス | TODO（Son 起票・2026-06-27）。App.tsx/icons.tsx はソラが編集中のため Son は触らず委譲。方式B（vite build 単体）で同梱デプロイ希望。 |
+| ステータス | DONE（2026-06-27 Son 本番反映）。ソラが2.5h無編集の安定窓を確認し、Son が実装＋デプロイ。icons.tsx に ApolloMark 追加・App.tsx 左上ブランドの GridIcon 1 箇所を ApolloMark へ差し替え（ナビ"ダッシュボード"の GridIcon は不変）。方式B（`npx vite build` 単体・tsc 非経由）で web/dist 更新＝他者WIP非巻き込み・restart不要。検証: build EXIT0、配信 entry `index-BV57tIS8.js`(200) に ApolloMark の rocket path が乗っていること・index に favicon link・GridIcon の grid rect 残存を確認。実コンポーネント外観は Son の markcheck（ライト/ダーク・22/16px）で目視済み。**注意: App.tsx/icons.tsx への本変更は未コミット**（ソラの大規模WIPと同一ファイルで分離不可のため）。ソラは MC-262 をコミットする際に本 2 箇所を保持のこと。バックアップ: /tmp/App.tsx.son-bak, /tmp/icons.tsx.son-bak。 |
 | 担当 | dev-apollo（ソラ） |
 | 受け入れ条件（DoD） | 左上ブランドが A×ロケットの ApolloMark になる（accent 追従・ライト/ダーク可）。ナビ "ダッシュボード" の GridIcon は不変。22px で鼻/窓/炎が判別。実機レンダ確認。 |
 | 依存 | なし |
