@@ -27,6 +27,22 @@ export function GridIcon(props: IconProps) {
   );
 }
 
+// Apollo ブランドマーク（A×ロケット＝窓/フィン/炎）。塗りで currentColor 継承＝配色は親が制御。MC-262。
+export function ApolloMark(props: IconProps) {
+  return (
+    <svg width={18} height={18} viewBox="0 0 24 24" fill="currentColor" aria-hidden {...props}>
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M12 2.7C12.9 5.2 17.8 11.2 20.4 16.8C20.95 18 20.2 18.8 19.1 18.8L15.2 18.8C13.9 18.8 13.2 16.7 12 16.7C10.8 16.7 10.1 18.8 8.8 18.8L4.9 18.8C3.8 18.8 3.05 18 3.6 16.8C6.2 11.2 11.1 5.2 12 2.7ZM9.4 10.1a2.6 2.6 0 1 1 5.2 0 2.6 2.6 0 1 1-5.2 0Z"
+      />
+      <rect x="10" y="19.6" width="1" height="1.8" rx="0.5" />
+      <rect x="11.5" y="19.6" width="1" height="2.7" rx="0.5" />
+      <rect x="13" y="19.6" width="1" height="1.8" rx="0.5" />
+    </svg>
+  );
+}
+
 export function UsersIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
@@ -110,6 +126,17 @@ export function DotIcon(props: IconProps) {
   );
 }
 
+// ケバブ（縦三点）メニュー。Drive 流のホバー時アクション集約に使う（MC ドキュメント再設計）。
+export function MoreIcon(props: IconProps) {
+  return (
+    <svg {...base({ strokeWidth: 0, ...props })}>
+      <circle cx="12" cy="5" r="1.7" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.7" fill="currentColor" />
+      <circle cx="12" cy="19" r="1.7" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function PulseIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
@@ -132,6 +159,16 @@ export function FolderIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
       <path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.4.6L11.4 7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </svg>
+  );
+}
+
+export function FolderPlusIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.4.6L11.4 7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <path d="M12 11v5" />
+      <path d="M9.5 13.5h5" />
     </svg>
   );
 }

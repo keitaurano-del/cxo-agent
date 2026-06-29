@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type DragEvent as ReactDragEvent } from 'react';
 import { useLiveResource } from '../lib/useLiveData';
 import { MinutesPane } from './Notebooks';
 
@@ -19,7 +19,7 @@ import {
   DownloadIcon,
   UploadIcon,
   FolderIcon,
-  FolderOpenIcon,
+  FolderPlusIcon,
   SheetIcon,
   SlidesIcon,
   PdfFileIcon,
@@ -48,6 +48,7 @@ import {
   TagIcon,
   LinkIcon,
   SearchIcon,
+  MoreIcon,
 } from '../components/icons';
 import { relativeTime, absoluteTime } from '../lib/time';
 import { highlightCode, isHighlightable } from '../lib/codeHighlight';
@@ -516,11 +517,88 @@ async function collectFolderEntries(
 // ページ遷移でコンポーネントがアンマウントされても XHR が継続し、
 // 完了は UploadToast フローティングインジケーターで表示する。
 
-function UploadPanel() {
+
+// 常時のドロップゾーン（ビジーの一因）の代わりに、コンテンツ領域全体を
+// 外部ファイル/フォルダのドロップ先にする薄いラッパ。ドラッグ中だけ控えめな
+// オーバーレイを出す（Drive 流）。ファイル・フォルダ階層どちらも受ける。
+function UploadDropZone({ children }: { children: ReactNode }) {
   const { upload, uploading } = useUpload();
   const [dragOver, setDragOver] = useState(false);
+  const depthRef = useRef(0);
+
+  const isFileDrag = (e: ReactDragEvent) =>
+    Array.from(e.dataTransfer.types || []).includes('Files');
+
+  return (
+    <div
+      className="relative h-full"
+      onDragEnter={(e) => {
+        if (!isFileDrag(e) || uploading) return;
+        depthRef.current += 1;
+        setDragOver(true);
+      }}
+      onDragOver={(e) => {
+        if (!isFileDrag(e) || uploading) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }}
+      onDragLeave={(e) => {
+        if (!isFileDrag(e)) return;
+        depthRef.current -= 1;
+        if (depthRef.current <= 0) { depthRef.current = 0; setDragOver(false); }
+      }}
+      onDrop={async (e) => {
+        if (!isFileDrag(e)) return;
+        e.preventDefault();
+        depthRef.current = 0;
+        setDragOver(false);
+        if (uploading) return;
+        const items = Array.from(e.dataTransfer.items);
+        const hasDir = items.some((item) => item.webkitGetAsEntry()?.isDirectory);
+        if (hasDir) {
+          const fsEntries = items
+            .map((item) => item.webkitGetAsEntry())
+            .filter((entry): entry is FileSystemEntry => entry !== null);
+          const results = await Promise.all(fsEntries.map((entry) => collectFolderEntries(entry)));
+          const pairs = results.flat();
+          if (pairs.length > 0) upload(pairs);
+        } else if (e.dataTransfer.files.length > 0) {
+          upload(Array.from(e.dataTransfer.files).map((f) => ({ file: f, relpath: f.name })));
+        }
+      }}
+    >
+      {children}
+      {dragOver && (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-xl border-2 border-dashed border-accent bg-accent/5">
+          <div className="flex flex-col items-center gap-1.5 text-accent">
+            <UploadIcon width={28} height={28} />
+            <span className="text-sm font-semibold">ここにドロップしてアップロード</span>
+            <span className="text-[11px] text-text-muted">ファイル・フォルダ階層に対応</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Drive 流の控えめなアップロード導線（ツールバーの「+ 新規」ボタン）。
+// クリックでファイル/フォルダのアップロードメニューを出す。常時のドロップゾーンは廃止し、
+// コンテンツ領域へのドラッグ＆ドロップで同じ upload を受ける。
+function UploadButton() {
+  const { upload, uploading } = useUpload();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('mousedown', onDoc);
+    return () => window.removeEventListener('mousedown', onDoc);
+  }, [open]);
 
   const handleEntries = useCallback(
     (entries: Array<{ file: File; relpath: string }>) => {
@@ -532,90 +610,65 @@ function UploadPanel() {
   );
 
   return (
-    <div className="mb-4">
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          if (!uploading) setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={async (e) => {
-          e.preventDefault();
-          setDragOver(false);
-          if (uploading) return;
-
-          const items = Array.from(e.dataTransfer.items);
-          const hasDir = items.some((item) => item.webkitGetAsEntry()?.isDirectory);
-
-          if (hasDir) {
-            const fsEntries = items
-              .map((item) => item.webkitGetAsEntry())
-              .filter((entry): entry is FileSystemEntry => entry !== null);
-            const results = await Promise.all(fsEntries.map((entry) => collectFolderEntries(entry)));
-            const pairs = results.flat();
-            if (pairs.length > 0) handleEntries(pairs);
-          } else {
-            if (e.dataTransfer.files.length > 0) {
-              handleEntries(Array.from(e.dataTransfer.files).map((f) => ({ file: f, relpath: f.name })));
-            }
+    <div ref={ref} className="relative">
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            handleEntries(Array.from(e.target.files).map((f) => ({ file: f, relpath: f.webkitRelativePath || f.name })));
           }
         }}
-        className={`flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-center transition-colors ${
-          dragOver ? 'border-accent bg-surface-2' : 'border-border bg-surface'
-        }`}
+      />
+      <input
+        ref={folderInputRef}
+        type="file"
+        // @ts-expect-error webkitdirectory is non-standard but widely supported
+        webkitdirectory=""
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            handleEntries(Array.from(e.target.files).map((f) => ({ file: f, relpath: f.webkitRelativePath || f.name })));
+          }
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={uploading}
+        title="新規"
+        className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-accent p-2 text-xs font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-50 sm:px-3.5 sm:py-1.5"
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files && e.target.files.length > 0) {
-              handleEntries(Array.from(e.target.files).map((f) => ({ file: f, relpath: f.webkitRelativePath || f.name })));
-            }
-          }}
-        />
-        <input
-          ref={folderInputRef}
-          type="file"
-          // @ts-expect-error webkitdirectory is non-standard but widely supported
-          webkitdirectory=""
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files && e.target.files.length > 0) {
-              handleEntries(Array.from(e.target.files).map((f) => ({ file: f, relpath: f.webkitRelativePath || f.name })));
-            }
-          }}
-        />
-        <span className="text-text-faint">
-          <UploadIcon width={22} height={22} />
-        </span>
-        <p className="text-sm text-text-muted">
-          ファイル・フォルダをここにドラッグ＆ドロップ、または
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-2">
+        <PlusIcon width={14} height={14} />
+        <span className="hidden sm:inline">{uploading ? 'アップロード中…' : '新規'}</span>
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-lg">
           <button
+            role="menuitem"
             type="button"
-            onClick={() => inputRef.current?.click()}
-            disabled={uploading}
-            className="inline-flex items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-bg transition-opacity disabled:opacity-50"
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+            onClick={() => { setOpen(false); inputRef.current?.click(); }}
           >
-            <UploadIcon width={14} height={14} />
-            ファイルを選択
+            <span className="shrink-0 text-text-faint"><UploadIcon width={14} height={14} /></span>
+            ファイルをアップロード
           </button>
           <button
+            role="menuitem"
             type="button"
-            onClick={() => folderInputRef.current?.click()}
-            disabled={uploading}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-4 py-1.5 text-xs font-semibold text-text-muted transition-opacity hover:bg-surface-3 hover:text-text disabled:opacity-50"
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+            onClick={() => { setOpen(false); folderInputRef.current?.click(); }}
           >
-            <FolderIcon width={14} height={14} />
-            フォルダを選択
+            <span className="shrink-0 text-text-faint"><FolderIcon width={14} height={14} /></span>
+            フォルダをアップロード
           </button>
         </div>
-        <p className="text-[11px] text-text-faint">大容量ファイル・フォルダ階層にも対応しています。</p>
-      </div>
+      )}
     </div>
   );
 }
@@ -1192,389 +1245,6 @@ function findNode(root: TreeNode, path: string): TreeNode | null {
   return node;
 }
 
-function FileRow({
-  file, onDelete, indent, onView, onRenamed, onMoveRequest, interactions,
-}: {
-  file: DeliverableFile;
-  onDelete: (f: DeliverableFile) => void;
-  indent: number;
-  onView: (f: DeliverableFile) => void;
-  onRenamed: () => void;
-  onMoveRequest: (f: DeliverableFile) => void;
-  interactions: ItemInteractions;
-}) {
-  const downloadHref = `/api/deliverables/file?path=${encodeURIComponent(file.relpath)}`;
-  const [rename, setRename] = useState<RenameState>({ editing: false, value: '', saving: false, error: null });
-  const selected = interactions.selectedPaths.has(file.relpath);
-
-  const isImage = file.kind === 'image' || IMG_EXTS.has(file.ext.toLowerCase());
-  const isText =
-    TEXT_KINDS.has(file.kind) || file.ext.toLowerCase() === CSV_EXT || isHighlightable(file.ext);
-  const viewable = isImage || file.kind === 'pdf' || isOfficePreviewable(file) || isText;
-
-  const commitRename = useCallback(async (value: string) => {
-    const next = value.trim();
-    if (!next || next === file.name) {
-      setRename({ editing: false, value: '', saving: false, error: null });
-      return;
-    }
-    setRename((r) => ({ ...r, saving: true, error: null }));
-    const result = await renameDeliverable(file.relpath, next);
-    if (result.ok) {
-      setRename({ editing: false, value: '', saving: false, error: null });
-      onRenamed();
-    } else {
-      setRename((r) => ({ ...r, saving: false, error: result.error }));
-    }
-  }, [file.relpath, file.name, onRenamed]);
-
-  return (
-    <div style={{ paddingLeft: `${indent * 20}px` }}>
-      <div
-        draggable={!rename.editing}
-        onDragStart={(e) => {
-          e.dataTransfer.setData(DND_MIME, file.relpath);
-          e.dataTransfer.effectAllowed = 'move';
-          interactions.setDraggingPath(file.relpath);
-        }}
-        onDragEnd={() => interactions.setDraggingPath(null)}
-        onClick={(e) => {
-          if (e.shiftKey || e.metaKey || e.ctrlKey) {
-            e.preventDefault();
-            interactions.onSelectToggle(file.relpath, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey });
-          }
-        }}
-        className={`flex items-center gap-2 rounded px-2 py-1.5 group ${
-          selected ? 'bg-accent/10 ring-1 ring-inset ring-accent' : 'hover:bg-surface-2'
-        }`}
-      >
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={() => interactions.onSelectToggle(file.relpath, { shift: false, meta: true })}
-          onClick={(e) => e.stopPropagation()}
-          className="h-3.5 w-3.5 shrink-0 accent-accent"
-          aria-label={`${file.name} を選択`}
-        />
-        <span className="shrink-0 text-text-faint">
-          <KindIcon kind={file.kind} ext={file.ext} />
-        </span>
-        {rename.editing ? (
-          <InlineRenameInput
-            initial={file.name}
-            saving={rename.saving}
-            error={rename.error}
-            onCommit={commitRename}
-            onCancel={() => setRename({ editing: false, value: '', saving: false, error: null })}
-          />
-        ) : (
-          <button
-            type="button"
-            onDoubleClick={() => setRename({ editing: true, value: file.name, saving: false, error: null })}
-            className="flex-1 truncate text-left text-xs text-text"
-            title={`${file.name}（ダブルクリックで名前を変更）`}
-          >{file.name}</button>
-        )}
-        <MetaBadges meta={interactions.metaByPath.get(file.relpath)} compact />
-        <span className="shrink-0 text-[10px] text-text-faint whitespace-nowrap">
-          {humanReadableSize(file.sizeBytes)}
-        </span>
-        <StarToggle
-          relpath={file.relpath}
-          meta={interactions.metaByPath.get(file.relpath)}
-          onSetMeta={interactions.onSetMeta}
-          size={14}
-        />
-        {viewable && (
-          <button
-            type="button"
-            onClick={() => onView(file)}
-            className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text"
-            aria-label={`${file.name} をプレビュー`}
-          >
-            <EyeIcon width={14} height={14} />
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => setRename({ editing: true, value: file.name, saving: false, error: null })}
-          className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text"
-          aria-label={`${file.name} の名前を変更`}
-        >
-          <EditIcon width={14} height={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => onMoveRequest(file)}
-          className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text"
-          aria-label={`${file.name} を移動`}
-        >
-          <MoveIcon width={14} height={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => interactions.onCopyRequest(file)}
-          className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text"
-          aria-label={`${file.name} をコピー`}
-        >
-          <CopyIcon width={14} height={14} />
-        </button>
-        <span className="shrink-0 opacity-0 group-hover:opacity-100">
-          <CopyPathButton relpath={file.relpath} size={14} />
-        </span>
-        <a
-          href={downloadHref}
-          download={file.name}
-          className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text"
-          aria-label={`${file.name} をダウンロード`}
-        >
-          <DownloadIcon width={14} height={14} />
-        </a>
-        <button
-          type="button"
-          onClick={() => onDelete(file)}
-          className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text"
-          aria-label={`${file.name} を削除`}
-        >
-          <TrashIcon width={14} height={14} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function FolderNodeView({
-  node, indent, openFolders, toggleFolder, onDelete, onView, onRenamed, sort,
-  onMoveRequest, interactions, onOpenFolder,
-}: {
-  node: TreeNode;
-  indent: number;
-  openFolders: Set<string>;
-  toggleFolder: (path: string) => void;
-  onDelete: (f: DeliverableFile) => void;
-  onView: (f: DeliverableFile) => void;
-  onRenamed: () => void;
-  sort: SortPref;
-  onMoveRequest: (f: DeliverableFile) => void;
-  interactions: ItemInteractions;
-  onOpenFolder: (path: string) => void;
-}) {
-  const isOpen = openFolders.has(node.path);
-  const total = countFiles(node);
-  const [rename, setRename] = useState<RenameState>({ editing: false, value: '', saving: false, error: null });
-  const [dropActive, setDropActive] = useState(false);
-
-  // このフォルダを表す合成 DeliverableFile（移動/選択ハンドラに渡すため）。
-  const folderAsFile: DeliverableFile = {
-    name: node.name,
-    relpath: node.path,
-    sizeBytes: 0,
-    mtime: new Date().toISOString(),
-    created: new Date().toISOString(),
-    ext: '',
-    kind: 'folder',
-    isDir: true,
-  };
-  const selected = interactions.selectedPaths.has(node.path);
-
-  // 子フォルダはフォルダ名で安定ソート、ファイルは選択中ソートを適用。
-  const subdirs = Array.from(node.subdirs.values()).sort((a, b) =>
-    a.name.localeCompare(b.name, 'ja', { numeric: true, sensitivity: 'base' }),
-  );
-  const files = sortFiles(node.files, sort);
-
-  // ドロップ受理可否: 自分自身/子孫をこのフォルダへは入れられない（循環）。
-  const canAcceptDrop = (srcPath: string | null): boolean => {
-    if (!srcPath) return false;
-    if (srcPath === node.path) return false;
-    if (node.path === srcPath || node.path.startsWith(srcPath + '/')) return false;
-    // 既にこのフォルダ直下に在るものは移動不要。
-    if (parentDirOf(srcPath) === node.path) return false;
-    return true;
-  };
-
-  const commitRename = useCallback(async (value: string) => {
-    const next = value.trim();
-    if (!next || next === node.name) {
-      setRename({ editing: false, value: '', saving: false, error: null });
-      return;
-    }
-    setRename((r) => ({ ...r, saving: true, error: null }));
-    const result = await renameDeliverable(node.path, next);
-    if (result.ok) {
-      setRename({ editing: false, value: '', saving: false, error: null });
-      onRenamed();
-    } else {
-      setRename((r) => ({ ...r, saving: false, error: result.error }));
-    }
-  }, [node.path, node.name, onRenamed]);
-
-  return (
-    <div>
-      <div
-        draggable={!rename.editing}
-        onDragStart={(e) => {
-          e.stopPropagation();
-          e.dataTransfer.setData(DND_MIME, node.path);
-          e.dataTransfer.effectAllowed = 'move';
-          interactions.setDraggingPath(node.path);
-        }}
-        onDragEnd={() => interactions.setDraggingPath(null)}
-        onDragOver={(e) => {
-          if (canAcceptDrop(interactions.draggingPath)) {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            if (!dropActive) setDropActive(true);
-          }
-        }}
-        onDragLeave={() => setDropActive(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setDropActive(false);
-          const src = e.dataTransfer.getData(DND_MIME) || interactions.draggingPath;
-          if (src && canAcceptDrop(src)) interactions.onDropMove(src, node.path);
-          interactions.setDraggingPath(null);
-        }}
-        style={{ paddingLeft: `${indent * 20}px` }}
-        className={`flex w-full items-center gap-1.5 rounded px-2 py-1.5 group ${
-          dropActive
-            ? 'bg-accent/20 ring-1 ring-inset ring-accent'
-            : selected
-              ? 'bg-accent/10 ring-1 ring-inset ring-accent'
-              : 'hover:bg-surface-2'
-        }`}
-      >
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={() => interactions.onSelectToggle(node.path, { shift: false, meta: true })}
-          onClick={(e) => e.stopPropagation()}
-          className="h-3.5 w-3.5 shrink-0 accent-accent"
-          aria-label={`${node.name} を選択`}
-        />
-        <button
-          type="button"
-          onClick={() => toggleFolder(node.path)}
-          className="shrink-0 rounded p-0.5 text-text-faint transition-transform duration-100 hover:bg-surface-3 hover:text-text"
-          style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
-          aria-label={isOpen ? `${node.name} を閉じる` : `${node.name} を開く`}
-          aria-expanded={isOpen}
-        >
-          <ChevronRightIcon width={14} height={14} />
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            if (e.shiftKey || e.metaKey || e.ctrlKey) {
-              e.preventDefault();
-              interactions.onSelectToggle(node.path, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey });
-              return;
-            }
-            onOpenFolder(node.path);
-          }}
-          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-        >
-          <span className="shrink-0 text-text-faint">
-            {isOpen
-              ? <FolderOpenIcon width={16} height={16} />
-              : <FolderIcon width={16} height={16} />}
-          </span>
-          {rename.editing ? (
-            <InlineRenameInput
-              initial={node.name}
-              saving={rename.saving}
-              error={rename.error}
-              onCommit={commitRename}
-              onCancel={() => setRename({ editing: false, value: '', saving: false, error: null })}
-            />
-          ) : (
-            <span
-              className="flex-1 truncate text-sm font-medium text-text"
-              onDoubleClick={(e) => { e.stopPropagation(); setRename({ editing: true, value: node.name, saving: false, error: null }); }}
-              title={`${node.name}（クリックで開く / ダブルクリックで名前を変更）`}
-            >{node.name}</span>
-          )}
-        </button>
-        {!rename.editing && (
-          <>
-            <span className="shrink-0">
-              <StarToggle
-                relpath={node.path}
-                meta={interactions.metaByPath.get(node.path)}
-                onSetMeta={interactions.onSetMeta}
-                size={14}
-              />
-            </span>
-            <button
-              type="button"
-              onClick={() => setRename({ editing: true, value: node.name, saving: false, error: null })}
-              className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text"
-              aria-label={`${node.name} の名前を変更`}
-            >
-              <EditIcon width={14} height={14} />
-            </button>
-            <button
-              type="button"
-              onClick={() => onMoveRequest(folderAsFile)}
-              className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text"
-              aria-label={`${node.name} を移動`}
-            >
-              <MoveIcon width={14} height={14} />
-            </button>
-            <button
-              type="button"
-              onClick={() => interactions.onCopyRequest(folderAsFile)}
-              className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text"
-              aria-label={`${node.name} をコピー`}
-            >
-              <CopyIcon width={14} height={14} />
-            </button>
-            <span className="shrink-0 opacity-0 group-hover:opacity-100">
-              <CopyPathButton relpath={node.path} size={14} />
-            </span>
-            <button
-              type="button"
-              onClick={() => onDelete(folderAsFile)}
-              className="shrink-0 rounded p-0.5 text-text-faint opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-text"
-              aria-label={`${node.name} を削除`}
-            >
-              <TrashIcon width={14} height={14} />
-            </button>
-          </>
-        )}
-        <MetaBadges meta={interactions.metaByPath.get(node.path)} compact />
-        <span className="shrink-0 rounded-full bg-surface-3 px-1.5 py-0.5 text-[10px] text-text-faint">
-          {total}
-        </span>
-      </div>
-      {isOpen && (
-        <div>
-          {subdirs.map((sub) => (
-            <FolderNodeView
-              key={sub.path}
-              node={sub}
-              indent={indent + 1}
-              openFolders={openFolders}
-              toggleFolder={toggleFolder}
-              onDelete={onDelete}
-              onView={onView}
-              onRenamed={onRenamed}
-              sort={sort}
-              onMoveRequest={onMoveRequest}
-              interactions={interactions}
-              onOpenFolder={onOpenFolder}
-            />
-          ))}
-          {files.map((f) => (
-            <FileRow key={f.relpath} file={f} onDelete={onDelete} indent={indent + 1} onView={onView} onRenamed={onRenamed} onMoveRequest={onMoveRequest} interactions={interactions} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─────────────────────────────────────────────────────────
 
 // ─── 新規フォルダ作成（MC-154）────────────────────────────────
@@ -1636,10 +1306,12 @@ function NewFolderButton({ onCreated }: { onCreated: () => void }) {
       <button
         type="button"
         onClick={handleOpen}
-        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-semibold text-text-muted transition-colors hover:bg-surface-3 hover:text-text"
+        title="新規フォルダ"
+        aria-label="新規フォルダ"
+        className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-surface-2 p-1.5 text-xs font-semibold text-text-muted transition-colors hover:bg-surface-3 hover:text-text sm:px-3 sm:py-1"
       >
-        <PlusIcon width={13} height={13} />
-        新規フォルダ
+        <FolderPlusIcon width={15} height={15} />
+        <span className="hidden sm:inline">新規フォルダ</span>
       </button>
       {open && (
         <div
@@ -1927,28 +1599,33 @@ function TrashView({ onChanged, onClose }: { onChanged: () => void; onClose: () 
 }
 
 // ─── 並び替えコントロール（MC-231）────────────────────────────────
+// 並べ替え（Drive 流コンパクト）。現在のキーを示すボタン→クリックでキー選択の
+// ポップオーバー。向き（昇順/降順）は別ボタンでトグル。モバイルでも横幅を取らない。
 function SortControl({ sort, onChange }: { sort: SortPref; onChange: (s: SortPref) => void }) {
   const keys: SortKey[] = ['name', 'mtime', 'created', 'size'];
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('mousedown', onDoc);
+    return () => window.removeEventListener('mousedown', onDoc);
+  }, [open]);
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-text-faint">
-        <SortIcon width={14} height={14} />
-      </span>
-      <div className="flex rounded-full border border-border bg-surface-2 p-0.5 text-xs">
-        {keys.map((k) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => onChange({ key: k, dir: sort.key === k ? sort.dir : (k === 'name' ? 'asc' : 'desc') })}
-            className={`rounded-full px-2.5 py-1 transition-colors ${
-              sort.key === k ? 'bg-accent text-bg font-semibold' : 'text-text-muted hover:text-text'
-            }`}
-            aria-pressed={sort.key === k}
-          >
-            {SORT_KEY_LABELS[k]}
-          </button>
-        ))}
-      </div>
+    <div ref={ref} className="relative flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-2 px-2.5 py-1 text-xs text-text-muted transition-colors hover:bg-surface-3 hover:text-text"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="並べ替え"
+      >
+        <SortIcon width={13} height={13} />
+        <span className="hidden sm:inline">{SORT_KEY_LABELS[sort.key]}</span>
+      </button>
       <button
         type="button"
         onClick={() => onChange({ key: sort.key, dir: sort.dir === 'asc' ? 'desc' : 'asc' })}
@@ -1958,6 +1635,28 @@ function SortControl({ sort, onChange }: { sort: SortPref; onChange: (s: SortPre
       >
         {sort.dir === 'asc' ? <ArrowUpIcon width={14} height={14} /> : <ArrowDownIcon width={14} height={14} />}
       </button>
+      {open && (
+        <div role="menu" className="absolute right-0 top-full z-30 mt-1 w-36 overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-lg">
+          {keys.map((k) => (
+            <button
+              key={k}
+              role="menuitemradio"
+              aria-checked={sort.key === k}
+              type="button"
+              onClick={() => {
+                onChange({ key: k, dir: sort.key === k ? sort.dir : (k === 'name' ? 'asc' : 'desc') });
+                setOpen(false);
+              }}
+              className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition-colors hover:bg-surface-2 ${
+                sort.key === k ? 'font-semibold text-text' : 'text-text-muted hover:text-text'
+              }`}
+            >
+              {SORT_KEY_LABELS[k]}
+              {sort.key === k && <CheckIcon width={13} height={13} />}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1970,7 +1669,7 @@ function SearchFilterBar({
   kind, onKind, kindOptions, kindCounts,
   dateRange, onDateRange,
   allTags, tagFilter, onToggleTag,
-  onReset, hasActive,
+  onReset, hasActive, hideSearch,
 }: {
   query: string;
   onQuery: (q: string) => void;
@@ -1987,35 +1686,38 @@ function SearchFilterBar({
   onToggleTag: (t: string) => void;
   onReset: () => void;
   hasActive: boolean;
+  hideSearch?: boolean;
 }) {
   const dateRanges: DateRange[] = ['all', '7d', '30d', '90d'];
   return (
-    <div className="mb-3 space-y-2 rounded-lg border border-border bg-surface-2 p-2.5">
-      {/* 検索ボックス + スコープ */}
+    <div className="space-y-2 rounded-lg border border-border bg-surface-2 p-2.5">
+      {/* 検索ボックス + スコープ（hideSearch のときは検索本体を出さずスコープ/クリアのみ） */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1">
-          <span className="shrink-0 text-text-faint">
-            <SearchIcon width={14} height={14} />
-          </span>
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => onQuery(e.target.value)}
-            placeholder="ファイル名で検索"
-            className="min-w-0 flex-1 bg-transparent text-xs text-text placeholder:text-text-faint focus:outline-none"
-            aria-label="ファイル名で検索"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => onQuery('')}
-              className="shrink-0 rounded p-0.5 text-text-faint hover:text-text"
-              aria-label="検索をクリア"
-            >
-              <CloseIcon width={12} height={12} />
-            </button>
-          )}
-        </div>
+        {!hideSearch && (
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1">
+            <span className="shrink-0 text-text-faint">
+              <SearchIcon width={14} height={14} />
+            </span>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => onQuery(e.target.value)}
+              placeholder="ファイル名で検索"
+              className="min-w-0 flex-1 bg-transparent text-xs text-text placeholder:text-text-faint focus:outline-none"
+              aria-label="ファイル名で検索"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => onQuery('')}
+                className="shrink-0 rounded p-0.5 text-text-faint hover:text-text"
+                aria-label="検索をクリア"
+              >
+                <CloseIcon width={12} height={12} />
+              </button>
+            )}
+          </div>
+        )}
         <div className="flex shrink-0 rounded-full border border-border bg-surface p-0.5 text-xs" role="group" aria-label="検索スコープ">
           <button
             type="button"
@@ -2510,46 +2212,6 @@ function Breadcrumb({
   );
 }
 
-// ─── 最近使った項目（MC-232）──────────────────────────────────
-function RecentStrip({
-  recent, files, onOpen,
-}: {
-  recent: RecentItem[];
-  files: DeliverableFile[];
-  onOpen: (f: DeliverableFile) => void;
-}) {
-  // 実在するファイルだけを表示（削除/移動済みは除外）。
-  const byPath = new Map(files.map((f) => [f.relpath, f] as const));
-  const live = recent
-    .map((r) => byPath.get(r.relpath))
-    .filter((f): f is DeliverableFile => !!f && !f.isDir)
-    .slice(0, 8);
-  if (live.length === 0) return null;
-  return (
-    <div className="mb-4">
-      <div className="mb-1.5 flex items-center gap-1.5 text-xs text-text-faint">
-        <ClockIcon width={13} height={13} />
-        最近使った項目
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {live.map((f) => (
-          <button
-            key={f.relpath}
-            type="button"
-            onClick={() => onOpen(f)}
-            className="inline-flex max-w-[14rem] items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2.5 py-1 text-xs text-text-muted transition-colors hover:bg-surface-3 hover:text-text"
-            title={f.relpath}
-          >
-            <span className="shrink-0 text-text-faint">
-              <KindIcon kind={f.kind} ext={f.ext} />
-            </span>
-            <span className="truncate">{f.name}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ─── 属性列テーブル（MC-239）──────────────────────────────────
 // 名前/更新日/作成日/サイズ/種類の列を持つテーブル。列ヘッダクリックでソート、
@@ -2874,6 +2536,334 @@ function GalleryView({
   );
 }
 
+// ─── Drive 風レイアウト用コンポーネント（ドキュメント再設計）────────────
+// 情報設計: パンくずで階層を潜り、フォルダ section とファイル section を
+// 余白広めのカードグリッドで分離表示する。ファイル操作はカード上に常時出さず、
+// ホバー/クリックで開くケバブ(︙)メニューに集約してビジーさを抑える。
+
+// セクション見出し（「フォルダ」「ファイル」）。静かなトーンで件数を添える。
+function SectionHeading({ label, count }: { label: string; count: number }) {
+  return (
+    <div className="mb-2 mt-1 flex items-center gap-2 px-0.5">
+      <span className="text-xs font-semibold uppercase tracking-wide text-text-faint">{label}</span>
+      <span className="rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] text-text-faint">{count}</span>
+    </div>
+  );
+}
+
+// ケバブ（︙）メニュー。Drive 流に、ファイル/フォルダ操作をホバーで現れる
+// ボタン→クリックで開くポップオーバーに収める。actions は表示順の配列。
+interface KebabAction {
+  label: string;
+  icon: ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+  href?: string;
+  download?: string;
+}
+function KebabMenu({ actions, label }: { actions: KebabAction[]; label: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('mousedown', onDoc);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); e.preventDefault(); setOpen((v) => !v); }}
+        className={`rounded-full p-1 text-text-faint transition-colors hover:bg-surface-3 hover:text-text ${
+          open ? 'bg-surface-3 text-text opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
+        }`}
+        aria-label={`${label} の操作`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <MoreIcon width={16} height={16} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 z-30 mt-1 w-44 overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {actions.map((a, i) => {
+            const cls = `flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-surface-2 ${
+              a.danger ? 'text-stalled' : 'text-text-muted hover:text-text'
+            }`;
+            const inner = (
+              <>
+                <span className="shrink-0 text-text-faint">{a.icon}</span>
+                {a.label}
+              </>
+            );
+            if (a.href) {
+              return (
+                <a key={i} role="menuitem" href={a.href} download={a.download} className={cls} onClick={() => setOpen(false)}>
+                  {inner}
+                </a>
+              );
+            }
+            return (
+              <button key={i} role="menuitem" type="button" className={cls} onClick={() => { setOpen(false); a.onClick(); }}>
+                {inner}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// フォルダカード（Drive 流）。クリックで中に入る。常時ツリー展開はしない。
+// ドロップ先・選択・リネーム・ケバブ操作を持つ。
+function FolderCard({
+  node, onOpenFolder, onDelete, onRenamed, onMoveRequest, interactions,
+}: {
+  node: TreeNode;
+  onOpenFolder: (path: string) => void;
+  onDelete: (f: DeliverableFile) => void;
+  onRenamed: () => void;
+  onMoveRequest: (f: DeliverableFile) => void;
+  interactions: ItemInteractions;
+}) {
+  const total = countFiles(node);
+  const [rename, setRename] = useState<RenameState>({ editing: false, value: '', saving: false, error: null });
+  const [dropActive, setDropActive] = useState(false);
+  const selected = interactions.selectedPaths.has(node.path);
+
+  const folderAsFile: DeliverableFile = {
+    name: node.name, relpath: node.path, sizeBytes: 0,
+    mtime: new Date().toISOString(), created: new Date().toISOString(),
+    ext: '', kind: 'folder', isDir: true,
+  };
+
+  const canAcceptDrop = (srcPath: string | null): boolean => {
+    if (!srcPath) return false;
+    if (srcPath === node.path) return false;
+    if (node.path === srcPath || node.path.startsWith(srcPath + '/')) return false;
+    if (parentDirOf(srcPath) === node.path) return false;
+    return true;
+  };
+
+  const commitRename = useCallback(async (value: string) => {
+    const next = value.trim();
+    if (!next || next === node.name) {
+      setRename({ editing: false, value: '', saving: false, error: null });
+      return;
+    }
+    setRename((r) => ({ ...r, saving: true, error: null }));
+    const result = await renameDeliverable(node.path, next);
+    if (result.ok) {
+      setRename({ editing: false, value: '', saving: false, error: null });
+      onRenamed();
+    } else {
+      setRename((r) => ({ ...r, saving: false, error: result.error }));
+    }
+  }, [node.path, node.name, onRenamed]);
+
+  const actions: KebabAction[] = [
+    { label: '名前を変更', icon: <EditIcon width={14} height={14} />, onClick: () => setRename({ editing: true, value: node.name, saving: false, error: null }) },
+    { label: '移動', icon: <MoveIcon width={14} height={14} />, onClick: () => onMoveRequest(folderAsFile) },
+    { label: 'コピー', icon: <CopyIcon width={14} height={14} />, onClick: () => interactions.onCopyRequest(folderAsFile) },
+    { label: '削除', icon: <TrashIcon width={14} height={14} />, onClick: () => onDelete(folderAsFile), danger: true },
+  ];
+
+  return (
+    <div
+      draggable={!rename.editing}
+      onDragStart={(e) => {
+        e.stopPropagation();
+        e.dataTransfer.setData(DND_MIME, node.path);
+        e.dataTransfer.effectAllowed = 'move';
+        interactions.setDraggingPath(node.path);
+      }}
+      onDragEnd={() => interactions.setDraggingPath(null)}
+      onDragOver={(e) => {
+        if (canAcceptDrop(interactions.draggingPath)) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (!dropActive) setDropActive(true);
+        }
+      }}
+      onDragLeave={() => setDropActive(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDropActive(false);
+        const src = e.dataTransfer.getData(DND_MIME) || interactions.draggingPath;
+        if (src && canAcceptDrop(src)) interactions.onDropMove(src, node.path);
+        interactions.setDraggingPath(null);
+      }}
+      onClick={(e) => {
+        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+          e.preventDefault();
+          interactions.onSelectToggle(node.path, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey });
+          return;
+        }
+        if (!rename.editing) onOpenFolder(node.path);
+      }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !rename.editing) { e.preventDefault(); onOpenFolder(node.path); } }}
+      title={`${node.name}（クリックで開く）`}
+      className={`group flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2.5 transition-colors ${
+        dropActive
+          ? 'border-accent bg-accent/10 ring-1 ring-inset ring-accent'
+          : selected
+            ? 'border-accent bg-accent/5 ring-1 ring-inset ring-accent'
+            : 'border-border bg-surface hover:bg-surface-2'
+      }`}
+    >
+      <span className="shrink-0 text-text-muted">
+        <FolderIcon width={22} height={22} />
+      </span>
+      {rename.editing ? (
+        <div className="min-w-0 flex-1" onClick={(e) => e.stopPropagation()}>
+          <InlineRenameInput
+            initial={node.name}
+            saving={rename.saving}
+            error={rename.error}
+            onCommit={commitRename}
+            onCancel={() => setRename({ editing: false, value: '', saving: false, error: null })}
+          />
+        </div>
+      ) : (
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-text">{node.name}</span>
+      )}
+      {!rename.editing && (
+        <>
+          <MetaBadges meta={interactions.metaByPath.get(node.path)} compact />
+          <span className="shrink-0 text-[11px] text-text-faint">{total}</span>
+          <span className="shrink-0" onClick={(e) => e.stopPropagation()}>
+            <StarToggle relpath={node.path} meta={interactions.metaByPath.get(node.path)} onSetMeta={interactions.onSetMeta} size={15} />
+          </span>
+          <KebabMenu actions={actions} label={node.name} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ファイルカード（Drive 流グリッド）。上部に種別アイコン/画像サムネの面、
+// 下に ファイル名＋種別アイコン。操作はケバブに収める。クリックでプレビュー。
+function FileCard({
+  file, onView, onDelete, onRenamed, onMoveRequest, interactions,
+}: {
+  file: DeliverableFile;
+  onView: (f: DeliverableFile) => void;
+  onDelete: (f: DeliverableFile) => void;
+  onRenamed: () => void;
+  onMoveRequest: (f: DeliverableFile) => void;
+  interactions: ItemInteractions;
+}) {
+  const [rename, setRename] = useState<RenameState>({ editing: false, value: '', saving: false, error: null });
+  const selected = interactions.selectedPaths.has(file.relpath);
+  const isImage = file.kind === 'image' || IMG_EXTS.has(file.ext.toLowerCase());
+  const viewable = isPreviewable(file);
+  const downloadHref = `/api/deliverables/file?path=${encodeURIComponent(file.relpath)}`;
+  const thumbSrc = `/api/deliverables/file?path=${encodeURIComponent(file.relpath)}&inline=1`;
+
+  const commitRename = useCallback(async (value: string) => {
+    const next = value.trim();
+    if (!next || next === file.name) {
+      setRename({ editing: false, value: '', saving: false, error: null });
+      return;
+    }
+    setRename((r) => ({ ...r, saving: true, error: null }));
+    const result = await renameDeliverable(file.relpath, next);
+    if (result.ok) {
+      setRename({ editing: false, value: '', saving: false, error: null });
+      onRenamed();
+    } else {
+      setRename((r) => ({ ...r, saving: false, error: result.error }));
+    }
+  }, [file.relpath, file.name, onRenamed]);
+
+  const actions: KebabAction[] = [
+    ...(viewable ? [{ label: 'プレビュー', icon: <EyeIcon width={14} height={14} />, onClick: () => onView(file) }] : []),
+    { label: '名前を変更', icon: <EditIcon width={14} height={14} />, onClick: () => setRename({ editing: true, value: file.name, saving: false, error: null }) },
+    { label: '移動', icon: <MoveIcon width={14} height={14} />, onClick: () => onMoveRequest(file) },
+    { label: 'コピー', icon: <CopyIcon width={14} height={14} />, onClick: () => interactions.onCopyRequest(file) },
+    { label: 'ダウンロード', icon: <DownloadIcon width={14} height={14} />, onClick: () => {}, href: downloadHref, download: file.name },
+    { label: '削除', icon: <TrashIcon width={14} height={14} />, onClick: () => onDelete(file), danger: true },
+  ];
+
+  return (
+    <div
+      draggable={!rename.editing}
+      onDragStart={(e) => {
+        e.dataTransfer.setData(DND_MIME, file.relpath);
+        e.dataTransfer.effectAllowed = 'move';
+        interactions.setDraggingPath(file.relpath);
+      }}
+      onDragEnd={() => interactions.setDraggingPath(null)}
+      onClick={(e) => {
+        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+          e.preventDefault();
+          interactions.onSelectToggle(file.relpath, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey });
+          return;
+        }
+        if (!rename.editing && viewable) onView(file);
+      }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !rename.editing && viewable) { e.preventDefault(); onView(file); } }}
+      title={file.name}
+      className={`group flex flex-col overflow-hidden rounded-xl border transition-colors ${
+        selected ? 'border-accent ring-1 ring-inset ring-accent' : 'border-border hover:border-border-strong'
+      } ${viewable ? 'cursor-pointer' : ''} bg-surface`}
+    >
+      {/* 面: 画像はサムネ、それ以外は種別アイコンを中央に大きく */}
+      <div className="relative flex h-28 items-center justify-center overflow-hidden border-b border-border bg-surface-2">
+        {isImage ? (
+          <img src={thumbSrc} alt={file.name} className="h-full w-full object-cover" loading="lazy" />
+        ) : (
+          <span className="text-text-faint opacity-80">
+            <KindIcon kind={file.kind} ext={file.ext} />
+          </span>
+        )}
+      </div>
+      {/* 下段: 名前＋種別アイコン＋ケバブ */}
+      <div className="flex items-center gap-1.5 px-2.5 py-2">
+        <span className="shrink-0 text-text-faint">
+          <KindIcon kind={file.kind} ext={file.ext} />
+        </span>
+        {rename.editing ? (
+          <div className="min-w-0 flex-1" onClick={(e) => e.stopPropagation()}>
+            <InlineRenameInput
+              initial={file.name}
+              saving={rename.saving}
+              error={rename.error}
+              onCommit={commitRename}
+              onCancel={() => setRename({ editing: false, value: '', saving: false, error: null })}
+            />
+          </div>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-xs text-text">{file.name}</span>
+        )}
+        {!rename.editing && (
+          <>
+            <MetaBadges meta={interactions.metaByPath.get(file.relpath)} compact />
+            <KebabMenu actions={actions} label={file.name} />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────
 
 export default function Deliverables() {
@@ -2924,6 +2914,10 @@ export default function Deliverables() {
   const [navHistory, setNavHistory] = useState<string[]>(['']);
   const [navIndex, setNavIndex] = useState(0);
   const [recent, setRecent] = useState<RecentItem[]>(loadRecent);
+  // フィルタ（種別/期間/タグ）はデフォルト折りたたみ。Drive 流にビジーさを抑える。
+  const [showFilters, setShowFilters] = useState(false);
+  // 最近使った項目もデフォルト折りたたみ（控えめな1行）。
+  const [showRecent, setShowRecent] = useState(false);
 
   const changeSort = useCallback((s: SortPref) => {
     setSort(s);
@@ -2975,15 +2969,6 @@ export default function Deliverables() {
       }
     });
   }, [refetchMeta]);
-
-  const toggleFolder = useCallback((path: string) => {
-    setOpenFolders((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
-  }, []);
 
   // MC-232: 現在地ナビ。新しい遷移は履歴の現在位置以降を切り捨てて積む（ブラウザ履歴と同じ）。
   const navigateTo = useCallback((dir: string) => {
@@ -3371,143 +3356,223 @@ export default function Deliverables() {
         subtitle="Excel / PowerPoint / PDF などの成果物"
         fetchedAt={fetchedAt}
       />
+      <UploadDropZone>
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
-        <div className="mb-4 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setOpenMinutesHistory(false);
-              setShowMinutesPane(true);
-            }}
-            className="inline-flex items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-60"
-          >
-            <NoteIcon width={14} height={14} />
-            議事録を作成
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setOpenMinutesHistory(true);
-              setShowMinutesPane(true);
-            }}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-4 py-1.5 text-xs text-text-muted transition-colors hover:border-accent/50 hover:text-text"
-            title="過去の議事録を読み込む"
-          >
-            🕘 履歴
-          </button>
-        </div>
-        <UploadPanel />
         <ResourceState loading={loading} error={error} hasData={!!data}>
           {data && (
             <div className="flex gap-4">
               <div className="min-w-0 flex-1">
-              {/* ツールバー: ビュー切り替え + 種別フィルタ（リストビュー時） + 新規フォルダ */}
+              {/* ── Drive 流ツールバー（1行集約）: パンくず（左・伸長）＋ 操作群（右） ── */}
               <div className="mb-4 flex flex-wrap items-center gap-2">
-                {/* ビュー切り替えボタン */}
-                <div className="flex rounded-full border border-border bg-surface-2 p-0.5 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('folder')}
-                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 transition-colors ${
-                      viewMode === 'folder'
-                        ? 'bg-accent text-bg font-semibold'
-                        : 'text-text-muted hover:text-text'
-                    }`}
-                  >
-                    <FolderIcon width={13} height={13} />
-                    フォルダ
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('list')}
-                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 transition-colors ${
-                      viewMode === 'list'
-                        ? 'bg-accent text-bg font-semibold'
-                        : 'text-text-muted hover:text-text'
-                    }`}
-                  >
-                    <GridIcon width={13} height={13} />
-                    リスト
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('gallery')}
-                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 transition-colors ${
-                      viewMode === 'gallery'
-                        ? 'bg-accent text-bg font-semibold'
-                        : 'text-text-muted hover:text-text'
-                    }`}
-                  >
-                    <ImageFileIcon width={13} height={13} />
-                    ギャラリー
-                  </button>
+                {/* パンくず（フォルダグリッド時のみ。検索中・リスト/ギャラリーは平坦なので非表示） */}
+                <div className="order-1 min-w-0 flex-1">
+                  {viewMode === 'folder' && !searchActive ? (
+                    <Breadcrumb
+                      currentDir={effectiveDir}
+                      onNavigate={navigateTo}
+                      canBack={canBack}
+                      canForward={canForward}
+                      onBack={goBack}
+                      onForward={goForward}
+                    />
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-text">
+                      <FolderIcon width={14} height={14} />
+                      {searchActive ? '検索結果' : 'ドキュメント'}
+                    </div>
+                  )}
                 </div>
 
-                {/* MC-231: 並び替えコントロール */}
-                <SortControl sort={sort} onChange={changeSort} />
+                {/* 検索（コンパクト） */}
+                <div className="order-3 relative w-full sm:order-2 sm:w-52">
+                  <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-faint">
+                    <SearchIcon width={14} height={14} />
+                  </span>
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="ファイル名で検索"
+                    className="w-full rounded-full border border-border bg-surface-2 py-1.5 pl-8 pr-3 text-xs text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
+                    aria-label="ファイル名で検索"
+                  />
+                </div>
 
-                {/* 右端: 新規フォルダ（MC-154）＋ ゴミ箱（MC-230） */}
-                <div className="ml-auto flex items-center gap-2">
+                {/* 操作群: 表示切替 / 並べ替え / フィルタ / 新規 / 新規フォルダ / ゴミ箱 */}
+                <div className="order-2 flex flex-wrap items-center gap-1.5 sm:order-3">
+                  {/* 表示切替（グリッド⇄リスト）。ギャラリーは画像時のみ補助表示。 */}
+                  <div className="flex rounded-full border border-border bg-surface-2 p-0.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('folder')}
+                      title="グリッド表示"
+                      aria-label="グリッド表示"
+                      aria-pressed={viewMode === 'folder'}
+                      className={`inline-flex items-center rounded-full px-2 py-1 transition-colors ${
+                        viewMode === 'folder' ? 'bg-accent text-bg' : 'text-text-muted hover:text-text'
+                      }`}
+                    >
+                      <GridIcon width={14} height={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('list')}
+                      title="リスト表示"
+                      aria-label="リスト表示"
+                      aria-pressed={viewMode === 'list'}
+                      className={`inline-flex items-center rounded-full px-2 py-1 transition-colors ${
+                        viewMode === 'list' ? 'bg-accent text-bg' : 'text-text-muted hover:text-text'
+                      }`}
+                    >
+                      <SortIcon width={14} height={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('gallery')}
+                      title="ギャラリー表示（画像）"
+                      aria-label="ギャラリー表示"
+                      aria-pressed={viewMode === 'gallery'}
+                      className={`inline-flex items-center rounded-full px-2 py-1 transition-colors ${
+                        viewMode === 'gallery' ? 'bg-accent text-bg' : 'text-text-muted hover:text-text'
+                      }`}
+                    >
+                      <ImageFileIcon width={14} height={14} />
+                    </button>
+                  </div>
+
+                  {/* 並べ替え（コンパクト） */}
+                  <SortControl sort={sort} onChange={changeSort} />
+
+                  {/* フィルタ（種別/期間/タグ）トグル。Drive 流に普段は畳む。 */}
+                  <button
+                    type="button"
+                    onClick={() => setShowFilters((v) => !v)}
+                    title="フィルタ"
+                    aria-label="フィルタ"
+                    aria-pressed={showFilters || searchActive}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                      showFilters || (searchActive && filter !== 'all')
+                        ? 'border-accent bg-accent/10 text-text'
+                        : 'border-border bg-surface-2 text-text-muted hover:text-text'
+                    }`}
+                  >
+                    <TagIcon width={13} height={13} />
+                    <span className="hidden sm:inline">フィルタ</span>
+                  </button>
+
+                  <UploadButton />
                   <NewFolderButton onCreated={refetch} />
                   <button
                     type="button"
                     onClick={() => setShowTrash(true)}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-semibold text-text-muted transition-colors hover:bg-surface-3 hover:text-text"
+                    title="ゴミ箱"
+                    aria-label="ゴミ箱"
+                    className="inline-flex items-center rounded-full border border-border bg-surface-2 p-1.5 text-text-muted transition-colors hover:bg-surface-3 hover:text-text"
                   >
-                    <TrashIcon width={13} height={13} />
-                    ゴミ箱
+                    <TrashIcon width={14} height={14} />
                   </button>
                 </div>
               </div>
 
-              {/* MC-237: 検索 + フィルタチップ + スコープ切替。 */}
-              <SearchFilterBar
-                query={searchQuery}
-                onQuery={setSearchQuery}
-                scope={searchScope}
-                onScope={setSearchScope}
-                kind={filter}
-                onKind={setFilter}
-                kindOptions={visibleFilters}
-                kindCounts={Object.fromEntries(
-                  visibleFilters.filter((k) => k !== 'all').map((k) => [k, realFiles.filter((f) => f.kind === k).length]),
-                )}
-                dateRange={dateRange}
-                onDateRange={setDateRange}
-                allTags={allTags}
-                tagFilter={tagFilter}
-                onToggleTag={(t) =>
-                  setTagFilter((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(t)) next.delete(t);
-                    else next.add(t);
-                    return next;
-                  })
-                }
-                onReset={() => {
-                  setSearchQuery('');
-                  setFilter('all');
-                  setDateRange('all');
-                  setTagFilter(new Set());
-                  setSearchScope('all');
-                }}
-                hasActive={searchActive}
-              />
+              {/* 議事録の作成/履歴は控えめな副導線として1行に。 */}
+              <div className="mb-3 flex items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => { setOpenMinutesHistory(false); setShowMinutesPane(true); }}
+                  className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-surface px-3 py-1 text-text-muted transition-colors hover:border-accent/50 hover:text-text"
+                >
+                  <NoteIcon width={13} height={13} />
+                  議事録を作成
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setOpenMinutesHistory(true); setShowMinutesPane(true); }}
+                  className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-surface px-3 py-1 text-text-muted transition-colors hover:border-accent/50 hover:text-text"
+                  title="過去の議事録を読み込む"
+                >
+                  <ClockIcon width={13} height={13} />
+                  履歴
+                </button>
+              </div>
 
-              {/* MC-232: パンくず + 戻る/進む（フォルダビュー時のみ。リストは平坦なので非表示）。 */}
-              {viewMode === 'folder' && !searchActive && (
-                <Breadcrumb
-                  currentDir={effectiveDir}
-                  onNavigate={navigateTo}
-                  canBack={canBack}
-                  canForward={canForward}
-                  onBack={goBack}
-                  onForward={goForward}
-                />
+              {/* フィルタ（折りたたみ）: 種別/期間/タグ/スコープ。検索本体はツールバーへ移動済み。 */}
+              {(showFilters || (searchActive && filter !== 'all')) && (
+                <div className="mb-4">
+                  <SearchFilterBar
+                    query={searchQuery}
+                    onQuery={setSearchQuery}
+                    scope={searchScope}
+                    onScope={setSearchScope}
+                    kind={filter}
+                    onKind={setFilter}
+                    kindOptions={visibleFilters}
+                    kindCounts={Object.fromEntries(
+                      visibleFilters.filter((k) => k !== 'all').map((k) => [k, realFiles.filter((f) => f.kind === k).length]),
+                    )}
+                    dateRange={dateRange}
+                    onDateRange={setDateRange}
+                    allTags={allTags}
+                    tagFilter={tagFilter}
+                    onToggleTag={(t) =>
+                      setTagFilter((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(t)) next.delete(t);
+                        else next.add(t);
+                        return next;
+                      })
+                    }
+                    onReset={() => {
+                      setSearchQuery('');
+                      setFilter('all');
+                      setDateRange('all');
+                      setTagFilter(new Set());
+                      setSearchScope('all');
+                    }}
+                    hasActive={searchActive}
+                    hideSearch
+                  />
+                </div>
               )}
 
-              {/* MC-232: 最近使った項目。 */}
-              <RecentStrip recent={recent} files={realFiles} onOpen={openView} />
+              {/* 最近使った項目（控えめな折りたたみ）。 */}
+              {(() => {
+                const byPath = new Map(realFiles.map((f) => [f.relpath, f] as const));
+                const liveRecent = recent
+                  .map((r) => byPath.get(r.relpath))
+                  .filter((f): f is DeliverableFile => !!f && !f.isDir)
+                  .slice(0, 8);
+                if (liveRecent.length === 0) return null;
+                return (
+                  <div className="mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowRecent((v) => !v)}
+                      className="inline-flex items-center gap-1.5 text-xs text-text-faint transition-colors hover:text-text-muted"
+                      aria-expanded={showRecent}
+                    >
+                      <ClockIcon width={13} height={13} />
+                      最近使った項目
+                      <span className="text-text-faint">{showRecent ? '−' : `（${liveRecent.length}）`}</span>
+                    </button>
+                    {showRecent && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {liveRecent.map((f) => (
+                          <button
+                            key={f.relpath}
+                            type="button"
+                            onClick={() => openView(f)}
+                            className="inline-flex max-w-[14rem] items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2.5 py-1 text-xs text-text-muted transition-colors hover:bg-surface-3 hover:text-text"
+                            title={f.relpath}
+                          >
+                            <span className="shrink-0 text-text-faint"><KindIcon kind={f.kind} ext={f.ext} /></span>
+                            <span className="truncate">{f.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* MC-229: 選択中のみ表示する文脈ツールバー。 */}
               {selectedItems.length > 0 && (
@@ -3531,14 +3596,14 @@ export default function Deliverables() {
                 </div>
               )}
 
-              {/* フォルダビュー（現在地 currentDir のスコープを表示。ルートはドロップ先にもなる）。 */}
+              {/* ── グリッド（Drive 流）: フォルダ section ＋ ファイル section を分離 ── */}
               {viewMode === 'folder' && (
                 files.length === 0 ? (
                   <EmptyState>まだ成果物がありません</EmptyState>
                 ) : (
                   <div
                     onDragOver={(e) => {
-                      // ルート（現在地）直下へのドロップ受理: 既にここ直下に在るもの以外。
+                      // 現在地（ルート）直下へのドロップ受理: 既にここ直下に在るもの以外。
                       const src = draggingPath;
                       if (src && parentDirOf(src) !== effectiveDir && src !== effectiveDir) {
                         e.preventDefault();
@@ -3547,7 +3612,6 @@ export default function Deliverables() {
                       }
                     }}
                     onDragLeave={(e) => {
-                      // 子要素間の dragleave は無視（境界外のみ解除）。
                       if (e.currentTarget === e.target) setRootDropActive(false);
                     }}
                     onDrop={(e) => {
@@ -3560,21 +3624,24 @@ export default function Deliverables() {
                       }
                       setDraggingPath(null);
                     }}
-                    className={`rounded-lg border bg-surface py-1 transition-colors ${
-                      rootDropActive ? 'border-accent ring-1 ring-inset ring-accent' : 'border-border'
+                    className={`rounded-xl transition-colors ${
+                      rootDropActive ? 'ring-2 ring-inset ring-accent' : ''
                     }`}
                   >
                     {(() => {
-                      // MC-237: 検索/フィルタが有効なら、ツリーでなく該当ファイルのフラット結果を表示する。
+                      // 検索/フィルタが有効なら、ツリーでなく該当ファイルのフラット結果をカードで表示。
                       if (searchActive) {
                         if (filtered.length === 0) {
                           return <EmptyState>条件に一致する項目がありません</EmptyState>;
                         }
                         return (
                           <>
-                            {filtered.map((f) => (
-                              <FileRow key={f.relpath} file={f} onDelete={handleDelete} indent={0} onView={openView} onRenamed={refetchAll} onMoveRequest={(ff) => setMoveTargets([ff])} interactions={interactions} />
-                            ))}
+                            <SectionHeading label="ファイル" count={filtered.length} />
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                              {filtered.map((f) => (
+                                <FileCard key={f.relpath} file={f} onView={openView} onDelete={handleDelete} onRenamed={refetchAll} onMoveRequest={(ff) => setMoveTargets([ff])} interactions={interactions} />
+                              ))}
+                            </div>
                           </>
                         );
                       }
@@ -3587,34 +3654,43 @@ export default function Deliverables() {
                         return <EmptyState>このフォルダは空です</EmptyState>;
                       }
                       return (
-                        <>
-                          {topDirs.map((sub) => (
-                            <FolderNodeView
-                              key={sub.path}
-                              node={sub}
-                              indent={0}
-                              openFolders={openFolders}
-                              toggleFolder={toggleFolder}
-                              onDelete={handleDelete}
-                              onView={openView}
-                              onRenamed={refetchAll}
-                              sort={sort}
-                              onMoveRequest={(f) => setMoveTargets([f])}
-                              interactions={interactions}
-                              onOpenFolder={navigateTo}
-                            />
-                          ))}
-                          {topFiles.map((f) => (
-                            <FileRow key={f.relpath} file={f} onDelete={handleDelete} indent={0} onView={openView} onRenamed={refetchAll} onMoveRequest={(ff) => setMoveTargets([ff])} interactions={interactions} />
-                          ))}
-                        </>
+                        <div className="space-y-5">
+                          {topDirs.length > 0 && (
+                            <div>
+                              <SectionHeading label="フォルダ" count={topDirs.length} />
+                              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                                {topDirs.map((sub) => (
+                                  <FolderCard
+                                    key={sub.path}
+                                    node={sub}
+                                    onOpenFolder={navigateTo}
+                                    onDelete={handleDelete}
+                                    onRenamed={refetchAll}
+                                    onMoveRequest={(f) => setMoveTargets([f])}
+                                    interactions={interactions}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {topFiles.length > 0 && (
+                            <div>
+                              <SectionHeading label="ファイル" count={topFiles.length} />
+                              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                                {topFiles.map((f) => (
+                                  <FileCard key={f.relpath} file={f} onView={openView} onDelete={handleDelete} onRenamed={refetchAll} onMoveRequest={(ff) => setMoveTargets([ff])} interactions={interactions} />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       );
                     })()}
                   </div>
                 )
               )}
 
-              {/* リストビュー（MC-239: 属性列テーブル＋列ヘッダソート＋列幅永続化）。 */}
+              {/* リストビュー（属性列テーブル＋列ヘッダソート＋列幅永続化）。 */}
               {viewMode === 'list' && (
                 filtered.length === 0 ? (
                   <EmptyState>{searchActive ? '条件に一致する項目がありません' : 'まだ成果物がありません'}</EmptyState>
@@ -3634,22 +3710,24 @@ export default function Deliverables() {
                 )
               )}
 
-              {/* ギャラリービュー（MC-239: 画像向け 大サムネ＋フィルムストリップ）。 */}
+              {/* ギャラリービュー（画像向け 大サムネ＋フィルムストリップ）。 */}
               {viewMode === 'gallery' && (
                 <GalleryView files={filtered} onView={openView} interactions={interactions} />
               )}
               </div>
 
               {/* MC-236: 右ペイン詳細（選択中ファイルのメタ＋プレビュー）。
+                  Drive 流に、項目を選択している時だけ表示する（空の詳細レールは出さない）。
                   広い画面（xl 以上）でのみ常時表示。狭い画面（〜390px 含む）では非表示にし、
                   Space / プレビューボタンの Quick Look モーダルにフォールバックする。 */}
+              {selectedSingle && (
               <aside className="hidden w-72 shrink-0 xl:block">
                 <div className="sticky top-0 rounded-lg border border-border bg-surface p-3">
                   <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-text-muted">
                     <InfoIcon width={14} height={14} />
                     詳細
                   </div>
-                  {selectedSingle ? (
+                  {(
                     <div className="space-y-3">
                       <div className="truncate text-sm font-medium text-text" title={selectedSingle.name}>
                         {selectedSingle.name}
@@ -3681,17 +3759,15 @@ export default function Deliverables() {
                         </button>
                       )}
                     </div>
-                  ) : (
-                    <p className="text-xs text-text-faint">
-                      項目を 1 件選択すると、ここに詳細・パス・タグなどが表示されます。
-                    </p>
                   )}
                 </div>
               </aside>
+              )}
             </div>
           )}
         </ResourceState>
       </div>
+      </UploadDropZone>
       {moveTargets && (
         <MoveDialog
           items={moveTargets}
