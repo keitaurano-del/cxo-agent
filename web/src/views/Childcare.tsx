@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PageHeader } from '../components/PageHeader';
 import ChatMarkdown from '../components/ChatMarkdown';
+import { UserChatBody } from '../components/mediaEmbed';
 import {
   BabyIcon,
   ChildcareChatIcon,
@@ -1174,6 +1175,37 @@ function useSukuChat() {
 
     let acc = '';
     let resolved = false; // done を受け取って表示を確定できたか。
+    // SSE ウォッチドッグ: トンネル越し（cloudflared 等）で SSE がバッファ/ハングして
+    // done も close も来ないと、reader.read() が永久に待ちぼうけになり streamingRef が
+    // true のままになる → ポーリング・フォールバックも抑止されて pending が永久に解決しない
+    // （「すくすくが全然回答しない」の正体）。これを防ぐため AbortController で SSE を
+    // 強制中断できるようにし、「一定時間データが来ない」「全体が長すぎる」場合に abort して
+    // サーバ履歴ポーリング経路へ確実にフォールバックする。サーバ側は keep-alive ping を
+    // 15 秒ごとに流すので、ping すら来ない＝接続が死んでいるとみなせる。
+    const ac = new AbortController();
+    // 最初のデータ（ping/chunk/done いずれか）が来るまでの猶予。ping が 15s 間隔なので
+    // 健全な接続なら必ずこの内に何か届く。届かなければトンネルが握り込んでいるとみなす。
+    const FIRST_DATA_TIMEOUT_MS = 30_000;
+    // データが来た後の無音上限（chunk/ping の間隔監視）。ping 15s + 余裕。
+    const IDLE_TIMEOUT_MS = 40_000;
+    // SSE 全体の上限（これを超えたら done を待たずポーリングへ）。WebSearch 最長 180s + 余裕。
+    const OVERALL_TIMEOUT_MS = 240_000;
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    let overallTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearTimers = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (overallTimer) clearTimeout(overallTimer);
+      idleTimer = null;
+      overallTimer = null;
+    };
+    // 受信のたびに無音タイマーをリセットする。
+    const bumpIdle = (ms: number) => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        // 無音が続いた＝接続が死んでいる。SSE を中断してポーリングへ落とす。
+        ac.abort();
+      }, ms);
+    };
     try {
       const res = await fetch('/api/childcare/chat', {
         method: 'POST',
@@ -1183,8 +1215,12 @@ function useSukuChat() {
           messages: next.map((m) => ({ role: m.role, content: m.content })),
           media,
         }),
+        signal: ac.signal,
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      // 最初のデータが来るまでの猶予と、全体上限を仕掛ける。
+      bumpIdle(FIRST_DATA_TIMEOUT_MS);
+      overallTimer = setTimeout(() => ac.abort(), OVERALL_TIMEOUT_MS);
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = '';
@@ -1194,10 +1230,13 @@ function useSukuChat() {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
+        // 何か届いた（ping コメント行を含む）＝接続は生きている。無音タイマーを延ばす。
+        bumpIdle(IDLE_TIMEOUT_MS);
         buf += decoder.decode(value, { stream: true });
         const lines = buf.split('\n');
         buf = lines.pop() ?? '';
         for (const line of lines) {
+          // keep-alive コメント行（`: ping ...`）は無視（接続生存の確認だけに使う）。
           if (!line.startsWith('data: ')) continue;
           let evt: {
             type?: string;
@@ -1239,10 +1278,12 @@ function useSukuChat() {
         void restore();
       }
     } catch {
-      // 通信が確立できなかった／途中で切れた。エラー確定せず pending のまま、サーバ結果を待つ。
+      // 通信が確立できなかった／途中で切れた／ウォッチドッグが abort した。エラー確定せず
+      // pending のまま、サーバ結果をポーリングで取りに行く（サーバはバックグラウンドで生成継続）。
       streamingRef.current = false;
       void restore();
     } finally {
+      clearTimers();
       setStreaming(null);
       setSending(false);
       streamingRef.current = false;
@@ -1404,7 +1445,7 @@ function SukuMessageList({
                 <ChatMarkdown body={m.content} />
               )
             ) : (
-              <span className="whitespace-pre-wrap break-words">{m.content}</span>
+              <UserChatBody text={m.content} />
             )}
           </SukuBubble>
         );

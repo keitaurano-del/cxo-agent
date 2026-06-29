@@ -17,6 +17,7 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import ChatMarkdown from '../components/ChatMarkdown';
+import { UserChatBody } from '../components/mediaEmbed';
 import { ChajiIcon, ChildcareChatIcon, CloseIcon, ImageFileIcon, SendIcon } from '../components/icons';
 import { CHAJI_GUIDE_MARKDOWN } from './chajiData';
 
@@ -45,18 +46,27 @@ function ChajiGuide() {
 // ─── 茶事チャット（表千家の茶道アドバイザー）─────────────────────────────
 // 育児チャット「すくすく」のクライアントを踏襲（API base を /api/chaji に）。テキストのみ。
 type ChajiRole = 'user' | 'assistant';
-// 添付メディア参照（生徒の画像/動画アップロード）。childcare の SukuMedia のユーザー添付側を踏襲。
+// 添付メディア参照（childcare の SukuMedia を踏襲）。送信側（生徒の画像/動画）と返信側
+// （茶事の YouTube 埋め込み・生成図解・信頼ソース画像）の両方を扱う。
 interface ChajiMedia {
   id: string;
-  // 'image' はインライン表示・AI が見られる、'video' は <video> 表示（AI は内容解析しない）。
-  kind: 'image' | 'video';
-  // 配信 URL（GET /api/chaji/chat/media/:id）。ステージングのサムネにもそのまま使う。
+  // 'image'/'video' は実体配信、'youtube' は埋め込み（返信側の参考動画）。
+  kind: 'image' | 'video' | 'youtube';
+  // 配信 URL（GET /api/chaji/chat/media/:id）。'youtube' は視聴ページ URL。
   url: string;
   mime: string;
   name?: string;
   size?: number;
-  // 出所。茶事チャットでは常に 'upload'（生徒がアップロードした添付）。
-  source?: 'upload';
+  // 出所: 'upload'=生徒添付 / 'generated'=茶事生成図解 / 'web'=検証済み YouTube・信頼ソース画像。
+  source?: 'upload' | 'generated' | 'web';
+  // キャプション（なぜおすすめか・図解の説明）。
+  caption?: string;
+  // YouTube 埋め込み用の videoId（kind==='youtube' のとき）。
+  videoId?: string;
+  // 出典・帰属表示用 URL（YouTube 視聴元 / 画像の出典ページ）。
+  sourceUrl?: string;
+  // 出典タイトル（帰属表示に使う）。
+  sourceTitle?: string;
 }
 // 生成状態。'pending'=生成中（考え中…）/ 'done'=完了 / 'error'=失敗（丁寧メッセージ確定）。
 type ChajiStatus = 'pending' | 'done' | 'error';
@@ -96,8 +106,14 @@ function normalizeMessages(parsed: unknown): ChajiMessage[] {
       const list = media.filter((x): x is ChajiMedia => {
         if (!x || typeof (x as ChajiMedia).id !== 'string') return false;
         const k = (x as ChajiMedia).kind;
-        if (k !== 'image' && k !== 'video') return false;
-        return typeof (x as ChajiMedia).url === 'string';
+        if (k === 'image' || k === 'video') {
+          return typeof (x as ChajiMedia).url === 'string';
+        }
+        // YouTube は埋め込みのため videoId が要る（url は視聴ページ）。
+        if (k === 'youtube') {
+          return typeof (x as ChajiMedia).videoId === 'string' && !!(x as ChajiMedia).videoId;
+        }
+        return false;
       });
       if (list.length > 0) msg.media = list;
     }
@@ -257,6 +273,30 @@ function useChajiChat() {
 
     let acc = '';
     let resolved = false; // done を受け取って表示を確定できたか。
+    // SSE ウォッチドッグ: トンネル越し（cloudflared 等）で SSE がバッファ/ハングして done も close も
+    // 来ないと reader.read() が永久に待ちぼうけになり streamingRef が true のままになる → ポーリング
+    // も抑止されて pending が永久に解決しない（「全然回答しない」の正体）。AbortController で SSE を
+    // 強制中断し、「一定時間データが来ない」「全体が長すぎる」場合に abort してサーバ履歴ポーリング経路へ
+    // 確実にフォールバックする。サーバは keep-alive ping を 15 秒ごとに流す。
+    const ac = new AbortController();
+    const FIRST_DATA_TIMEOUT_MS = 30_000;
+    const IDLE_TIMEOUT_MS = 40_000;
+    const OVERALL_TIMEOUT_MS = 240_000;
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    let overallTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearTimers = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (overallTimer) clearTimeout(overallTimer);
+      idleTimer = null;
+      overallTimer = null;
+    };
+    const bumpIdle = (ms: number) => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        // 無音が続いた＝接続が死んでいる。SSE を中断してポーリングへ落とす。
+        ac.abort();
+      }, ms);
+    };
     try {
       const res = await fetch('/api/chaji/chat', {
         method: 'POST',
@@ -266,22 +306,35 @@ function useChajiChat() {
           messages: next.map((m) => ({ role: m.role, content: m.content })),
           media,
         }),
+        signal: ac.signal,
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      bumpIdle(FIRST_DATA_TIMEOUT_MS);
+      overallTimer = setTimeout(() => ac.abort(), OVERALL_TIMEOUT_MS);
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = '';
       let finalAnswer: string | null = null;
+      let finalMedia: ChajiMedia[] = [];
       let finalStatus: ChajiStatus = 'done';
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
+        // 何か届いた（ping コメント行を含む）＝接続は生きている。無音タイマーを延ばす。
+        bumpIdle(IDLE_TIMEOUT_MS);
         buf += decoder.decode(value, { stream: true });
         const lines = buf.split('\n');
         buf = lines.pop() ?? '';
         for (const line of lines) {
+          // keep-alive コメント行（`: ping ...`）は無視（接続生存の確認だけに使う）。
           if (!line.startsWith('data: ')) continue;
-          let evt: { type?: string; text?: string; answer?: string; status?: ChajiStatus } = {};
+          let evt: {
+            type?: string;
+            text?: string;
+            answer?: string;
+            media?: unknown;
+            status?: ChajiStatus;
+          } = {};
           try {
             evt = JSON.parse(line.slice(6)) as typeof evt;
           } catch {
@@ -291,9 +344,13 @@ function useChajiChat() {
             acc += evt.text;
             setStreaming(acc);
           } else if (evt.type === 'done') {
-            // done の answer は整形本文。
+            // done の answer は記法を除去済みの整形本文。media は検証/生成済みのみ確定。
             finalAnswer = typeof evt.answer === 'string' && evt.answer ? evt.answer : acc;
             if (evt.status === 'error') finalStatus = 'error';
+            if (Array.isArray(evt.media)) {
+              const norm = normalizeMessages([{ role: 'assistant', content: '', media: evt.media }]);
+              finalMedia = norm[0]?.media ?? [];
+            }
             resolved = true;
           }
         }
@@ -302,6 +359,7 @@ function useChajiChat() {
       if (resolved && answer) {
         // 完了を受け取れた → pending バブルを確定本文で置き換える。
         const assistantMsg: ChajiMessage = { role: 'assistant', content: answer, status: finalStatus };
+        if (finalMedia.length > 0) assistantMsg.media = finalMedia;
         setMessages((prev) => replaceLastPending(prev, assistantMsg));
       } else {
         // done を受け取れずストリームが切れた（接続断・途中終了）。失敗扱いにせず pending を残し、
@@ -310,10 +368,12 @@ function useChajiChat() {
         void restore();
       }
     } catch {
-      // 通信が確立できなかった／途中で切れた。エラー確定せず pending のまま、サーバ結果を待つ。
+      // 通信が確立できなかった／途中で切れた／ウォッチドッグが abort した。エラー確定せず
+      // pending のまま、サーバ結果をポーリングで取りに行く（サーバはバックグラウンドで生成継続）。
       streamingRef.current = false;
       void restore();
     } finally {
+      clearTimers();
       setStreaming(null);
       setSending(false);
       streamingRef.current = false;
@@ -471,7 +531,7 @@ function ChajiMessageList({
                 <ChatMarkdown body={m.content} />
               )
             ) : (
-              <span className="whitespace-pre-wrap break-words">{m.content}</span>
+              <UserChatBody text={m.content} />
             )}
           </ChajiBubble>
         );
@@ -510,9 +570,9 @@ function ChajiBubble({
   children: ReactNode;
 }) {
   const isUser = role === 'user';
-  // 添付画像/動画があるバブルは窮屈にならないよう少し広めにする。
+  // メディア（添付画像/動画・返信側の YouTube 埋め込み/図解/画像）があるバブルは窮屈にならないよう広めに。
   const hasMedia = !!media && media.length > 0;
-  const widthClass = hasMedia ? 'max-w-[92%] sm:max-w-[24rem]' : 'max-w-[85%]';
+  const widthClass = hasMedia ? 'max-w-[92%] sm:max-w-[28rem]' : 'max-w-[85%]';
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
@@ -536,22 +596,77 @@ function ChajiBubble({
   );
 }
 
-// ─── 茶事チャットの 1 メディア（生徒添付の画像/動画）──────────────────────
-//   - image: インライン画像（クリックで原寸を別タブで開く）。
-//   - video: 添付動画（<video controls>）。
-// 画像 src は自前配信 URL（GET /api/chaji/chat/media/:id）のみ。
+// ─── 茶事チャットの 1 メディア（画像/動画/YouTube 埋め込み）──────────────────
+//   - youtube: youtube-nocookie の iframe 埋め込み（aspect-video）。キャプション・出典を添える。
+//   - image  : インライン画像。生成図解/信頼ソース画像はキャプション・出典リンクを添える。
+//   - video  : 生徒添付の動画（<video>）。
+// XSS/安全: iframe は youtube-nocookie ドメイン固定。画像 src は検証済み自前配信 URL か添付 URL のみ。
 function ChajiMediaItem({ media: m }: { media: ChajiMedia }) {
+  if (m.kind === 'youtube' && m.videoId) {
+    return (
+      <figure className="m-0">
+        <div className="overflow-hidden rounded-md border border-black/10 bg-black/5">
+          <iframe
+            className="aspect-video w-full"
+            src={`https://www.youtube-nocookie.com/embed/${m.videoId}`}
+            title={m.sourceTitle ?? m.caption ?? '参考動画'}
+            loading="lazy"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
+        {(m.caption || m.sourceTitle) && (
+          <figcaption className="mt-1 text-[11px] leading-snug text-text-muted">
+            {m.caption && <span>{m.caption}</span>}
+            {m.sourceUrl && (
+              <>
+                {m.caption && ' '}
+                <a
+                  href={m.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-dotted underline-offset-2 hover:text-text"
+                >
+                  {m.sourceTitle ?? 'YouTube で見る'}
+                </a>
+              </>
+            )}
+          </figcaption>
+        )}
+      </figure>
+    );
+  }
+
   if (m.kind === 'image') {
     return (
       <figure className="m-0">
         <a href={m.url} target="_blank" rel="noopener noreferrer">
           <img
             src={m.url}
-            alt={m.name ?? '画像'}
+            alt={m.caption ?? m.name ?? (m.source === 'generated' ? '図解' : '画像')}
             loading="lazy"
             className="max-h-72 max-w-full rounded-md border border-black/10 object-contain"
           />
         </a>
+        {(m.caption || m.sourceUrl) && (
+          <figcaption className="mt-1 text-[11px] leading-snug text-text-muted">
+            {m.caption && <span>{m.caption}</span>}
+            {m.source === 'web' && m.sourceUrl && (
+              <>
+                {m.caption && ' '}
+                <a
+                  href={m.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-dotted underline-offset-2 hover:text-text"
+                >
+                  出典
+                </a>
+              </>
+            )}
+          </figcaption>
+        )}
       </figure>
     );
   }

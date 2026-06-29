@@ -8,10 +8,14 @@
 
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { MediaEmbed, parseMedia } from './mediaEmbed';
 
 const COMPONENTS: Components = {
-  // 外部リンクは新規タブ＋rel で安全に開く。
+  // リンクが YouTube/Vimeo/画像/動画なら埋め込み表示、それ以外は新規タブ＋rel で安全に開く。
+  // （remark-gfm が裸の URL も自動リンク化するため、本文に貼られた YouTube 等もここで埋め込まれる。）
   a({ href, children, ...rest }) {
+    const media = parseMedia(href);
+    if (media) return <MediaEmbed media={media} />;
     const external = !!href && /^https?:\/\//.test(href);
     return (
       <a
@@ -20,6 +24,15 @@ const COMPONENTS: Components = {
         {...rest}
       >
         {children}
+      </a>
+    );
+  },
+  // 画像（![](url)）はレスポンシブに整形し、クリックで原寸を別タブで開く。
+  img({ src, alt }) {
+    if (!src || typeof src !== 'string') return null;
+    return (
+      <a href={src} target="_blank" rel="noopener noreferrer" className="block">
+        <img src={src} alt={alt ?? '画像'} loading="lazy" className="my-2 max-h-72 max-w-full rounded-md border border-black/10 object-contain" />
       </a>
     );
   },

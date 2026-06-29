@@ -32,26 +32,44 @@ export type ChatRole = 'user' | 'assistant';
 
 /**
  * メッセージに添付されたメディア参照（childcareChatStore の ChatMedia を踏襲）。
- * 茶事チャットでは送信側（生徒）の画像/動画アップロードのみを扱う（source は常に 'upload'）。
- * 実体（アップロード画像/動画）は data/chaji-chat-media/ 配下に保存し、ここには参照
- * （id/url/種別 等）だけを持つ。画像は AI が Read して表千家の文脈でコメントでき、動画は
- * 受領・表示のみ（内容解析はしない）。
+ *   - 送信側（生徒）の画像/動画アップロード（kind: 'image'|'video', source: 'upload'）
+ *   - 返信側（茶事）のメディア返却:
+ *       - YouTube 参考動画埋め込み（kind: 'youtube', source: 'web'）— oEmbed で実在検証済み
+ *       - Gemini 生成図解（kind: 'image', source: 'generated'）— data/chaji-chat-media/ に保存
+ *       - Web 実在画像の提示（kind: 'image', source: 'web'）— 検証後サーバへ取り込み自前配信
+ * 実体（アップロード画像/動画・生成画像・取り込んだ Web 画像）は data/chaji-chat-media/ 配下に
+ * 保存し、ここには参照（id/url/種別 等）だけを持つ。YouTube は埋め込みのため実体保存はせず
+ * videoId/url を持つ。実在しないメディアは決してここに入れない（サーバ側で検証・生成に成功した
+ * ものだけを確定する）。
  */
 export interface ChatMedia {
   /** 一意 ID（保存名のプレフィックス・React key にも使う）。 */
   id: string;
-  /** 種別。'image' は AI が見られる、'video' は受領・表示のみ（内容解析しない）。 */
-  kind: 'image' | 'video';
-  /** 配信 URL（GET /api/chaji/chat/media/:id）。 */
+  /** 種別。'youtube' は iframe 埋め込み、'image'/'video' は実体配信。動画は AI が内容解析しない前提。 */
+  kind: 'image' | 'video' | 'youtube';
+  /** 配信 URL（GET /api/chaji/chat/media/:id）。'youtube' は視聴ページ URL。 */
   url: string;
-  /** MIME タイプ。 */
+  /** MIME タイプ（'youtube' では空でよい）。 */
   mime: string;
   /** 元ファイル名（表示・ダウンロード用）。 */
   name?: string;
   /** バイトサイズ。 */
   size?: number;
-  /** 出所。茶事チャットでは常に 'upload'（生徒がアップロードした添付）。 */
-  source?: 'upload';
+  /**
+   * 出所。
+   *   - 'upload'    : 生徒がアップロードした添付。
+   *   - 'generated': 茶事が Gemini で生成した図解。
+   *   - 'web'      : Web 検索で見つけ、実在検証した YouTube 動画 / 信頼ソースの画像。
+   */
+  source?: 'upload' | 'generated' | 'web';
+  /** 任意のキャプション（なぜこの動画/画像がおすすめか・図解の説明）。 */
+  caption?: string;
+  /** 'youtube' の動画 ID（youtube-nocookie の埋め込みに使う）。検証済みのものだけ入る。 */
+  videoId?: string;
+  /** 'youtube'/'web' の出典・帰属表示用 URL（視聴元ページ / 画像の出典ページ）。 */
+  sourceUrl?: string;
+  /** 出典タイトル（oEmbed の title / 出典ページタイトル）。帰属表示に使う。 */
+  sourceTitle?: string;
 }
 
 /** メッセージの生成状態。assistant のみ pending/error を取りうる（user は常に done 相当）。 */
@@ -266,13 +284,14 @@ export function startExchange(
 
 /**
  * pending の assistant エントリを最終状態（done/error）に確定する（update 行を追記）。
- * status='done' は最終本文、status='error' はユーザー向けの丁寧メッセージを確定する。
+ * status='done' は最終本文＋検証済み media、status='error' はユーザー向けの丁寧メッセージを確定する。
  * クライアント接続の有無に関係なく必ず保存される（接続から切り離した永続化の肝）。
  */
 export function finalizeAssistant(
   assistantId: string,
   status: 'done' | 'error',
   content: string,
+  media?: ChatMedia[],
 ): void {
   const rec: UpdateRecord = {
     type: 'update',
@@ -281,6 +300,8 @@ export function finalizeAssistant(
     status,
     ts: new Date().toISOString(),
   };
+  // media は明示的に配列を渡したときのみ反映（done は検証済み配列、error は [] で添付なしに倒す）。
+  if (Array.isArray(media)) rec.media = media;
   appendRecord(rec);
 }
 

@@ -11,10 +11,13 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import ChatMarkdown from '../components/ChatMarkdown';
+import { UserChatBody } from '../components/mediaEmbed';
 import {
   ChatIcon,
   CheckIcon,
+  CloseIcon,
   EditIcon,
+  ImageFileIcon,
   InfoIcon,
   NotebookIcon,
   PlusIcon,
@@ -36,6 +39,14 @@ import {
   PIVOT_RESULT_INTRO_MD,
   PIVOT_TIPS_MD,
   PIVOT_PRACTICE_MD,
+  PIVOT_PRO_INTRO_MD,
+  PIVOT_PRO_POWERQUERY_MD,
+  PIVOT_PRO_DATAMODEL_MD,
+  PIVOT_PRO_SHOWVALUES_MD,
+  PIVOT_PRO_BRIDGE_MD,
+  PIVOT_PRO_TOPN_MD,
+  PIVOT_PRO_DECKLINK_MD,
+  PIVOT_PRO_QA_MD,
 } from './workPivotGuide';
 import {
   PivotBeforeAfterDiagram,
@@ -44,7 +55,44 @@ import {
   PivotFieldPaneDiagram,
   PivotValueSettingsDiagram,
   PivotResultDiagram,
+  PivotProPowerQueryDiagram,
+  PivotProDataModelDaxDiagram,
+  PivotProShowValuesDiagram,
+  PivotProBridgeDiagram,
+  PivotProTopNDiagram,
+  PivotProDeckLinkDiagram,
+  PivotProQADiagram,
 } from './workPivotDiagrams';
+import {
+  COST_PIVOT_INTRO_MD,
+  COST_PIVOT_STEPS_INTRO_MD,
+  COST_PIVOT_FIELDS_MD,
+  COST_PIVOT_CALC_INTRO_MD,
+  COST_PIVOT_GROUPING_INTRO_MD,
+  COST_PIVOT_FORMAT_MD,
+  COST_PIVOT_RESULT_INTRO_MD,
+  COST_PIVOT_TIPS_MD,
+  COST_PIVOT_PRACTICE_MD,
+  COST_PIVOT_ADV_INTRO_MD,
+  COST_PIVOT_ADV_CALCFIELD_MD,
+  COST_PIVOT_ADV_TRENDFORMAT_MD,
+  COST_PIVOT_ADV_PARETO_MD,
+  COST_PIVOT_ADV_HEATMAP_MD,
+  COST_PIVOT_ADV_BUDGETACTUAL_MD,
+  COST_PIVOT_ADV_EXTRAS_MD,
+} from './workCostPivotGuide';
+import {
+  CostPivotBeforeAfterDiagram,
+  CostPivotFieldPaneDiagram,
+  CostPivotCalcDiagram,
+  CostPivotGroupingDiagram,
+  CostPivotResultDiagram,
+  CostPivotCalcFieldDiagram,
+  CostPivotTrendFormatDiagram,
+  CostPivotParetoDiagram,
+  CostPivotHeatmapDiagram,
+  CostPivotBudgetActualDiagram,
+} from './workCostPivotDiagrams';
 import { WORK_GLOSSARY, GLOSSARY_CATEGORIES, type GlossaryCategory } from './workGlossary';
 
 // ナレッジのカテゴリ既定リスト（server: workKnowledgeStore.KNOWLEDGE_CATEGORIES と一致させる）。
@@ -119,8 +167,27 @@ function WorkPivotTab() {
           <ChatMarkdown body={PIVOT_RESULT_INTRO_MD} />
           <PivotResultDiagram />
 
-          {/* よく使う操作・使いどころ・練習ファイル */}
+          {/* よく使う操作・使いどころ */}
           <ChatMarkdown body={PIVOT_TIPS_MD} />
+
+          {/* ── 応用・実務（コンサル水準）── データ準備/モデル/表示形式/要因分解/Top-N/成果物/QA */}
+          <ChatMarkdown body={PIVOT_PRO_INTRO_MD} />
+          <ChatMarkdown body={PIVOT_PRO_POWERQUERY_MD} />
+          <PivotProPowerQueryDiagram />
+          <ChatMarkdown body={PIVOT_PRO_DATAMODEL_MD} />
+          <PivotProDataModelDaxDiagram />
+          <ChatMarkdown body={PIVOT_PRO_SHOWVALUES_MD} />
+          <PivotProShowValuesDiagram />
+          <ChatMarkdown body={PIVOT_PRO_BRIDGE_MD} />
+          <PivotProBridgeDiagram />
+          <ChatMarkdown body={PIVOT_PRO_TOPN_MD} />
+          <PivotProTopNDiagram />
+          <ChatMarkdown body={PIVOT_PRO_DECKLINK_MD} />
+          <PivotProDeckLinkDiagram />
+          <ChatMarkdown body={PIVOT_PRO_QA_MD} />
+          <PivotProQADiagram />
+
+          {/* 練習ファイル案内（末尾） */}
           <ChatMarkdown body={PIVOT_PRACTICE_MD} />
         </div>
       </section>
@@ -128,13 +195,101 @@ function WorkPivotTab() {
   );
 }
 
+// ─── 課題管理費タブ（課題管理費＝プロジェクト費用 をピボットで集計する図解ガイド）────
+// 既存の「ピボット」タブ（ECL残高のクロス集計）より一段詳しく、費用集計に特化した実務ガイド。
+// 費目×月のクロス集計、構成比%・累計（計算の種類）、月→四半期のグループ化、表示形式、
+// スライサーまで、説明文（ChatMarkdown）と SVG 図解（workCostPivotDiagrams）を交互に並べる。
+function WorkCostPivotTab() {
+  return (
+    <div className="mx-auto flex max-w-3xl flex-col gap-4">
+      <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+        <div className="mb-3">
+          <h2 className="text-base font-bold text-text">課題管理費の集計（ピボット）</h2>
+          <p className="mt-1 text-xs text-text-muted">
+            課題管理費（プロジェクトの費用）を、費目別・月別・担当（ベンダー）別に集計する手順を、図解で順番に説明します。構成比・累計・四半期まとめまで、数式なしで作れます。
+          </p>
+        </div>
+        <div className="mc-markdown">
+          {/* イントロ → 図1: 費用一覧 → 費目×月のクロス集計 */}
+          <ChatMarkdown body={COST_PIVOT_INTRO_MD} />
+          <CostPivotBeforeAfterDiagram />
+
+          {/* 手順導入 → 図2: フィールド配置（費目=行 / 月=列 / 費用=値） */}
+          <ChatMarkdown body={COST_PIVOT_STEPS_INTRO_MD} />
+          <CostPivotFieldPaneDiagram />
+          <ChatMarkdown body={COST_PIVOT_FIELDS_MD} />
+
+          {/* 計算の種類（構成比%・累計）→ 図3 */}
+          <ChatMarkdown body={COST_PIVOT_CALC_INTRO_MD} />
+          <CostPivotCalcDiagram />
+
+          {/* 月→四半期グループ化 → 図4 */}
+          <ChatMarkdown body={COST_PIVOT_GROUPING_INTRO_MD} />
+          <CostPivotGroupingDiagram />
+
+          {/* 表示形式・並べ替え */}
+          <ChatMarkdown body={COST_PIVOT_FORMAT_MD} />
+
+          {/* 完成イメージ＋スライサー → 図5 */}
+          <ChatMarkdown body={COST_PIVOT_RESULT_INTRO_MD} />
+          <CostPivotResultDiagram />
+
+          {/* よく使う操作・使いどころ */}
+          <ChatMarkdown body={COST_PIVOT_TIPS_MD} />
+
+          {/* ── より高度な分析 ── 計算フィールド／トレンド／パレート／ヒートマップ／予実対比 */}
+          <ChatMarkdown body={COST_PIVOT_ADV_INTRO_MD} />
+          <ChatMarkdown body={COST_PIVOT_ADV_CALCFIELD_MD} />
+          <CostPivotCalcFieldDiagram />
+          <ChatMarkdown body={COST_PIVOT_ADV_TRENDFORMAT_MD} />
+          <CostPivotTrendFormatDiagram />
+          <ChatMarkdown body={COST_PIVOT_ADV_PARETO_MD} />
+          <CostPivotParetoDiagram />
+          <ChatMarkdown body={COST_PIVOT_ADV_HEATMAP_MD} />
+          <CostPivotHeatmapDiagram />
+          <ChatMarkdown body={COST_PIVOT_ADV_BUDGETACTUAL_MD} />
+          <CostPivotBudgetActualDiagram />
+          <ChatMarkdown body={COST_PIVOT_ADV_EXTRAS_MD} />
+
+          {/* 練習ファイル案内（末尾） */}
+          <ChatMarkdown body={COST_PIVOT_PRACTICE_MD} />
+        </div>
+      </section>
+    </div>
+  );
+}
+
 // ─── 壁打ちチャット（ECL/PMO アドバイザー）─────────────────────────────
-// 茶事チャットのテキスト部分を踏襲（メディアは扱わない）。API base は /api/work。
+// 茶事チャットのメディア対応版を踏襲。API base は /api/work。送信側（相談者の画像/動画）と
+// 返信側（アドバイザーの YouTube 埋め込み・生成図解・信頼ソース画像）の両方を扱う。
 type WorkRole = 'user' | 'assistant';
 type WorkStatus = 'pending' | 'done' | 'error';
+// 添付メディア参照（chaji の ChajiMedia を踏襲）。
+interface WorkMedia {
+  id: string;
+  // 'image'/'video' は実体配信、'youtube' は埋め込み（返信側の参考動画）。
+  kind: 'image' | 'video' | 'youtube';
+  // 配信 URL（GET /api/work/chat/media/:id）。'youtube' は視聴ページ URL。
+  url: string;
+  mime: string;
+  name?: string;
+  size?: number;
+  // 出所: 'upload'=相談者添付 / 'generated'=生成図解 / 'web'=検証済み YouTube・信頼ソース画像。
+  source?: 'upload' | 'generated' | 'web';
+  // キャプション（なぜおすすめか・図解の説明）。
+  caption?: string;
+  // YouTube 埋め込み用の videoId（kind==='youtube' のとき）。
+  videoId?: string;
+  // 出典・帰属表示用 URL（YouTube 視聴元 / 画像の出典ページ）。
+  sourceUrl?: string;
+  // 出典タイトル（帰属表示に使う）。
+  sourceTitle?: string;
+}
 interface WorkMessage {
   role: WorkRole;
   content: string;
+  // 添付メディア（無ければ省略）。
+  media?: WorkMedia[];
   status?: WorkStatus;
   jobId?: string;
 }
@@ -158,6 +313,22 @@ function normalizeMessages(parsed: unknown): WorkMessage[] {
     if (status === 'pending' || status === 'error' || status === 'done') msg.status = status;
     const jobId = (m as WorkMessage)?.jobId;
     if (typeof jobId === 'string' && jobId) msg.jobId = jobId;
+    const media = (m as WorkMessage)?.media;
+    if (Array.isArray(media)) {
+      const list = media.filter((x): x is WorkMedia => {
+        if (!x || typeof (x as WorkMedia).id !== 'string') return false;
+        const k = (x as WorkMedia).kind;
+        if (k === 'image' || k === 'video') {
+          return typeof (x as WorkMedia).url === 'string';
+        }
+        // YouTube は埋め込みのため videoId が要る（url は視聴ページ）。
+        if (k === 'youtube') {
+          return typeof (x as WorkMedia).videoId === 'string' && !!(x as WorkMedia).videoId;
+        }
+        return false;
+      });
+      if (list.length > 0) msg.media = list;
+    }
     out.push(msg);
   }
   return out;
@@ -190,13 +361,16 @@ function loadWorkHistory(): WorkMessage[] {
 
 /**
  * 壁打ちチャットの状態とロジックを 1 箇所に集約するフック。
- * 茶事 useChajiChat のテキスト部分を踏襲（メディアなし・API base は /api/work）。
+ * 茶事 useChajiChat を踏襲（送受信メディア対応・API base は /api/work）。
  */
 function useWorkChat() {
   const [messages, setMessages] = useState<WorkMessage[]>(() => loadWorkHistory());
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 送信前に添付したメディア（アップロード済みで参照を保持）。
+  const [pending, setPending] = useState<WorkMedia[]>([]);
   const [streaming, setStreaming] = useState<string | null>(null);
   const [hasPending, setHasPending] = useState(false);
   // ストリーミング購読が生きているか（生きている間はポーリング resync を抑止して二重描画を避ける）。
@@ -249,20 +423,51 @@ function useWorkChat() {
     };
   }, [hasPending, restore]);
 
+  /** ファイル選択 → サーバへアップロードして pending に追加する。 */
+  const upload = useCallback(async (files: FileList | File[]) => {
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      for (const f of list) form.append('files', f);
+      const res = await fetch('/api/work/chat/upload', { method: 'POST', body: form });
+      const data = (await res.json().catch(() => ({}))) as { media?: WorkMedia[]; error?: string };
+      if (!res.ok) {
+        setError(data.error || 'アップロードに失敗しました。');
+        return;
+      }
+      const added = Array.isArray(data.media) ? data.media : [];
+      setPending((prev) => [...prev, ...added]);
+    } catch {
+      setError('アップロードに失敗しました。通信状況をご確認ください。');
+    } finally {
+      setUploading(false);
+    }
+  }, []);
+
+  const removePending = useCallback((id: string) => {
+    setPending((prev) => prev.filter((m) => m.id !== id));
+  }, []);
+
   /**
-   * 送信。AI 生成はサーバ側でバックグラウンド実行され、結果はサーバに永続化される。
-   * SSE が繋がっている間は逐次表示するが、完了の正本はサーバ。接続が切れても失敗確定せず
-   * pending のままにして history ポーリング／タブ復帰で結果を取りに行く。
+   * 送信。テキストか添付メディアのどちらかがあれば送れる。AI 生成はサーバ側でバックグラウンド実行
+   * され、結果はサーバに永続化される。SSE が繋がっている間は逐次表示するが、完了の正本はサーバ。
+   * 接続が切れても失敗確定せず pending のままにして history ポーリング／タブ復帰で結果を取りに行く。
    */
   const send = useCallback(async () => {
     const text = input.trim();
-    if (!text || sending) return;
+    const media = pending;
+    if ((!text && media.length === 0) || sending) return;
 
-    const userMsg: WorkMessage = { role: 'user', content: text };
+    const userMsg: WorkMessage = { role: 'user', content: text || '（画像/動画を添付しました）' };
+    if (media.length > 0) userMsg.media = media;
     const pendingAssistant: WorkMessage = { role: 'assistant', content: '', status: 'pending' };
     const next: WorkMessage[] = [...messages, userMsg];
     setMessages([...next, pendingAssistant]);
     setInput('');
+    setPending([]);
     setError(null);
     setSending(true);
     setStreaming('');
@@ -270,27 +475,60 @@ function useWorkChat() {
 
     let acc = '';
     let resolved = false;
+    // SSE ウォッチドッグ（茶事と同じ）。トンネル越しで done/close が来ない場合に abort してポーリングへ。
+    const ac = new AbortController();
+    const FIRST_DATA_TIMEOUT_MS = 30_000;
+    const IDLE_TIMEOUT_MS = 40_000;
+    const OVERALL_TIMEOUT_MS = 240_000;
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    let overallTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearTimers = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (overallTimer) clearTimeout(overallTimer);
+      idleTimer = null;
+      overallTimer = null;
+    };
+    const bumpIdle = (ms: number) => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => ac.abort(), ms);
+    };
     try {
       const res = await fetch('/api/work/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-        body: JSON.stringify({ messages: next.map((m) => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify({
+          messages: next.map((m) => ({ role: m.role, content: m.content })),
+          media,
+        }),
+        signal: ac.signal,
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      bumpIdle(FIRST_DATA_TIMEOUT_MS);
+      overallTimer = setTimeout(() => ac.abort(), OVERALL_TIMEOUT_MS);
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = '';
       let finalAnswer: string | null = null;
+      let finalMedia: WorkMedia[] = [];
       let finalStatus: WorkStatus = 'done';
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
+        // 何か届いた（ping コメント行を含む）＝接続は生きている。無音タイマーを延ばす。
+        bumpIdle(IDLE_TIMEOUT_MS);
         buf += decoder.decode(value, { stream: true });
         const lines = buf.split('\n');
         buf = lines.pop() ?? '';
         for (const line of lines) {
+          // keep-alive コメント行（`: ping ...`）は無視（接続生存の確認だけに使う）。
           if (!line.startsWith('data: ')) continue;
-          let evt: { type?: string; text?: string; answer?: string; status?: WorkStatus } = {};
+          let evt: {
+            type?: string;
+            text?: string;
+            answer?: string;
+            media?: unknown;
+            status?: WorkStatus;
+          } = {};
           try {
             evt = JSON.parse(line.slice(6)) as typeof evt;
           } catch {
@@ -302,6 +540,10 @@ function useWorkChat() {
           } else if (evt.type === 'done') {
             finalAnswer = typeof evt.answer === 'string' && evt.answer ? evt.answer : acc;
             if (evt.status === 'error') finalStatus = 'error';
+            if (Array.isArray(evt.media)) {
+              const norm = normalizeMessages([{ role: 'assistant', content: '', media: evt.media }]);
+              finalMedia = norm[0]?.media ?? [];
+            }
             resolved = true;
           }
         }
@@ -309,6 +551,7 @@ function useWorkChat() {
       const answer = (finalAnswer ?? acc).trim();
       if (resolved && answer) {
         const assistantMsg: WorkMessage = { role: 'assistant', content: answer, status: finalStatus };
+        if (finalMedia.length > 0) assistantMsg.media = finalMedia;
         setMessages((prev) => replaceLastPending(prev, assistantMsg));
       } else {
         // done を受け取れずストリームが切れた → 失敗扱いにせず pending を残し、サーバ結果を待つ。
@@ -316,25 +559,42 @@ function useWorkChat() {
         void restore();
       }
     } catch {
-      // 通信が確立できなかった／途中で切れた → エラー確定せず pending のまま、サーバ結果を待つ。
+      // 通信が確立できなかった／途中で切れた／ウォッチドッグが abort した → エラー確定せず
+      // pending のまま、サーバ結果をポーリングで取りに行く（サーバはバックグラウンドで生成継続）。
       streamingRef.current = false;
       void restore();
     } finally {
+      clearTimers();
       setStreaming(null);
       setSending(false);
       streamingRef.current = false;
     }
-  }, [input, sending, messages, restore]);
+  }, [input, pending, sending, messages, restore]);
 
   const clearHistory = useCallback(() => {
     setMessages([]);
     setStreaming(null);
+    setPending([]);
     void fetch('/api/work/chat/history', { method: 'DELETE' }).catch(() => {
       /* 通信失敗時はローカルのみクリア */
     });
   }, []);
 
-  return { messages, input, setInput, sending, error, streaming, restore, send, clearHistory };
+  return {
+    messages,
+    input,
+    setInput,
+    sending,
+    uploading,
+    error,
+    pending,
+    streaming,
+    restore,
+    upload,
+    removePending,
+    send,
+    clearHistory,
+  };
 }
 
 type WorkChat = ReturnType<typeof useWorkChat>;
@@ -354,20 +614,121 @@ function WorkThinking() {
 }
 
 // ─── 吹き出し ────────────────────────────────────────────────────────
-function WorkBubble({ role, children }: { role: WorkRole; children: ReactNode }) {
+function WorkBubble({
+  role,
+  media,
+  children,
+}: {
+  role: WorkRole;
+  media?: WorkMedia[];
+  children: ReactNode;
+}) {
   const isUser = role === 'user';
+  // メディア（添付画像/動画・返信側の YouTube 埋め込み/図解/画像）があるバブルは広めにする。
+  const hasMedia = !!media && media.length > 0;
+  const widthClass = hasMedia ? 'max-w-[92%] sm:max-w-[28rem]' : 'max-w-[85%]';
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[85%] break-words rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
+        className={`${widthClass} break-words rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
           isUser
             ? 'rounded-br-sm bg-accent text-bg'
             : 'rounded-bl-sm border border-border bg-surface text-text'
         }`}
       >
+        {/* 添付メディア（相談者の画像/動画）と返信側メディア（YouTube/生成図解/信頼ソース画像）。 */}
+        {hasMedia && (
+          <div className="mb-1.5 flex flex-col gap-2">
+            {media!.map((m) => (
+              <WorkMediaItem key={m.id} media={m} />
+            ))}
+          </div>
+        )}
         {children}
       </div>
     </div>
+  );
+}
+
+// ─── 壁打ちチャットの 1 メディア（画像/動画/YouTube 埋め込み）──────────────────
+// XSS/安全: iframe は youtube-nocookie ドメイン固定。画像 src は検証済み自前配信 URL か添付 URL のみ。
+function WorkMediaItem({ media: m }: { media: WorkMedia }) {
+  if (m.kind === 'youtube' && m.videoId) {
+    return (
+      <figure className="m-0">
+        <div className="overflow-hidden rounded-md border border-black/10 bg-black/5">
+          <iframe
+            className="aspect-video w-full"
+            src={`https://www.youtube-nocookie.com/embed/${m.videoId}`}
+            title={m.sourceTitle ?? m.caption ?? '参考動画'}
+            loading="lazy"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
+        {(m.caption || m.sourceTitle) && (
+          <figcaption className="mt-1 text-[11px] leading-snug text-text-muted">
+            {m.caption && <span>{m.caption}</span>}
+            {m.sourceUrl && (
+              <>
+                {m.caption && ' '}
+                <a
+                  href={m.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-dotted underline-offset-2 hover:text-text"
+                >
+                  {m.sourceTitle ?? 'YouTube で見る'}
+                </a>
+              </>
+            )}
+          </figcaption>
+        )}
+      </figure>
+    );
+  }
+
+  if (m.kind === 'image') {
+    return (
+      <figure className="m-0">
+        <a href={m.url} target="_blank" rel="noopener noreferrer">
+          <img
+            src={m.url}
+            alt={m.caption ?? m.name ?? (m.source === 'generated' ? '図解' : '画像')}
+            loading="lazy"
+            className="max-h-72 max-w-full rounded-md border border-black/10 object-contain"
+          />
+        </a>
+        {(m.caption || m.sourceUrl) && (
+          <figcaption className="mt-1 text-[11px] leading-snug text-text-muted">
+            {m.caption && <span>{m.caption}</span>}
+            {m.source === 'web' && m.sourceUrl && (
+              <>
+                {m.caption && ' '}
+                <a
+                  href={m.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-dotted underline-offset-2 hover:text-text"
+                >
+                  出典
+                </a>
+              </>
+            )}
+          </figcaption>
+        )}
+      </figure>
+    );
+  }
+  // 動画（相談者添付）。内容解析はしないが、表示・再生はできる。
+  return (
+    <video
+      src={m.url}
+      controls
+      preload="metadata"
+      className="max-h-60 max-w-full rounded-md border border-black/10"
+    />
   );
 }
 
@@ -390,7 +751,7 @@ function WorkMessageList({
           return null;
         }
         return (
-          <WorkBubble key={i} role={m.role}>
+          <WorkBubble key={i} role={m.role} media={m.media}>
             {m.role === 'assistant' ? (
               m.status === 'pending' ? (
                 <WorkThinking />
@@ -398,7 +759,7 @@ function WorkMessageList({
                 <ChatMarkdown body={m.content} />
               )
             ) : (
-              <span className="whitespace-pre-wrap break-words">{m.content}</span>
+              <UserChatBody text={m.content} />
             )}
           </WorkBubble>
         );
@@ -412,13 +773,68 @@ function WorkMessageList({
   );
 }
 
-// ─── 入力バー ────────────────────────────────────────────────────────
+// ─── 入力バー（テキスト＋メディア添付）────────────────────────────────────
 function WorkComposer({ chat }: { chat: WorkChat }) {
-  const canSend = chat.input.trim().length > 0 && !chat.sending;
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const canSend = (chat.input.trim().length > 0 || chat.pending.length > 0) && !chat.sending;
   return (
     <div className="border-t border-border px-3 py-3">
+      {/* 添付プレビュー（送信前のステージング）。サムネはサーバ配信 URL を使う。 */}
+      {chat.pending.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {chat.pending.map((m) => (
+            <div
+              key={m.id}
+              className="relative overflow-hidden rounded-md border border-border bg-surface-2"
+            >
+              {m.kind === 'image' ? (
+                <img src={m.url} alt={m.name ?? '添付画像'} className="h-16 w-16 object-cover" />
+              ) : (
+                <div className="flex h-16 w-16 flex-col items-center justify-center gap-1 px-1 text-center">
+                  <span aria-hidden className="text-base">🎬</span>
+                  <span className="line-clamp-1 text-[9px] text-text-muted">動画</span>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => chat.removePending(m.id)}
+                aria-label="添付を削除"
+                className="absolute right-0.5 top-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white shadow-sm hover:bg-black/85"
+              >
+                <CloseIcon width={13} height={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       {chat.error && <p className="mb-1.5 px-1 text-[11px] text-blocked">{chat.error}</p>}
       <div className="flex items-end gap-2">
+        {/* メディア添付ボタン */}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif,image/heic,video/mp4,video/quicktime,video/webm"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = e.target.files;
+            if (files && files.length > 0) void chat.upload(files);
+            e.target.value = '';
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={chat.uploading || chat.sending}
+          aria-label="画像・動画を添付"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {chat.uploading ? (
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-text-muted border-t-transparent" />
+          ) : (
+            <ImageFileIcon width={18} height={18} />
+          )}
+        </button>
         <textarea
           value={chat.input}
           onChange={(e) => chat.setInput(e.target.value)}
@@ -1242,7 +1658,7 @@ function WorkGlossaryTab() {
 }
 
 // ─── タブ統括 ────────────────────────────────────────────────────────
-type WorkTab = 'overview' | 'chat' | 'knowledge' | 'glossary' | 'pivot';
+type WorkTab = 'overview' | 'chat' | 'knowledge' | 'glossary' | 'pivot' | 'cost-pivot';
 
 function resolveInitialTab(): WorkTab {
   if (typeof window !== 'undefined') {
@@ -1252,6 +1668,7 @@ function resolveInitialTab(): WorkTab {
       t === 'knowledge' ||
       t === 'glossary' ||
       t === 'pivot' ||
+      t === 'cost-pivot' ||
       t === 'overview'
     )
       return t;
@@ -1266,6 +1683,7 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
     { id: 'knowledge', label: 'ナレッジ', icon: <NotebookIcon width={16} height={16} /> },
     { id: 'glossary', label: '単語帳', icon: <TextFileIcon width={16} height={16} /> },
     { id: 'pivot', label: 'ピボット', icon: <SheetIcon width={16} height={16} /> },
+    { id: 'cost-pivot', label: '課題管理費', icon: <SheetIcon width={16} height={16} /> },
   ];
   return (
     <div className="flex border-b border-border px-4 md:px-6" role="tablist" aria-label="仕事ページのタブ">
@@ -1321,6 +1739,8 @@ export default function Work() {
           <WorkGlossaryTab />
         ) : tab === 'pivot' ? (
           <WorkPivotTab />
+        ) : tab === 'cost-pivot' ? (
+          <WorkCostPivotTab />
         ) : (
           <WorkOverview />
         )}

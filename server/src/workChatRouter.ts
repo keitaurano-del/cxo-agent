@@ -1,30 +1,55 @@
 // workChatRouter — 仕事チャット（ECL/PMO 学習・壁打ちアドバイザー）の API（MC-260）。
 //
 // 新サイドメニュー「仕事」(/work) から開く、メガバンクの ECL（予想信用損失）システム導入 PMO 案件
-// 向けの学習・壁打ちチャット。茶事チャット（chajiChatRouter）のテキストチャット部分をそのまま踏襲し、
-// メディア（画像/動画）添付は扱わない（テキストのみ）。
+// 向けの学習・壁打ちチャット。茶事チャット（chajiChatRouter）のメディア対応版をそのまま踏襲する。
 //   - 会話履歴をサーバ側 JSONL（data/work-chat.jsonl）に蓄積する（workChatStore）。
 //     端末・リロードをまたいで過去の質問が残る。クライアントの localStorage はキャッシュ扱い。
 //   - 応答生成時は直近の履歴を文脈として渡し、過去のやり取りを踏まえて続けて答えられる。
+//   - 送信側のメディア（画像/動画）添付に対応する（childcare/chaji の添付側をミラー）。画像は
+//     マルチモーダルでアドバイザーが Read して見られる（best-effort）。動画は受領・表示のみ。
+//   - 返信側のメディア返却（YouTube 参考動画埋め込み・Gemini 生成図解・Web 実在画像）に対応する
+//     （workMedia.ts の後処理＝oEmbed 実在検証 / 信頼ホスト画像取り込み / 図解生成）。捏造禁止。
 //
 // AI 応答は notebookClaude.ts の runClaudeStream（claude -p ベース）を流用する。
-// cwd は CXO_ROOT（既存ディレクトリ）を渡す。
+// cwd は CXO_ROOT（既存ディレクトリ）を渡し、画像 Read のためにメディア保存ディレクトリ
+// （CXO_ROOT/data/work-chat-media/）配下のファイルを読ませる（CXO_ROOT 配下なので既定で許可）。
 //
 // 出典リンク機能: このチャット専用に claude へ WebSearch/WebFetch を許可し
 // （WORK_ALLOWED_TOOLS → runClaudeStream の opts.allowedTools）、アドバイザーが実際に
 // 実在ページを検索・取得して確認した URL だけを「## 出典」セクションに引用できるようにする。
-// systemPrompt で捏造リンクを厳禁し、確認できる出典が無ければリンクを出さない。
+// 添付画像を見るために Read も許可する。systemPrompt で捏造リンクを厳禁する。
 // この allowedTools は当チャット専用の opt-in で、notebook 等の既存 claude 呼び出しには渡らない。
 //
 // ルート（index.ts で auth ミドルウェア配下に /api/work で mount）:
-//   POST   /chat              { messages: [...] } → SSE ストリーム or JSON
-//   GET    /chat/history      → { messages: [{ role, content }] }（サーバ保存の会話履歴）
+//   POST   /chat              { messages: [...], media?: [...] } → SSE ストリーム or JSON
+//   GET    /chat/history      → { messages: [{ role, content, media? }] }（サーバ保存の会話履歴）
 //   GET    /chat/job/:id      → 単一ジョブの現在状態
 //   DELETE /chat/history      → { ok: true }（会話を論理クリア）
+//   POST   /chat/upload       multipart files[] → { ok, media: [{ id, kind, url, mime, name, size }] }
+//   GET    /chat/media/:id    → メディア実体をストリーム配信（Range 対応）
+
+import { randomUUID } from 'node:crypto';
+import {
+  createReadStream,
+  mkdirSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+  unlinkSync,
+} from 'node:fs';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { Router, type Request, type Response } from 'express';
+import multer from 'multer';
 
-import { CXO_ROOT } from './config.js';
+import {
+  CXO_ROOT,
+  WORK_CHAT_IMAGE_MAX_BYTES,
+  WORK_CHAT_MEDIA_DIR,
+  WORK_CHAT_MEDIA_MAX_FILES,
+  WORK_CHAT_VIDEO_MAX_BYTES,
+} from './config.js';
+import { processAssistantText } from './lib/workMedia.js';
 import {
   clearMessages,
   finalizeAssistant,
@@ -32,6 +57,7 @@ import {
   listMessages,
   recentContext,
   startExchange,
+  type ChatMedia,
 } from './lib/workChatStore.js';
 import { runClaudeStream } from './lib/notebookClaude.js';
 
@@ -76,6 +102,19 @@ export const WORK_SYSTEM_PROMPT = [
   '- 日本基準の予想信用損失・償却原価に関する質問に答えるときは、原則として上記の公開草案（およびその後の最新の審議状況・最終基準化の有無）を WebSearch / WebFetch で確認し、その内容に基づいて答えてください。記憶だけで古い内容を述べないこと。一次情報は ASBJ サイト（asb-j.jp）を優先し、実務解釈は大手監査法人（EY・PwC・KPMG・Deloitte 等）の解説で補ってください。',
   '- ただしこれらは現時点で「公開草案」段階であり、最終基準の内容・適用範囲・経過措置・確定スケジュールは変わりうる点に注意してください。確定事項のように断定せず、「公開草案（第89号等）時点では…」と前置きし、未確定の事項は「未確定」「要確認」と明示してください。憶測で確定事項のように述べてはいけません。',
   '',
+  '【画像・動画の取り扱い】',
+  '- 相談者が画像（資料・図・スクリーンショット・Excel の画面など）を添付した場合、その画像を Read して内容を確認し、ECL/会計/IT/PMO の観点から具体的にコメント・壁打ちしてかまいません。読み取れない箇所は推測で断定せず「読み取れません」と正直に伝えてください。',
+  '- 動画が添付された場合、内容の詳細な解析はできません。気になる点は文章で教えていただくようお願いしてください。',
+  '',
+  '【参考メディアの提示（図解・参考動画・資料画像を埋め込みで添えられます）】',
+  '- あなたは回答に、学習・壁打ちに役立つメディア（図解・参考動画・信頼ソースの資料画像）を最大2点まで埋め込んで添えられます。本当に役立つときだけ、原則1〜2点に留めてください（軽い相談・純粋な壁打ちには不要です）。「このチャットには動画を再生・検索する機能がない」といった案内はしないでください（埋め込み機能はあります）。',
+  '- メディアを添えたいときは、本文中に次の専用記法を1行で書いてください。サーバがこの記法を受け取り、実在を検証・生成してから実際のメディアに変換します（記法自体は利用者には表示されません）。',
+  '- 図解の生成: 「[[gen-image: 図解にしたい内容の説明（日本語）]]」。ECL の3ステージ、PD×LGD×EAD の関係、引当ロールフォワードの要因分解、データフロー/アーキテクチャ、WBS/スケジュールの考え方など、説明を分かりやすくする概念図・スキーマ図をその場で生成します（実データの図ではなく説明用の概念図）。',
+  '- 参考動画（YouTube）: 「[[youtube: 動画のwatch URL | なぜこの動画がおすすめかの一言]]」。IFRS9/ECL・会計基準・PMO 実務などの理解に役立つ実在の YouTube 動画の URL（https://www.youtube.com/watch?v=... 形式）を、WebSearch で実在と内容を確認してから書いてください。記憶・推測で URL を組み立ててはいけません。サーバが oEmbed で実在を再検証し、存在しない・限定公開・削除済みの動画は自動で除外します。',
+  '- 信頼できる画像・図表: 「[[web-image: 画像のURL | 出典（機関名・ページ名）]]」。IFRS 財団・ASBJ・規制当局・大手監査法人・学術機関など信頼できるソースの実在する画像 URL を、WebSearch/WebFetch で確認できたときだけ書いてください。物販サイト・出典不明サイトの画像は使わないでください。サーバが URL の到達性・画像であること・信頼ホストであることを再検証し、ダメなら自動で除外します。',
+  '- 重要: メディアは「あれば添える」程度です。検証で実在が確認できないものは自動的に落ちます。落ちることを前提に、本文はメディアが無くても回答が完結するように書いてください。',
+  '- メディア記法は出典の捏造禁止・「公開草案段階は未確定」「要確認」を明示する方針を一切変えません。',
+  '',
   '【対象の線引き】',
   '- 本案件（ECL システム導入 PMO）、銀行業務、会計、IT・データ、PMO／プロジェクト管理に関わる相談には、幅広く具体的に答えてください。',
   '- これらと完全に無関係な雑談（占いなど）にだけは深入りせず、穏やかに「本案件・銀行・会計・IT・PMO に関するご相談に専念しています」と伝え、本題へ柔らかく案内してください。',
@@ -105,9 +144,10 @@ export const WORK_SYSTEM_PROMPT = [
 /**
  * 仕事チャットで claude に許可する組み込みツール。
  * WebSearch / WebFetch を許可して、アドバイザーが実際に実在ページを検索・取得して出典を確認できるようにする。
+ * Read を許可して、相談者が添付した画像ファイルを開いて見られるようにする（マルチモーダル）。
  * これは当チャット専用の opt-in。notebook 等の既存 claude 呼び出しには渡さないので挙動は変わらない。
  */
-const WORK_ALLOWED_TOOLS = ['WebSearch', 'WebFetch'];
+const WORK_ALLOWED_TOOLS = ['WebSearch', 'WebFetch', 'Read'];
 
 // 応答生成時に文脈として渡すサーバ保存履歴の上限件数（トークン肥大の抑止）。
 const SERVER_CONTEXT_LIMIT = 30;
@@ -122,6 +162,187 @@ interface ChatMessageInput {
 // 会話履歴・1 メッセージ長の上限（暴走・過大プロンプト抑止）。
 const MAX_MESSAGES = 40;
 const MAX_CONTENT_CHARS = 4000;
+
+// ─── 許可 MIME（画像 / 動画）────────────────────────────────
+const IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/heic']);
+const VIDEO_MIME = new Set(['video/mp4', 'video/quicktime', 'video/webm']);
+
+/** MIME から種別を判定。許可外は null。 */
+function kindOf(mime: string): 'image' | 'video' | null {
+  const m = (mime || '').toLowerCase().split(';')[0].trim();
+  if (IMAGE_MIME.has(m)) return 'image';
+  if (VIDEO_MIME.has(m)) return 'video';
+  return null;
+}
+
+/** 添付メディア参照の入力を検証・正規化する（POST /chat の media フィールド）。 */
+function parseMedia(body: unknown): ChatMedia[] {
+  const raw = (body as { media?: unknown } | null)?.media;
+  if (!Array.isArray(raw)) return [];
+  const out: ChatMedia[] = [];
+  for (const m of raw) {
+    const id = (m as { id?: unknown })?.id;
+    const kind = (m as { kind?: unknown })?.kind;
+    const url = (m as { url?: unknown })?.url;
+    const mime = (m as { mime?: unknown })?.mime;
+    if (typeof id !== 'string' || !id) continue;
+    if (kind !== 'image' && kind !== 'video') continue;
+    if (typeof url !== 'string' || !url) continue;
+    const item: ChatMedia = {
+      id,
+      kind,
+      url,
+      mime: typeof mime === 'string' ? mime : '',
+      source: 'upload',
+    };
+    const name = (m as { name?: unknown })?.name;
+    const size = (m as { size?: unknown })?.size;
+    if (typeof name === 'string') item.name = name.slice(0, 200);
+    if (typeof size === 'number' && Number.isFinite(size)) item.size = size;
+    out.push(item);
+    if (out.length >= WORK_CHAT_MEDIA_MAX_FILES) break;
+  }
+  return out;
+}
+
+// ─── メディア実体パスの安全解決（パストラバーサル防止）──────────
+// chajiChatRouter の resolveMediaPath / isInside / realpath 方式を踏襲する。
+
+let mediaRoot: string | null = null;
+function chatMediaRoot(): string {
+  if (mediaRoot) return mediaRoot;
+  try {
+    mediaRoot = realpathSync(WORK_CHAT_MEDIA_DIR);
+  } catch {
+    mediaRoot = resolve(WORK_CHAT_MEDIA_DIR);
+  }
+  return mediaRoot;
+}
+
+/** target が base 配下か（境界文字付きで prefix 詐称を防ぐ）。 */
+function isInside(base: string, target: string): boolean {
+  if (target === base) return true;
+  const rel = relative(base, target);
+  return rel !== '' && !rel.startsWith('..' + sep) && rel !== '..' && !isAbsolute(rel);
+}
+
+/**
+ * 保存名（<id>-<safe-name>）を WORK_CHAT_MEDIA_DIR 配下の安全な絶対パスに解決する。
+ * 区切り/絶対パスを弾いてから resolve・realpath で配下を確認する。配下外・不在は null。
+ */
+function resolveMediaPath(filename: string): string | null {
+  if (!filename || filename.includes('/') || filename.includes('\\') || isAbsolute(filename)) {
+    return null;
+  }
+  const root = chatMediaRoot();
+  const abs = resolve(root, filename);
+  if (!isInside(root, abs)) return null;
+  try {
+    const real = realpathSync(abs);
+    if (!isInside(root, real)) return null;
+    return real;
+  } catch {
+    return null;
+  }
+}
+
+/** ファイル名のパス区切り・制御文字を無害化する（chaji の sanitize に準拠）。 */
+function sanitizeName(name: string): string {
+  const base = (name || 'media')
+    .replace(/[\\/]/g, '_')
+    .replace(/\.\./g, '_')
+    .replace(/^\./, '_')
+    .replace(/[ -]/g, '_')
+    .slice(0, 120);
+  return base || 'media';
+}
+
+// id → 保存名の対応を multer 処理後に引くため、filename コールバックで採番して req に記録する。
+interface UploadIdEntry {
+  id: string;
+  filename: string;
+  kind: 'image' | 'video';
+}
+
+// 画像と動画で上限が異なるため、上限は「大きい方（動画）」を multer の limits に設定し、
+// 画像が画像上限を超えるケースは保存後チェックで弾く。
+const MEDIA_MAX_BYTES = Math.max(WORK_CHAT_IMAGE_MAX_BYTES, WORK_CHAT_VIDEO_MAX_BYTES);
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination(_req, _file, cb) {
+      mkdirSync(WORK_CHAT_MEDIA_DIR, { recursive: true });
+      cb(null, WORK_CHAT_MEDIA_DIR);
+    },
+    filename(req, file, cb) {
+      const kind = kindOf(file.mimetype);
+      const id = randomUUID();
+      const safe = sanitizeName(file.originalname);
+      const filename = `${id}-${safe}`;
+      const bag = ((req as Request & { _chatMediaIds?: UploadIdEntry[] })._chatMediaIds ??= []);
+      bag.push({ id, filename, kind: kind ?? 'image' });
+      cb(null, filename);
+    },
+  }),
+  limits: { fileSize: MEDIA_MAX_BYTES, files: WORK_CHAT_MEDIA_MAX_FILES },
+  fileFilter(_req, file, cb) {
+    if (!kindOf(file.mimetype)) {
+      cb(new Error('対応していない形式です（画像: png/jpeg/webp/gif/heic、動画: mp4/mov/webm）。'));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
+const uploadFiles = upload.array('files', WORK_CHAT_MEDIA_MAX_FILES);
+
+/** id プレフィックスで保存ディレクトリ内の実ファイル絶対パスを探す（保存名が原名依存で揺れる対策）。 */
+function findImagePathsById(images: ChatMedia[]): string[] {
+  const root = chatMediaRoot();
+  const out: string[] = [];
+  let entries: string[] = [];
+  try {
+    entries = readdirSync(root);
+  } catch {
+    return out;
+  }
+  for (const img of images) {
+    const match = entries.find((f) => f.startsWith(`${img.id}-`));
+    if (match) {
+      const abs = resolveMediaPath(match);
+      if (abs) out.push(abs);
+    }
+  }
+  return out;
+}
+
+/**
+ * 画像添付があるときに、最後の user 発言に「画像を Read して見るよう」指示する補足を足す。
+ * claude CLI は CXO_ROOT 配下のファイルを Read できる。メディアは CXO_ROOT/data/work-chat-media/
+ * に保存されているので、その絶対パスを渡して読ませる。動画は内容解析できない旨を伝える。
+ */
+function buildImageHint(media: ChatMedia[]): string {
+  const images = media.filter((m) => m.kind === 'image');
+  const videos = media.filter((m) => m.kind === 'video');
+  const parts: string[] = [];
+  if (images.length > 0) {
+    const resolved = findImagePathsById(images);
+    if (resolved.length > 0) {
+      parts.push(
+        '',
+        '【添付画像について】相談者が次の画像を添付しました。Read ツールでこれらの画像ファイルを開いて内容を確認し、ECL/会計/IT/PMO の観点から具体的にコメント・壁打ちしてください。読み取れない箇所は推測で断定せず、その旨を正直に伝えてください。',
+        ...resolved.map((p) => `- 画像ファイル: ${p}`),
+      );
+    }
+  }
+  if (videos.length > 0) {
+    parts.push(
+      '',
+      '【添付動画について】相談者が動画を添付しましたが、動画の内容解析はできません。気になる点は文章で教えていただくようお願いしてください。',
+    );
+  }
+  return parts.join('\n');
+}
 
 /** リクエスト body の messages を検証・正規化する。不正なら null を返す。 */
 function parseMessages(body: unknown): ChatMessageInput[] | null {
@@ -165,6 +386,7 @@ function buildPrompt(messages: ChatMessageInput[]): string {
  */
 function buildContext(
   clientMessages: ChatMessageInput[],
+  media: ChatMedia[],
 ): { context: ChatMessageInput[]; userText: string } {
   // クライアント payload は parseMessages で末尾 user 保証済み。
   const userText = clientMessages[clientMessages.length - 1]?.content ?? '';
@@ -177,7 +399,10 @@ function buildContext(
   ) {
     stored.pop();
   }
-  return { context: [...stored, { role: 'user', content: userText }], userText };
+  // 画像/動画の補足は最後の user 発言に連結する（プロンプト末尾の指示として効く）。
+  const hint = media.length > 0 ? buildImageHint(media) : '';
+  const lastUser = hint ? `${userText}\n${hint}` : userText;
+  return { context: [...stored, { role: 'user', content: lastUser }], userText };
 }
 
 /** SSE イベントを 1 行書き出す。 */
@@ -212,7 +437,7 @@ const ERROR_MESSAGE =
 /** 進行中ジョブのライブストリーム購読者（SSE 接続が乗っているときだけ存在）。 */
 interface JobSubscriber {
   onChunk: (text: string) => void;
-  onDone: (answer: string, status: 'done' | 'error') => void;
+  onDone: (answer: string, media: ChatMedia[], status: 'done' | 'error') => void;
 }
 
 /** jobId → 進行中ジョブの状態。SSE 後着・再接続でも途中経過と確定結果を拾えるようにする。 */
@@ -221,6 +446,7 @@ interface RunningJob {
   subscribers: Set<JobSubscriber>;
   finished: boolean;
   finalAnswer: string;
+  finalMedia: ChatMedia[];
   finalStatus: 'done' | 'error';
 }
 
@@ -236,6 +462,7 @@ async function runJob(jobId: string, assistantId: string, prompt: string): Promi
     subscribers: new Set(),
     finished: false,
     finalAnswer: '',
+    finalMedia: [],
     finalStatus: 'done',
   };
   runningJobs.set(jobId, job);
@@ -271,31 +498,52 @@ async function runJob(jobId: string, assistantId: string, prompt: string): Promi
       // 実本文が流れていない失敗 → ユーザー向け丁寧メッセージで error 確定（無言で消えない）。
       const haystack = `${result.stdout ?? ''}\n${result.error ?? ''}`;
       const fallback = looksLikeLimit(haystack) ? LIMIT_MESSAGE : ERROR_MESSAGE;
-      finalizeAssistant(assistantId, 'error', fallback);
-      finishJob(job, fallback, 'error');
+      finalizeAssistant(assistantId, 'error', fallback, []);
+      finishJob(job, fallback, [], 'error');
       return;
     }
 
-    // 成功、または途中まで実本文が流れた失敗 → 流れた本文を確定保存する。
+    // 成功、または途中まで実本文が流れた失敗 → 流れた本文を確定保存する（メディア後処理も適用）。
     const source = failed ? streamed.trim() : answer;
-    finalizeAssistant(assistantId, 'done', source);
-    finishJob(job, source, 'done');
+    const { cleaned, media: assistantMedia } = await finalizeAssistantText(source);
+    finalizeAssistant(assistantId, 'done', cleaned, assistantMedia);
+    finishJob(job, cleaned, assistantMedia, 'done');
   } catch (err) {
     // 予期しない例外でも無言で消さない。error として丁寧メッセージを確定する。
     console.error('[work-chat] job failed:', err);
-    finalizeAssistant(assistantId, 'error', ERROR_MESSAGE);
-    finishJob(job, ERROR_MESSAGE, 'error');
+    finalizeAssistant(assistantId, 'error', ERROR_MESSAGE, []);
+    finishJob(job, ERROR_MESSAGE, [], 'error');
+  }
+}
+
+/**
+ * アシスタント本文のメディアディレクティブを後処理する薄いラッパー。
+ * 例外時は本文をそのまま返してメディア無しに倒し、チャットを止めない。
+ */
+async function finalizeAssistantText(
+  text: string,
+): Promise<{ cleaned: string; media: ChatMedia[] }> {
+  try {
+    return await processAssistantText(text);
+  } catch {
+    return { cleaned: text, media: [] };
   }
 }
 
 /** ジョブ完了を購読者へ通知し、しばらく後にマップから掃除する（後着クライアントの猶予を残す）。 */
-function finishJob(job: RunningJob, answer: string, status: 'done' | 'error'): void {
+function finishJob(
+  job: RunningJob,
+  answer: string,
+  media: ChatMedia[],
+  status: 'done' | 'error',
+): void {
   job.finished = true;
   job.finalAnswer = answer;
+  job.finalMedia = media;
   job.finalStatus = status;
   for (const s of job.subscribers) {
     try {
-      s.onDone(answer, status);
+      s.onDone(answer, media, status);
     } catch {
       /* noop */
     }
@@ -319,13 +567,15 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // 正本のサーバ履歴を文脈にし、末尾に今回の user 発言を置く。
-  const { context, userText } = buildContext(messages);
+  const media = parseMedia(req.body);
+
+  // 正本のサーバ履歴を文脈にし、末尾に今回の user 発言（＋画像補足）を置く。
+  const { context, userText } = buildContext(messages, media);
   const prompt = buildPrompt(context);
   const wantsStream = (req.headers.accept ?? '').includes('text/event-stream');
 
   // user を即永続化し、assistant の pending エントリを作る（ここで質問は失われなくなる）。
-  const { jobId, assistantId } = startExchange(userText);
+  const { jobId, assistantId } = startExchange(userText, media.length > 0 ? media : undefined);
 
   // 生成はバックグラウンドで走らせる（res の生死に依存しない）。await しない。
   void runJob(jobId, assistantId, prompt);
@@ -333,8 +583,9 @@ async function handleChat(req: Request, res: Response): Promise<void> {
 
   if (wantsStream) {
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    // nginx/cloudflared 越しの buffering を無効化（イベントが即届く／途中で握り込まれない）。
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
     // フロントが pending を相関できるよう jobId を最初に通知する。
@@ -349,28 +600,55 @@ async function handleChat(req: Request, res: Response): Promise<void> {
 
     if (job.finished) {
       // 既に完了済み（極めて速い生成）。確定結果をそのまま返す。
-      sseWrite(res, { type: 'done', jobId, answer: job.finalAnswer, status: job.finalStatus });
+      sseWrite(res, {
+        type: 'done',
+        jobId,
+        answer: job.finalAnswer,
+        media: job.finalMedia,
+        status: job.finalStatus,
+      });
       res.end();
       return;
     }
 
+    // ── keep-alive ping（/api/stream に倣う）──────────────────────────────
+    // 出典機能の WebSearch は事実質問で 80〜180 秒かかり、その間 SSE が無音になる。
+    // cloudflared など proxy/トンネルはアイドル（~100s）で接続を握り込み/切断するため、
+    // 15 秒ごとに SSE コメント行（`: ping`）を流してアイドル切断を防ぐ。
+    const PING_INTERVAL_MS = 15_000;
+    const keepAlive = setInterval(() => {
+      try {
+        res.write(`: ping ${Date.now()}\n\n`);
+      } catch {
+        /* 既に切断済みなら close ハンドラで掃除される */
+      }
+    }, PING_INTERVAL_MS);
+
     // 途中経過に追いつかせてから購読する。
     if (job.buffer) sseWrite(res, { type: 'chunk', text: job.buffer });
     let closed = false;
+    const finish = () => {
+      clearInterval(keepAlive);
+      if (!closed) {
+        closed = true;
+        res.end();
+      }
+    };
     const subscriber: JobSubscriber = {
       onChunk: (text) => {
         if (!closed) sseWrite(res, { type: 'chunk', text });
       },
-      onDone: (answer, status) => {
+      onDone: (answer, m, status) => {
         if (closed) return;
-        sseWrite(res, { type: 'done', jobId, answer, status });
-        res.end();
+        sseWrite(res, { type: 'done', jobId, answer, media: m, status });
+        finish();
       },
     };
     job.subscribers.add(subscriber);
-    // クライアント切断時は購読を外すだけ（claude プロセスは kill しない＝生成は継続する）。
+    // クライアント切断時は ping を止め購読を外すだけ（claude プロセスは kill しない＝生成は継続）。
     res.on('close', () => {
       closed = true;
+      clearInterval(keepAlive);
       job.subscribers.delete(subscriber);
     });
     return;
@@ -395,6 +673,7 @@ async function handleChat(req: Request, res: Response): Promise<void> {
   res.status(200).json({
     jobId,
     answer: finished.content,
+    media: finished.media ?? [],
     status: finished.status ?? 'done',
     ...(finished.status === 'error' ? { errorKind: 'engine_error' } : {}),
   });
@@ -426,6 +705,7 @@ function handleJob(req: Request, res: Response): void {
       jobId: id,
       status: found.status ?? 'done',
       answer: found.content,
+      media: found.media ?? [],
     });
   } catch {
     res.status(500).json({ error: 'failed to read job' });
@@ -442,11 +722,188 @@ function handleClear(_req: Request, res: Response): void {
   }
 }
 
+/** multer を Promise 化。サイズ/枚数超過・MIME reject は適切なステータスで返して false。 */
+function runMediaUpload(req: Request, res: Response): Promise<boolean> {
+  return new Promise((done) => {
+    uploadFiles(req, res, (err: unknown) => {
+      if (err) {
+        if (err instanceof multer.MulterError) {
+          if (err.code === 'LIMIT_FILE_SIZE') {
+            const mb = Math.round(MEDIA_MAX_BYTES / (1024 * 1024));
+            res.status(413).json({ error: `ファイルサイズが上限（${mb}MB）を超えています。`, code: err.code });
+            done(false);
+            return;
+          }
+          res.status(400).json({ error: err.message, code: err.code });
+          done(false);
+          return;
+        }
+        res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+        done(false);
+        return;
+      }
+      done(true);
+    });
+  });
+}
+
+// POST /chat/upload — 画像/動画をアップロードしてメディア参照を返す（保存のみ。送信は POST /chat）。
+async function handleUpload(req: Request, res: Response): Promise<void> {
+  mkdirSync(WORK_CHAT_MEDIA_DIR, { recursive: true });
+  const ok = await runMediaUpload(req, res);
+  if (!ok) return;
+
+  const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+  const idBag = (req as Request & { _chatMediaIds?: UploadIdEntry[] })._chatMediaIds ?? [];
+  if (files.length === 0) {
+    res.status(400).json({ error: 'ファイルがありません（フィールド名は "files" を使用してください）。' });
+    return;
+  }
+
+  const out: ChatMedia[] = [];
+  for (const f of files) {
+    const kind = kindOf(f.mimetype);
+    if (!kind) continue;
+    // 画像は画像上限で個別に弾く（multer limits は動画基準の大きい上限のため）。
+    const abs = f.path ?? join(WORK_CHAT_MEDIA_DIR, f.filename);
+    let size = f.size;
+    try { size = statSync(abs).size; } catch { /* use f.size */ }
+    if (kind === 'image' && size > WORK_CHAT_IMAGE_MAX_BYTES) {
+      try { unlinkSync(abs); } catch { /* 無視 */ }
+      const mb = Math.round(WORK_CHAT_IMAGE_MAX_BYTES / (1024 * 1024));
+      res.status(413).json({ error: `画像のサイズが上限（${mb}MB）を超えています。` });
+      return;
+    }
+    const entry = idBag.find((e) => e.filename === f.filename);
+    const id = entry?.id ?? randomUUID();
+    out.push({
+      id,
+      kind,
+      url: `/api/work/chat/media/${encodeURIComponent(id)}`,
+      mime: f.mimetype,
+      name: f.originalname,
+      size,
+      source: 'upload',
+    });
+  }
+
+  if (out.length === 0) {
+    res.status(400).json({ error: '保存できるメディアがありませんでした。' });
+    return;
+  }
+  res.status(201).json({ ok: true, media: out });
+}
+
+/** id プレフィックスで保存ディレクトリ内の実ファイル名を探す。 */
+function findFilenameById(id: string): string | null {
+  const root = chatMediaRoot();
+  try {
+    const entries = readdirSync(root);
+    return entries.find((f) => f.startsWith(`${id}-`)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** 保存名（<id>-<original>）の拡張子から MIME を推定する（許可セット限定）。 */
+function mimeOf(filename: string): string {
+  const ext = filename.toLowerCase().split('.').pop() ?? '';
+  switch (ext) {
+    case 'png':
+      return 'image/png';
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'webp':
+      return 'image/webp';
+    case 'gif':
+      return 'image/gif';
+    case 'heic':
+      return 'image/heic';
+    case 'mp4':
+      return 'video/mp4';
+    case 'mov':
+      return 'video/quicktime';
+    case 'webm':
+      return 'video/webm';
+    default:
+      return 'application/octet-stream';
+  }
+}
+
+// GET /chat/media/:id — メディア実体をストリーム配信（Range 対応＝動画シーク）。
+function handleStreamMedia(req: Request, res: Response): void {
+  const id = String(req.params.id ?? '');
+  if (!id || id.includes('/') || id.includes('\\') || id.includes('..')) {
+    res.status(400).json({ error: 'invalid id' });
+    return;
+  }
+  const filename = findFilenameById(id);
+  if (!filename) {
+    res.status(404).json({ error: 'media not found' });
+    return;
+  }
+  const abs = resolveMediaPath(filename);
+  if (!abs) {
+    res.status(404).json({ error: 'media file not found' });
+    return;
+  }
+  let total = 0;
+  try {
+    const st = statSync(abs);
+    if (!st.isFile()) {
+      res.status(404).json({ error: 'media file not found' });
+      return;
+    }
+    total = st.size;
+  } catch {
+    res.status(404).json({ error: 'media file not found' });
+    return;
+  }
+  const mime = mimeOf(filename);
+  res.type(mime);
+  res.set('Cache-Control', 'private, max-age=300');
+  res.set('Accept-Ranges', 'bytes');
+
+  const onErr = (stream: ReturnType<typeof createReadStream>) =>
+    stream.on('error', () => {
+      if (!res.headersSent) res.status(500).json({ error: 'failed to read media' });
+      else res.destroy();
+    });
+
+  const range = req.headers.range;
+  const m = typeof range === 'string' ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null;
+  if (m && total > 0) {
+    let start = m[1] === '' ? 0 : Number(m[1]);
+    let end = m[2] === '' ? total - 1 : Number(m[2]);
+    if (!Number.isFinite(start) || start < 0) start = 0;
+    if (!Number.isFinite(end) || end >= total) end = total - 1;
+    if (start > end || start >= total) {
+      res.status(416).set('Content-Range', `bytes */${total}`).end();
+      return;
+    }
+    res.status(206);
+    res.set('Content-Range', `bytes ${start}-${end}/${total}`);
+    res.set('Content-Length', String(end - start + 1));
+    const stream = createReadStream(abs, { start, end });
+    onErr(stream);
+    stream.pipe(res);
+    return;
+  }
+
+  res.set('Content-Length', String(total));
+  const stream = createReadStream(abs);
+  onErr(stream);
+  stream.pipe(res);
+}
+
 export function workChatRouter(): Router {
   const router = Router();
   router.get('/chat/history', (req, res) => handleHistory(req, res));
   router.get('/chat/job/:id', (req, res) => handleJob(req, res));
   router.delete('/chat/history', (req, res) => handleClear(req, res));
+  router.post('/chat/upload', (req, res) => void handleUpload(req, res));
+  router.get('/chat/media/:id', (req, res) => handleStreamMedia(req, res));
   router.post('/chat', (req, res) => void handleChat(req, res));
   return router;
 }

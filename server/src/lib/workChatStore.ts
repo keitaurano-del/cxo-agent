@@ -1,9 +1,9 @@
 // workChatStore — 仕事チャット（ECL/PMO 学習・壁打ちアドバイザー）の会話履歴 JSONL ストア。
 //
-// chajiChatStore.ts の作法をそのまま踏襲する。ただし仕事チャットは「テキストのみ」で、
-// メディア（画像/動画）添付は扱わない（chaji の ChatMedia / media 関連は取り込まない）。
-// 単一の会話スレッド（個人用ダッシュボードなので分岐不要）をサーバ側に永続化する。
-// 端末ローカルの localStorage と違い、別端末・リロードをまたいで過去の質問が残る。
+// chajiChatStore.ts の作法をそのまま踏襲する。送信側（ユーザー）の画像/動画添付と、返信側
+// （アドバイザー）のメディア返却（YouTube 埋め込み・生成図解・Web 画像）の両方を扱う
+// （chaji と同じ ChatMedia 構造）。単一の会話スレッド（個人用ダッシュボードなので分岐不要）を
+// サーバ側に永続化する。端末ローカルの localStorage と違い、別端末・リロードをまたいで過去の質問が残る。
 //
 // データストア（data/ 配下・.gitignore 済み）:
 //   data/work-chat.jsonl  : 追記専用。1 行 = 1 レコード。
@@ -30,13 +30,55 @@ import { WORK_CHAT_FILE } from '../config.js';
 
 export type ChatRole = 'user' | 'assistant';
 
+/**
+ * メッセージに添付されたメディア参照（chajiChatStore の ChatMedia を踏襲）。
+ *   - 送信側（相談者）の画像/動画アップロード（kind: 'image'|'video', source: 'upload'）
+ *   - 返信側（アドバイザー）のメディア返却:
+ *       - YouTube 参考動画埋め込み（kind: 'youtube', source: 'web'）— oEmbed で実在検証済み
+ *       - Gemini 生成図解（kind: 'image', source: 'generated'）— data/work-chat-media/ に保存
+ *       - Web 実在画像の提示（kind: 'image', source: 'web'）— 検証後サーバへ取り込み自前配信
+ * 実体は data/work-chat-media/ 配下に保存し、ここには参照だけを持つ。YouTube は埋め込みのため
+ * 実体保存はせず videoId/url を持つ。実在しないメディアは決してここに入れない。
+ */
+export interface ChatMedia {
+  /** 一意 ID（保存名のプレフィックス・React key にも使う）。 */
+  id: string;
+  /** 種別。'youtube' は iframe 埋め込み、'image'/'video' は実体配信。動画は AI が内容解析しない前提。 */
+  kind: 'image' | 'video' | 'youtube';
+  /** 配信 URL（GET /api/work/chat/media/:id）。'youtube' は視聴ページ URL。 */
+  url: string;
+  /** MIME タイプ（'youtube' では空でよい）。 */
+  mime: string;
+  /** 元ファイル名（表示・ダウンロード用）。 */
+  name?: string;
+  /** バイトサイズ。 */
+  size?: number;
+  /**
+   * 出所。
+   *   - 'upload'    : 相談者がアップロードした添付。
+   *   - 'generated': アドバイザーが Gemini で生成した図解。
+   *   - 'web'      : Web 検索で見つけ、実在検証した YouTube 動画 / 信頼ソースの画像。
+   */
+  source?: 'upload' | 'generated' | 'web';
+  /** 任意のキャプション（なぜこの動画/画像がおすすめか・図解の説明）。 */
+  caption?: string;
+  /** 'youtube' の動画 ID（youtube-nocookie の埋め込みに使う）。検証済みのものだけ入る。 */
+  videoId?: string;
+  /** 'youtube'/'web' の出典・帰属表示用 URL（視聴元ページ / 画像の出典ページ）。 */
+  sourceUrl?: string;
+  /** 出典タイトル（oEmbed の title / 出典ページタイトル）。帰属表示に使う。 */
+  sourceTitle?: string;
+}
+
 /** メッセージの生成状態。assistant のみ pending/error を取りうる（user は常に done 相当）。 */
 export type ChatStatus = 'pending' | 'done' | 'error';
 
-/** 公開形のメッセージ（フロント・プロンプトに渡す形）。テキストのみ。 */
+/** 公開形のメッセージ（フロント・プロンプトに渡す形）。 */
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  /** 添付メディア（無ければ省略）。 */
+  media?: ChatMedia[];
   /**
    * 生成状態。'pending'=生成中 / 'done'=完了 / 'error'=失敗（丁寧メッセージ確定）。
    * 既存データ（status 無し）は 'done' とみなす（後方互換）。
@@ -53,6 +95,8 @@ interface MessageRecord {
   id: string;
   role: ChatRole;
   content: string;
+  /** 添付メディア（無ければ省略）。 */
+  media?: ChatMedia[];
   /** 生成状態（省略時は 'done' 相当）。 */
   status?: ChatStatus;
   /** ジョブ ID（assistant のバックグラウンド生成と紐づく）。 */
@@ -67,6 +111,7 @@ interface UpdateRecord {
   /** 対象 message の id。 */
   id: string;
   content?: string;
+  media?: ChatMedia[];
   status: ChatStatus;
   ts: string;
 }
@@ -122,6 +167,7 @@ interface ResolvedMessage {
   id: string;
   role: ChatRole;
   content: string;
+  media?: ChatMedia[];
   status: ChatStatus;
   jobId?: string;
   ts: string;
@@ -153,6 +199,7 @@ function liveMessages(): ResolvedMessage[] {
         status: rec.status ?? 'done',
         ts: rec.ts,
       };
+      if (Array.isArray(rec.media) && rec.media.length > 0) resolved.media = rec.media;
       if (rec.jobId) resolved.jobId = rec.jobId;
       if (!byId.has(rec.id)) order.push(rec.id);
       byId.set(rec.id, resolved);
@@ -161,6 +208,10 @@ function liveMessages(): ResolvedMessage[] {
       if (!target) continue; // cleared 境界をまたいだ孤児 update は無視。
       target.status = rec.status;
       if (typeof rec.content === 'string') target.content = rec.content;
+      if (Array.isArray(rec.media)) {
+        if (rec.media.length > 0) target.media = rec.media;
+        else delete target.media;
+      }
     }
   }
   return order.map((id) => byId.get(id)).filter((m): m is ResolvedMessage => !!m);
@@ -168,9 +219,10 @@ function liveMessages(): ResolvedMessage[] {
 
 // ─── 公開 API ────────────────────────────────────────────
 
-/** 公開形（role/content/status/jobId）に整形する。 */
+/** 公開形（role/content/media/status/jobId）に整形する。media が空なら省略する。 */
 function toPublic(r: ResolvedMessage): ChatMessage {
   const out: ChatMessage = { role: r.role, content: r.content };
+  if (Array.isArray(r.media) && r.media.length > 0) out.media = r.media;
   if (r.status && r.status !== 'done') out.status = r.status;
   if (r.jobId) out.jobId = r.jobId;
   return out;
@@ -188,11 +240,13 @@ function newId(): string {
 
 /**
  * メッセージを 1 件追記する。content は trim + 長さ上限。保存した id を返す。
+ * media を渡すと添付参照を一緒に永続化する（再オープンで画像/動画が残る）。
  * status/jobId を渡すと生成状態・ジョブ相関キーを併せて永続化する（assistant の pending 用）。
  */
 export function appendMessage(
   role: ChatRole,
   content: string,
+  media?: ChatMedia[],
   opts?: { status?: ChatStatus; jobId?: string },
 ): string {
   const text = String(content ?? '').trim().slice(0, MAX_CONTENT_CHARS);
@@ -203,6 +257,7 @@ export function appendMessage(
     content: text,
     ts: new Date().toISOString(),
   };
+  if (Array.isArray(media) && media.length > 0) rec.media = media;
   if (opts?.status) rec.status = opts.status;
   if (opts?.jobId) rec.jobId = opts.jobId;
   appendRecord(rec);
@@ -215,22 +270,26 @@ export function appendMessage(
  * 接続が切れても user の質問と pending 状態は残るので、再オープンで「考え中…」を出して解決できる。
  * 返り値: { jobId, assistantId }（jobId は pending エントリと同値で相関キー）。
  */
-export function startExchange(userText: string): { jobId: string; assistantId: string } {
+export function startExchange(
+  userText: string,
+  userMedia?: ChatMedia[],
+): { jobId: string; assistantId: string } {
   const jobId = newId();
-  appendMessage('user', userText);
-  const assistantId = appendMessage('assistant', '', { status: 'pending', jobId });
+  appendMessage('user', userText, userMedia);
+  const assistantId = appendMessage('assistant', '', undefined, { status: 'pending', jobId });
   return { jobId, assistantId };
 }
 
 /**
  * pending の assistant エントリを最終状態（done/error）に確定する（update 行を追記）。
- * status='done' は最終本文、status='error' はユーザー向けの丁寧メッセージを確定する。
+ * status='done' は最終本文＋検証済み media、status='error' はユーザー向けの丁寧メッセージを確定する。
  * クライアント接続の有無に関係なく必ず保存される（接続から切り離した永続化の肝）。
  */
 export function finalizeAssistant(
   assistantId: string,
   status: 'done' | 'error',
   content: string,
+  media?: ChatMedia[],
 ): void {
   const rec: UpdateRecord = {
     type: 'update',
@@ -239,6 +298,8 @@ export function finalizeAssistant(
     status,
     ts: new Date().toISOString(),
   };
+  // media は明示的に配列を渡したときのみ反映（done は検証済み配列、error は [] で添付なしに倒す）。
+  if (Array.isArray(media)) rec.media = media;
   appendRecord(rec);
 }
 

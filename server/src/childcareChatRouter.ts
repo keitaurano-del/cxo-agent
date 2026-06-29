@@ -179,6 +179,9 @@ export const SUKUSUKU_SYSTEM_PROMPT = [
   '- 記録が無い、または日数が少ない場合は「まだ記録が少ない」前提で、無理に推測や断定をしないでください。一般的な目安を案内しつつ、必要なら記録を続けることをやさしく促してください。',
   '- 記録と無関係な一般的な相談（離乳食の開始時期、制度・手続き、グッズの選び方など）には、これまでどおり一般的な知識として答えてください。記録に無理に結びつけないでください。',
   '',
+  '【赤ちゃんの呼び名】',
+  '- 赤ちゃんの名前・呼び名は、システムから渡される「赤ちゃんの記録（ぴよログ要約）」の内容を正とします。過去の会話履歴に別の呼び名が出てきても、最新のぴよログ要約の方を優先してください（記録が更新されている場合があります）。呼び名が分からないときは無理に名前で呼ばず、「お子さん」「赤ちゃん」と表現してください。',
+  '',
   '【その他】',
   '- 必ず日本語で回答してください。',
   '- 提供された会話履歴の文脈を踏まえて、自然に続けて答えてください。',
@@ -817,8 +820,9 @@ async function handleChat(req: Request, res: Response): Promise<void> {
 
   if (wantsStream) {
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    // nginx/cloudflared 越しの buffering を無効化（イベントが即届く／途中で握り込まれない）。
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
     // フロントが pending を相関できるよう jobId を最初に通知する。
@@ -844,9 +848,31 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    // ── keep-alive ping（/api/stream に倣う）──────────────────────────────
+    // 出典機能の WebSearch は事実質問で 80〜180 秒かかり、その間 SSE が無音になる。
+    // cloudflared など proxy/トンネルはアイドル（~100s）で接続を握り込み/切断するため、
+    // job→最初の chunk までの長い沈黙でトンネルが切れて「全然回答しない」状態になっていた。
+    // 15 秒ごとに SSE コメント行（`: ping`）を流してアイドル切断を防ぐ。
+    // コメント行（`:` 始まり）はクライアントの data: パーサに乗らないので二重描画もしない。
+    const PING_INTERVAL_MS = 15_000;
+    const keepAlive = setInterval(() => {
+      try {
+        res.write(`: ping ${Date.now()}\n\n`);
+      } catch {
+        /* 既に切断済みなら close ハンドラで掃除される */
+      }
+    }, PING_INTERVAL_MS);
+
     // 途中経過に追いつかせてから購読する。
     if (job.buffer) sseWrite(res, { type: 'chunk', text: job.buffer });
     let closed = false;
+    const finish = () => {
+      clearInterval(keepAlive);
+      if (!closed) {
+        closed = true;
+        res.end();
+      }
+    };
     const subscriber: JobSubscriber = {
       onChunk: (text) => {
         if (!closed) sseWrite(res, { type: 'chunk', text });
@@ -854,15 +880,16 @@ async function handleChat(req: Request, res: Response): Promise<void> {
       onDone: (answer, m, status) => {
         if (closed) return;
         sseWrite(res, { type: 'done', jobId, answer, media: m, status });
-        res.end();
+        finish();
       },
     };
     job.subscribers.add(subscriber);
-    // クライアント切断時は購読を外すだけ（claude プロセスは kill しない＝生成は継続する）。
+    // クライアント切断時は ping を止め購読を外すだけ（claude プロセスは kill しない＝生成は継続）。
     // POST の req 'close' は body 読了で即発火しうるので使わない。res（レスポンス socket）の
     // 'close' が実際のクライアント切断シグナル。res.end() 後の close では既に subscriber は外れている。
     res.on('close', () => {
       closed = true;
+      clearInterval(keepAlive);
       job.subscribers.delete(subscriber);
     });
     return;

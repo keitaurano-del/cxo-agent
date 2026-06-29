@@ -49,6 +49,7 @@ import {
   CHAJI_CHAT_VIDEO_MAX_BYTES,
   CXO_ROOT,
 } from './config.js';
+import { processAssistantText } from './lib/chajiMedia.js';
 import {
   clearMessages,
   finalizeAssistant,
@@ -125,6 +126,18 @@ export const CHAJI_SYSTEM_PROMPT = [
   '- 出典として URL を載せてよいのは、このチャット内で実際に WebSearch または WebFetch を使って取得し、内容を確認できたページの URL だけです。',
   '- 記憶・うろ覚え・推測で URL を書いてはいけません。「たぶんこういう URL のはず」「公式サイトにあるはず」で URL を組み立てることは厳禁です。実在しない URL やデッドリンクを出してはいけません。',
   '- 検索しても確認できる適切な出典がどうしても得られない場合は、リンクを捏造せず「## 出典」見出しを付けないでください。その場合は「正確な作法は、お稽古の先生や表千家不審菴の公式情報でご確認ください。」と添えてください。リンクを捏造するくらいなら、出典なしで案内に留めるのが正しい対応です。',
+  '',
+  '【参考メディアの提示（動画・図解・画像を埋め込みで添えられます）】',
+  '- あなたは回答に、表千家の作法・道具・所作・しつらえの理解に役立つメディア（動画・図解・画像）を最大2点まで埋め込んで添えられます。本当に役立つときだけ、原則1〜2点に留めてください。毎回は添えないでください（軽い相談・雑談には不要です）。「このチャットには動画を再生・検索する機能がない」といった案内はしないでください（埋め込み機能はあります）。',
+  '- メディアを添えたいときは、本文中に次の専用記法を1行で書いてください。サーバがこの記法を受け取り、実在を検証・生成してから実際のメディアに変換します（記法自体は利用者には表示されません）。',
+  '- 参考動画（YouTube）: 「[[youtube: 動画のwatch URL | なぜこの動画がおすすめかの一言]]」。',
+  '    - 帛紗（ふくさ）のさばき方、茶筅通し、茶碗の清め方、薄茶点前の流れ、客の所作など、表千家の作法を学ぶのに役立つ実在の YouTube 動画の URL（https://www.youtube.com/watch?v=... 形式）を、WebSearch で実在と内容を確認してから書いてください。',
+  '    - できるだけ表千家の作法に沿った動画（表千家不審菴公式チャンネル等があればそれ）を優先し、流派が異なる作法の動画を表千家のものとして案内しないでください。流派が判別できない/他流の可能性がある動画は、その旨を一言添えるか、添えないでください。',
+  '    - 記憶・推測で URL を組み立ててはいけません。サーバが oEmbed で実在を再検証し、存在しない・限定公開・削除済みの動画は自動で除外します。',
+  '- 図解の生成: 「[[gen-image: 図解にしたい内容の説明（日本語）]]」。茶事の流れ（寄付→待合→初座→中立→後座）の図、点前の道具の置き合わせの図、帛紗さばきの手順の図など、説明を分かりやすくする図解をその場で生成します。',
+  '- 信頼できる画像・図表: 「[[web-image: 画像のURL | 出典（機関名・ページ名）]]」。表千家不審菴公式・美術館/博物館・公的機関・学術機関など信頼できるソースの実在する画像 URL を、WebSearch/WebFetch で確認できたときだけ書いてください。物販サイト・出典不明サイトの画像は使わないでください。サーバが URL の到達性・画像であること・信頼ホストであることを再検証し、ダメなら自動で除外します。',
+  '- 重要: メディアは「あれば添える」程度です。検証で実在が確認できないものは自動的に落ちます。落ちることを前提に、本文は「参考になりそうな動画も探しましたが見つかりませんでした」等と自然に流せるように書き、メディアが無くても回答が完結するようにしてください。',
+  '- メディア記法は出典の捏造禁止・信頼ソース優先・表千家の作法を基準にする方針を一切変えません。',
   '',
   '【その他】',
   '- 必ず日本語で回答してください。',
@@ -426,7 +439,7 @@ const ERROR_MESSAGE =
 /** 進行中ジョブのライブストリーム購読者（SSE 接続が乗っているときだけ存在）。 */
 interface JobSubscriber {
   onChunk: (text: string) => void;
-  onDone: (answer: string, status: 'done' | 'error') => void;
+  onDone: (answer: string, media: ChatMedia[], status: 'done' | 'error') => void;
 }
 
 /** jobId → 進行中ジョブの状態。SSE 後着・再接続でも途中経過と確定結果を拾えるようにする。 */
@@ -435,6 +448,7 @@ interface RunningJob {
   subscribers: Set<JobSubscriber>;
   finished: boolean;
   finalAnswer: string;
+  finalMedia: ChatMedia[];
   finalStatus: 'done' | 'error';
 }
 
@@ -450,6 +464,7 @@ async function runJob(jobId: string, assistantId: string, prompt: string): Promi
     subscribers: new Set(),
     finished: false,
     finalAnswer: '',
+    finalMedia: [],
     finalStatus: 'done',
   };
   runningJobs.set(jobId, job);
@@ -485,31 +500,52 @@ async function runJob(jobId: string, assistantId: string, prompt: string): Promi
       // 実本文が流れていない失敗 → ユーザー向け丁寧メッセージで error 確定（無言で消えない）。
       const haystack = `${result.stdout ?? ''}\n${result.error ?? ''}`;
       const fallback = looksLikeLimit(haystack) ? LIMIT_MESSAGE : ERROR_MESSAGE;
-      finalizeAssistant(assistantId, 'error', fallback);
-      finishJob(job, fallback, 'error');
+      finalizeAssistant(assistantId, 'error', fallback, []);
+      finishJob(job, fallback, [], 'error');
       return;
     }
 
-    // 成功、または途中まで実本文が流れた失敗 → 流れた本文を確定保存する。
+    // 成功、または途中まで実本文が流れた失敗 → 流れた本文を確定保存する（メディア後処理も適用）。
     const source = failed ? streamed.trim() : answer;
-    finalizeAssistant(assistantId, 'done', source);
-    finishJob(job, source, 'done');
+    const { cleaned, media: assistantMedia } = await finalizeAssistantText(source);
+    finalizeAssistant(assistantId, 'done', cleaned, assistantMedia);
+    finishJob(job, cleaned, assistantMedia, 'done');
   } catch (err) {
     // 予期しない例外でも無言で消さない。error として丁寧メッセージを確定する。
     console.error('[chaji-chat] job failed:', err);
-    finalizeAssistant(assistantId, 'error', ERROR_MESSAGE);
-    finishJob(job, ERROR_MESSAGE, 'error');
+    finalizeAssistant(assistantId, 'error', ERROR_MESSAGE, []);
+    finishJob(job, ERROR_MESSAGE, [], 'error');
+  }
+}
+
+/**
+ * アシスタント本文のメディアディレクティブを後処理する薄いラッパー。
+ * 例外時は本文をそのまま返してメディア無しに倒し、チャットを止めない。
+ */
+async function finalizeAssistantText(
+  text: string,
+): Promise<{ cleaned: string; media: ChatMedia[] }> {
+  try {
+    return await processAssistantText(text);
+  } catch {
+    return { cleaned: text, media: [] };
   }
 }
 
 /** ジョブ完了を購読者へ通知し、しばらく後にマップから掃除する（後着クライアントの猶予を残す）。 */
-function finishJob(job: RunningJob, answer: string, status: 'done' | 'error'): void {
+function finishJob(
+  job: RunningJob,
+  answer: string,
+  media: ChatMedia[],
+  status: 'done' | 'error',
+): void {
   job.finished = true;
   job.finalAnswer = answer;
+  job.finalMedia = media;
   job.finalStatus = status;
   for (const s of job.subscribers) {
     try {
-      s.onDone(answer, status);
+      s.onDone(answer, media, status);
     } catch {
       /* noop */
     }
@@ -550,8 +586,9 @@ async function handleChat(req: Request, res: Response): Promise<void> {
 
   if (wantsStream) {
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    // nginx/cloudflared 越しの buffering を無効化（イベントが即届く／途中で握り込まれない）。
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
     // フロントが pending を相関できるよう jobId を最初に通知する。
@@ -566,30 +603,58 @@ async function handleChat(req: Request, res: Response): Promise<void> {
 
     if (job.finished) {
       // 既に完了済み（極めて速い生成）。確定結果をそのまま返す。
-      sseWrite(res, { type: 'done', jobId, answer: job.finalAnswer, status: job.finalStatus });
+      sseWrite(res, {
+        type: 'done',
+        jobId,
+        answer: job.finalAnswer,
+        media: job.finalMedia,
+        status: job.finalStatus,
+      });
       res.end();
       return;
     }
 
+    // ── keep-alive ping（/api/stream に倣う）──────────────────────────────
+    // 出典機能の WebSearch は事実質問で 80〜180 秒かかり、その間 SSE が無音になる。
+    // cloudflared など proxy/トンネルはアイドル（~100s）で接続を握り込み/切断するため、
+    // 15 秒ごとに SSE コメント行（`: ping`）を流してアイドル切断を防ぐ。
+    // コメント行（`:` 始まり）はクライアントの data: パーサに乗らないので二重描画もしない。
+    const PING_INTERVAL_MS = 15_000;
+    const keepAlive = setInterval(() => {
+      try {
+        res.write(`: ping ${Date.now()}\n\n`);
+      } catch {
+        /* 既に切断済みなら close ハンドラで掃除される */
+      }
+    }, PING_INTERVAL_MS);
+
     // 途中経過に追いつかせてから購読する。
     if (job.buffer) sseWrite(res, { type: 'chunk', text: job.buffer });
     let closed = false;
+    const finish = () => {
+      clearInterval(keepAlive);
+      if (!closed) {
+        closed = true;
+        res.end();
+      }
+    };
     const subscriber: JobSubscriber = {
       onChunk: (text) => {
         if (!closed) sseWrite(res, { type: 'chunk', text });
       },
-      onDone: (answer, status) => {
+      onDone: (answer, m, status) => {
         if (closed) return;
-        sseWrite(res, { type: 'done', jobId, answer, status });
-        res.end();
+        sseWrite(res, { type: 'done', jobId, answer, media: m, status });
+        finish();
       },
     };
     job.subscribers.add(subscriber);
-    // クライアント切断時は購読を外すだけ（claude プロセスは kill しない＝生成は継続する）。
+    // クライアント切断時は ping を止め購読を外すだけ（claude プロセスは kill しない＝生成は継続）。
     // POST の req 'close' は body 読了で即発火しうるので使わない。res（レスポンス socket）の
     // 'close' が実際のクライアント切断シグナル。res.end() 後の close では既に subscriber は外れている。
     res.on('close', () => {
       closed = true;
+      clearInterval(keepAlive);
       job.subscribers.delete(subscriber);
     });
     return;

@@ -1069,6 +1069,36 @@ export const CHILDCARE_WEB_IMAGE_ALLOWED_HOSTS = env(
   .map((h) => h.trim().toLowerCase())
   .filter((h) => h.length > 0);
 
+// ─── 茶事チャットのアシスタント返却メディア（YouTube/生成画像/Web画像）──────
+// 育児（CHILDCARE_*）のアシスタント側メディア後処理を茶事へ横展開する（chatMedia.ts）。
+// 信頼ホストは茶道の主題に合わせる: 表千家不審菴公式・公的機関・美術館/博物館・学術機関など。
+// 捏造禁止・実在検証は childcare と共通（chatMedia.ts が oEmbed / GET 検証する）。
+export const CHAJI_WEB_IMAGE_ALLOWED_HOSTS = env(
+  'CHAJI_WEB_IMAGE_ALLOWED_HOSTS',
+  'omotesenke.jp,fushinan.jp,go.jp,lg.jp,ac.jp,nii.ac.jp,bunka.go.jp,tnm.jp,kyohaku.go.jp,emuseum.nich.go.jp',
+)
+  .split(',')
+  .map((h) => h.trim().toLowerCase())
+  .filter((h) => h.length > 0);
+
+// ─── 仕事（Work）チャットのユーザー添付メディア（画像/動画）──────────────────
+// 茶事チャット（CHAJI_CHAT_MEDIA_*）の作法をそのまま踏襲し、Work 専用の別ディレクトリ・別上限で受ける。
+export const WORK_CHAT_MEDIA_DIR = env('WORK_CHAT_MEDIA_DIR', join(INBOX_DATA_DIR, 'work-chat-media'));
+export const WORK_CHAT_IMAGE_MAX_BYTES = envNum('WORK_CHAT_IMAGE_MAX_BYTES', 10 * 1024 * 1024);
+export const WORK_CHAT_VIDEO_MAX_BYTES = envNum('WORK_CHAT_VIDEO_MAX_BYTES', 50 * 1024 * 1024);
+export const WORK_CHAT_MEDIA_MAX_FILES = envNum('WORK_CHAT_MEDIA_MAX_FILES', 5);
+
+// ─── 仕事（Work）チャットのアシスタント返却メディア（Web画像の信頼ホスト）──────
+// ビジネス（ECL/IFRS9/会計/PMO/データ）の主題に合わせた信頼ソース: 会計基準設定主体・規制当局・
+// 大手監査法人・学術機関・公的機関など。捏造禁止・実在検証は共通。
+export const WORK_WEB_IMAGE_ALLOWED_HOSTS = env(
+  'WORK_WEB_IMAGE_ALLOWED_HOSTS',
+  'ifrs.org,asb-j.jp,fsa.go.jp,boj.or.jp,go.jp,lg.jp,ac.jp,nii.ac.jp,jicpa.or.jp,bis.org',
+)
+  .split(',')
+  .map((h) => h.trim().toLowerCase())
+  .filter((h) => h.length > 0);
+
 /** メディア実体の保存ディレクトリ（<id>-<safe-name> でフラット保存）。 */
 export const BABY_DIARY_MEDIA_DIR = env('BABY_DIARY_MEDIA_DIR', join(BABY_DIARY_DIR, 'baby-diary-media'));
 
