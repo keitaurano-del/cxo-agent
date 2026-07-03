@@ -3150,3 +3150,16 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | 受け入れ条件（DoD） | 左上ブランドが A×ロケットの ApolloMark になる（accent 追従・ライト/ダーク可）。ナビ "ダッシュボード" の GridIcon は不変。22px で鼻/窓/炎が判別。実機レンダ確認。 |
 | 依存 | なし |
 | 更新日 | 2026-06-27 |
+
+### MC-263 — 端末4(Ops/Masayoshi)の send-keys/capture-pane が端末5(Son)へ誤配送（tmux プレフィックス一致）
+
+| フィールド | 値 |
+|---|---|
+| ID | MC-263 |
+| タイトル | Apollo 端末で「入力が正しいターミナルに入らない／出力が別ターミナルのもの」になる不具合。**真因**: tmux 3.4 でセッション名 `openclaw`(端末4) が `openclaw-son`(端末5) の**プレフィックス**のため、backend の tmux `-t openclaw`(bare) が **`openclaw-son` に解決**される（`tmux list-panes -t openclaw -F '#S'` → `openclaw-son` で実証）。結果、端末4(Masayoshi)宛ての send-keys(テキスト/ファイルパス注入)・capture-pane(出力取得) が端末5(Son)に誤配送。**修正**: `server/src/terminalControl.ts` と `server/src/terminalUpload.ts` の tmux `-t` ターゲットを全て exact-match `=${t.tmuxSession}` に変更（has-session/capture-pane/send-keys/copy-mode/remote 分・main の TERMINAL_TMUX_TARGET 含む）。`-t =openclaw` は `openclaw` に正しく解決することを実証済み。影響は端末4のみ（端末5/main/spare は元々一致）。 |
+| 優先度 | P1 |
+| ステータス | TODO（2026-07-03 Son 起票・根因特定＆修正方針確定）。terminalUpload.ts はソラの未コミットWIP有り→ソラが自身のWIPに畳んで適用。backend 変更のため mission-control 再起動要（作業ツリー巻き込みに注意）。 |
+| 担当 | dev-apollo（ソラ） |
+| 受け入れ条件（DoD） | `tmux list-panes -t =openclaw -F '#S'` が `openclaw` を返す前提で、端末4での入力/出力が端末4のセッションに正しく届く。端末5(Son)・端末1(main)・端末3(spare)の挙動は不変。実機で端末4に文字送信→端末4のみに反映、capture が端末4の内容を返すことを確認。 |
+| 依存 | なし（Son が実証済みの根因あり） |
+| 更新日 | 2026-07-03 |
