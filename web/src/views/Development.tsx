@@ -361,75 +361,18 @@ const VERSION_KIND_META: Record<MockupVersionSummary['kind'], { icon: string; te
   restore: { icon: '↩️', text: '復元' },
 };
 
-/** ワイヤーフレーム PNG の配信 URL（auth は Cookie で自動付与される）。 */
-function wireframeSrc(dir: string | undefined, image: string | undefined): string | null {
-  if (!dir || !image) return null;
-  return `/api/dev/wireframe/${encodeURIComponent(dir)}/${encodeURIComponent(image)}`;
-}
-
-/** ワイヤーフレーム画像のサムネイル一覧。dir + 各画面の image から配信 URL を組み立てる。 */
-function WireframeShots({
-  dir,
-  screens,
-}: {
-  dir: string | undefined;
-  screens: WireframeScreen[];
-}): ReactElement | null {
-  const shots = screens.filter((s) => s.image);
-  if (shots.length === 0) return null;
-  return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-      {shots.map((s, i) => {
-        const src = wireframeSrc(dir, s.image);
-        return (
-          <figure key={`${s.name}-${i}`} className="flex flex-col gap-1">
-            {src && (
-              <img
-                src={src}
-                alt={s.name}
-                loading="lazy"
-                className="w-full rounded border border-border bg-white"
-              />
-            )}
-            <figcaption className="truncate text-center text-[10px] text-text-faint">
-              {s.name}
-            </figcaption>
-          </figure>
-        );
-      })}
-    </div>
-  );
-}
-
-/** 完成/読込後に「このプロトタイプの作り方（設計書・Figma ワイヤーフレーム）」を表示する折りたたみパネル。 */
-function DesignPanel({ design }: { design: DesignInfo }): ReactElement {
+/** 完成/読込後に「このプロトタイプの作り方（設計書）」を表示する折りたたみパネル。設計書が無ければ出さない。 */
+function DesignPanel({ design }: { design: DesignInfo }): ReactElement | null {
+  if (!design.designDoc) return null;
   return (
     <details
       open
       className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted"
     >
       <summary className="cursor-pointer font-semibold text-text">
-        🎨 設計・ワイヤーフレーム（このプロトタイプの作り方）
+        🎨 設計（このプロトタイプの作り方）
       </summary>
-      <div className="mt-2 flex flex-col gap-2">
-        {design.figmaFileUrl && (
-          <a
-            href={design.figmaFileUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex w-fit items-center gap-1 rounded border border-border px-2 py-1 text-[11px] hover:bg-surface-2"
-            style={{ color: 'var(--mc-accent)' }}
-          >
-            Figma でワイヤーフレームを開く ↗
-          </a>
-        )}
-        {design.wireframeScreens && design.wireframeScreens.length > 0 && (
-          <WireframeShots dir={design.wireframeDir} screens={design.wireframeScreens} />
-        )}
-        {design.designDoc && (
-          <div className="whitespace-pre-wrap leading-relaxed">{design.designDoc}</div>
-        )}
-      </div>
+      <div className="mt-2 whitespace-pre-wrap leading-relaxed">{design.designDoc}</div>
     </details>
   );
 }
@@ -472,15 +415,9 @@ export default function Development() {
   } | null>(null);
   // エディタに紐づくジョブのサーバ状態（'' | 'pending'=順番待ち | 'generating'=生成中）。
   const [streamStatus, setStreamStatus] = useState<'' | 'pending' | 'generating'>('');
-  // 4段フローの現在ステージ（design=設計 / wireframe=Figma / code=コーディング）。
-  const [stage, setStage] = useState<'' | 'design' | 'wireframe' | 'code' | 'review'>('');
-  // ワイヤーフレーム生成中の進捗メッセージ（ツール実行ベース）。
-  const [wireframeProgress, setWireframeProgress] = useState('');
-  // 生成中に出来たワイヤーフレーム（画面が揃うとここに入る）。
-  const [liveWireframe, setLiveWireframe] = useState<Wireframe | null>(null);
-  // 設計ステージが洗い出した画面リスト（ライブ表示用）。
-  const [liveScreens, setLiveScreens] = useState<{ name: string; description?: string }[]>([]);
-  // 現在表示中プロトタイプの設計・ワイヤーフレーム（完成後/読込後に「何を作ったか」を表示）。
+  // 生成フローの現在ステージ（design=設計 / code=コーディング / review=デザイン仕上げ）。
+  const [stage, setStage] = useState<'' | 'design' | 'code' | 'review'>('');
+  // 現在表示中プロトタイプの設計（完成後/読込後に「何を作ったか」を表示）。
   const [design, setDesign] = useState<DesignInfo | null>(bootDraft?.design ?? null);
   // 実装仕様書（モック→本番化の設計。MC-253）。生成/読込で入る。
   const [spec, setSpec] = useState<string | null>(bootDraft?.spec ?? null);
@@ -604,10 +541,7 @@ export default function Development() {
               setStreamCode(live.partial);
               setStreamPlan(live.plan);
               setStreamThinking(live.thinking);
-              setStage((live.stage as '' | 'design' | 'wireframe' | 'code' | 'review') ?? '');
-              setWireframeProgress(live.wireframeProgress);
-              setLiveWireframe(live.wireframe ?? null);
-              if (live.screens) setLiveScreens(live.screens);
+              setStage((live.stage as '' | 'design' | 'code' | 'review') ?? '');
             }
           : undefined,
       )
@@ -635,9 +569,6 @@ export default function Development() {
               setStreamThinking('');
               setStreamStatus('');
               setStage('');
-              setWireframeProgress('');
-              setLiveWireframe(null);
-              setLiveScreens([]);
               setFailedRun(null);
               setMobileTab('preview');
               // 修正履歴を読み直す（修正では currentId が変わらず effect が走らないため明示的に）。
@@ -658,9 +589,6 @@ export default function Development() {
               setStreamThinking('');
               setStreamStatus('');
               setStage('');
-              setWireframeProgress('');
-              setLiveWireframe(null);
-              setLiveScreens([]);
               setFailedRun(null);
             }
             setNotice(
@@ -699,9 +627,6 @@ export default function Development() {
             setStreamThinking('');
             setStreamStatus('');
             setStage('');
-            setWireframeProgress('');
-            setLiveWireframe(null);
-            setLiveScreens([]);
           } else {
             setNotice('完了した試作品は下の「保存済みモックアップ」をご確認ください。');
           }
@@ -774,9 +699,6 @@ export default function Development() {
       setStreamPlan('');
       setStreamThinking('');
       setStage('design');
-      setWireframeProgress('');
-      setLiveWireframe(null);
-      setLiveScreens([]);
       setDesign(null);
       setSpec(null);
       setCodeLesson(null);
@@ -1157,9 +1079,6 @@ export default function Development() {
     setStreamThinking('');
     setStreamStatus('');
     setStage('');
-    setWireframeProgress('');
-    setLiveWireframe(null);
-    setLiveScreens([]);
     setDesign(null);
     setSpec(null);
     setCodeLesson(null);
@@ -1574,18 +1493,7 @@ export default function Development() {
                       className="min-w-0 flex-1 text-left"
                       title={m.title}
                     >
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate text-sm text-text">{m.title}</span>
-                        {m.figmaFileUrl && (
-                          <span
-                            className="shrink-0 rounded px-1 text-[9px] font-semibold"
-                            style={{ background: 'var(--mc-active-bg)', color: 'var(--mc-active)' }}
-                            title="Figma ワイヤーフレームあり"
-                          >
-                            🎨 Figma
-                          </span>
-                        )}
-                      </div>
+                      <div className="truncate text-sm text-text">{m.title}</div>
                       <div className="text-[10px] text-text-faint">
                         {new Date(m.updatedAt).toLocaleString('ja-JP')}
                       </div>
@@ -1639,11 +1547,9 @@ export default function Development() {
               {generating
                 ? stage === 'design'
                   ? '① 設計書を作成中…'
-                  : stage === 'wireframe'
-                    ? '② Figma でワイヤーフレーム作成中…'
-                    : stage === 'review'
-                      ? '④ デザインを点検して仕上げ中…'
-                      : '③ コードを生成中…'
+                  : stage === 'review'
+                    ? '③ デザインを点検して仕上げ中…'
+                    : '② コードを生成中…'
                 : 'プレビュー'}
             </span>
             {generating ? (
@@ -1678,44 +1584,7 @@ export default function Development() {
           </div>
           <div className="min-h-0 flex-1 overflow-hidden p-3">
             {generating ? (
-              stage === 'wireframe' ? (
-                // ステージ②: Figma でワイヤーフレームを作成中。進捗と画面リスト、出来た分の画像を表示。
-                <div className="flex h-full flex-col gap-2 overflow-auto">
-                  <div
-                    className="flex items-center gap-2 rounded-lg border border-accent px-3 py-2 text-xs font-semibold"
-                    style={{ background: 'var(--mc-active-bg)', color: 'var(--mc-active)' }}
-                  >
-                    <Spinner />
-                    <span>{wireframeProgress || '🎨 Figma でワイヤーフレームを作っています…'}</span>
-                  </div>
-                  <p className="text-[10px] text-text-faint">
-                    設計を元に Figma 上で各画面のワイヤーフレーム（下書き）を作成しています。出来たらこの後、それを元にコードを作ります。
-                  </p>
-                  {liveScreens.length > 0 && (
-                    <div className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
-                      <div className="mb-1 font-semibold text-text">作成する画面（{liveScreens.length}）</div>
-                      <ul className="list-disc pl-4 leading-relaxed">
-                        {liveScreens.map((s, i) => (
-                          <li key={`${s.name}-${i}`}>
-                            <span className="text-text">{s.name}</span>
-                            {s.description ? `：${s.description}` : ''}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {liveWireframe && (
-                    <WireframeShots dir={liveWireframe.dir} screens={liveWireframe.screens} />
-                  )}
-                  {streamPlan && (
-                    <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
-                      <summary className="cursor-pointer font-semibold">📐 設計書</summary>
-                      <div className="mt-1 whitespace-pre-wrap leading-relaxed">{streamPlan}</div>
-                    </details>
-                  )}
-                  <p className="text-[11px] text-text-faint">経過 {elapsed} 秒</p>
-                </div>
-              ) : // 生成中: claude が書いているコードをリアルタイムに流す（末尾自動スクロール）。
+              // 生成中: claude が書いているコードをリアルタイムに流す（末尾自動スクロール）。
               streamCode ? (
                 <div className="flex h-full flex-col gap-2">
                   {/* いま何をしているかを平易な日本語で（未経験者向け） */}
@@ -1737,25 +1606,6 @@ export default function Development() {
                     <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
                       <summary className="cursor-pointer font-semibold">📐 設計書</summary>
                       <div className="mt-1 whitespace-pre-wrap leading-relaxed">{streamPlan}</div>
-                    </details>
-                  )}
-                  {liveWireframe && (liveWireframe.fileUrl || liveWireframe.screens.some((s) => s.image)) && (
-                    <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
-                      <summary className="cursor-pointer font-semibold">🎨 Figma ワイヤーフレーム</summary>
-                      <div className="mt-2 flex flex-col gap-2">
-                        {liveWireframe.fileUrl && (
-                          <a
-                            href={liveWireframe.fileUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex w-fit items-center gap-1 rounded border border-border px-2 py-1 hover:bg-surface-2"
-                            style={{ color: 'var(--mc-accent)' }}
-                          >
-                            Figma で開く ↗
-                          </a>
-                        )}
-                        <WireframeShots dir={liveWireframe.dir} screens={liveWireframe.screens} />
-                      </div>
                     </details>
                   )}
                   <p className="text-[10px] text-text-faint">
