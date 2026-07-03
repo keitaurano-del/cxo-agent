@@ -28,14 +28,19 @@ import { Router, type Request, type Response } from 'express';
 import {
   NOTEBOOK_CLAUDE_BIN,
   NOTEBOOK_CLAUDE_MODEL,
+  DEV_MOCKUP_MODEL,
   DEV_MOCKUP_FALLBACK_MODEL,
+  DEV_ENABLE_FIGMA,
   DEV_WIREFRAMES_DIR,
 } from './config.js';
 import {
   deleteMockup,
   getMockup,
+  getVersion,
   listMockups,
   listReferenceMockups,
+  listVersions,
+  restoreVersion,
   setCodeLesson,
   setImplSpec,
   setRating,
@@ -45,6 +50,7 @@ import {
   generateFigmaWireframes,
   type WireframeScreenSpec,
 } from './lib/devFigmaWireframes.js';
+import { generateGeminiText } from './lib/geminiText.js';
 import { withClaudeSlot } from './lib/notebookClaude.js';
 
 // ─── claude CLI（HTML 生成）──────────────────────────────────
@@ -57,9 +63,13 @@ import { withClaudeSlot } from './lib/notebookClaude.js';
  *  （再試行してもまた長く待たせるだけ）ので、これが「コード段で諦めるまでの最大待ち時間」になる。 */
 const GENERATE_TIMEOUT_MS = 1_200_000;
 
-/** 仕上げレビュー(P2)専用の短いタイムアウト。レビューは「速い時だけ磨く」ベストエフォートなので、
- *  長く待たない。超えたら元 HTML を保持してすぐ完了させる（重い割に無改善で待たせるのを防ぐ）。 */
-const REVIEW_TIMEOUT_MS = 180_000;
+/** デザイン昇格・critique パス（弱点の洗い出し）専用のタイムアウト。指摘だけなので短くてよい。
+ *  失敗しても refine パスはチェックリスト基準で磨けるため、詰まらせない短さにする。 */
+const CRITIQUE_TIMEOUT_MS = 120_000;
+
+/** デザイン昇格・refine パス（見た目の引き上げ）専用のタイムアウト。HTML 全体を Opus で書き直すため
+ *  critique より長めに取る。超えたら直前の HTML を保持して完了させる（重い割に無改善で待たせない）。 */
+const REVIEW_TIMEOUT_MS = 300_000;
 
 /** HTML は大きくなり得るため maxBuffer を広めに取る（8MB）。 */
 const GENERATE_MAX_BUFFER = 8 * 1024 * 1024;
@@ -131,6 +141,34 @@ const DESIGN_SYSTEM_RULES = [
   '8. 状態: 内容に応じて空/読み込み/エラーの状態も設計する。空はCTA付き、エラーは該当箇所の近くにインライン＋',
   '   平易な日本語で示す。状態は色だけでなくアイコンや文言も添える（色だけに頼らない）。',
   '9. モーション: 使うなら100〜300msで控えめに。自動でずっと動き続けるもの（自動カルーセル等）は付けない。',
+].join('\n');
+
+/**
+ * アートディレクション指示（MC-260 UI 品質強化）。DESIGN_SYSTEM_RULES が「良いトークンの枠内で組む」
+ * 下限を担保するのに対し、こちらは「実在の一流アプリ並みに作り込む」上限（狙う水準）を強く促す。
+ * Opus に十分な作り込み余地を与え、生成物を目に見えて上質にすることを狙う。
+ */
+const ART_DIRECTION = [
+  '【アートディレクション（目指す水準）】単なる動く試作ではなく、実在の一流アプリ（App Store 上位の',
+  '完成度）と見紛う質感まで作り込むこと。「それっぽい」で止めず、細部まで詰める。',
+  '- 現実的で具体的な日本語コンテンツを入れること。lorem ipsum や「サンプルテキスト」「ダミー」等の',
+  '  意味のない仮文字は禁止。要望のドメインに沿った、実在しそうな自然な項目名・数値・文章を入れる',
+  '  （例: タスク名・店名・金額・日付・レビュー文などをリアルに）。',
+  '- アイコンはインライン SVG で、その用途に合った適切な図案を使うこと（検索は虫眼鏡、追加は＋、',
+  '  設定は歯車、など）。絵文字は補助的に少量ならよいが、UI の主要アイコンを絵文字だけで済ませない。',
+  '  SVG は currentColor で色をトークンに追従させ、大きさ・線幅を揃える。',
+  '- タイポグラフィにリズムを付ける: 見出し・小見出し・本文・キャプションの階層を大きさと太さ・色で',
+  '  はっきり作り、行間・字間・余白で「読ませる」レイアウトにする。情報を詰め込みすぎず呼吸を作る。',
+  '- 視覚的な奥行きと上質さ: 面の色差（--surface / --surface-container 系）・繊細な境界線・控えめな影を',
+  '  組み合わせて階層を作る。配色は役割ベースで洗練させ、多色の乱用を避け、アクセントは効かせどころを絞る。',
+  '- 状態を丁寧に作る: 空・読み込み（スケルトンやスピナー）・エラーの状態、ボタン/入力/リンクの',
+  '  hover・focus・active・disabled、選択中/未選択の差を、それぞれ視覚的に用意する。',
+  '- マイクロインタラクションは控えめで上品に（押下の微かな沈み込み、フェード/スライドの短いトランジション、',
+  '  トグルの滑らかな切替など）。派手さより「気持ちよさ」。過剰な演出はしない。',
+  '- 実機モバイル前提: 主要操作は親指が届く下部に置き、タップ領域と要素間隔を守る（前項の 48px 基準）。',
+  '  ブラウザ既定の安っぽいフォーム/ボタン外観のまま放置せず、必ずトークンで整える。',
+  '- ただし前項のトークン方式（:root CSS 変数）・8px グリッド・コントラスト基準・「単一の動く HTML」の',
+  '  制約は厳守する。作り込みはこの枠の中で行うこと。',
 ].join('\n');
 
 /** 完成前の自己点検リスト（B ルーブリックの軽量版。HTML を出す直前にモデル自身に点検させる）。 */
@@ -247,10 +285,55 @@ function buildReferenceGuidance(): string {
   ].join('\n');
 }
 
+// ─── Gemini によるアートディレクション注入（MC-260・多モデル活用）──────────
+//
+// コード生成の直前に、Gemini でこの試作品の「ビジュアルデザイン方針」（配色パレット/タイポ/
+// レイアウト方針/ムード）を短い日本語テキストで書かせ、Claude のコード生成プロンプトに
+// 「デザイン方針」として差し込む。異なるモデルの美的感覚を混ぜて見た目の当たりを上げる狙い。
+// GEMINI_API_KEY 未設定・失敗・タイムアウト時は null が返り、方針注入をスキップして
+// 従来どおり Claude だけで生成する（グレースフルフォールバック＝生成を止めない）。
+
+/** Gemini に「ビジュアルデザイン方針」を書かせるプロンプト（日本語・短め）。 */
+function buildDesignBriefPrompt(userPrompt: string, designDoc: string): string {
+  return [
+    'あなたは、モバイルアプリの試作品のビジュアルデザインを方向づけるアートディレクターです。',
+    '次の要望（と設計）に最も似合う「ビジュアルデザイン方針」を、日本語で簡潔にまとめてください。',
+    'コードは書かず、方針だけを書きます。実在の一流アプリのような上質さを狙ってください。',
+    '',
+    '要望:',
+    userPrompt,
+    ...(designDoc ? ['', '設計書:', designDoc] : []),
+    '',
+    '次の観点を、各 1〜2 行で箇条書きにすること（前置き・見出し・コードフェンスは付けない）:',
+    '- 配色パレット: ベース/サーフェス/テキスト/アクセントの方向性（役割ベース。具体的な色相の狙いを短く）',
+    '- タイポグラフィ: 見出しと本文の雰囲気・階層の付け方',
+    '- レイアウト方針: 情報の並べ方・余白の取り方・主要導線の置き方',
+    '- ムード/トーン: このアプリが与えるべき印象（例: 落ち着いた/活発/信頼感/やわらかい 等）',
+    '',
+    '全体で 8 行以内。抽象論に逃げず、この要望に固有の具体的な方向を示すこと。',
+  ].join('\n');
+}
+
+/**
+ * Gemini でこの試作品のビジュアルデザイン方針を生成する（失敗時 null）。
+ * 返り値はコード生成プロンプトに差し込む「デザイン方針」ブロック（または null）。
+ */
+async function buildGeminiArtDirection(userPrompt: string, designDoc: string): Promise<string | null> {
+  const brief = await generateGeminiText(buildDesignBriefPrompt(userPrompt, designDoc));
+  if (!brief) return null;
+  return [
+    '【このアプリのビジュアルデザイン方針（アートディレクター案）】',
+    '別のデザイン AI が、この要望に合わせて次の見た目の方針を立てました。これを土台に、',
+    '上のデザイン基準・アートディレクションと矛盾しない範囲で、この方針の雰囲気に寄せて作ってください。',
+    brief.trim(),
+  ].join('\n');
+}
+
 /**
  * 設計書＋画面リスト（＋Figma で作ったワイヤーフレームの有無）を元に、動く単一 HTML を作らせる。
  * 設計は済んでいるので作り方メモ（PLAN_RULES）は付けず、HTML 本文だけを書かせる。
  * referenceGuidance には 👍 手本のスタイル参考（あれば）を渡す。
+ * artDirection には Gemini が立てたビジュアルデザイン方針（あれば）を渡す（無ければ null）。
  */
 function buildCodeFromDesignPrompt(
   prompt: string,
@@ -258,6 +341,7 @@ function buildCodeFromDesignPrompt(
   screens: ScreenSpec[],
   wireframed: boolean,
   referenceGuidance: string,
+  artDirection: string | null,
 ): string {
   const screenLines = screens.length
     ? screens.map((s, i) => `${i + 1}. ${s.name}: ${s.description}`).join('\n')
@@ -284,6 +368,9 @@ function buildCodeFromDesignPrompt(
     INTERACTIVE_RULES,
     '',
     DESIGN_SYSTEM_RULES,
+    '',
+    ART_DIRECTION,
+    ...(artDirection ? ['', artDirection] : []),
     ...(referenceGuidance ? ['', referenceGuidance] : []),
     '',
     DESIGN_SELF_CHECK,
@@ -293,59 +380,72 @@ function buildCodeFromDesignPrompt(
 }
 
 /**
- * 仕上げレビュー（MC-252 P2）のプロンプト。生成済み HTML をデザインルーブリックで自己点検し、
- * 機能・内容・文言は一切変えずに「見た目と画面構成」だけを基準に寄せて改善した HTML 全体を返させる。
- * 出力は HTML 本文のみ（説明・フェンス禁止）。
+ * デザイン昇格・パス1（critique）のプロンプト（MC-260）。生成済み HTML の見た目の弱点だけを、
+ * シニア UI デザイナーの目で具体的に箇条書きで洗い出させる。コードは書かせず指摘のみ（軽く速い）。
+ * この指摘を次の refine パスに渡して「見た目だけ」引き上げる。
  */
-function buildReviewPrompt(html: string): string {
+function buildCritiquePrompt(html: string): string {
   return [
-    'あなたは、できあがった HTML 試作品の「デザイン仕上げ（design review）」を行うシニア UI デザイナーです。',
-    '次の HTML を下のチェックリストで点検し、引っかかる点だけを直して、改善後の HTML 全体を返してください。',
+    'あなたは、実在の一流アプリを数多く手がけたシニア UI デザイナーです。',
+    '次の HTML 試作品の「見た目・仕上がり」を辛口に講評し、上質にするために直すべき点だけを',
+    '具体的な箇条書きで洗い出してください。コードは書かず、指摘だけを出します。',
     '',
-    '厳守: 機能・JavaScript の挙動・文言・データ・画面構成（どんな部品があるか）は変えないこと。',
-    '変えてよいのは見た目（配色・余白・サイズ・整列・階層・角丸・影・状態表現）だけ。新機能や別画面を足さない。',
-    'すでに良い箇所はそのまま残す。ゼロから作り直さない（差分は最小限）。',
+    '観点（この試作に当てはまるものだけ、具体的に指摘する）:',
+    '- 配色・コントラスト・面の色差の弱さ / 安っぽく見える箇所',
+    '- タイポの階層（見出し/本文/キャプションの差）・行間・字間・余白のリズムの甘さ',
+    '- アイコンの適切さ（絵文字頼み・用途に合っていない・大きさや線幅の不揃い）',
+    '- 影/境界/角丸の使い方・視覚的な奥行きの不足',
+    '- hover/focus/active/disabled・選択状態・空/読み込み/エラー状態の欠落や雑さ',
+    '- タップ領域・要素間隔・主要導線の位置（親指到達）',
+    '- ブラウザ既定のままの安っぽいフォーム/ボタン外観',
     '',
-    'チェックリスト（外れていれば直す）:',
+    '各指摘は「どこが・どう悪く・どう直すと上質になるか」を 1 行で。10 個以内に絞り、重要な順に。',
+    '機能・文言・画面構成（部品の種類）を変える提案はしないこと（見た目の改善だけを指摘する）。',
+    '前置き・総評は不要。箇条書きだけを日本語で出力すること。',
+    '',
+    '点検対象の HTML:',
+    html.slice(0, 60000),
+  ].join('\n');
+}
+
+/**
+ * デザイン昇格・パス2（refine）のプロンプト（MC-260）。critique の指摘を反映して、
+ * 機能・内容・文言・DOM 構造は一切変えずに「見た目だけ」を実在の一流アプリ水準へ引き上げた
+ * HTML 全体を返させる。出力は HTML 本文のみ（説明・フェンス禁止）。
+ * critique が空でも（パス1失敗時）チェックリスト基準で自己点検して磨けるようにする。
+ */
+function buildRefinePrompt(html: string, critique: string): string {
+  return [
+    'あなたは、HTML 試作品の見た目を実在の一流アプリ水準まで引き上げるシニア UI デザイナーです。',
+    '次の HTML の「見た目・仕上がり」だけを磨き上げ、改善後の HTML 全体を返してください。',
+    '',
+    '厳守: 機能・JavaScript の挙動・文言・データ・画面構成（どんな部品があるか）・DOM 構造は変えないこと。',
+    '変えてよいのは見た目（配色・余白・サイズ・整列・階層・角丸・影・アイコン・状態表現・トランジション）だけ。',
+    '新機能・別画面・別の文言を足さない。すでに良い箇所は残し、ゼロから作り直さない。',
+    '',
+    ...(critique
+      ? [
+          '下の「指摘」を反映して直すこと（見た目の範囲で）:',
+          critique.trim(),
+          '',
+        ]
+      : []),
+    '合わせて次のチェックリストで自己点検し、外れていれば直すこと:',
     '- 本文は16px(1rem)以上 / 行間1.5 / 見出しはサイズと太さで階層がある',
     '- 余白は8pxグリッド(4/8/12/16/24/32/48)で一貫・不揃いや過密が無い',
     '- 本文のコントラストが背景に対し4.5:1以上、境界線/アイコン/UI部品は3:1以上（薄いグレー文字を白地に置かない）',
     '- 1画面で目立つ主アクションは1つ / ボタンに primary/secondary/text の強弱がある',
     '- カードやシートは面の色で背景と差がつく（影だけに頼らない）',
+    '- アイコンは用途に合ったインライン SVG で、大きさ・線幅が揃っている（絵文字頼みにしない）',
     '- 押せる要素は最小48px・要素間8px以上 / 主要操作は親指の届く下部',
-    '- 色だけで状態を示さない（必ずアイコンや文言を添える）/ 必要なら空・エラー状態がある',
+    '- hover/focus/active/disabled・選択状態が視覚的に用意されている / 必要なら空・エラー状態がある',
     '- 過度なアニメーション(>500ms)や自動で動き続けるものが無い',
-    '- 可能なら配色・余白は CSS 変数(:root のトークン)に整理して一貫させる',
+    '- 配色・余白は CSS 変数(:root のトークン)に整理して一貫させる',
     '',
     HTML_RULES,
     '',
-    '点検対象の HTML:',
+    '磨き上げる対象の HTML:',
     html,
-  ].join('\n');
-}
-
-/**
- * 高速モード（Figma なし）用の単一呼び出しプロンプト。設計ステージを分けず、要望から直接 HTML を作らせる。
- * 設計は頭の中で素早く済ませてすぐ書き始めるよう促し、2 回の AI 呼び出しを 1 回に圧縮して速くする。
- * 設計システム・手本・自己チェックは付与して品質は保つ。
- */
-function buildFastGeneratePrompt(prompt: string, referenceGuidance: string): string {
-  return [
-    'あなたは、動くインタラクティブな試作品を HTML で作るデザイナー兼フロントエンドエンジニアです。',
-    '次の要望に対して、実際に操作できる試作品を 1 つ作成してください。',
-    '設計は頭の中で手短に済ませ、長く考え込まずにすぐ作り始めること（速さを優先）。',
-    '',
-    '要望:',
-    prompt,
-    '',
-    INTERACTIVE_RULES,
-    '',
-    DESIGN_SYSTEM_RULES,
-    ...(referenceGuidance ? ['', referenceGuidance] : []),
-    '',
-    DESIGN_SELF_CHECK,
-    '',
-    HTML_RULES,
   ].join('\n');
 }
 
@@ -365,6 +465,8 @@ function buildRevisePrompt(baseHtml: string, instruction: string): string {
     `説明を書き終えたら、次の行に ${PLAN_MARKER} とだけ書いた行を 1 行入れ、その直後の行から修正後の単一 HTML ドキュメント本文だけを出力してください。`,
     '',
     DESIGN_SYSTEM_RULES,
+    '',
+    ART_DIRECTION,
     '',
     HTML_RULES,
     '',
@@ -433,6 +535,7 @@ function runClaudeRaw(
   model: string,
   onChunk?: (accumulated: string, thinking: string) => void,
   timeoutMs: number = GENERATE_TIMEOUT_MS,
+  jobId?: string,
 ): Promise<RawRun> {
   // 引数に NUL バイトがあると spawn が throw し得る。想定外の制御文字でサーバを落とさないよう、
   // (1) プロンプトから NUL を除去し、(2) spawn 自体も try/catch で囲う。
@@ -461,6 +564,10 @@ function runClaudeRaw(
           return;
         }
 
+        // キャンセル時に kill できるよう登録。起動直後に既に中止済みなら即 kill（すり抜け防止）。
+        registerChild(jobId, child);
+        if (jobId && isCanceled(jobId)) child.kill('SIGTERM');
+
         let body = ''; // content_block_delta を積み上げた本文（= 生成中の作り方+HTML）。
         let thinking = ''; // thinking_delta を積み上げた「AI の思考」（拡張思考。ライブ表示用）。
         let resultText = ''; // result イベントの最終本文（delta が無い場合のフォールバック）。
@@ -473,6 +580,7 @@ function runClaudeRaw(
         const done = (r: RawRun): void => {
           if (settled) return;
           settled = true;
+          unregisterChild(jobId, child);
           resolve(r);
         };
 
@@ -601,7 +709,7 @@ function isLimitFailure(r: RawRun): boolean {
 // フロントは GET /job/:id をポーリングする。これでエッジ上限に縛られなくなる。
 // ジョブはインメモリ（プロセス再起動で消える）。
 
-type JobStatus = 'pending' | 'generating' | 'done' | 'error';
+type JobStatus = 'pending' | 'generating' | 'done' | 'error' | 'canceled';
 /** 多段フローの現在ステージ（設計→ワイヤーフレーム→コード→仕上げレビュー）。修正(revise)では未使用。 */
 type JobStage = 'design' | 'wireframe' | 'code' | 'review';
 interface Job {
@@ -638,6 +746,33 @@ interface Job {
 
 /** jobId → Job。インメモリのみ。 */
 const jobs = new Map<string, Job>();
+
+/**
+ * jobId → 実行中の claude 子プロセス群。キャンセル（POST /job/:id/cancel）で確実に kill するため、
+ * runClaudeRaw が spawn した子をここへ登録し、終了時に外す。1 ジョブが順番に複数回 claude を
+ * 呼ぶ（設計→コード→仕上げ）のを踏まえ Set で持つ。
+ */
+const jobChildren = new Map<string, Set<ReturnType<typeof spawn>>>();
+function registerChild(jobId: string | undefined, child: ReturnType<typeof spawn>): void {
+  if (!jobId) return;
+  let set = jobChildren.get(jobId);
+  if (!set) {
+    set = new Set();
+    jobChildren.set(jobId, set);
+  }
+  set.add(child);
+}
+function unregisterChild(jobId: string | undefined, child: ReturnType<typeof spawn>): void {
+  if (!jobId) return;
+  const set = jobChildren.get(jobId);
+  if (!set) return;
+  set.delete(child);
+  if (set.size === 0) jobChildren.delete(jobId);
+}
+/** ジョブがユーザに中止されたか。各ステージ境界で確認し、以降の処理を止める。 */
+function isCanceled(jobId: string): boolean {
+  return jobs.get(jobId)?.status === 'canceled';
+}
 
 /** 完了/失敗ジョブの保持期間（15 分）。クライアントは完了後すぐ取りに来るのでこれで十分。 */
 const JOB_TTL_MS = 15 * 60_000;
@@ -704,21 +839,26 @@ function sleep(ms: number): Promise<void> {
  * claude CLI で HTML を 1 本生成し、フェンス除去 + 最低限の妥当性チェックまで行う。
  * 堅牢化（エラー画面に落とさない）のための多層防御:
  *  - 一過性失敗（空応答・claude 競合・タイムアウト）を吸収するため最大 GENERATE_MAX_ATTEMPTS 回リトライ。
- *  - 利用上限（Sonnet limit / rate limit 等）を検出したら、以降の試行を fallback（Opus）へ切替える。
+ *  - 利用上限（usage limit / rate limit 等）を検出したら、以降の試行を fallback（既定 Sonnet）へ切替える。
  *  - 失敗時は原因を分類（limit/timeout/empty/error）して返し、ユーザに出し分けできるようにする。
  * 成功した HTML を { html } で返す。全試行失敗なら { html:null, reason, detail }。
  */
 async function generateHtmlWithRetry(
   cliPrompt: string,
   onChunk?: (accumulated: string, thinking: string) => void,
+  jobId?: string,
 ): Promise<GenResult> {
-  let model = NOTEBOOK_CLAUDE_MODEL; // primary（Sonnet）。利用上限検出で fallback（Opus）へ。
+  // primary は DEV_MOCKUP_MODEL（既定 Opus＝作り込みが強い）。利用上限検出で
+  // fallback（既定 Sonnet）へ切替え、上限/重い時も生成を止めない。
+  let model = DEV_MOCKUP_MODEL;
   let switchedToFallback = false;
   let lastReason: GenFailReason = 'error';
   let lastDetail: string | undefined;
 
   for (let attempt = 1; attempt <= GENERATE_MAX_ATTEMPTS; attempt += 1) {
-    const raw = await runClaudeRaw(cliPrompt, model, onChunk);
+    // ユーザが中止したら以降の試行はしない。
+    if (jobId && isCanceled(jobId)) return { html: null, reason: 'error' };
+    const raw = await runClaudeRaw(cliPrompt, model, onChunk, GENERATE_TIMEOUT_MS, jobId);
 
     if (!raw.error) {
       // 「作り方メモ → ---HTML--- → HTML 本文」のうち HTML 本文だけを取り出す。
@@ -731,12 +871,12 @@ async function generateHtmlWithRetry(
     } else if (isLimitFailure(raw)) {
       lastReason = 'limit';
       lastDetail = raw.error;
-      // 利用上限。まだ primary なら次回以降は fallback（Opus）へ切替える。
+      // 利用上限。まだ primary なら次回以降は fallback（既定 Sonnet）へ切替える。
       if (!switchedToFallback) {
         switchedToFallback = true;
         model = DEV_MOCKUP_FALLBACK_MODEL;
         console.warn(
-          `[dev-mockup] sonnet limit hit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`,
+          `[dev-mockup] ${DEV_MOCKUP_MODEL} limit hit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`,
         );
       }
     } else if (raw.timedOut) {
@@ -785,7 +925,7 @@ function serializeDevGen<T>(fn: () => Promise<T>): Promise<T> {
 async function runGenerateJob(
   jobId: string,
   cliPrompt: string,
-  save: { title: string; id?: string; prompt?: string },
+  save: { title: string; id?: string; prompt?: string; versionLabel?: string },
 ): Promise<void> {
   // 生成途中の stdout をジョブへ反映＝クライアントがポーリングでライブにコードを見られる。
   const onChunk = (accumulated: string, thinking: string): void => {
@@ -807,8 +947,10 @@ async function runGenerateJob(
   const result = await serializeDevGen(() => {
     const job = jobs.get(jobId);
     if (job && job.status === 'pending') job.status = 'generating';
-    return generateHtmlWithRetry(cliPrompt, onChunk);
+    return generateHtmlWithRetry(cliPrompt, onChunk, jobId);
   });
+  // 中止されていたら保存も done 化もしない（status='canceled' のまま）。
+  if (isCanceled(jobId)) return;
   if (result.html) {
     const html = result.html;
     // 生成成功。クライアントが離脱・通信失敗しても結果が残るよう、ストアへ自動保存する。
@@ -820,6 +962,8 @@ async function runGenerateJob(
         title: save.title,
         html,
         prompt: save.prompt,
+        // 修正完了を 1 版として記録する（MC-260。versionLabel が無ければタイトルを使う）。
+        recordVersion: { kind: 'revise', label: save.versionLabel || save.title || '修正' },
       });
       mockupId = saved.id;
     } catch {
@@ -853,7 +997,9 @@ async function runGenerateJob(
 
 /**
  * 設計ステージ: 要望から設計書＋画面リストを生成する。途中経過（設計書・思考）をジョブに流す。
- * 利用上限なら一度だけ fallback（Opus）へ切替えて再試行。完全失敗時は { designDoc:'', screens:[] }。
+ * 完全失敗時は { designDoc:'', screens:[] }。
+ * ※このステージは「何を作るか」の軽い整理なので、コード生成と違い Opus は使わず
+ *   NOTEBOOK_CLAUDE_MODEL（Sonnet）で回す（速さ/コスト優先。品質は本丸のコード段と昇格段で担保する）。
  */
 async function runDesignStage(
   jobId: string,
@@ -869,13 +1015,15 @@ async function runDesignStage(
     if (thinking) job.thinking = thinking;
   };
 
+  // 設計は軽いので Sonnet 固定。利用上限時のみ fallback（現状も Sonnet だが将来差し替え可）。
   let model = NOTEBOOK_CLAUDE_MODEL;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const raw = await runClaudeRaw(buildDesignPrompt(userPrompt), model, onChunk);
+    if (isCanceled(jobId)) return { designDoc: '', screens: [] };
+    const raw = await runClaudeRaw(buildDesignPrompt(userPrompt), model, onChunk, GENERATE_TIMEOUT_MS, jobId);
     if (!raw.error) return splitDesignScreens(raw.stdout);
     if (isLimitFailure(raw) && attempt === 1) {
       model = DEV_MOCKUP_FALLBACK_MODEL;
-      console.warn(`[dev-mockup] design stage sonnet limit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`);
+      console.warn(`[dev-mockup] design stage limit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`);
       continue;
     }
     console.warn(`[dev-mockup] design stage failed: ${raw.error}`);
@@ -885,35 +1033,68 @@ async function runDesignStage(
 }
 
 /**
- * 仕上げレビュー（MC-252 P2）。生成済み HTML をデザインルーブリックで自己点検し、見た目だけ改善した
- * HTML を返す。失敗・劣化（空/タグ無し/極端に短い）時は null を返し、呼び出し側は元 HTML を保持する。
+ * デザイン昇格・パス1（critique）。生成済み HTML の見た目の弱点を箇条書きで洗い出させる（MC-260）。
+ * コードは書かせず指摘のみなので軽い。失敗時は ''（＝指摘なし）を返し、refine 側はチェックリストで磨く。
+ * primary は DEV_MOCKUP_MODEL（既定 Opus）、利用上限で fallback（既定 Sonnet）。
+ */
+async function runCritiquePass(html: string, jobId?: string): Promise<string> {
+  let model = DEV_MOCKUP_MODEL;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    if (jobId && isCanceled(jobId)) return '';
+    const raw = await runClaudeRaw(buildCritiquePrompt(html), model, undefined, CRITIQUE_TIMEOUT_MS, jobId);
+    if (!raw.error) {
+      const critique = stripFences(raw.stdout).trim();
+      return critique;
+    }
+    if (isLimitFailure(raw) && attempt === 1) {
+      model = DEV_MOCKUP_FALLBACK_MODEL;
+      console.warn(`[dev-mockup] critique pass limit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`);
+      continue;
+    }
+    console.warn(`[dev-mockup] critique pass failed: ${raw.error} → refine with checklist only`);
+    break;
+  }
+  return '';
+}
+
+/**
+ * デザイン昇格（MC-260・旧 P2 の 2 パス化）。生成済み HTML の見た目だけを実在の一流アプリ水準へ引き上げる。
+ *   (i) critique パス: 具体的な弱点を箇条書きで洗い出す（runCritiquePass）
+ *   (ii) refine パス: その指摘＋チェックリストで「見た目だけ」を磨いた HTML 全体を返させる
+ * 機能・文言・DOM 構造は変えない制約は厳守。critique が失敗（空）でも refine はチェックリストで磨ける。
+ * refine の失敗・劣化（空/タグ無し/極端に短い）時は null を返し、呼び出し側は元 HTML を保持する。
  * 改善後の HTML をストリームで job.partial に流す（ライブ表示）。
  */
 async function runReviewStage(jobId: string, html: string): Promise<string | null> {
-  const onChunk = (accumulated: string): void => {
+  const setPartial = (accumulated: string): void => {
     const job = jobs.get(jobId);
     if (!job || job.status === 'done' || job.status === 'error') return;
     job.partial = splitPlanHtml(accumulated).html;
   };
 
-  let model = NOTEBOOK_CLAUDE_MODEL;
+  // パス1: 弱点の洗い出し（軽い。失敗しても続行）。
+  const critique = await runCritiquePass(html, jobId);
+
+  // パス2: 指摘＋チェックリストで見た目だけ引き上げる。
+  let model = DEV_MOCKUP_MODEL;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const raw = await runClaudeRaw(buildReviewPrompt(html), model, onChunk, REVIEW_TIMEOUT_MS);
+    if (isCanceled(jobId)) return null;
+    const raw = await runClaudeRaw(buildRefinePrompt(html, critique), model, setPartial, REVIEW_TIMEOUT_MS, jobId);
     if (!raw.error) {
       const improved = stripFences(splitPlanHtml(raw.stdout).html);
       // 劣化ガード: HTML として妥当か＋元の 60% 以上の分量か（丸ごと短く壊していないか）。
       if (improved && improved.includes('<') && improved.length >= html.length * 0.6) {
         return improved;
       }
-      console.warn('[dev-mockup] review stage output rejected (too short / invalid) → keep original');
+      console.warn('[dev-mockup] refine pass output rejected (too short / invalid) → keep original');
       return null;
     }
     if (isLimitFailure(raw) && attempt === 1) {
       model = DEV_MOCKUP_FALLBACK_MODEL;
-      console.warn(`[dev-mockup] review stage sonnet limit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`);
+      console.warn(`[dev-mockup] refine pass limit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`);
       continue;
     }
-    console.warn(`[dev-mockup] review stage failed: ${raw.error} → keep original`);
+    console.warn(`[dev-mockup] refine pass failed: ${raw.error} → keep original`);
     break;
   }
   return null;
@@ -1166,7 +1347,7 @@ async function runDesignFirstJob(
 ): Promise<void> {
   const setJob = (patch: Partial<Job>): void => {
     const job = jobs.get(jobId);
-    if (!job || job.status === 'done' || job.status === 'error') return;
+    if (!job || job.status === 'done' || job.status === 'error' || job.status === 'canceled') return;
     Object.assign(job, patch);
   };
 
@@ -1177,56 +1358,28 @@ async function runDesignFirstJob(
       if (job && job.status === 'pending') job.status = 'generating';
     }
 
-    // ── 高速モード（Figma なし）: 設計とコードを 1 回の AI 呼び出しに圧縮 ─────────
-    // 設計ステージを分けず要望から直接 HTML を作る。2 呼び出し→1 呼び出しで実質半分の時間に。
-    if (!useWireframe) {
-      setJob({ stage: 'code', partial: undefined });
-      const referenceGuidance = buildReferenceGuidance();
-      const fastPrompt = buildFastGeneratePrompt(userPrompt, referenceGuidance);
-      const onChunk = (accumulated: string, thinking: string): void => {
-        const job = jobs.get(jobId);
-        if (!job || job.status === 'done' || job.status === 'error') return;
-        job.partial = splitPlanHtml(accumulated).html;
-        if (thinking) job.thinking = thinking;
-      };
-      const fast = await generateHtmlWithRetry(fastPrompt, onChunk);
-      if (fast.html) {
-        let mockupId: string | undefined;
-        try {
-          mockupId = upsertMockup({ title: save.title, html: fast.html, prompt: save.prompt }).id;
-        } catch {
-          /* html は返す（保存はベストエフォート）。 */
-        }
-        const job = jobs.get(jobId);
-        if (job) {
-          job.status = 'done';
-          job.html = fast.html;
-          job.mockupId = mockupId;
-          if (mockupId) job.saved = [{ id: mockupId, title: save.title }];
-        }
-      } else {
-        const job = jobs.get(jobId);
-        if (job) {
-          job.status = 'error';
-          job.error = GENERATE_FAILURE_MESSAGES[fast.reason ?? 'error'];
-        }
-      }
-      return;
-    }
+    // Figma 工程は既定オフ（DEV_ENABLE_FIGMA=false）。HTML がそのまま成果物のためワイヤーフレームは
+    // 不要（Keita 方針）。useWireframe（旧トグル）も残すが、フラグが true の時だけ Figma を通す
+    //（可逆＝DEV_ENABLE_FIGMA=true に戻せば従来の Figma 先行フローが復活する）。
+    const figmaEnabled = DEV_ENABLE_FIGMA && useWireframe;
 
     // ── ステージ1: 設計（思考＋設計書＋画面リスト）─────────────
     setJob({ stage: 'design' });
     const design = await runDesignStage(jobId, userPrompt);
+    if (isCanceled(jobId)) return;
     const designDoc = design.designDoc;
     // 画面が出せなければ単一画面として続行（設計が空でもコードは作る）。
     const screens: ScreenSpec[] =
       design.screens.length > 0 ? design.screens : [{ name: save.title, description: userPrompt }];
     setJob({ designDoc: designDoc || undefined, screens, plan: designDoc || undefined });
 
-    // ── ステージ2: Figma ワイヤーフレーム（任意・失敗時はスキップ）──────
-    // useWireframe=false（高速モード）なら Figma 工程ごと飛ばし、設計→コードへ直行する。
+    // ── アートディレクション: Gemini でこの試作品のビジュアル方針を立て、コード生成へ差し込む ──
+    // 失敗/キー無しは null（＝方針注入なし）で Claude だけで生成。生成を止めない（グレースフルフォールバック）。
+    const artDirection = await buildGeminiArtDirection(userPrompt, designDoc);
+
+    // ── ステージ2: Figma ワイヤーフレーム（DEV_ENABLE_FIGMA 時のみ・失敗時はスキップ）──────
     let wireframed = false;
-    if (useWireframe) {
+    if (figmaEnabled) {
       setJob({ stage: 'wireframe', partial: undefined, wireframeProgress: '🎨 Figma でワイヤーフレームを作る準備をしています' });
       const specs: WireframeScreenSpec[] = screens.map((s) => ({
         name: s.name,
@@ -1271,6 +1424,7 @@ async function runDesignFirstJob(
       screens,
       wireframed,
       referenceGuidance,
+      artDirection,
     );
     const onCodeChunk = (accumulated: string, thinking: string): void => {
       const job = jobs.get(jobId);
@@ -1279,18 +1433,19 @@ async function runDesignFirstJob(
       job.partial = splitPlanHtml(accumulated).html;
       if (thinking) job.thinking = thinking;
     };
-    const result = await generateHtmlWithRetry(codePrompt, onCodeChunk);
+    const result = await generateHtmlWithRetry(codePrompt, onCodeChunk, jobId);
+    if (isCanceled(jobId)) return;
 
     if (result.html) {
       let html = result.html;
-      // ── ステージ4: 仕上げレビュー（丁寧モードのみ・MC-252 P2）─────────
-      // ルーブリックで自己点検→見た目だけ微修正。高速モード(useWireframe=false)では省いて速さを保つ。
-      // 失敗・劣化時は元 HTML を保持（runReviewStage が null を返す）。
-      if (useWireframe) {
-        setJob({ stage: 'review', partial: html, wireframeProgress: undefined });
-        const improved = await runReviewStage(jobId, html);
-        if (improved) html = improved;
-      }
+      // ── ステージ4: デザイン昇格（2 パス・MC-260）─────────
+      // critique（弱点洗い出し）→ refine（見た目だけ引き上げ）で常に磨く（Figma 有無に関わらず実施）。
+      // 見た目の底上げが本機能の狙いなので、高速/丁寧の区別なく毎回かける。
+      // 失敗・劣化時は直前 HTML を保持（runReviewStage が null を返す）。
+      setJob({ stage: 'review', partial: html, wireframeProgress: undefined });
+      const improved = await runReviewStage(jobId, html);
+      if (isCanceled(jobId)) return;
+      if (improved) html = improved;
       const cur = jobs.get(jobId);
       let mockupId: string | undefined;
       try {
@@ -1302,6 +1457,8 @@ async function runDesignFirstJob(
           ...(cur?.wireframe?.fileUrl ? { figmaFileUrl: cur.wireframe.fileUrl } : {}),
           ...(wireframed ? { wireframeDir: jobId } : {}),
           ...(wireframed && cur?.wireframe ? { wireframeScreens: cur.wireframe.screens } : {}),
+          // 生成完了を修正履歴の初回版として記録する（MC-260）。
+          recordVersion: { kind: 'generate', label: '初回生成', designDoc: designDoc || undefined },
         });
         mockupId = saved.id;
       } catch {
@@ -1379,10 +1536,13 @@ function handleGenerate(req: Request, res: Response): void {
     const autoTitle = explicitTitle || (instruction.trim() ? `修正: ${oneLine(instruction)}` : 'モックアップ');
     const storePrompt = instruction.trim() || undefined;
     const cliPrompt = buildRevisePrompt(baseHtml, instruction);
+    // 修正履歴の版ラベルは指示の要約にする（一覧で「何をした修正か」が分かるように）。
+    const versionLabel = instruction.trim() ? `修正: ${oneLine(instruction)}` : '修正';
     void runGenerateJob(jobId, cliPrompt, {
       title: autoTitle,
       id: explicitId,
       prompt: storePrompt,
+      versionLabel,
     }).catch(onFatal);
   }
 
@@ -1430,6 +1590,40 @@ function handleJob(req: Request, res: Response): void {
 }
 
 /**
+ * POST /api/dev/mockup/job/:jobId/cancel — 実行中ジョブをユーザ操作で中止する。
+ * status を 'canceled' にし、実行中の claude 子プロセスを kill する。各ステージの境界で
+ * isCanceled を見ているので、以降は保存も done 化もされない。既に終了済みなら何もしない。
+ */
+function handleCancelJob(req: Request, res: Response): void {
+  const jobId = String(req.params.jobId);
+  const job = jobs.get(jobId);
+  if (!job) {
+    res.status(404).json({ error: 'job not found' });
+    return;
+  }
+  // 既に完了/失敗しているなら中止不要。現状をそのまま返す。
+  if (job.status === 'done' || job.status === 'error') {
+    res.json({ status: job.status });
+    return;
+  }
+  job.status = 'canceled';
+  job.error = undefined;
+  // 実行中の claude 子プロセスを止める（順番待ち中で未起動なら子は無い）。
+  const children = jobChildren.get(jobId);
+  if (children) {
+    for (const child of children) {
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        /* noop */
+      }
+    }
+    jobChildren.delete(jobId);
+  }
+  res.json({ status: 'canceled' });
+}
+
+/**
  * GET /api/dev/wireframe/:dir/:file — 保存済みワイヤーフレーム PNG を配信する。
  * dir は生成時の jobId（uuid: 英数字＋ハイフン）、file は数字.png のみ許可し、
  * DEV_WIREFRAMES_DIR 配下から出ないようサニタイズする。auth ミドルウェア配下＝Cookie/Bearer 必須。
@@ -1463,6 +1657,50 @@ function handleGet(req: Request, res: Response): void {
   const mockup = getMockup(id);
   if (!mockup) {
     res.status(404).json({ error: 'mockup not found' });
+    return;
+  }
+  res.json({ mockup });
+}
+
+/**
+ * GET /api/dev/mockups/:id/versions — 修正履歴（バージョン）の一覧を新しい順で返す（html 除く・MC-260）。
+ * versions 無し/削除済み/不在は空配列（後方互換）。
+ */
+function handleListVersions(req: Request, res: Response): void {
+  const id = String(req.params.id);
+  res.json({ versions: listVersions(id) });
+}
+
+/**
+ * GET /api/dev/mockups/:id/versions/:versionId — 特定バージョンの html（本文込み）を返す（MC-260）。
+ * プレビュー用。無ければ 404。
+ */
+function handleGetVersion(req: Request, res: Response): void {
+  const id = String(req.params.id);
+  const versionId = String(req.params.versionId);
+  const version = getVersion(id, versionId);
+  if (!version) {
+    res.status(404).json({ error: 'version not found' });
+    return;
+  }
+  res.json({ version });
+}
+
+/**
+ * POST /api/dev/mockups/:id/restore — { versionId } で指定バージョンを現行 html に復元する（MC-260）。
+ * 復元自体も 1 版（kind='restore'）として記録される。成功時は復元後のモックアップ（html 含む）を返す。
+ */
+function handleRestoreVersion(req: Request, res: Response): void {
+  const id = String(req.params.id);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const versionId = typeof body.versionId === 'string' ? body.versionId.trim() : '';
+  if (!versionId) {
+    res.status(400).json({ error: 'versionId is required' });
+    return;
+  }
+  const mockup = restoreVersion(id, versionId);
+  if (!mockup) {
+    res.status(404).json({ error: 'mockup or version not found' });
     return;
   }
   res.json({ mockup });
@@ -1576,15 +1814,106 @@ function handleCodeLesson(req: Request, res: Response): void {
   res.status(202).json({ jobId });
 }
 
+// ─── アイデアを生成（開発ページの「💡 アイデアを生成」ボタン）─────────────
+//
+// 「何を作るか」が思いつかないときに、Claude にその場で 1 つだけ具体的なアプリ/画面の
+// アイデアを出させ、生成プロンプト欄に流し込む。出力はそのまま POST /mockup/generate に
+// 渡せる短い説明文（1〜2文）。毎回違うアイデアになるよう、ランダムな切り口を種に混ぜる。
+
+const IDEA_TIMEOUT_MS = 90_000;
+
+/** アイデアに多様性を持たせるための切り口（毎回ランダムに 1 つ選んで種にする）。 */
+const IDEA_SEEDS = [
+  '日々のちょっとした記録・習慣づくり',
+  '仕事・業務の効率化や見える化',
+  '学習・スキルアップを助ける',
+  'お金・家計・節約の管理',
+  '健康・運動・睡眠のサポート',
+  '家族・育児・暮らしの便利ツール',
+  '趣味・創作・エンタメ',
+  '計算・変換・診断などの実用ツール',
+  'タスク・予定・段取りの管理',
+  'チーム・コミュニティでの共有',
+];
+
+/** アイデア生成プロンプトを組む（ランダムな切り口を種に、具体的で作れる試作品案を 1 つ）。 */
+function buildIdeaPrompt(): string {
+  const seed = IDEA_SEEDS[Math.floor(Math.random() * IDEA_SEEDS.length)];
+  const salt = Math.random().toString(36).slice(2, 8); // 同種でも被らせないための種（出力には出さない）。
+  return [
+    'あなたは、動く HTML 試作品（モックアップ）を作るためのアイデア出しを手伝うプロダクト企画者です。',
+    'これから「ボタンが実際に動く小さな試作品を 1 つ作る」ための、具体的で面白いアプリ/画面のアイデアを 1 つだけ提案してください。',
+    '',
+    `今回の切り口（ヒント。これに沿いつつ自由に発想してよい）: ${seed}`,
+    '',
+    '条件:',
+    '- 1 つの画面＋数個の操作で完結する、こぢんまりした試作品向けの題材にすること（壮大すぎない）。',
+    '- 「何を入力して、何のボタンを押すと、何が起きるか」が具体的に分かること（動きが想像できる）。',
+    '- ありきたりすぎない、つい作ってみたくなる切り口にすること。',
+    '- 日本語で、1〜2 文（最大でも 120 文字程度）。前置き・箇条書き・見出し・引用符は付けず、説明文だけを出力すること。',
+    '- 例の形式: 「サムネイル作成ツール。タイトルを入力して『サムネ生成』を押すと、サンプルのサムネが実際に表示される」',
+    '',
+    `（内部識別子: ${salt} — 出力には含めないこと）`,
+  ].join('\n');
+}
+
+/** 出力を 1 行の説明文に整える（コードフェンス・前後の引用符・余計な空行を除去）。 */
+function cleanIdea(text: string): string {
+  let s = stripFences(text).trim();
+  // 行頭の箇条書き記号や番号、囲みの引用符を素朴に剥がす。
+  s = s.replace(/^[\s>*\-・]+/, '').trim();
+  s = s.replace(/^["'「『]/, '').replace(/["'」』]$/, '').trim();
+  // 複数行で返ってきたら最初の意味のある段落だけ採用。
+  const firstPara = s.split(/\n{2,}/)[0].split('\n').join(' ').trim();
+  return (firstPara || s).slice(0, 200);
+}
+
+/** POST /idea — その場でアプリ/画面のアイデアを 1 つ生成して返す（{ idea }）。 */
+async function handleIdea(_req: Request, res: Response): Promise<void> {
+  try {
+    const idea = await serializeDevGen(async () => {
+      let model = NOTEBOOK_CLAUDE_MODEL;
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const raw = await runClaudeRaw(buildIdeaPrompt(), model, undefined, IDEA_TIMEOUT_MS);
+        if (!raw.error) {
+          const cleaned = cleanIdea(raw.stdout);
+          if (cleaned) return cleaned;
+        } else if (isLimitFailure(raw) && attempt === 1) {
+          model = DEV_MOCKUP_FALLBACK_MODEL;
+          console.warn(`[dev-idea] sonnet limit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`);
+          continue;
+        }
+        console.warn(`[dev-idea] attempt ${attempt} failed: ${raw.error ?? 'empty'}`);
+        if (attempt < 2) await sleep(GENERATE_RETRY_BACKOFF_MS);
+      }
+      return '';
+    });
+    if (!idea) {
+      res.status(503).json({ error: 'アイデアの生成に失敗しました。少し待ってもう一度お試しください。' });
+      return;
+    }
+    res.status(200).json({ idea });
+  } catch (e) {
+    console.error('[dev-idea] failed:', e);
+    res.status(500).json({ error: 'アイデアの生成に失敗しました。' });
+  }
+}
+
 // ─── Router 組み立て ─────────────────────────────────────
 
 /** /api/dev 配下のルータを返す。index.ts で auth ミドルウェア配下に mount する。 */
 export function devMockupRouter(): Router {
   const router = Router();
+  router.post('/idea', (req, res) => void handleIdea(req, res));
   router.post('/mockup/generate', handleGenerate);
   router.get('/mockup/job/:jobId', handleJob);
+  router.post('/mockup/job/:jobId/cancel', handleCancelJob);
   router.get('/wireframe/:dir/:file', handleWireframeImage);
   router.get('/mockups', handleList);
+  // 修正履歴（バージョン）は :id より具体的なパスなので先に登録する（MC-260）。
+  router.get('/mockups/:id/versions', handleListVersions);
+  router.get('/mockups/:id/versions/:versionId', handleGetVersion);
+  router.post('/mockups/:id/restore', handleRestoreVersion);
   router.get('/mockups/:id', handleGet);
   router.post('/mockups', handleUpsert);
   router.post('/mockups/:id/rating', handleRating);

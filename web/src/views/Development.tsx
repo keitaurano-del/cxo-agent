@@ -28,6 +28,14 @@ interface DesignInfo {
   screens?: { name: string; description?: string }[];
 }
 
+/** 修正履歴の 1 版（サマリ。html は含めず、必要時に別 API で取得する）。 */
+interface MockupVersionSummary {
+  id: string;
+  label: string;
+  kind: 'generate' | 'revise' | 'review' | 'restore';
+  createdAt: string;
+}
+
 interface MockupSummary {
   id: string;
   title: string;
@@ -78,12 +86,17 @@ interface DraftState {
   currentId: string | null;
   /** 現在表示中プロトタイプの設計・ワイヤーフレーム（完成後/読込後に表示するため復元する）。 */
   design?: DesignInfo | null;
-  /** Figma ワイヤーフレーム工程を行うか（OFF=高速モード）。 */
-  useWireframe?: boolean;
   /** 実装仕様書（Markdown。生成/読込したら復元する）。 */
   spec?: string | null;
   /** コード学習（Markdown。TS実装＋構造化解説。生成/読込したら復元する）。MC-256。 */
   codeLesson?: string | null;
+  /**
+   * この currentId のモックを最後にサーバと同期した時刻（サーバの updatedAt）。
+   * マウント復元時に「サーバの方が新しい＝ドラフトが古い」を検知して読み直すのに使う。
+   * 別タブ/別端末で修正が完了し、こちらの追跡ジョブが期限切れになったケースでプレビューが
+   * 古いまま残るのを防ぐ（サーバが新しい時だけ読み直す＝未保存の手編集は壊さない）。
+   */
+  syncedAt?: string | null;
 }
 
 /** 進行中ジョブ（「作成中」カード表示・離脱/リロード後の再開に使う）。 */
@@ -156,6 +169,7 @@ interface SavedScreen {
 
 type JobResult =
   | { status: 'done'; html: string; mockupId?: string; saved: SavedScreen[]; design: DesignInfo }
+  | { status: 'canceled' }
   | { status: 'timeout' };
 
 /** ポーリングで運ぶ生成中のライブ状態（段階・設計・ワイヤーフレーム進捗を含む）。 */
@@ -279,6 +293,10 @@ async function pollMockupJob(
         screens: Array.isArray(data.screens) ? data.screens : undefined,
       });
     }
+    if (data.status === 'canceled') {
+      // ユーザが「実装をやめる」を押した。赤エラーにせず静かに片付ける。
+      return { status: 'canceled' };
+    }
     if (data.status === 'done') {
       const saved = Array.isArray(data.saved) ? data.saved : [];
       return {
@@ -334,6 +352,14 @@ function describeStreamPhase(code: string): string {
   }
   return best;
 }
+
+/** 修正履歴の版の種類ごとの表示（バッジ絵文字＋短いラベル）。 */
+const VERSION_KIND_META: Record<MockupVersionSummary['kind'], { icon: string; text: string }> = {
+  generate: { icon: '✨', text: '生成' },
+  revise: { icon: '✏️', text: '修正' },
+  review: { icon: '🎨', text: '仕上げ' },
+  restore: { icon: '↩️', text: '復元' },
+};
 
 /** ワイヤーフレーム PNG の配信 URL（auth は Cookie で自動付与される）。 */
 function wireframeSrc(dir: string | undefined, image: string | undefined): string | null {
@@ -422,6 +448,8 @@ export default function Development() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // 「💡 アイデアを生成」実行中フラグ。
+  const [ideaBusy, setIdeaBusy] = useState(false);
 
   // 進行中ジョブ（「作成中」として一覧に表示・離脱/リロードでも保持）。起動時に復元する。
   const [activeJobs, setActiveJobs] = useState<JobState[]>(loadJobs);
@@ -454,9 +482,6 @@ export default function Development() {
   const [liveScreens, setLiveScreens] = useState<{ name: string; description?: string }[]>([]);
   // 現在表示中プロトタイプの設計・ワイヤーフレーム（完成後/読込後に「何を作ったか」を表示）。
   const [design, setDesign] = useState<DesignInfo | null>(bootDraft?.design ?? null);
-  // Figma ワイヤーフレーム工程を行うか（OFF=高速モード：設計→コードのみで速い）。
-  // 既定 OFF（高速）。Figma は遅く詰まりやすいため、まず確実に出る高速を既定にし、必要時にONにする。
-  const [useWireframe, setUseWireframe] = useState<boolean>(bootDraft?.useWireframe ?? false);
   // 実装仕様書（モック→本番化の設計。MC-253）。生成/読込で入る。
   const [spec, setSpec] = useState<string | null>(bootDraft?.spec ?? null);
   // 実装仕様書の生成中フラグ。
@@ -465,6 +490,10 @@ export default function Development() {
   const [codeLesson, setCodeLesson] = useState<string | null>(bootDraft?.codeLesson ?? null);
   // コード学習の生成中フラグ。
   const [lessonBusy, setLessonBusy] = useState(false);
+  // 修正履歴（バージョン。新しい順。MC-260）。currentId の変化・生成/修正完了時に読み直す。
+  const [versions, setVersions] = useState<MockupVersionSummary[]>([]);
+  // 履歴パネルの開閉・復元中フラグ・プレビュー中の版 id（別ウィンドウで開く）。
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   // エディタに紐づく進行中ジョブ（あればエディタ側の進捗バーと生成ボタン無効化に使う）。
   const editorJob = activeJobs.find((j) => j.attachToEditor) ?? null;
@@ -472,6 +501,10 @@ export default function Development() {
 
   // 現在編集中のモックアップ id（保存済みを読み込んだ/保存した場合に入る）。
   const [currentId, setCurrentId] = useState<string | null>(bootDraft?.currentId ?? null);
+  // currentId のモックを最後にサーバと同期した時刻（サーバの updatedAt）。マウント時の整合に使う。
+  const [syncedAt, setSyncedAt] = useState<string | null>(bootDraft?.syncedAt ?? null);
+  // マウント時のサーバ整合を 1 回だけ走らせるためのフラグ。
+  const reconciledRef = useRef(false);
 
   // スマホ幅(md未満)での表示ペイン切替。デスクトップ(md+)では無視され両ペイン横並び。
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit');
@@ -518,10 +551,27 @@ export default function Development() {
     loadList();
   }, [loadList]);
 
+  // 指定 id の修正履歴（バージョン）を読み込む。id 無しなら空にする（MC-260）。
+  const loadVersions = useCallback((id: string | null) => {
+    if (!id) {
+      setVersions([]);
+      return;
+    }
+    fetch(`/api/dev/mockups/${encodeURIComponent(id)}/versions`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('versions failed'))))
+      .then((data: { versions?: MockupVersionSummary[] }) => setVersions(data.versions ?? []))
+      .catch(() => setVersions([]));
+  }, []);
+
+  // 編集中モックアップが変わるたびに履歴を読み直す（読込/生成/修正完了で currentId が変わる）。
+  useEffect(() => {
+    loadVersions(currentId);
+  }, [currentId, loadVersions]);
+
   // 入力・生成結果・選択中 id が変わるたびに localStorage へ退避する（離脱/リロード復元用）。
   useEffect(() => {
-    saveDraft({ prompt, instruction, title, html, currentId, design, useWireframe, spec, codeLesson });
-  }, [prompt, instruction, title, html, currentId, design, useWireframe, spec, codeLesson]);
+    saveDraft({ prompt, instruction, title, html, currentId, design, spec, codeLesson, syncedAt });
+  }, [prompt, instruction, title, html, currentId, design, spec, codeLesson, syncedAt]);
 
   // 進行中ジョブ配列が変わるたびに localStorage へ退避する（離脱/リロードでも「作成中」を保持）。
   useEffect(() => {
@@ -570,6 +620,8 @@ export default function Development() {
               setCurrentId(r.mockupId ?? r.saved[0]?.id ?? null);
               if (r.saved[0]?.title) setTitle(r.saved[0].title);
               if (job.mode === 'revise') setInstruction('');
+              // 生成が終わったら要望欄はクリアする（以降は「修正」だけの UI に切り替わる）。
+              if (job.mode === 'generate') setPrompt('');
               // 完成した設計・ワイヤーフレームを「何を作ったか」として保持（修正時は内容があれば更新）。
               if (job.mode === 'generate') {
                 setDesign(
@@ -588,11 +640,31 @@ export default function Development() {
               setLiveScreens([]);
               setFailedRun(null);
               setMobileTab('preview');
+              // 修正履歴を読み直す（修正では currentId が変わらず effect が走らないため明示的に）。
+              loadVersions(r.mockupId ?? r.saved[0]?.id ?? null);
+              // 完了＝サーバに自動保存された時点。整合基準を今に更新する。
+              setSyncedAt(new Date().toISOString());
             }
             setNotice(
               job.mode === 'revise'
                 ? '修正が完了しました（一覧にも自動保存済み）。'
                 : `「${job.label}」が完成しました（一覧にも自動保存済み）。`,
+            );
+          } else if (r.status === 'canceled') {
+            // ユーザが中止した。エディタ紐付けなら生成表示を畳む（赤エラーにはしない）。
+            if (job.attachToEditor) {
+              setStreamCode('');
+              setStreamPlan('');
+              setStreamThinking('');
+              setStreamStatus('');
+              setStage('');
+              setWireframeProgress('');
+              setLiveWireframe(null);
+              setLiveScreens([]);
+              setFailedRun(null);
+            }
+            setNotice(
+              job.mode === 'revise' ? '修正を中止しました。' : '作成を中止しました。',
             );
           } else {
             setNotice(
@@ -640,7 +712,7 @@ export default function Development() {
           setActiveJobs((prev) => prev.filter((j) => j.jobId !== job.jobId));
         });
     }
-  }, [activeJobs, loadList]);
+  }, [activeJobs, loadList, loadVersions]);
 
   // 通知は数秒で自動的に消す。
   useEffect(() => {
@@ -656,6 +728,32 @@ export default function Development() {
   }, [streamCode, streamPlan, streamThinking]);
 
   // 新規生成。起票だけして「進行中ジョブ」に積む（完了はバックグラウンドのポーリングが捌く）。
+  // 「💡 アイデアを生成」: サーバ(/api/dev/idea)で Claude にアイデアを 1 つ出させ、入力欄へ流し込む。
+  const handleGenerateIdea = useCallback(async () => {
+    if (ideaBusy || generating) return;
+    setError(null);
+    setNotice(null);
+    setIdeaBusy(true);
+    try {
+      const res = await fetch('/api/dev/idea', { method: 'POST' });
+      if (!res.ok) {
+        setError(await readError(res, 'アイデアの生成に失敗しました。'));
+        return;
+      }
+      const data = (await res.json()) as { idea?: string };
+      if (data.idea && data.idea.trim()) {
+        setPrompt(data.idea.trim());
+        setNotice('アイデアを入れました。必要なら直してから「生成」を押してください。');
+      } else {
+        setError('アイデアの生成に失敗しました。少し待ってもう一度お試しください。');
+      }
+    } catch {
+      setError('アイデアの生成に失敗しました。通信状態をご確認ください。');
+    } finally {
+      setIdeaBusy(false);
+    }
+  }, [ideaBusy, generating]);
+
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim() || generating) return;
     setError(null);
@@ -663,7 +761,7 @@ export default function Development() {
     const label = prompt.trim().slice(0, 40) || 'モックアップ';
     try {
       const jobId = await startMockupJob(
-        { prompt: prompt.trim(), wireframe: useWireframe },
+        { prompt: prompt.trim() },
         '生成に失敗しました',
       );
       // 既存ジョブのエディタ紐付けを外し、この新ジョブをエディタに紐づけて先頭に積む。
@@ -686,15 +784,11 @@ export default function Development() {
       setStreamStatus('pending');
       setStage('design');
       setMobileTab('preview'); // 生成の進み具合がライブで見えるプレビュー側へ。
-      setNotice(
-        useWireframe
-          ? '作成を開始しました。設計→ワイヤーフレーム→コードの順に進む様子をプレビュー側に表示します。'
-          : '作成を開始しました（高速モード）。設計→コードの順に進みます。',
-      );
+      setNotice('作成を開始しました。設計 → コード → デザイン仕上げ の順に進む様子をプレビュー側に表示します。');
     } catch (e) {
       setError(e instanceof Error ? e.message : '生成に失敗しました');
     }
-  }, [prompt, generating, title, useWireframe]);
+  }, [prompt, generating, title]);
 
   // 反復修正。起票だけして「進行中ジョブ」に積む。
   const handleRevise = useCallback(async () => {
@@ -723,6 +817,8 @@ export default function Development() {
         },
         ...prev.map((j) => ({ ...j, attachToEditor: false })),
       ]);
+      // 修正指示は「反映されたら」クリアする（＝完了時。失敗/中止で入力を失わないよう送信時には消さない）。
+      // クリアは完了ハンドラ（poller done の revise 分岐）と読込（handleLoad）で行う。
       setStreamCode('');
       setStreamPlan('');
       setStreamThinking('');
@@ -735,6 +831,21 @@ export default function Development() {
       setError(e instanceof Error ? e.message : '修正に失敗しました');
     }
   }, [html, instruction, generating, currentId, title]);
+
+  // 生成/修正を途中でやめる。エディタに紐づく進行中ジョブをサーバ側で中止（実行中の claude を kill）する。
+  // ポーリングが 'canceled' を拾って生成表示を畳む。通信が届かなくてもサーバの TTL で最終的に片付く。
+  const handleCancel = useCallback(async () => {
+    const job = activeJobs.find((j) => j.attachToEditor);
+    if (!job) return;
+    setNotice('作成を中止しています…');
+    try {
+      await fetch(`/api/dev/mockup/job/${encodeURIComponent(job.jobId)}/cancel`, {
+        method: 'POST',
+      });
+    } catch {
+      /* 通信失敗でもポーリング側／サーバ TTL で片付くので無視。 */
+    }
+  }, [activeJobs]);
 
   // 保存（upsert）。
   const handleSave = useCallback(async () => {
@@ -756,6 +867,8 @@ export default function Development() {
       if (!res.ok) throw new Error(await readError(res, '保存に失敗しました'));
       const data = (await res.json()) as { mockup?: { id?: string } };
       if (data.mockup?.id) setCurrentId(data.mockup.id);
+      // 保存＝サーバと同期した時点。整合基準を今に更新する。
+      setSyncedAt(new Date().toISOString());
       setNotice('保存しました。');
       loadList();
     } catch (e) {
@@ -785,11 +898,14 @@ export default function Development() {
           wireframeScreens?: WireframeScreen[];
           implSpec?: string;
           codeLesson?: string;
+          updatedAt?: string;
         };
       };
       const m = data.mockup;
       if (!m) throw new Error('読み込みに失敗しました');
       setCurrentId(m.id);
+      // サーバから読んだ＝この時点でサーバと同期済み。以後の整合判定の基準にする。
+      setSyncedAt(m.updatedAt ?? new Date().toISOString());
       setTitle(m.title);
       setHtml(m.html);
       setPreviewHtml(m.html);
@@ -814,6 +930,26 @@ export default function Development() {
       setError(e instanceof Error ? e.message : '読み込みに失敗しました');
     }
   }, []);
+
+  // マウント時の整合（1 回だけ）。ドラフト復元した currentId のモックについて、サーバの updatedAt が
+  // 最後の同期時刻より新しければ、ドラフトのプレビューは古い＝サーバの最新を読み直す。
+  // 別タブ/別端末で修正が完了し、こちらの追跡ジョブが期限切れになっていた場合でも最新が出るようにする。
+  // 進行中の編集ジョブがある間はポーリングに任せる。サーバが新しい時だけ読むので未保存の手編集は壊さない。
+  useEffect(() => {
+    if (reconciledRef.current) return;
+    if (listLoading) return; // 一覧が来るまで待つ（updatedAt 比較のため）。
+    reconciledRef.current = true;
+    const cid = bootDraft?.currentId;
+    if (!cid) return;
+    if (activeJobs.some((j) => j.attachToEditor)) return; // 生成/修正中はポーリングが反映する。
+    const server = mockups.find((m) => m.id === cid);
+    if (!server) return; // 一覧に無い（削除された等）は触らない。
+    const draftSynced = bootDraft?.syncedAt ? Date.parse(bootDraft.syncedAt) : 0;
+    const serverUpdated = Date.parse(server.updatedAt);
+    if (Number.isFinite(serverUpdated) && serverUpdated > draftSynced) {
+      void handleLoad(cid); // サーバの最新でプレビュー・コードを揃える。
+    }
+  }, [listLoading, mockups, activeJobs, bootDraft, handleLoad]);
 
   // 実装仕様書を作る（MC-253）。保存済みモックが対象。生成中の本文をライブ表示し、完了で確定・保存。
   const handleMakeSpec = useCallback(async () => {
@@ -946,6 +1082,65 @@ export default function Development() {
     [loadList],
   );
 
+  // 修正履歴（バージョン）のプレビュー: 指定版の html を取得し、新しいタブで開いて見比べられるようにする。
+  // 現在の編集内容を壊さず「この版はどんな見た目だったか」を確認できる（MC-260）。
+  const handlePreviewVersion = useCallback(
+    async (versionId: string) => {
+      if (!currentId) return;
+      try {
+        const res = await fetch(
+          `/api/dev/mockups/${encodeURIComponent(currentId)}/versions/${encodeURIComponent(versionId)}`,
+        );
+        if (!res.ok) throw new Error(await readError(res, 'この版の読み込みに失敗しました'));
+        const data = (await res.json()) as { version?: { html?: string } };
+        const versionHtml = data.version?.html;
+        if (!versionHtml) throw new Error('この版の読み込みに失敗しました');
+        // Blob URL を新しいタブで開く（sandbox なしのプレビュー窓＝見た目確認用）。
+        const blob = new Blob([versionHtml], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank', 'noopener,noreferrer');
+        // 少し待ってから URL を解放（開いた側が読み込む余裕を持たせる）。
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'この版の読み込みに失敗しました');
+      }
+    },
+    [currentId],
+  );
+
+  // 修正履歴（バージョン）への復元: 指定版を現行 html に戻す。復元自体も 1 版として記録される（MC-260）。
+  // 復元後はエディタ・プレビューにも反映し、履歴を読み直す。
+  const handleRestoreVersion = useCallback(
+    async (versionId: string, label: string) => {
+      if (!currentId || restoringId) return;
+      if (!window.confirm(`「${label}」の状態に戻します。よろしいですか？（現在の内容は履歴に残ります）`)) return;
+      setRestoringId(versionId);
+      setError(null);
+      try {
+        const res = await fetch(`/api/dev/mockups/${encodeURIComponent(currentId)}/restore`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ versionId }),
+        });
+        if (!res.ok) throw new Error(await readError(res, '復元に失敗しました'));
+        const data = (await res.json()) as { mockup?: { html?: string } };
+        const restoredHtml = data.mockup?.html;
+        if (typeof restoredHtml === 'string') {
+          setHtml(restoredHtml);
+          setPreviewHtml(restoredHtml);
+        }
+        setNotice(`「${label}」の状態に復元しました。`);
+        loadVersions(currentId);
+        loadList();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : '復元に失敗しました');
+      } finally {
+        setRestoringId(null);
+      }
+    },
+    [currentId, restoringId, loadVersions, loadList],
+  );
+
   // 新規作成: 入力・コード・プレビュー・選択中 id をすべてクリアして白紙に戻す。
   // 生成物は一覧に自動保存済みのため、ここで消えても「保存済みモックアップ」から再度開ける。
   const handleNew = useCallback(() => {
@@ -955,6 +1150,7 @@ export default function Development() {
     setHtml('');
     setPreviewHtml('');
     setCurrentId(null);
+    setSyncedAt(null);
     setError(null);
     setStreamCode('');
     setStreamPlan('');
@@ -967,6 +1163,7 @@ export default function Development() {
     setDesign(null);
     setSpec(null);
     setCodeLesson(null);
+    setVersions([]);
     setFailedRun(null);
     // 進行中ジョブは消さない。エディタ紐付けだけ外し、一覧に「作成中」で見え続けるようにする。
     setActiveJobs((prev) => prev.map((j) => ({ ...j, attachToEditor: false })));
@@ -1042,55 +1239,52 @@ export default function Development() {
             mobileTab === 'edit' ? 'flex' : 'hidden'
           } w-full min-h-0 flex-1 flex-col gap-4 overflow-y-auto border-b border-border p-4 md:flex md:w-[26rem] md:flex-none md:border-b-0 md:border-r`}
         >
-          {/* 生成 */}
+          {/* 生成。まだ試作品が無いときだけ表示し、1 つ作ったら以降は「修正」だけの UI にする
+              （Keita 指示 2026-07-03）。作り直したいときは修正セクションの「＋新規作成」で白紙に戻す。 */}
           <section className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-xs font-semibold text-text-muted" htmlFor="dev-prompt">
-                作りたい画面や機能の説明（ボタンが実際に動く試作品を 1 つ作ります）
-              </label>
-              <button
-                type="button"
-                onClick={handleNew}
-                className="shrink-0 rounded px-2 py-0.5 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
-              >
-                ＋ 新規作成
-              </button>
-            </div>
-            <textarea
-              id="dev-prompt"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="例: サムネイル作成ツール。タイトルを入力して『サムネ生成』を押すと、サンプルのサムネが実際に表示される"
-              rows={4}
-              className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
-            />
-            {/* Figma ワイヤーフレーム工程の ON/OFF。ON=設計→Figma下書き→コード（丁寧・数分）、
-                OFF=設計→コード（高速・1〜2分）。Keita がその場で速度と丁寧さを選べる。 */}
-            <label className="flex cursor-pointer items-start gap-2 text-xs text-text-muted">
-              <input
-                type="checkbox"
-                checked={useWireframe}
-                onChange={(e) => setUseWireframe(e.target.checked)}
-                disabled={generating}
-                className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--mc-accent)]"
-              />
-              <span>
-                Figma でワイヤーフレームも作る（より丁寧・数分かかります）
-                <span className="block text-[10px] text-text-faint">
-                  オフにすると設計→コードだけで素早く作ります（1〜2分）
-                </span>
-              </span>
-            </label>
-            <button
-              type="button"
-              onClick={handleGenerate}
-              disabled={generating || !prompt.trim()}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: 'var(--mc-accent)', color: 'var(--mc-bg)' }}
-            >
-              {generating ? <Spinner /> : <SparkIcon width={16} height={16} />}
-              {generating ? '生成中…' : useWireframe ? '生成（設計＋Figma）' : '生成（高速）'}
-            </button>
+            {!html.trim() && (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-semibold text-text-muted" htmlFor="dev-prompt">
+                    作りたい画面や機能の説明（ボタンが実際に動く試作品を 1 つ作ります）
+                  </label>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {/* 何を作るか思いつかない時に、Claude にその場でアイデアを 1 つ出させて入力欄へ流し込む。 */}
+                    <button
+                      type="button"
+                      onClick={handleGenerateIdea}
+                      disabled={ideaBusy || generating}
+                      className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+                      title="開発に使えるアイデアを 1 つ自動で出します"
+                    >
+                      {ideaBusy ? <Spinner /> : <span aria-hidden>💡</span>}
+                      {ideaBusy ? '考え中…' : 'アイデアを生成'}
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  id="dev-prompt"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="例: サムネイル作成ツール。タイトルを入力して『サムネ生成』を押すと、サンプルのサムネが実際に表示される"
+                  rows={4}
+                  className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
+                />
+                {/* 生成は「設計 → コード → デザイン昇格（2パス仕上げ）」の高品質 1 フローで作る。
+                    以前あった Figma ワイヤーフレーム工程は不要になったためトグルは撤去した
+                    （HTML がそのまま成果物・サーバ側 DEV_ENABLE_FIGMA で可逆的に復活可）。 */}
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  disabled={generating || !prompt.trim()}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ background: 'var(--mc-accent)', color: 'var(--mc-bg)' }}
+                >
+                  {generating ? <Spinner /> : <SparkIcon width={16} height={16} />}
+                  {generating ? '生成中…' : '生成'}
+                </button>
+              </>
+            )}
 
             {/* 生成/修正中の進捗。経過秒＋推定90秒ベースの簡易バー。 */}
             {generating && (
@@ -1107,6 +1301,15 @@ export default function Development() {
                 <p className="text-[11px] leading-relaxed text-text-muted">
                   生成中… {elapsed}秒（混雑時は1〜2分ほどかかることがあります。完了すると下の保存済み一覧にも自動保存されます）
                 </p>
+                {/* 途中でやめる。実行中の AI 処理をサーバ側で止める。 */}
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="self-start rounded-lg border px-3 py-1 text-[11px] font-semibold transition-colors hover:bg-surface-2"
+                  style={{ borderColor: 'var(--mc-stalled)', color: 'var(--mc-stalled)' }}
+                >
+                  ■ 実装をやめる
+                </button>
               </div>
             )}
           </section>
@@ -1114,9 +1317,19 @@ export default function Development() {
           {/* 反復修正（html がある時のみ） */}
           {html.trim() && (
             <section className="flex flex-col gap-2 border-t border-border pt-4">
-              <label className="text-xs font-semibold text-text-muted" htmlFor="dev-instruction">
-                修正指示
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-semibold text-text-muted" htmlFor="dev-instruction">
+                  修正指示
+                </label>
+                {/* 別のものを新しく作りたいときは白紙に戻す（要望欄＋生成ボタンが再び出る）。 */}
+                <button
+                  type="button"
+                  onClick={handleNew}
+                  className="rounded px-2 py-0.5 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+                >
+                  ＋ 新規作成
+                </button>
+              </div>
               <textarea
                 id="dev-instruction"
                 value={instruction}
@@ -1178,6 +1391,73 @@ export default function Development() {
                   {currentId ? '上書き保存' : '保存'}
                 </button>
               </div>
+            </section>
+          )}
+
+          {/* 修正履歴（バージョン。MC-260）— 保存済みモックで、履歴が 1 件以上ある時だけ出す。
+              修正・再生成・復元のたびに版が積まれ、各版をプレビュー/復元できる。 */}
+          {currentId && versions.length > 0 && (
+            <section className="flex flex-col gap-2 border-t border-border pt-4">
+              <details open className="flex flex-col gap-2">
+                <summary className="cursor-pointer text-xs font-semibold text-text-muted">
+                  修正履歴（{versions.length} 件）
+                </summary>
+                <p className="mt-1 text-[10px] text-text-faint">
+                  修正・再生成のたびに履歴として残ります。各版は「👁 プレビュー」で見比べ、「↩︎ 復元」で現在の内容に戻せます（復元しても今の内容は履歴に残ります）。
+                </p>
+                <ul className="mt-1 flex flex-col gap-1">
+                  {versions.map((v, i) => {
+                    const meta = VERSION_KIND_META[v.kind];
+                    return (
+                      <li
+                        key={v.id}
+                        className="flex items-center gap-2 rounded-lg border border-border px-3 py-2"
+                      >
+                        <span className="shrink-0 text-sm" aria-hidden>
+                          {meta.icon}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate text-xs text-text" title={v.label}>
+                              {v.label}
+                            </span>
+                            {i === 0 && (
+                              <span
+                                className="shrink-0 rounded px-1 text-[9px] font-semibold"
+                                style={{ background: 'var(--mc-active-bg)', color: 'var(--mc-active)' }}
+                              >
+                                最新
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-text-faint">
+                            {meta.text}・{new Date(v.createdAt).toLocaleString('ja-JP')}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handlePreviewVersion(v.id)}
+                          aria-label={`「${v.label}」をプレビュー`}
+                          title="この版を新しいタブでプレビュー"
+                          className="shrink-0 rounded p-1 text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+                        >
+                          👁
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleRestoreVersion(v.id, v.label)}
+                          disabled={restoringId !== null}
+                          aria-label={`「${v.label}」に復元`}
+                          title="この版を現在の内容に復元する"
+                          className="shrink-0 rounded p-1 text-text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {restoringId === v.id ? <Spinner /> : '↩︎'}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </details>
             </section>
           )}
 
@@ -1367,12 +1647,23 @@ export default function Development() {
                 : 'プレビュー'}
             </span>
             {generating ? (
-              <span
-                className="flex items-center gap-1.5 text-[11px]"
-                style={{ color: 'var(--mc-active)' }}
-              >
-                <Spinner /> {elapsed}秒
-              </span>
+              <div className="flex items-center gap-2">
+                <span
+                  className="flex items-center gap-1.5 text-[11px]"
+                  style={{ color: 'var(--mc-active)' }}
+                >
+                  <Spinner /> {elapsed}秒
+                </span>
+                {/* 途中でやめる（プレビュー側にも常に出す＝生成中はこのペインを見ているため）。 */}
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="rounded border px-2 py-0.5 text-[11px] font-semibold transition-colors hover:bg-surface-2"
+                  style={{ borderColor: 'var(--mc-stalled)', color: 'var(--mc-stalled)' }}
+                >
+                  ■ やめる
+                </button>
+              </div>
             ) : (
               previewHtml.trim() && (
                 <button
@@ -1468,7 +1759,7 @@ export default function Development() {
                     </details>
                   )}
                   <p className="text-[10px] text-text-faint">
-                    ↓ ワイヤーフレームを元に AI が書いているコードです（各部分の説明コメント付き）。完成すると下に実際の画面が出ます。
+                    ↓ 設計を元に AI が書いているコードです（各部分の説明コメント付き）。この後デザインを仕上げて、下に実際の画面が出ます。
                   </p>
                   <pre
                     ref={streamPreRef}
@@ -1495,7 +1786,7 @@ export default function Development() {
                     </details>
                   )}
                   <p className="text-[10px] text-text-faint">
-                    まず「何を作るか」と必要な画面を整理しています。この後 Figma でワイヤーフレームを描き、それを元にコードを書きます。
+                    まず「何を作るか」と必要な画面を整理しています。この後それを元にコードを書き、最後にデザインを仕上げます。
                   </p>
                   <pre
                     ref={streamPreRef}
@@ -1614,7 +1905,7 @@ export default function Development() {
             ) : (
               <div className="flex h-full items-center justify-center p-6">
                 <EmptyState>
-                  左の入力欄に作りたい画面を説明して「生成」を押すと、設計 → Figma ワイヤーフレーム → 動くプレビュー の順でここに表示されます。
+                  左の入力欄に作りたい画面を説明して「生成」を押すと、設計 → コード → デザイン仕上げ の順で作られ、動くプレビューがここに表示されます。
                 </EmptyState>
               </div>
             )}
