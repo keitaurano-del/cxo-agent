@@ -3171,8 +3171,8 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | MC-264 |
 | タイトル | Apollo サイドメニューに「PDF」を新設。ブラウザ内で完結する **PDFエディター**を自前で作り込む。Keita 要望＝「C（本文テキストの直接編集）」を主目的に、**商用SDK（Apryse/Nutrient/Foxit）は使わず**、無料スタックで到達可能な最大品質まで作り込む（2026-07-03 Keita「可能な限り作り込んで」）。**正直な前提**: Acrobat Pro級の完全な本文リフローには届かない（自前の限界）。文字ベースPDFが対象、**スキャンPDFは対象外**（この箱に OCR/tesseract 無し）。 |
 | 優先度 | P2 |
-| ステータス | TODO（2026-07-03 Son 起票・方針確定）。実装は段階リリース可。nav.ts/App.tsx はソラ WIP のため本人が結線。 |
-| 担当 | dev-apollo（ソラ） |
+| ステータス | IN_PROGRESS（Phase1 完了・本番反映 / 2026-07-03 **Son 直接実装**＝Keita「ソラに渡さなくていいから直接やって」）。**Phase1 実装済**: 新規 `web/src/views/PdfEditor.tsx`、依存 pdfjs-dist@4.10.38+pdf-lib@1.17.1 追加、App.tsx に3行結線（lazy import＋NAV"PDF"＋/pdf route、アイコンは暫定 DocumentsIcon 流用・icons.tsx 不変）。方式B(`npx vite build`)で web/dist 反映＝restart不要。**検証**: build EXIT0・全アセット/worker/`/pdf` 配信200・playwright ヘッドレスで実PDF(2p)読込→pdf.js 実描画(canvasピクセル確認)・「2ページ」表示・**console error 0**。App.tsx/package.json はソラWIPと同一→保全共有済(ソラは次コミットで3行＋依存2件を保持)。バックアップ /tmp/App.tsx.son-bak-pdf。次: Phase2(注釈/署名)・Phase3(本文編集)を Son 継続。 |
+| 担当 | Son（直接実装・Keita 指示）。関連保全: dev-apollo（ソラ）は共有ファイルのコミット時に本変更を保持 |
 | 技術前提（Son 確認済み） | この箱に **LibreOffice 24.2（soffice）**＝PDF↔DOCX/HTML 変換可、**poppler（pdftotext/pdftoppm）**、server に **pdfkit** 既存。OCR(tesseract) は**無い**。フロント追加想定: `pdfjs-dist`(描画) + `pdf-lib`(書き出し)。 |
 | スコープ（可能な限り作り込む・段階） | **Phase1 基盤/閲覧/ページ操作**: サイドメニュー"PDF"追加（nav.ts＋App.tsx route＋新 view）。アップロード→pdf.js 描画・ズーム・ページサムネ・並べ替え(D&D)・削除・回転・抽出・**複数PDF結合/分割**・ダウンロード（pdf-lib）。**Phase2 注釈/記入/署名**: テキストボックス追加・ハイライト・フリーハンド・図形・**署名(手書き/画像)**・AcroForm フォーム記入。**Phase3 本文テキスト編集（主目的・最大作り込み）**: (a) **インプレース上書き編集**＝pdf.js テキストレイヤで文字ランを検出→原文を白抜き→同フォント/サイズ/色で組み直し（レイアウト保持・部分修正に強い）、(b) **変換ラウンドトリップ**＝soffice で PDF→DOCX/HTML→アプリ内リッチエディタで本文書換→PDFへ戻す（大幅な文章編集向け）。UI で「複雑レイアウトは崩れ得る／スキャンPDF非対応」を明示。 |
 | 受け入れ条件（DoD） | サイドメニューに"PDF"。文字ベースPDFで、閲覧・ページ操作(結合/分割/並べ替え/回転/削除)・注釈/署名・**本文テキスト編集(上書き＋変換)**が実機で動き、編集後PDFをダウンロードできる。スキャンPDFや非対応時は穏当なメッセージ。段階リリース各Phaseで実機確認。 |
