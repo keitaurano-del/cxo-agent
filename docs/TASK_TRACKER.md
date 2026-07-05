@@ -3216,7 +3216,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-275 | コンテンツページ（使い方 / FAQ）新設＝SEO＋AdSense審査「価値あるコンテンツ」要件 | 中 | IN_PROGRESS（Fable） | Fable/Son | |
 | MC-276 | 軽量化: AI-OCR化で不要になった tessdata(11-16MB)/tesseractアセット削除・和文フォントのサブセット最適化 | 中 | IN_PROGRESS（Fable） | Fable/Son | 参照グリップ確認のうえ未使用のみ削除 |
 | MC-277 | OGP最終化（og-image 確定・twitter card・favicon） | 低 | IN_PROGRESS（Fable=微修正） | Fable/Son | og-image.png/favicon.svg は存在 |
-| MC-278 | 解析導入（GA4 or Plausible） | 低 | **BLOCKED**（Keita: 選定/アカウント） | Son | 匿名イベント設計は MC-265 §Phase1 |
+| MC-278 | アクセス解析（第一者・Apollo内表示） | 中 | **DONE**（2026-07-05 Keita「一旦自前で」。Fable5＋Son検証。server/src/lib/siteAnalytics.ts=公開サイトのGET /を匿名集計[Cookieレス・生IP非保存=日付salt付sha256・CF-IPCountryで国・UAでbot除外]→data/analytics/pdfai/YYYY-MM.json永続[20件/60秒/SIGTERMフラッシュ]。`GET /api/analytics/pdfai?days=`認証保護[公開側404]。Apolloサイドメニュー「PDF.ai 解析」=日別訪問/ユニーク/参照元/国/デバイス/OCR利用数・7日30日切替。.mc.envに SITE_ANALYTICS_SALT 追加でハッシュ安定化。**検証**: API=JSON・公開側404・apollomansion無傷・テスト来訪3件が集計反映・生IP非保存） | Son | GA4併設は将来（今回は自前のみ） |
 | MC-279 | AI-OCR（Gemini vision）完了後の独立検証 | 高 | IN_PROGRESS（Son: API検証済/実機E2E残） | Son | tesseract→AI置換。本番 `/api/ocr` 200確認済 |
 | MC-280 | クロスブラウザ実機QA（iOS Safari / Android Chrome / PC）＝公開前ゲート | 中 | TODO | Son | |
 | MC-281 | 運用監視・Gemini OCR 従量コスト監視・バックアップ | 中 | TODO（後段） | Son | |
