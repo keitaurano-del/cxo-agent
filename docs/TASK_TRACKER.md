@@ -3206,7 +3206,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 |---|---|---|---|---|---|
 | MC-266 | `/site/` を認証なしで公開配信（ダッシュボード/API は MC_TOKEN 保護維持）。独立SPA化 or 公開ホスティング方式の決定＋実装 | 高 | **BLOCKED**（Keita: 公開GO＋方式決定。現状は「非公開でいい」方針） | Son/Fable | 現状は全体が MC_TOKEN 配下＝外部から入れない。公開の起点 |
 | MC-267 | OCR API の公開稼働（GEMINI_API_KEY を公開ホスト側に・body limit・レート制限/悪用対策・従量コスト保護） | 高 | TODO | Son/Fable | 依存 MC-266。ローカルの `/api/ocr` は稼働済 |
-| MC-268 | 独立ドメイン確定・DNS/TLS・OGP(og:url)/sitemap の URL 更新 | 高 | IN_PROGRESS（**ドメイン=`pdfdotai.com` 決定** / 2026-07-05 Keita「1でいいよ」。取得=Keita が Cloudflare Registrar で登録→取得後に Son が DNS/OGP/sitemap/canonical を切替） | Keita(取得)/Son(設定) | 空き確認済(RDAP)。「PDF.ai」を綴る.com。実公開は MC-266(公開配信GO) と併せて |
+| MC-268 | 独立ドメイン確定・DNS/TLS・OGP(og:url)/sitemap の URL 更新 | 高 | IN_PROGRESS（**`pdfdotai.com` 取得・配信疎通まで完了** / 2026-07-05。**真因=ドメインがurano2アカウント・既存トンネルは主アカウントで cfargotunnel が跨げず1033**→urano2アカウントに新トンネル `pdfdotai-son`(TID 74498993…)をAPIで作成・remotely-managed・ingress pdfdotai/www→:4317・systemd `cloudflared-pdfdotai.service`(enabled/EnvironmentFile=/etc/cloudflared/pdfdotai.env)で常駐。DNS(apex/www CNAME→新TID.cfargotunnel)張替。**`https://pdfdotai.com/site/` =200 PDF.ai表示**確認。残: OGP/canonical/sitemap を新ドメインへ切替(定数1箇所)＝実公開時に。**要掃除**: 主アカウント側の誤登録 `pdfdotai.com.apollomansion.com`/`www.…` CNAME(害なし)） | Son | 実公開(認証OFF)は MC-266 GO 後 |
 | MC-269 | Google AdSense: アカウント作成→サイト審査通過→ads.txt→実広告タグ差込（現状 Aurora Cloud モック置換） | 高 | **BLOCKED**（Keita: アカウント＋公開URL必要） | Keita/Son | 収益の要。審査に公開URL＋コンテンツ＋PP＋運営者情報が必要（相互依存） |
 | MC-270 | プライバシーポリシー本文の確定（第三者Cookie/パーソナライズ広告の開示・OCR送信の開示・問い合わせ先） | 高 | IN_PROGRESS（Fable） | Fable/Son | OCR送信の開示は実装済。広告Cookie開示を追記 |
 | MC-271 | 運営者情報・お問い合わせ窓口ページ新設 | 中 | IN_PROGRESS（Fable=雛形） | Fable/Son | 運営者情報の実値（主体/連絡先）は **要Keita**。雛形＋プレースホルダで用意 |
