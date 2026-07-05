@@ -3220,3 +3220,10 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-279 | AI-OCR（Gemini vision）完了後の独立検証 | 高 | IN_PROGRESS（Son: API検証済/実機E2E残） | Son | tesseract→AI置換。本番 `/api/ocr` 200確認済 |
 | MC-280 | クロスブラウザ実機QA（iOS Safari / Android Chrome / PC）＝公開前ゲート | 中 | TODO | Son | |
 | MC-281 | 運用監視・Gemini OCR 従量コスト監視・バックアップ | 中 | TODO（後段） | Son | |
+
+### 追加: 2026-07-05 公開後グロース（DL計測・海外SEO）
+
+| ID | タイトル | 優先 | ステータス | 担当 | 備考 |
+|---|---|---|---|---|---|
+| MC-282 | アクセス解析に「ダウンロード数」追加 | 中 | **DONE**（2026-07-05 Fable5＋Son検証。DL成立時に PdfEditor が sendBeacon で `POST /api/analytics/event {type:download}` を1回→当日downloads+1。publicSite の PUBLIC_POST に event 追加＋レート制限30/分・不正/未知type/8KB超は静かに204・**ボットUA除外**・二重発火なし。Apolloパネルに「ダウンロード数」カード。**Son実測**: ブラウザUAで 0→3 加算・curl既定UAは仕様どおり除外・公開閲覧API404・apollomansion無傷） | Son | 生IP非保存維持 |
+| MC-283 | 海外流入向けSEO/国際化（実パス化・英語ファースト・LP・構造化データ） | 高 | **IN_PROGRESS**（2026-07-05 Keita「海外流入増やして」。Fable5実装中: ①HashRouter→BrowserRouter＋旧#リダイレクト＋ページ別メタ/canonical/OG/JSON-LD(SoftwareApplication/FAQPage)/hreflang＋クローラ用静的HTML ②英語ファースト(Accept-Language/国で自動判定) ③キーワードLP(/edit-pdf・/edit-scanned-pdf・/add-text-to-pdf)＋sitemap全URL。境界(公開GETのみ許可・保護404・apollomansion無傷)厳守。完了後Son敵対的検証＋再起動） | Son/Fable | 効果は解析の国別で計測。投稿系(ProductHunt/HN/Reddit)はKeita・文面Sonドラフト |
