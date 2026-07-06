@@ -3221,6 +3221,8 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-280 | クロスブラウザ実機QA（iOS Safari / Android Chrome / PC）＝公開前ゲート | 中 | TODO | Son | |
 | MC-281 | 運用監視・Gemini OCR 従量コスト監視・バックアップ | 中 | TODO（後段） | Son | |
 
+> **運用インシデント記録 2026-07-06（Son・ボード棚卸しで検出→即復旧）**: `pdfdotai.com` が全URL **HTTP 500**（`web/dist/site/index.html` ENOENT＝ダッシュボードbuildが dist/site を消したまま未再build。記憶 pdf-site-build-order-dist-wipe の通り）。`npm run build:site`（99静的p＋sitemap・11言語）で再生成→ルート/ja/sitemap/ads.txt=200・保護境界(tasks404/apollo401)無傷を実測復旧。サーバ再起動不要（毎リクエスト stat）。**根因の恒久対策が未了**＝ダッシュボードbuild後にサイト再buildを強制する運用/スクリプト化は MC-281 で要対応。**併せて要Keita判断**: PDF.ai本番変更が working-tree に**117ファイル未コミット**（他agent WIP混在で一括commit不可・/tmp/pdfai-backup-20260706 退避）＝ツリーreset/checkoutで消失リスク。正式commitはチーム調整要。
+
 ### 追加: 2026-07-05 公開後グロース（DL計測・海外SEO）
 
 | ID | タイトル | 優先 | ステータス | 担当 | 備考 |
