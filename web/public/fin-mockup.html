@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>財務分析プラットフォーム — UIモック（企業分析画面）</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --line:#293040;
+    --text:#e6edf3; --muted:#9aa7b4; --faint:#6b7684;
+    --accent:#5b8cff; --accent2:#22d3ee;
+    --good:#3fb950; --warn:#e3a008; --bad:#f0553a; --neutral:#8b98a5;
+    --chip:#202838;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+       background:linear-gradient(180deg,#0b0f15,#0d1117);color:var(--text);line-height:1.55;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 20px 64px}
+  /* top bar */
+  .topbar{position:sticky;top:0;z-index:10;backdrop-filter:blur(10px);background:rgba(13,17,23,.82);
+          border-bottom:1px solid var(--line)}
+  .topbar .inner{max-width:1120px;margin:0 auto;display:flex;align-items:center;gap:18px;padding:12px 20px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:800;letter-spacing:.2px}
+  .brand .dot{width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .search{flex:1;max-width:420px;display:flex;align-items:center;gap:8px;background:var(--panel2);
+          border:1px solid var(--line);border-radius:10px;padding:8px 12px;color:var(--muted)}
+  .search input{flex:1;background:none;border:none;outline:none;color:var(--text);font-size:14px}
+  .badge-demo{margin-left:auto;font-size:11px;color:var(--faint);border:1px dashed var(--line);
+              border-radius:20px;padding:4px 10px}
+  /* company header */
+  .company{display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px;padding:26px 0 8px}
+  .logo{width:52px;height:52px;border-radius:13px;background:#eb0a1e;display:flex;align-items:center;
+        justify-content:center;font-weight:800;color:#fff;font-size:20px}
+  .company h1{margin:0;font-size:24px;letter-spacing:.3px}
+  .company .meta{color:var(--muted);font-size:13px;margin-top:2px}
+  .price{margin-left:auto;text-align:right}
+  .price .p{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
+  .price .c{color:var(--good);font-size:13px;font-weight:600}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:6px;background:var(--chip);
+       color:var(--muted);border:1px solid var(--line)}
+  /* grid */
+  .grid{display:grid;gap:16px}
+  .g3{grid-template-columns:1.15fr 1fr 1fr}
+  .g2{grid-template-columns:1fr 1fr}
+  @media(max-width:860px){.g3,.g2{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
+  .card h3{margin:0 0 4px;font-size:13px;letter-spacing:.4px;color:var(--muted);text-transform:uppercase}
+  .card .sub{color:var(--faint);font-size:11.5px;margin:0 0 12px}
+  .section-t{font-size:15px;font-weight:700;margin:30px 0 12px;display:flex;align-items:center;gap:8px}
+  .section-t .bar{width:4px;height:16px;border-radius:2px;background:linear-gradient(var(--accent),var(--accent2))}
+  /* valuation gauge */
+  .valnum{display:flex;align-items:baseline;gap:10px;margin:2px 0 14px}
+  .valnum .fair{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+  .valnum small{color:var(--muted);font-size:12px}
+  .gauge{position:relative;height:12px;border-radius:8px;overflow:hidden;
+         background:linear-gradient(90deg,#2f7d4f 0%,#3fb950 22%,#d9b23a 50%,#e3771a 74%,#f0553a 100%)}
+  .gauge .mk{position:absolute;top:-4px;width:3px;height:20px;background:#fff;border-radius:2px;box-shadow:0 0 0 2px rgba(0,0,0,.35)}
+  .gauge-lbls{display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px}
+  .assump{font-size:11px;color:var(--faint);margin-top:12px;border-top:1px dashed var(--line);padding-top:10px}
+  /* health radar */
+  .subscores{display:flex;flex-direction:column;gap:9px;margin-top:6px}
+  .ss{display:grid;grid-template-columns:76px 1fr 30px;align-items:center;gap:10px;font-size:12.5px}
+  .ss .track{height:7px;border-radius:5px;background:var(--panel2);overflow:hidden}
+  .ss .fill{height:100%;border-radius:5px}
+  .scoreBig{font-size:34px;font-weight:800;line-height:1}
+  .scoreBig small{font-size:14px;color:var(--muted);font-weight:600}
+  /* kpi strip */
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+  @media(max-width:860px){.kpis{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:520px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:12px 13px}
+  .kpi .k{font-size:11px;color:var(--muted)}
+  .kpi .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:3px}
+  .chip{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;margin-top:6px}
+  .c-good{background:rgba(63,185,80,.14);color:var(--good)}
+  .c-warn{background:rgba(227,160,8,.16);color:var(--warn)}
+  .c-neu{background:rgba(139,152,165,.16);color:var(--neutral)}
+  /* statements */
+  .stacked{display:flex;height:34px;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+  .seg{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#0c1016}
+  .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-size:11.5px;color:var(--muted)}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  .bars{display:flex;align-items:flex-end;gap:10px;height:120px;margin-top:8px}
+  .bars .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;justify-content:flex-end;height:100%}
+  .bars .bk{width:100%;max-width:34px;border-radius:6px 6px 0 0;background:linear-gradient(var(--accent),#3358b8)}
+  .bars .yr{font-size:10.5px;color:var(--faint)}
+  /* AI cards */
+  .ai{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:860px){.ai{grid-template-columns:1fr}}
+  .obs{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
+       border-radius:12px;padding:14px 15px}
+  .obs.warn{border-left-color:var(--warn)}
+  .obs.good{border-left-color:var(--good)}
+  .obs .h{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:6px}
+  .obs .h .ic{font-size:15px}
+  .obs p{margin:0 0 10px;font-size:13px;color:#cdd7e1}
+  .srctag{display:inline-flex;align-items:center;gap:6px;font-size:11px;background:var(--chip);
+          border:1px solid var(--line);border-radius:20px;padding:3px 9px;color:var(--muted)}
+  .srctag b{color:var(--accent2);font-weight:700}
+  .obs .link{font-size:11px;color:var(--faint);margin-left:8px}
+  /* peer table */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:10px 12px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child{text-align:left}
+  thead th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+  tbody tr.me{background:rgba(91,140,255,.08)}
+  tbody tr.me td:first-child{font-weight:800;color:var(--text)}
+  .hl{color:var(--good);font-weight:700}
+  .lo{color:var(--warn);font-weight:700}
+  .disc{margin-top:26px;font-size:11.5px;color:var(--faint);border:1px solid var(--line);
+        border-radius:12px;padding:14px 16px;background:var(--panel)}
+  .aihdr{display:flex;align-items:center;gap:8px}
+  .aipill{font-size:10px;font-weight:700;color:#0c1016;background:linear-gradient(135deg,var(--accent),var(--accent2));
+          padding:2px 8px;border-radius:20px}
+</style>
+</head>
+<body>
+  <div class="topbar"><div class="inner">
+    <div class="brand"><span class="dot"></span><span>FinLens<span style="color:var(--faint);font-weight:600">（仮）</span></span></div>
+    <div class="search">🔎<input placeholder="企業名・証券コードで検索（例: トヨタ / 7203）" value="トヨタ自動車" /></div>
+    <span class="badge-demo">UIモック / サンプルデータ</span>
+  </div></div>
+
+  <div class="wrap">
+    <!-- company header -->
+    <div class="company">
+      <div class="logo">T</div>
+      <div>
+        <h1>トヨタ自動車 <span style="font-size:15px;color:var(--faint);font-weight:600">7203・東証P</span></h1>
+        <div class="meta">輸送用機器 / 自動車　<span class="tag">3月決算</span> <span class="tag">連結・IFRS</span> <span class="tag">出典: 金融庁 EDINET</span></div>
+      </div>
+      <div class="price">
+        <div class="p">¥2,980</div>
+        <div class="c">▲ +1.4%（前日比）</div>
+      </div>
+    </div>
+
+    <!-- row 1: valuation / health / kpi-ish -->
+    <div class="grid g3">
+      <!-- valuation -->
+      <div class="card">
+        <h3>バリュエーション（適正化）</h3>
+        <p class="sub">複数モデルの参考レンジ。助言ではなく客観的な計算結果です。</p>
+        <div class="valnum">
+          <span class="fair">¥2,600 – ¥3,400</span><small>理論株価レンジ（参考）</small>
+        </div>
+        <div class="gauge"><span class="mk" style="left:53%"></span></div>
+        <div class="gauge-lbls"><span>割安</span><span>妥当</span><span>割高</span></div>
+        <div style="font-size:12px;margin-top:10px;color:var(--muted)">現在値 <b style="color:var(--text)">¥2,980</b> はレンジ内＝<b style="color:var(--good)">概ね妥当</b>圏。</div>
+        <div class="assump">モデル: DCF（割引率8.0%・永久成長1.0%）／DDM／PER・PBRマルチプル（同業中央値）。前提を変えると結果は変わります。<b>投資判断はご自身の責任で。</b></div>
+      </div>
+      <!-- health -->
+      <div class="card">
+        <h3>財務健全性スコア</h3>
+        <p class="sub">収益性・安全性・成長性・CF創出を総合評価</p>
+        <div style="display:flex;align-items:center;gap:16px;margin:6px 0 12px">
+          <div class="scoreBig" style="color:var(--good)">78<small> /100</small></div>
+          <div style="font-size:12px;color:var(--muted)">総合<br><b style="color:var(--good)">良好</b>（安全性が特に高い）</div>
+        </div>
+        <div class="subscores">
+          <div class="ss"><span>収益性</span><span class="track"><span class="fill" style="width:70%;background:var(--good)"></span></span><b>70</b></div>
+          <div class="ss"><span>安全性</span><span class="track"><span class="fill" style="width:88%;background:var(--good)"></span></span><b>88</b></div>
+          <div class="ss"><span>成長性</span><span class="track"><span class="fill" style="width:62%;background:var(--warn)"></span></span><b>62</b></div>
+          <div class="ss"><span>CF創出</span><span class="track"><span class="fill" style="width:80%;background:var(--good)"></span></span><b>80</b></div>
+        </div>
+      </div>
+      <!-- theoretical vs actual mini -->
+      <div class="card">
+        <h3>理論株価 vs 現在値</h3>
+        <p class="sub">モデル別の参考値（前提明示）</p>
+        <div class="subscores" style="gap:12px;margin-top:8px">
+          <div class="ss" style="grid-template-columns:64px 1fr 56px"><span>DCF</span><span class="track"><span class="fill" style="width:64%;background:var(--accent)"></span></span><b>¥3,150</b></div>
+          <div class="ss" style="grid-template-columns:64px 1fr 56px"><span>DDM</span><span class="track"><span class="fill" style="width:52%;background:var(--accent)"></span></span><b>¥2,720</b></div>
+          <div class="ss" style="grid-template-columns:64px 1fr 56px"><span>PER基準</span><span class="track"><span class="fill" style="width:58%;background:var(--accent)"></span></span><b>¥2,880</b></div>
+          <div class="ss" style="grid-template-columns:64px 1fr 56px"><span>PBR基準</span><span class="track"><span class="fill" style="width:60%;background:var(--accent)"></span></span><b>¥2,950</b></div>
+        </div>
+        <div class="assump">現在値 ¥2,980 を基準線に、各モデルの参考値を並置。</div>
+      </div>
+    </div>
+
+    <!-- KPI strip -->
+    <div class="section-t"><span class="bar"></span>主要指標</div>
+    <div class="kpis">
+      <div class="kpi"><div class="k">PER</div><div class="v">9.8倍</div><span class="chip c-good">同業比 割安</span></div>
+      <div class="kpi"><div class="k">PBR</div><div class="v">1.05倍</div><span class="chip c-neu">妥当圏</span></div>
+      <div class="kpi"><div class="k">ROE</div><div class="v">11.2%</div><span class="chip c-good">良好</span></div>
+      <div class="kpi"><div class="k">自己資本比率</div><div class="v">38.4%</div><span class="chip c-good">安定</span></div>
+      <div class="kpi"><div class="k">営業利益率</div><div class="v">9.1%</div><span class="chip c-warn">やや低下</span></div>
+      <div class="kpi"><div class="k">配当利回り</div><div class="v">2.6%</div><span class="chip c-neu">平均並み</span></div>
+    </div>
+
+    <!-- statements -->
+    <div class="section-t"><span class="bar"></span>財務3表のビジュアル</div>
+    <div class="grid g2">
+      <div class="card">
+        <h3>貸借対照表（BS）の構成</h3>
+        <p class="sub">総資産 ¥90.1兆 ＝ 負債 ＋ 純資産</p>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:5px">資産サイド</div>
+        <div class="stacked">
+          <div class="seg" style="width:44%;background:#5b8cff">流動資産 44%</div>
+          <div class="seg" style="width:56%;background:#3358b8;color:#dfe7ff">固定資産 56%</div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin:12px 0 5px">調達サイド</div>
+        <div class="stacked">
+          <div class="seg" style="width:30%;background:#e3a008">流動負債 30%</div>
+          <div class="seg" style="width:32%;background:#b8790a;color:#fff2d6">固定負債 32%</div>
+          <div class="seg" style="width:38%;background:#3fb950">純資産 38%</div>
+        </div>
+        <div class="legend"><span><i style="background:#5b8cff"></i>流動資産</span><span><i style="background:#3358b8"></i>固定資産</span><span><i style="background:#e3a008"></i>流動負債</span><span><i style="background:#b8790a"></i>固定負債</span><span><i style="background:#3fb950"></i>純資産</span></div>
+      </div>
+      <div class="card">
+        <h3>売上高・営業利益の推移（PL）</h3>
+        <p class="sub">直近5期（兆円）</p>
+        <div class="bars">
+          <div class="col"><div class="bk" style="height:70%"></div><div class="yr">FY22</div></div>
+          <div class="col"><div class="bk" style="height:78%"></div><div class="yr">FY23</div></div>
+          <div class="col"><div class="bk" style="height:88%"></div><div class="yr">FY24</div></div>
+          <div class="col"><div class="bk" style="height:100%"></div><div class="yr">FY25</div></div>
+          <div class="col"><div class="bk" style="height:96%"></div><div class="yr">FY26</div></div>
+        </div>
+        <div class="legend"><span><i style="background:#5b8cff"></i>売上高（棒）</span><span style="color:var(--faint)">営業利益率は右で「やや低下」と所見</span></div>
+      </div>
+    </div>
+
+    <!-- AI observations -->
+    <div class="section-t"><span class="bar"></span><span class="aihdr">AIの視点による所見 <span class="aipill">AI分析</span></span></div>
+    <p style="font-size:12px;color:var(--faint);margin:-4px 0 12px">各所見は<b style="color:var(--muted)">財務諸表のどの箇所に表れているか</b>を明示し、原典（有報）にリンクします。数値はデータから確定、AIは解釈のみ。</p>
+    <div class="ai">
+      <div class="obs warn">
+        <div class="h"><span class="ic">⚠️</span>気になる点：利益率の緩やかな低下</div>
+        <p>売上は最高水準を更新する一方、営業利益率は前期 9.8% → 当期 9.1% に低下。原材料・労務費の上昇が主因とみられます。</p>
+        <span class="srctag">📄 <b>PL・売上原価率</b>（当期 79.2%, +1.1pt）</span><a class="link" href="#">→ 有報 該当箇所</a>
+      </div>
+      <div class="obs good">
+        <div class="h"><span class="ic">✅</span>現状：厚い自己資本と潤沢な現金</div>
+        <p>自己資本比率 38.4% と同業平均を上回り、財務の安全性は高い水準。手元流動性も厚く、下振れ耐性があります。</p>
+        <span class="srctag">📄 <b>BS・純資産 / 現金及び預金</b></span><a class="link" href="#">→ 有報 該当箇所</a>
+      </div>
+      <div class="obs">
+        <div class="h"><span class="ic">🔎</span>現状：営業CFが投資を十分カバー</div>
+        <p>営業CFは投資CFを継続的に上回り、フリーCFはプラス圏。設備投資・研究開発を自己資金で賄えています。</p>
+        <span class="srctag">📄 <b>CF・営業/投資キャッシュフロー</b></span><a class="link" href="#">→ 有報 該当箇所</a>
+      </div>
+      <div class="obs warn">
+        <div class="h"><span class="ic">⚠️</span>気になる点：有利子負債の増加</div>
+        <p>金融事業の拡大に伴い有利子負債が増加。安全性は保たれていますが、金利上昇局面では利息負担に留意。</p>
+        <span class="srctag">📄 <b>BS・流動負債（短期借入金）</b>（+8.2%）</span><a class="link" href="#">→ 有報 該当箇所</a>
+      </div>
+    </div>
+
+    <!-- peer comparison -->
+    <div class="section-t"><span class="bar"></span>競合他社との比較</div>
+    <div class="card" style="padding:6px 6px 2px">
+      <table>
+        <thead><tr><th>企業</th><th>PER</th><th>ROE</th><th>営業利益率</th><th>自己資本比率</th><th>売上成長(3年)</th></tr></thead>
+        <tbody>
+          <tr class="me"><td>トヨタ自動車</td><td>9.8倍</td><td>11.2%</td><td>9.1%</td><td class="hl">38.4%</td><td>+7.2%</td></tr>
+          <tr><td>ホンダ</td><td>8.1倍</td><td>9.6%</td><td>6.8%</td><td>44.1%</td><td>+5.1%</td></tr>
+          <tr><td>日産自動車</td><td>7.4倍</td><td class="lo">4.2%</td><td class="lo">3.1%</td><td>29.3%</td><td>+2.0%</td></tr>
+          <tr><td>同業中央値</td><td>8.1倍</td><td>9.6%</td><td>6.8%</td><td>38.4%</td><td>+5.1%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:12.5px;color:#cdd7e1;margin-top:12px">
+      <b style="color:var(--accent2)">特徴の整理：</b>トヨタは3社中で<b class="hl">収益性（ROE・営業利益率）が最も高く</b>、自己資本比率も中央値並みで安全性と収益性のバランスが良好。日産は利益率・ROEが低く、PLの<b>営業利益段階</b>とBSの<b>純資産の薄さ</b>に課題が表れています。
+    </p>
+
+    <div class="disc">
+      ※ 本画面は<b>UIモックアップ（サンプルデータ）</b>です。実データは金融庁 EDINET の開示資料（XBRL）から取得し、指標は機械的に算出、AIは解釈・整理のみを行います。理論株価・割安/割高は<b>前提を明示した客観的な計算結果</b>であり、特定銘柄の売買を推奨するものではありません。<b>投資判断はご自身の責任でお願いします。</b>出典: 金融庁 EDINET（公共データ利用規約 PDL1.0）。
+    </div>
+  </div>
+</body>
+</html>
