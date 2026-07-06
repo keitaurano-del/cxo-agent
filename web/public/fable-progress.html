@@ -1,0 +1,146 @@
+<!doctype html><html lang=ja><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Fable 5 進捗 — Zaimu.ai モック — 主要指標の折りたたみ＆財務諸表ハイライト解説（v6）</title>
+<style>
+:root{color-scheme:dark} *{box-sizing:border-box}
+body{margin:0;background:#0e1420;color:#e6ecf5;font:15px/1.65 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+.wrap{max-width:880px;margin:0 auto;padding:16px}
+h1{font-size:18px;margin:0 0 2px}
+.sub{color:#8aa0bd;font-size:13px;margin-bottom:14px}
+.card{background:#16202f;border:1px solid #24344a;border-radius:12px;padding:14px 16px;margin-bottom:12px}
+.phase{font-size:20px;font-weight:700}
+.now{margin-top:8px;color:#cfe0f5}
+.h{font-size:12px;letter-spacing:.08em;color:#7f95b3;text-transform:uppercase;margin:0 0 8px}
+.feat{padding:4px 0;font-size:14.5px}
+.feed{background:#111a27;border:1px solid #24344a;border-radius:12px;padding:6px 4px;max-height:56vh;overflow:auto}
+.ev{display:flex;gap:8px;padding:7px 10px;border-bottom:1px solid #1b2637;font-size:14px;word-break:break-word;align-items:baseline}
+.ev:last-child{border-bottom:0}
+.t{flex:0 0 auto;color:#6f86a6;font-family:ui-monospace,monospace;font-size:12px;min-width:62px}
+.ic{flex:0 0 1.3em} .tx{flex:1}
+.mono{font-family:ui-monospace,monospace;font-size:12.5px;color:#9fd0ff}
+b{color:#eaf1fb} .foot{color:#6b7f9c;font-size:12px;margin-top:10px;text-align:center}
+.ccwrap{max-height:62vh;overflow:auto}
+.cc{border:1px solid #24344a;border-radius:8px;margin-bottom:8px;overflow:hidden}
+.cch{background:#16202f;padding:6px 10px;font-size:13px}
+.ccd{margin:0;padding:8px 10px;background:#0b1119;font-family:ui-monospace,monospace;font-size:11.5px;line-height:1.5;overflow-x:auto}
+</style></head><body><div class=wrap>
+<h1>🛰 Fable 5 — Zaimu.ai モック — 主要指標の折りたたみ＆財務諸表ハイライト解説（v6）</h1>
+<div class=sub><span style='color:#1e8e5a'>■ 完了</span> ・ 更新停止（完了） ・ 総操作 15</div>
+<div class=card><div class=phase>✅ 完了しました</div><div class=now>いま: 完成しました。仕様v6の2機能を `web/public/fin-mockup.html` に実装し、`web/dist/fin-mockup.html` へコピー済みです。
+
+実装内容:
+
+① 主要指標の計算式デフォルト折りたたみ
+- `.kpi .f`（12枚）と理論株価の `.model .mf`（4枚）を既定非表示に。値・短い説明（.k/.v/.n）は常時表示のまま
+- 各カードに「計算方法 ▾」トグルをJSで付与（開くと ▴、aria-expanded/aria-controls付き）
+- セクション見出し脇に「すべて展開 ▾／すべて閉じる ▴」ボタンを追加（主要指標のみ）
+- スマホ3グリッドはトグルを10pxに縮小して破綻なし
+
+② 財務諸表のインタラクティブ主要行
+- BS 7行・PL 6行・CF 4行（計17行）を「科目｜実数」のリストとしてキャプチャ隣の解説欄に配置。数</div></div>
+<div class=card><p class=h>作っている機能（▶=着手済みの推定）</p><div class='feat'><span style='color:#5b9dff'>▶</span> 主要指標の計算式をデフォルト折りたたみ（タップで開閉）</div>
+<div class='feat'><span style='color:#5b9dff'>▶</span> 理論株価の各モデルの計算式も折りたたみ対象に</div>
+<div class='feat'><span style='color:#5b9dff'>▶</span> 「すべて展開／すべて閉じる」トグルを追加</div>
+<div class='feat'><span style='color:#5b9dff'>▶</span> スマホ3グリッドでもトグルが崩れないよう調整</div>
+<div class='feat'><span style='color:#5b9dff'>▶</span> 財務諸表(BS/PL/CF)の主要行をホバー/タップでハイライト＋解説の吹き出し</div>
+<div class='feat'><span style='color:#5b9dff'>▶</span> 既存の実キャプチャ・実データ・非AIデザインは保持</div></div>
+<div class=card><p class=h>作業のようす（上が最新・左が時刻JST）</p><div class=feed><div class='ev'><span class='t'>07:45:40</span><span class='ic'>💬</span><span class='tx'>完成しました。仕様v6の2機能を `web/public/fin-mockup.html` に実装し、`web/dist/fin-mockup.html` へコピー済みです。
+
+実装内容:
+
+① 主要指標の計算式デフォルト折りたたみ
+- `.kpi .f`（12枚）と理論株価の `.model .mf`（4枚）を既定非表示に。値・短い説明（.k/.v/.n）は常時表示のまま
+- 各カードに「計算方法 ▾」トグルをJSで付与（開くと ▴、aria-expanded/aria-controls付き）
+- セクション見出し脇に「すべて展開 ▾／すべて閉じる ▴」ボタンを追加（主要指標のみ）
+- スマホ3グリッドはトグルを10pxに縮小して破綻なし
+
+② 財務諸表のインタラクティブ主要行
+- BS 7行・PL 6行・CF 4行（計17行）を「科目｜実数」のリストとしてキャプチャ隣の解説欄に配置。数</span></div>
+<div class='ev'><span class='t'>07:45:22</span><span class='ic'></span><span class='tx'>💻 コマンド実行: <span class=mono>node -e &quot;
+const html=require(&#x27;fs&#x27;).readFileSync(&#x27;web/public/fin-mockup</span></span></div>
+<div class='ev'><span class='t'>07:45:15</span><span class='ic'></span><span class='tx'>💻 コマンド実行: <span class=mono>cd /home/dev/projects/cxo-agent &amp;&amp; cp web/public/fin-mockup.html web/dist/fin-mock</span></span></div>
+<div class='ev'><span class='t'>07:45:08</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>07:44:54</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>07:44:36</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>07:44:14</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>07:43:52</span><span class='ic'>💬</span><span class='tx'>Now replace the BS static reads with interactive rows.</span></div>
+<div class='ev'><span class='t'>07:43:48</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>07:43:45</span><span class='ic'>💬</span><span class='tx'>Next, KPI section heading: add an &quot;expand/collapse all&quot; button and update the lead text.</span></div>
+<div class='ev'><span class='t'>07:43:41</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>07:43:29</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>07:43:18</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>07:41:40</span><span class='ic'>📖</span><span class='tx'><b>fin-mockup.html</b> を読んでいます</span></div>
+<div class='ev'><span class='t'>07:41:35</span><span class='ic'>📖</span><span class='tx'><b>fin-mockup-spec-v6.md</b> を読んでいます</span></div></div></div>
+<div class=card><p class=h>コード変更（実際に書いている差分・上が最新／緑=追加 赤=削除）</p><div class=ccwrap><div class='cc'><div class='cch'><span class='t'>07:45:08</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-   &lt;/div&gt;</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>- &lt;/body&gt;</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>- &lt;/html&gt;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   &lt;/div&gt;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+ </div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+ &lt;script&gt;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+ (function(){</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   &quot;use strict&quot;;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+ </div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   /* ① 計算式（.kpi .f / .model .mf）をデフォルト折りたたみ＋タップ開閉 */</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   var LABEL_CLOSED = &quot;計算方法 ▾&quot;, LABEL_OPEN = &quot;計算方法 ▴&quot;;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   var formulas = document.querySelectorAll(&quot;.kpi .f, .model .mf&quot;);</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   Array.prototype.forEach.call(formulas, function(f, i){</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     var id = &quot;fx-&quot; + i;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     f.id = id;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     var btn = document.createElement(&quot;button&quot;);</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     btn.type = &quot;button&quot;;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     btn.className = &quot;ftog&quot;;</div></pre></div>
+<div class='cc'><div class='cch'><span class='t'>07:44:54</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-         &lt;div class=&quot;reads&quot;&gt;</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           &lt;div class=&quot;read&quot;&gt;&lt;p class=&quot;row&quot;&gt;営業活動によるCF &lt;b&gt;+5,472,920&lt;/b&gt; 百万円（約+5.47兆円）&lt;/p&gt;&lt;p class=&quot;mean&quot;&gt;本業で実際に稼いだ現金。前期3.70兆から大きく増加＝&</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           &lt;div class=&quot;read&quot;&gt;&lt;p class=&quot;row&quot;&gt;投資活動によるCF &lt;b&gt;△1,520,307&lt;/b&gt;（約-1.52兆円）&lt;/p&gt;&lt;p class=&quot;mean&quot;&gt;設備投資や投資に使った現金（マイナスが通常）。&lt;/p&gt</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           &lt;div class=&quot;read&quot;&gt;&lt;p class=&quot;row&quot;&gt;財務活動によるCF &lt;b&gt;△536,659&lt;/b&gt;（約-0.54兆円）&lt;/p&gt;&lt;p class=&quot;mean&quot;&gt;借入返済・配当・自社株買いなど。マイナス＝株主還元や返済に回した。&</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           &lt;div class=&quot;read&quot;&gt;&lt;p class=&quot;row&quot;&gt;フリーCF（営業+投資）＝ 約 &lt;b&gt;+3.95兆円&lt;/b&gt;&lt;/p&gt;&lt;p class=&quot;mean&quot;&gt;投資を賄ってなお手元に残る現金。プラス＝&lt;b&gt;自己資金で投資を回せ</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           &lt;div class=&quot;keyline&quot;&gt;&lt;b&gt;読みどころ：&lt;/b&gt;営業利益は減っても営業CFは潤沢でフリーCFは大きくプラス。&lt;b&gt;「利益は細っても現金はしっかり稼げている」&lt;/b&gt;という実態が読み取れます。&lt;/div&gt;</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-         &lt;/div&gt;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+         &lt;div class=&quot;reads num&quot;&gt;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+           &lt;p class=&quot;ihint&quot;&gt;主要な行に&lt;b&gt;ふれる（ホバー／タップ）&lt;/b&gt;と、その行の意味が吹き出しで出ます。単位: 百万円&lt;/p&gt;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+           &lt;button type=&quot;button&quot; class=&quot;irow&quot; aria-expanded=&quot;false&quot;&gt;&lt;span class=&quot;il&quot;&gt;営業活動によるCF&lt;/span&gt;&lt;span class=&quot;iv&quot;&gt;+5,472,</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+             &lt;span class=&quot;ibub&quot; role=&quot;tooltip&quot;&gt;&lt;b&gt;+5,472,920&lt;/b&gt; 百万円（約+5.47兆円）。本業で実際に稼いだ現金。前期3.70兆から大きく増加＝&lt;b&gt;現金を稼ぐ力は強い&lt;/b&gt;。&lt;span class=&quot;itag&</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+           &lt;button type=&quot;button&quot; class=&quot;irow&quot; aria-expanded=&quot;false&quot;&gt;&lt;span class=&quot;il&quot;&gt;投資活動によるCF&lt;/span&gt;&lt;span class=&quot;iv&quot;&gt;△1,520,</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+             &lt;span class=&quot;ibub&quot; role=&quot;tooltip&quot;&gt;&lt;b&gt;△1,520,307&lt;/b&gt; 百万円（約-1.52兆円）。設備投資や投資に使った現金（マイナスが通常）。&lt;span class=&quot;itag&quot;&gt;CF・投資&lt;/span&gt;&lt;/s</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+           &lt;button type=&quot;button&quot; class=&quot;irow&quot; aria-expanded=&quot;false&quot;&gt;&lt;span class=&quot;il&quot;&gt;財務活動によるCF&lt;/span&gt;&lt;span class=&quot;iv&quot;&gt;△536,65</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+             &lt;span class=&quot;ibub&quot; role=&quot;tooltip&quot;&gt;&lt;b&gt;△536,659&lt;/b&gt; 百万円</div></pre></div>
+<div class='cc'><div class='cch'><span class='t'>07:44:36</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-         &lt;div class=&quot;reads&quot;&gt;</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           &lt;div class=&quot;read&quot;&gt;&lt;p class=&quot;row&quot;&gt;営業収益合計 &lt;b&gt;50,684,952&lt;/b&gt; 百万円（約50.7兆円）&lt;/p&gt;&lt;p class=&quot;mean&quot;&gt;会社の売上（本業の稼ぎの入口）。前期48.0兆から増収。&lt;</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           &lt;div class=&quot;read&quot;&gt;&lt;p class=&quot;row&quot;&gt;売上原価 &lt;b&gt;39,141,418&lt;/b&gt;／販管費 &lt;b&gt;4,697,524&lt;/b&gt;&lt;/p&gt;&lt;p class=&quot;mean&quot;&gt;売上を生むためにかかった費用</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           &lt;div class=&quot;read&quot;&gt;&lt;p class=&quot;row&quot;&gt;営業利益 &lt;b&gt;3,766,216&lt;/b&gt; 百万円（約3.77兆円）&lt;/p&gt;&lt;p class=&quot;mean&quot;&gt;本業の儲け。&lt;b&gt;前期4.80兆 → 当期3.77兆と減益</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           &lt;div class=&quot;read&quot;&gt;&lt;p class=&quot;row&quot;&gt;税引前利益 &lt;b&gt;5,152,996&lt;/b&gt; ＞ 営業利益 3,766,216&lt;/p&gt;&lt;p class=&quot;mean&quot;&gt;本業の利益より最終段階の利益が大きいのは、持分法投資利益など</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           &lt;div class=&quot;keyline&quot;&gt;&lt;b&gt;読みどころ：&lt;/b&gt;増収でも営業利益は3期連続で減少（下の推移参照）。&lt;b&gt;「売れているのに本業の利益は細って</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+         &lt;div class=&quot;reads num&quot;&gt;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+           &lt;p class=&quot;ihint&quot;&gt;主要な行に&lt;b&gt;ふれる（ホバー／タップ）&lt;/b&gt;と、その行の意味が吹き出しで出ます。単位: 百万円&lt;/p&gt;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+           &lt;button type=&quot;button&quot; class=&quot;irow&quot; aria-expanded=&quot;false&quot;&gt;&lt;span class=&quot;il&quot;&gt;営業収益合計&lt;/span&gt;&lt;span class=&quot;iv&quot;&gt;50,684,952</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+             &lt;span class=&quot;ibub&quot; role=&quot;tooltip&quot;&gt;&lt;b&gt;50,684,952&lt;/b&gt; 百万円（約50.69兆円）。会社の売上（本業の稼ぎの入口）。前期48.04兆から増収です。&lt;span class=&quot;itag&quot;&gt;PL・売上&lt;/span&g</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+           &lt;button type=&quot;button&quot; class=&quot;irow&quot; aria-expanded=&quot;false&quot;&gt;&lt;span class=&quot;il&quot;&gt;売上原価&lt;/span&gt;&lt;span class=&quot;iv&quot;&gt;39,141,418&l</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+             &lt;span class=&quot;ibub&quot; role=&quot;tooltip&quot;&gt;&lt;b&gt;39,141,418&lt;/b&gt; 百万円（約39.14兆円）。売上を生むための直接費用。売上に対する原価の比率（原価率）が利益率を左右します。&lt;span class=&quot;itag&quot;&gt;PL・費用&l</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+           &lt;button type=&quot;button&quot; class=&quot;irow&quot; aria-expanded=&quot;false&quot;&gt;&lt;span class=&quot;il&quot;&gt;販売費及び一般管理費&lt;/span&gt;&lt;span class=&quot;iv&quot;&gt;4,697,</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+             &lt;span class=&quot;ibub&quot; role=&quot;tooltip&quot;&gt;&lt;b&gt;4,697,524&lt;/b&gt; 百万円。</div></pre></div>
+<div class='cc'><div class='cch'><span class='t'>07:44:14</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-         &lt;div class=&quot;reads&quot;&gt;</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           &lt;div class=&quot;read&quot;&gt;&lt;p class=&quot;row&quot;&gt;現金及び現金同等物 &lt;b&gt;12,659,622&lt;/b&gt; 百万円（約12.7兆円）&lt;/p&gt;&lt;p class=&quot;mean&quot;&gt;すぐ使える現金。潤沢にあり、不測の事態への耐性が高いことを</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           &lt;div class=&quot;read&quot;&gt;&lt;p class=&quot;row&quot;&gt;棚卸資産 &lt;b&gt;5,134,996&lt;/b&gt; 百万円（約5.1兆円）&lt;/p&gt;&lt;p class=&quot;mean&quot;&gt;在庫（部品・製品など）。多すぎると資金が寝る、少なすぎると機会損失。売上</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           &lt;div class=&quot;read&quot;&gt;&lt;p class=&quot;row&quot;&gt;資産合計 &lt;b&gt;105,522,331&lt;/b&gt; 百万円（約105.5兆円）&lt;/p&gt;&lt;p class=&quot;mean&quot;&gt;会社が持つ財産の総額。この額が &lt;b&gt;負債64.5兆</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           &lt;div class=&quot;read&quot;&gt;&lt;p class=&quot;row&quot;&gt;有利子負債 流動 &lt;b&gt;17,581,104&lt;/b&gt;＋非流動 &lt;b&gt;25,924,365&lt;/b&gt;（計 約43.5兆円）&lt;/p&gt;&lt;p class=&quot;mean&quot;&g</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           &lt;div class=&quot;read&quot;&gt;&lt;p class=&quot;row&quot;&gt;資本合計（純資産）&lt;b&gt;41,020,0</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+         &lt;div class=&quot;reads num&quot;&gt;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+           &lt;p class=&quot;ihint&quot;&gt;主要な行に&lt;b&gt;ふれる（ホバー／タップ）&lt;/b&gt;と、その行の意味が吹き出しで出ます。単位: 百万円&lt;/p&gt;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+           &lt;button type=&quot;button&quot; class=&quot;irow&quot; aria-expanded=&quot;false&quot;&gt;&lt;span class=&quot;il&quot;&gt;現金及び現金同等物&lt;/span&gt;&lt;span class=&quot;iv&quot;&gt;12,659,</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+             &lt;span class=&quot;ibub&quot; role=&quot;tooltip&quot;&gt;&lt;b&gt;12,659,622&lt;/b&gt; 百万円（約12.66兆円）。すぐ使える現金。潤沢＝不測の事態への耐性が高いことを示します。&lt;span class=&quot;itag&quot;&gt;BS・流動資産&lt;/span</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+           &lt;button type=&quot;button&quot; class=&quot;irow&quot; aria-expanded=&quot;false&quot;&gt;&lt;span class=&quot;il&quot;&gt;棚卸資産&lt;/span&gt;&lt;span class=&quot;iv&quot;&gt;5,134,996&lt</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+             &lt;span class=&quot;ibub&quot; role=&quot;tooltip&quot;&gt;&lt;b&gt;5,134,996&lt;/b&gt; 百万円（約5.13兆円）。在庫（部品・製品など）。多すぎると資金が寝る、少なすぎると機会損失。売上との比で多寡を見ます。&lt;span class=&quot;itag&quot;&gt;BS</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+           &lt;button type=&quot;button&quot; class=&quot;irow&quot; aria-expanded=&quot;false&quot;&gt;&lt;span class=&quot;il&quot;&gt;流動資産合計&lt;/span&gt;&lt;span class=&quot;iv&quot;&gt;42,824,081</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+             &lt;span class=&quot;ibub&quot; role=&quot;tooltip&quot;&gt;&lt;b&gt;42,824,081</div></pre></div>
+<div class='cc'><div class='cch'><span class='t'>07:43:48</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-       &lt;div class=&quot;section-t&quot;&gt;主要指標（すべて計算方法つき）&lt;/div&gt;</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-       &lt;p class=&quot;section-lead&quot;&gt;下の実際の決算書（①②③）と株価（2026-07-06）から計算した実データです。各カード下段に&lt;b&gt;計算式&lt;/b&gt;を示します。&lt;/p&gt;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+       &lt;div&gt;&lt;span class=&quot;section-t&quot;&gt;主要指標（すべて計算方法つき）&lt;/span&gt;&lt;button type=&quot;button&quot; class=&quot;fall&quot; id=&quot;kpiFallBtn&quot; aria-expanded=&quot;false&quo</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+       &lt;p class=&quot;section-lead&quot;&gt;下の実際の決算書（①②③）と株価（2026-07-06）から計算した実データです。各カードの&lt;b&gt;「計算方法」をタップすると計算式が開きます&lt;/b&gt;。&lt;/p&gt;</div></pre></div>
+<div class='cc'><div class='cch'><span class='t'>07:43:41</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-   .model .mf{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.6}</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-   .model .mf .fx{color:var(--accent-dark);font-weight:700}</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   .model .mf{display:none;font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.6}</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   .model .mf.open{display:block}</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   .model .mf .fx{color:var(--accent-dark);font-weight:700}</div></pre></div></div></div>
+<div class=card style="font-size:13px;color:#9fb2cd">ツール使用: Edit 8回 ・ Read 2回 ・ Bash 2回<br>完了すると自動で「■完了」に変わり、確定結果は Son からチャットで届きます。</div>
+<div class=foot>Apollo / Fable 5 live progress</div>
+</div></body></html>

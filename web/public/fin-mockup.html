@@ -70,6 +70,21 @@
   .read .tag{display:inline-block;font-size:10.5px;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:1px 8px;margin-top:7px}
   .keyline{font-size:13px;color:var(--muted);margin-top:14px;border-top:1px solid var(--line-soft);padding-top:12px}
 
+  /* interactive statement rows (v6: ホバー/タップで解説の吹き出し) */
+  .ihint{font-size:11.5px;color:var(--faint);margin:0 0 2px}
+  .irow{position:relative;display:flex;align-items:baseline;gap:10px;width:100%;margin:0;text-align:left;font-family:inherit;background:#fff;border:1px solid var(--line);border-left:3px solid var(--line);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);cursor:pointer;line-height:1.6}
+  .irow .il{flex:1;min-width:0;border-bottom:2px solid transparent;padding-bottom:1px}
+  .irow .iv{font-weight:700;white-space:nowrap;color:var(--muted);font-variant-numeric:tabular-nums}
+  .irow:hover,.irow.open,.irow:focus-visible{border-color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft)}
+  .irow:hover .il,.irow.open .il{border-bottom-color:var(--accent)}
+  .irow:hover .iv,.irow.open .iv{color:var(--accent-dark)}
+  .ibub{display:none;position:absolute;left:10px;right:10px;top:calc(100% + 8px);z-index:6;background:#fff;border:1px solid var(--accent);border-radius:8px;padding:10px 12px;font-size:12.5px;font-weight:400;line-height:1.7;color:var(--text);box-shadow:0 4px 14px rgba(32,48,60,.14);white-space:normal}
+  .ibub::before{content:"";position:absolute;top:-6px;left:22px;width:10px;height:10px;background:#fff;border-left:1px solid var(--accent);border-top:1px solid var(--accent);transform:rotate(45deg)}
+  .irow:hover .ibub,.irow.open .ibub,.irow:focus-visible .ibub{display:block}
+  .ibub b{background:var(--mark);border-bottom:1px solid var(--mark-line);padding:0 3px;border-radius:2px}
+  .ibub .itag{display:inline-block;font-size:10.5px;font-weight:700;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:1px 8px;margin-top:6px}
+  @media(max-width:560px){.irow{font-size:12px;padding:8px 10px}.irow .iv{font-size:11.5px}}
+
   /* trend */
   .trend{display:grid;grid-template-columns:1fr 1fr;gap:16px}
   @media(max-width:700px){.trend{grid-template-columns:1fr}}
@@ -92,8 +107,15 @@
   .kpi .k{font-size:12px;color:var(--muted)}
   .kpi .v{font-size:20px;font-weight:700;margin-top:2px}
   .kpi .n{font-size:11.5px;color:var(--faint);margin-top:4px}
-  .kpi .f{font-size:11px;color:var(--muted);margin-top:7px;border-top:1px dashed var(--line-soft);padding-top:6px;line-height:1.55}
+  .kpi .f{display:none;font-size:11px;color:var(--muted);margin-top:4px;line-height:1.55}
+  .kpi .f.open{display:block}
   .kpi .f .fx{color:var(--accent-dark);font-weight:700}
+  /* v6: 計算式のデフォルト折りたたみトグル */
+  .ftog{display:block;width:100%;text-align:left;margin:8px 0 0;border:0;border-top:1px dashed var(--line-soft);background:none;padding:6px 0 0;font-family:inherit;font-size:11px;font-weight:700;color:var(--accent-dark);cursor:pointer}
+  .ftog:hover{color:var(--accent)}
+  @media(max-width:820px){.ftog{font-size:10px}}
+  .fall{font-size:11.5px;font-family:inherit;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:20px;padding:3px 12px;cursor:pointer;vertical-align:middle;margin-left:12px}
+  .fall:hover{border-color:var(--accent);color:var(--accent-dark)}
 
   /* theoretical price models */
   .models{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -101,7 +123,8 @@
   .model{background:#fff;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:14px 16px}
   .model .mk{font-size:13px;font-weight:700}
   .model .mv{font-size:18px;font-weight:700;margin-top:2px}
-  .model .mf{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.6}
+  .model .mf{display:none;font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.6}
+  .model .mf.open{display:block}
   .model .mf .fx{color:var(--accent-dark);font-weight:700}
   .gauge-wrap{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px 20px;margin-top:12px}
   .gauge{position:relative;height:12px;border-radius:6px;margin:26px 8px 6px;
@@ -197,8 +220,8 @@
 
     <!-- ===== key metrics ===== -->
     <div class="section" style="margin-top:36px">
-      <div class="section-t">主要指標（すべて計算方法つき）</div>
-      <p class="section-lead">下の実際の決算書（①②③）と株価（2026-07-06）から計算した実データです。各カード下段に<b>計算式</b>を示します。</p>
+      <div><span class="section-t">主要指標（すべて計算方法つき）</span><button type="button" class="fall" id="kpiFallBtn" aria-expanded="false">すべて展開 ▾</button></div>
+      <p class="section-lead">下の実際の決算書（①②③）と株価（2026-07-06）から計算した実データです。各カードの<b>「計算方法」をタップすると計算式が開きます</b>。</p>
       <div class="kpis num">
         <div class="kpi"><div class="k">株価</div><div class="v">¥2,923</div><div class="n">2026-07-06 終値</div>
           <div class="f">すべての株価系指標の出発点。EPS・BPSと組み合わせて割安/割高を測ります。</div></div>
@@ -354,12 +377,22 @@
           <div class="cap" style="border-top:1px solid var(--line-soft)"><span class="pill">実際の開示</span>連結財政状態計算書（2/2）負債・純資産の部 — 同 ※資産の続き（縦に接続）</div>
           <img src="/fin-stmt-bs2.png" alt="トヨタ 連結財政状態計算書 負債・純資産の部（実際の決算短信）" loading="lazy" />
         </div>
-        <div class="reads">
-          <div class="read"><p class="row">現金及び現金同等物 <b>12,659,622</b> 百万円（約12.7兆円）</p><p class="mean">すぐ使える現金。潤沢にあり、不測の事態への耐性が高いことを示します。</p><span class="tag">BS・流動資産</span></div>
-          <div class="read"><p class="row">棚卸資産 <b>5,134,996</b> 百万円（約5.1兆円）</p><p class="mean">在庫（部品・製品など）。多すぎると資金が寝る、少なすぎると機会損失。売上との比で見ます。</p><span class="tag">BS・流動資産</span></div>
-          <div class="read"><p class="row">資産合計 <b>105,522,331</b> 百万円（約105.5兆円）</p><p class="mean">会社が持つ財産の総額。この額が <b>負債64.5兆＋純資産41.0兆</b> と一致します。</p><span class="tag">BS・合計</span></div>
-          <div class="read"><p class="row">有利子負債 流動 <b>17,581,104</b>＋非流動 <b>25,924,365</b>（計 約43.5兆円）</p><p class="mean">利息を払って借りているお金。トヨタは大きいですが、主に<b>金融事業（自動車ローン等）の調達</b>によるもの。手元現金12.7兆を差し引いた「純有利子負債」で見るのが実態的です。</p><span class="tag">BS・負債（2枚目）</span></div>
-          <div class="read"><p class="row">資本合計（純資産）<b>41,020,068</b> 百万円／親会社持分 <b>39,918,854</b></p><p class="mean">返さなくてよい自分のお金。総資産に占める割合＝<b>自己資本比率 約37.8%</b>。厚いほど安全性が高い。</p><span class="tag">BS・純資産（2枚目）</span></div>
+        <div class="reads num">
+          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">現金及び現金同等物</span><span class="iv">12,659,622</span>
+            <span class="ibub" role="tooltip"><b>12,659,622</b> 百万円（約12.66兆円）。すぐ使える現金。潤沢＝不測の事態への耐性が高いことを示します。<span class="itag">BS・流動資産</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">棚卸資産</span><span class="iv">5,134,996</span>
+            <span class="ibub" role="tooltip"><b>5,134,996</b> 百万円（約5.13兆円）。在庫（部品・製品など）。多すぎると資金が寝る、少なすぎると機会損失。売上との比で多寡を見ます。<span class="itag">BS・流動資産</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">流動資産合計</span><span class="iv">42,824,081</span>
+            <span class="ibub" role="tooltip"><b>42,824,081</b> 百万円（約42.82兆円）。1年以内に現金化しやすい資産の合計です。<span class="itag">BS・資産</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">資産合計</span><span class="iv">105,522,331</span>
+            <span class="ibub" role="tooltip"><b>105,522,331</b> 百万円（約105.52兆円）。会社が持つ財産の総額。<b>負債64.50兆＋純資産41.02兆</b>と必ず一致します。<span class="itag">BS・合計</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">有利子負債（流動＋非流動）</span><span class="iv">計 約43.5兆</span>
+            <span class="ibub" role="tooltip">流動 <b>17,581,104</b>＋非流動 <b>25,924,365</b>（計 約43.5兆円）。利息を払って借りているお金。主に<b>金融事業（自動車ローン等）の調達</b>によるもの。手元現金12.7兆を差し引いた「純有利子負債」で見るのが実態的です。<span class="itag">BS・負債（2枚目）</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">負債合計</span><span class="iv">64,502,263</span>
+            <span class="ibub" role="tooltip"><b>64,502,263</b> 百万円（約64.50兆円）。返済義務のあるお金の合計です。<span class="itag">BS・負債（2枚目）</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">資本合計（純資産）</span><span class="iv">41,020,068</span>
+            <span class="ibub" role="tooltip"><b>41,020,068</b> 百万円／うち親会社持分 <b>39,918,854</b>（約39.92兆円）。返さなくてよい自己資本。総資産に占める割合＝<b>自己資本比率 約37.8%</b>。厚いほど安全性が高い。<span class="itag">BS・純資産（2枚目）</span></span></button>
           <div class="keyline"><b>読みどころ：</b>返さなくていいお金（純資産41兆）が総資産の約4割を占め、手元現金も約12.7兆と厚い。<b>財務の安全性は高い</b>水準です。</div>
         </div>
       </div>
@@ -374,11 +407,20 @@
           <div class="cap"><span class="pill">実際の開示</span>連結損益計算書（トヨタ 2026年3月期 決算短信）※右列が当期・単位:百万円</div>
           <img src="/fin-stmt-pl.png" alt="トヨタ 連結損益計算書（実際の決算短信）" loading="lazy" />
         </div>
-        <div class="reads">
-          <div class="read"><p class="row">営業収益合計 <b>50,684,952</b> 百万円（約50.7兆円）</p><p class="mean">会社の売上（本業の稼ぎの入口）。前期48.0兆から増収。</p><span class="tag">PL・売上</span></div>
-          <div class="read"><p class="row">売上原価 <b>39,141,418</b>／販管費 <b>4,697,524</b></p><p class="mean">売上を生むためにかかった費用。売上に対する原価の比率（原価率）が利益率を左右します。</p><span class="tag">PL・費用</span></div>
-          <div class="read"><p class="row">営業利益 <b>3,766,216</b> 百万円（約3.77兆円）</p><p class="mean">本業の儲け。<b>前期4.80兆 → 当期3.77兆と減益</b>。売上は増えたのに本業利益は減った＝<b>利益率が低下</b>（費用の増加が効いている）。</p><span class="tag">PL・営業利益</span></div>
-          <div class="read"><p class="row">税引前利益 <b>5,152,996</b> ＞ 営業利益 3,766,216</p><p class="mean">本業の利益より最終段階の利益が大きいのは、持分法投資利益など<b>営業外の収益</b>が上乗せされているため（トヨタの特徴）。</p><span class="tag">PL・営業外</span></div>
+        <div class="reads num">
+          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">営業収益合計</span><span class="iv">50,684,952</span>
+            <span class="ibub" role="tooltip"><b>50,684,952</b> 百万円（約50.69兆円）。会社の売上（本業の稼ぎの入口）。前期48.04兆から増収です。<span class="itag">PL・売上</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">売上原価</span><span class="iv">39,141,418</span>
+            <span class="ibub" role="tooltip"><b>39,141,418</b> 百万円（約39.14兆円）。売上を生むための直接費用。売上に対する原価の比率（原価率）が利益率を左右します。<span class="itag">PL・費用</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">販売費及び一般管理費</span><span class="iv">4,697,524</span>
+            <span class="ibub" role="tooltip"><b>4,697,524</b> 百万円。販売・管理にかかった費用です。<span class="itag">PL・費用</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">営業利益</span><span class="iv">3,766,216</span>
+            <span class="ibub" role="tooltip"><b>3,766,216</b> 百万円（約3.77兆円）。本業の儲け。<b>前期4.80兆から▲21.5%の減益</b>。売上は増えたのに本業利益は減った＝<b>利益率が低下</b>（費用の増加が効いている）。<span class="itag">PL・営業利益</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">税引前利益</span><span class="iv">5,152,996</span>
+            <span class="ibub" role="tooltip"><b>5,152,996</b> 百万円（約5.15兆円）。持分法投資利益・金融収益など<b>営業外の収益</b>込みで、営業利益3,766,216を上回ります（トヨタの特徴）。<span class="itag">PL・営業外</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">当期利益（親会社の所有者）</span><span class="iv">3,848,098</span>
+            <span class="ibub" role="tooltip"><b>3,848,098</b> 百万円（約3.85兆円）。最終的に残る利益。1株当たり（EPS）<b>¥295.25</b>。<span class="itag">PL・純利益</span></span></button>
           <div class="keyline"><b>読みどころ：</b>増収でも営業利益は3期連続で減少（下の推移参照）。<b>「売れているのに本業の利益は細っている」＝利益率の低下</b>が最大の注目点です。</div>
         </div>
       </div>
@@ -393,11 +435,16 @@
           <div class="cap"><span class="pill">実際の開示</span>連結キャッシュ・フロー計算書（トヨタ 2026年3月期 決算短信）※右列が当期・単位:百万円</div>
           <img src="/fin-stmt-cf.png" alt="トヨタ 連結キャッシュ・フロー計算書（実際の決算短信）" loading="lazy" />
         </div>
-        <div class="reads">
-          <div class="read"><p class="row">営業活動によるCF <b>+5,472,920</b> 百万円（約+5.47兆円）</p><p class="mean">本業で実際に稼いだ現金。前期3.70兆から大きく増加＝<b>現金を稼ぐ力は強い</b>。</p><span class="tag">CF・営業</span></div>
-          <div class="read"><p class="row">投資活動によるCF <b>△1,520,307</b>（約-1.52兆円）</p><p class="mean">設備投資や投資に使った現金（マイナスが通常）。</p><span class="tag">CF・投資</span></div>
-          <div class="read"><p class="row">財務活動によるCF <b>△536,659</b>（約-0.54兆円）</p><p class="mean">借入返済・配当・自社株買いなど。マイナス＝株主還元や返済に回した。</p><span class="tag">CF・財務</span></div>
-          <div class="read"><p class="row">フリーCF（営業+投資）＝ 約 <b>+3.95兆円</b></p><p class="mean">投資を賄ってなお手元に残る現金。プラス＝<b>自己資金で投資を回せている</b>。</p><span class="tag">CF・営業+投資</span></div>
+        <div class="reads num">
+          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">営業活動によるCF</span><span class="iv">+5,472,920</span>
+            <span class="ibub" role="tooltip"><b>+5,472,920</b> 百万円（約+5.47兆円）。本業で実際に稼いだ現金。前期3.70兆から大きく増加＝<b>現金を稼ぐ力は強い</b>。<span class="itag">CF・営業</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">投資活動によるCF</span><span class="iv">△1,520,307</span>
+            <span class="ibub" role="tooltip"><b>△1,520,307</b> 百万円（約-1.52兆円）。設備投資や投資に使った現金（マイナスが通常）。<span class="itag">CF・投資</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">財務活動によるCF</span><span class="iv">△536,659</span>
+            <span class="ibub" role="tooltip"><b>△536,659</b> 百万円（約-0.54兆円）。借入返済・配当・自社株買いなど。マイナス＝株主還元や返済に回した。<span class="itag">CF・財務</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">フリーCF（営業＋投資）</span><span class="iv">≒ +3.95兆</span>
+            <span class="ibub" role="tooltip">営業CF <b>+5,472,920</b>＋投資CF <b>△1,520,307</b> ＝ 約<b>+3.95兆円</b>。投資を賄ってなお手元に残る現金。プラス＝<b>自己資金で投資を回せている</b>。<span class="itag">CF・営業+投資</span></span></button>
           <div class="keyline"><b>読みどころ：</b>営業利益は減っても営業CFは潤沢でフリーCFは大きくプラス。<b>「利益は細っても現金はしっかり稼げている」</b>という実態が読み取れます。</div>
         </div>
       </div>
@@ -452,5 +499,72 @@
       ※ 本画面は <b>Zaimu.ai のUIモック</b>ですが、<b>財務3表の数値・画像、主要指標、および上記テキスト（リスク／MD&amp;A／経営方針／セグメント）はトヨタ自動車 2026年3月期の実際の開示（決算短信・有価証券報告書 IFRS連結）と2026-07-06時点の市場データ</b>に基づきます。本番サービスでは、企業を検索すると<b>金融庁EDINETのXBRL/開示書類</b>から財務数値と定性テキストを自動取得し、同様に読み解きます。理論株価・テクニカル指標は<b>客観的な計算結果・一般的な解説であり、特定銘柄の売買推奨や目標株価の助言ではありません</b>。前提を変えれば結果は変わります。<b>投資判断はご自身の責任で。</b>出典: トヨタ自動車 IR（決算短信・有価証券報告書）/ 金融庁 EDINET。
     </div>
   </div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ① 計算式（.kpi .f / .model .mf）をデフォルト折りたたみ＋タップ開閉 */
+  var LABEL_CLOSED = "計算方法 ▾", LABEL_OPEN = "計算方法 ▴";
+  var formulas = document.querySelectorAll(".kpi .f, .model .mf");
+  Array.prototype.forEach.call(formulas, function(f, i){
+    var id = "fx-" + i;
+    f.id = id;
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ftog";
+    btn.setAttribute("aria-expanded", "false");
+    btn.setAttribute("aria-controls", id);
+    btn.textContent = LABEL_CLOSED;
+    btn.addEventListener("click", function(){
+      var open = f.classList.toggle("open");
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      btn.textContent = open ? LABEL_OPEN : LABEL_CLOSED;
+    });
+    f.parentNode.insertBefore(btn, f);
+  });
+
+  /* 主要指標: すべて展開／すべて閉じる（任意ボタン） */
+  var fallBtn = document.getElementById("kpiFallBtn");
+  if (fallBtn) {
+    fallBtn.addEventListener("click", function(){
+      var expand = fallBtn.getAttribute("aria-expanded") !== "true";
+      var kpiFs = document.querySelectorAll(".kpis .kpi .f");
+      Array.prototype.forEach.call(kpiFs, function(f){
+        f.classList.toggle("open", expand);
+        var t = f.previousElementSibling;
+        if (t && t.classList.contains("ftog")) {
+          t.setAttribute("aria-expanded", expand ? "true" : "false");
+          t.textContent = expand ? LABEL_OPEN : LABEL_CLOSED;
+        }
+      });
+      fallBtn.setAttribute("aria-expanded", expand ? "true" : "false");
+      fallBtn.textContent = expand ? "すべて閉じる ▴" : "すべて展開 ▾";
+    });
+  }
+
+  /* ② 財務諸表の主要行: ホバーはCSS、タップ/クリックで吹き出しトグル */
+  var rows = document.querySelectorAll(".irow");
+  function closeAllRows(except){
+    Array.prototype.forEach.call(rows, function(r){
+      if (r !== except) { r.classList.remove("open"); r.setAttribute("aria-expanded", "false"); }
+    });
+  }
+  Array.prototype.forEach.call(rows, function(r){
+    r.addEventListener("click", function(){
+      var willOpen = !r.classList.contains("open");
+      closeAllRows(r);
+      r.classList.toggle("open", willOpen);
+      r.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    });
+  });
+  document.addEventListener("click", function(e){
+    if (!e.target.closest(".irow")) closeAllRows(null);
+  });
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Escape") closeAllRows(null);
+  });
+})();
+</script>
 </body>
 </html>
