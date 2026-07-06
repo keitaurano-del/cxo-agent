@@ -3,640 +3,185 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>企業財務分析 — 決算書の読み方がわかる企業ページ（UIモック）</title>
+<title>企業財務分析 — 実際の決算書（有価証券報告書・決算短信）を読む（UIモック）</title>
 <style>
   :root{
-    --bg:#f7f8f8;
-    --card:#ffffff;
-    --line:#e2e6e9;
-    --line-soft:#eceff1;
-    --text:#20303c;
-    --muted:#5c6b78;
-    --faint:#8b98a3;
-    --accent:#0f6b5f;        /* 唯一のアクセント色（濃い青緑） */
-    --accent-soft:#e7f1ef;
-    --accent-dark:#0a4c44;
-    --gray-bar:#aeb8c0;
-    --gray-bar-dark:#7d8a94;
+    --bg:#f7f8f8; --card:#ffffff; --line:#e2e6e9; --line-soft:#eceff1;
+    --text:#20303c; --muted:#5c6b78; --faint:#8b98a3;
+    --accent:#0f6b5f; --accent-soft:#e7f1ef; --accent-dark:#0a4c44;
+    --mark:#fff3d6; --mark-line:#e6b73e;
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
-  body{
-    margin:0;
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;
-    background:var(--bg);color:var(--text);line-height:1.8;
-    -webkit-font-smoothing:antialiased;
-  }
-  a{color:var(--accent);text-decoration:none}
-  a:hover{text-decoration:underline}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;
+       background:var(--bg);color:var(--text);line-height:1.8;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
   b,strong{font-weight:700}
   .num{font-variant-numeric:tabular-nums}
-  .wrap{max-width:960px;margin:0 auto;padding:0 20px 72px}
-
-  /* ---------- top bar ---------- */
+  .wrap{max-width:1000px;margin:0 auto;padding:0 20px 72px}
   .topbar{background:var(--card);border-bottom:1px solid var(--line)}
-  .topbar .inner{max-width:960px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:14px 20px}
-  .brand{font-weight:700;font-size:15px;letter-spacing:.3px}
+  .topbar .inner{max-width:1000px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:14px 20px;flex-wrap:wrap}
+  .brand{font-weight:700;font-size:15px}
   .brand small{font-weight:500;color:var(--faint);font-size:12px;margin-left:6px}
-  .badge-demo{margin-left:auto;font-size:11px;color:var(--muted);border:1px solid var(--line);
-              border-radius:4px;padding:3px 10px;background:var(--bg);white-space:nowrap}
-
-  /* ---------- common ---------- */
+  .badge-demo{margin-left:auto;font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:3px 10px;background:var(--bg)}
   .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:22px 24px;margin:0 0 16px}
-  .card h3{margin:0 0 6px;font-size:16px;font-weight:700}
-  .card .sub{color:var(--muted);font-size:13px;margin:0 0 14px}
-  .section{margin-top:56px}
+  .section{margin-top:52px}
   .section-t{font-size:20px;font-weight:700;margin:0 0 6px;padding-top:8px;border-top:3px solid var(--accent);display:inline-block}
-  .section-lead{color:var(--muted);font-size:14px;margin:4px 0 18px;max-width:760px}
-  .grid{display:grid;gap:16px}
-  .g2{grid-template-columns:1fr 1fr}
-  @media(max-width:760px){.g2{grid-template-columns:1fr}}
+  .section-lead{color:var(--muted);font-size:14px;margin:4px 0 18px;max-width:820px}
+  .learn{background:var(--accent-soft);border:1px solid #d2e4e0;border-radius:8px;padding:16px 20px;margin:0 0 18px;font-size:14px}
+  .learn .t{font-weight:700;color:var(--accent-dark);margin:0 0 6px}
+  .learn p{margin:0 0 8px}.learn p:last-child{margin:0}
 
-  /* 解説ボックス（意味から説明する枠） */
-  .learn{background:var(--accent-soft);border:1px solid #d2e4e0;border-radius:8px;padding:18px 20px;margin:0 0 16px;font-size:14px}
-  .learn .t{font-weight:700;color:var(--accent-dark);font-size:14px;margin:0 0 6px}
-  .learn p{margin:0 0 10px}
-  .learn p:last-child{margin-bottom:0}
-  .learn ul{margin:6px 0 10px;padding-left:20px}
-  .learn li{margin:3px 0}
+  /* capture + callouts layout */
+  .stmt{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:22px;align-items:start}
+  @media(max-width:820px){.stmt{grid-template-columns:1fr}}
+  .shot{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+  .shot .cap{font-size:11.5px;color:var(--muted);padding:7px 10px;border-bottom:1px solid var(--line-soft);background:var(--bg);display:flex;gap:8px;align-items:center}
+  .shot .cap .pill{font-size:10px;font-weight:700;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:1px 8px;white-space:nowrap}
+  .shot img{display:block;width:100%;height:auto}
+  .reads{display:flex;flex-direction:column;gap:12px}
+  .read{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:12px 14px;background:#fff}
+  .read .row{font-size:12.5px;color:var(--muted);margin:0 0 3px}
+  .read .row b{color:var(--text);background:var(--mark);border-bottom:1px solid var(--mark-line);padding:0 3px;border-radius:2px}
+  .read .mean{font-size:13.5px;margin:0}
+  .read .tag{display:inline-block;font-size:10.5px;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:1px 8px;margin-top:7px}
+  .keyline{font-size:13px;color:var(--muted);margin-top:14px;border-top:1px solid var(--line-soft);padding-top:12px}
 
-  /* 用語ミニ辞書（定義リスト） */
-  .dl{display:grid;grid-template-columns:150px 1fr;gap:8px 16px;font-size:13.5px;margin-top:8px}
-  @media(max-width:600px){.dl{grid-template-columns:1fr}.dl dt{margin-top:8px}}
-  .dl dt{font-weight:700;margin:0}
-  .dl dd{margin:0;color:var(--muted)}
-  .dl dd .ex{color:var(--faint);font-size:12.5px}
+  /* trend */
+  .trend{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:700px){.trend{grid-template-columns:1fr}}
+  .bars{display:flex;align-items:flex-end;gap:16px;height:150px;margin-top:6px;padding-top:8px}
+  .bars .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;justify-content:flex-end;height:100%}
+  .bars .bk{width:100%;max-width:46px;border-radius:4px 4px 0 0}
+  .bars .v{font-size:11px;font-weight:700}
+  .bars .yr{font-size:10.5px;color:var(--faint)}
 
-  /* ---------- company header ---------- */
-  .company{display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px;padding:6px 0 2px}
-  .logo{width:48px;height:48px;border-radius:8px;background:var(--accent);display:flex;align-items:center;
-        justify-content:center;font-weight:700;color:#fff;font-size:20px;flex:none}
-  .company h1{margin:0;font-size:24px;letter-spacing:.3px}
-  .company h1 small{font-size:14px;color:var(--faint);font-weight:500;margin-left:8px}
-  .company .meta{color:var(--muted);font-size:13px;margin-top:2px}
-  .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:4px;background:var(--bg);
-       color:var(--muted);border:1px solid var(--line);margin-right:4px}
-  .price{margin-left:auto;text-align:right}
-  .price .p{font-size:26px;font-weight:700}
-  .price .c{color:var(--muted);font-size:12.5px}
-
-  /* ---------- valuation ---------- */
-  .valnum{display:flex;align-items:baseline;gap:10px;margin:2px 0 12px;flex-wrap:wrap}
-  .valnum .fair{font-size:24px;font-weight:700}
-  .valnum small{color:var(--muted);font-size:12.5px}
-  .range{position:relative;height:10px;border-radius:5px;background:linear-gradient(90deg,#dfe6e4 0%,#dfe6e4 100%);margin:8px 0 4px}
-  .range .band{position:absolute;top:0;height:100%;background:var(--accent-soft);border:1px solid var(--accent);border-radius:5px;opacity:.9}
-  .range .mk{position:absolute;top:-5px;width:2px;height:20px;background:var(--text)}
-  .range-lbls{display:flex;justify-content:space-between;font-size:11px;color:var(--faint);margin-top:4px}
-  .assump{font-size:12px;color:var(--muted);margin-top:14px;border-top:1px solid var(--line-soft);padding-top:12px}
-  .modelrow{display:grid;grid-template-columns:110px 1fr 72px;align-items:center;gap:12px;font-size:13px;margin:10px 0}
-  .modelrow .track{height:6px;border-radius:3px;background:var(--line-soft);position:relative}
-  .modelrow .fill{position:absolute;left:0;top:0;height:100%;border-radius:3px;background:var(--accent)}
-  .modelrow b{text-align:right}
-
-  /* health */
-  .scoreBig{font-size:34px;font-weight:700;line-height:1;color:var(--accent-dark)}
-  .scoreBig small{font-size:14px;color:var(--muted);font-weight:500}
-  .subscores{display:flex;flex-direction:column;gap:10px;margin-top:12px}
-  .ss{display:grid;grid-template-columns:80px 1fr 34px;align-items:center;gap:12px;font-size:13px}
-  .ss .track{height:6px;border-radius:3px;background:var(--line-soft);overflow:hidden}
-  .ss .fill{height:100%;border-radius:3px;background:var(--accent)}
-  .ss b{text-align:right}
-
-  /* ---------- statements visuals ---------- */
-  .stacked{display:flex;height:36px;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
-  .seg{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden}
-  .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-size:12px;color:var(--muted)}
-  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
-  .lblrow{font-size:12px;color:var(--muted);margin:14px 0 5px}
-  .lblrow:first-of-type{margin-top:4px}
-
-  /* PL 段階バー */
-  .plrow{display:grid;grid-template-columns:130px 1fr 90px;align-items:center;gap:12px;font-size:13px;margin:8px 0}
-  @media(max-width:600px){.plrow{grid-template-columns:104px 1fr 78px;gap:8px}}
-  .plrow .track{height:16px;background:var(--line-soft);border-radius:3px;position:relative}
-  .plrow .fill{position:absolute;left:0;top:0;height:100%;border-radius:3px;background:var(--accent)}
-  .plrow .fill.gray{background:var(--gray-bar)}
-  .plrow b{text-align:right}
-  .plminus{font-size:12.5px;color:var(--muted);margin:2px 0 2px 8px}
-  .plminus b{color:var(--text)}
-
-  /* CF バー */
-  .cfrow{display:grid;grid-template-columns:110px 1fr 84px;align-items:center;gap:12px;font-size:13px;margin:10px 0}
-  .cfrow .track{height:16px;position:relative;background:var(--line-soft);border-radius:3px}
-  .cfrow .zero{position:absolute;left:50%;top:-3px;width:1px;height:22px;background:var(--faint)}
-  .cfrow .bar{position:absolute;top:0;height:100%;border-radius:3px}
-  .cfrow b{text-align:right}
-
-  /* ---------- KPI cards ---------- */
-  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  @media(max-width:760px){.kpis{grid-template-columns:1fr}}
-  .kpi{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:18px 20px}
-  .kpi .head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-  .kpi .k{font-size:15px;font-weight:700}
-  .kpi .v{font-size:20px;font-weight:700;margin-left:auto}
-  .kpi .body{font-size:13px;color:var(--muted);margin-top:8px}
-  .kpi .rowlbl{display:grid;grid-template-columns:64px 1fr;gap:8px;margin:5px 0}
-  .kpi .rowlbl span:first-child{font-weight:700;color:var(--text);font-size:12.5px}
-
-  /* ---------- 注目点 ---------- */
-  .obs{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--accent);
-       border-radius:8px;padding:16px 18px;margin-bottom:14px}
-  .obs .h{font-weight:700;font-size:14.5px;margin-bottom:6px}
-  .obs p{margin:0 0 10px;font-size:13.5px;color:var(--muted)}
-  .obs .why{font-size:12.5px;color:var(--text);background:var(--bg);border:1px solid var(--line-soft);
-            border-radius:6px;padding:8px 12px;margin:0 0 10px}
-  .srcline{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .srctag{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;background:var(--bg);
-          border:1px solid var(--line);border-radius:4px;padding:3px 9px;color:var(--muted)}
-  .srctag b{color:var(--accent-dark)}
-  .srclink{font-size:11.5px}
-
-  /* ---------- table ---------- */
-  table{width:100%;border-collapse:collapse;font-size:13.5px}
-  th,td{padding:10px 12px;text-align:right;border-bottom:1px solid var(--line-soft);font-variant-numeric:tabular-nums}
-  th:first-child,td:first-child{text-align:left}
-  thead th{font-size:12px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line)}
-  tbody tr.me{background:var(--accent-soft)}
-  tbody tr.me td:first-child{font-weight:700}
-  .tbl-scroll{overflow-x:auto}
-
-  .footnote{font-size:12px;color:var(--faint);margin-top:8px}
-  .disc{margin-top:56px;font-size:12.5px;color:var(--muted);border:1px solid var(--line);
-        border-radius:8px;padding:16px 20px;background:var(--card)}
-  .disc b{color:var(--text)}
-  .toc{font-size:13px;color:var(--muted);margin:10px 0 0}
-  .toc a{margin-right:14px;white-space:nowrap}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  @media(max-width:700px){.kpis{grid-template-columns:1fr 1fr}}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+  .kpi .k{font-size:12px;color:var(--muted)}
+  .kpi .v{font-size:20px;font-weight:700;margin-top:2px}
+  .kpi .n{font-size:11.5px;color:var(--faint);margin-top:4px}
+  .disc{margin-top:26px;font-size:11.5px;color:var(--faint);border:1px solid var(--line);border-radius:8px;padding:14px 16px;background:#fff}
+  h1.co{margin:0;font-size:22px}
+  .co-meta{color:var(--muted);font-size:13px;margin:2px 0 0}
+  .tag2{display:inline-block;font-size:11px;padding:1px 8px;border-radius:4px;background:var(--bg);color:var(--muted);border:1px solid var(--line);margin-right:4px}
 </style>
 </head>
 <body>
-
   <div class="topbar"><div class="inner">
-    <div class="brand">企業財務分析<small>決算書の読み方がわかる企業ページ</small></div>
-    <span class="badge-demo">UIモック / サンプルデータ</span>
+    <div class="brand">企業財務分析<small>実際の決算書を読む</small></div>
+    <span class="badge-demo">UIモック / 財務3表＝トヨタ 2026年3月期 実績（IFRS連結・決算短信より）</span>
   </div></div>
 
   <div class="wrap">
-
-    <!-- ================= 導入：決算書ってそもそも何？ ================= -->
-    <div class="section" style="margin-top:36px">
-      <h2 class="section-t">はじめに：決算書ってそもそも何？</h2>
-      <p class="section-lead">
-        このページは、実在企業のサンプルデータを題材に「決算書（財務諸表）をどう読むのか」を、数字の意味から学べるように作られています。上から順に読むと、決算書の基本的な読み方が一通り身につきます。
-      </p>
-
-      <div class="learn">
-        <p class="t">決算書＝会社の「成績表」と「健康診断書」</p>
-        <p>
-          決算書とは、会社が1年間の活動の結果を数字でまとめた報告書です。学校の成績表のように「どれだけ稼げたか」を示し、健康診断書のように「体力（財産）は十分か、無理をしていないか」を示します。上場企業は法律でこれを開示する義務があり、誰でも読むことができます。
-        </p>
-        <p>決算書の中心は次の<b>「財務3表」</b>です。それぞれ役割が違います。</p>
-        <ul>
-          <li><b>貸借対照表（BS）</b> — <b>ある時点</b>の財産と借金のリスト。例えるなら「3月31日24時に撮った、会社の財布と借金の<b>写真</b>」。</li>
-          <li><b>損益計算書（PL）</b> — <b>1年間</b>にいくら売り上げ、いくら使い、いくら儲かったか。例えるなら「1年分の<b>家計簿の集計表</b>」。</li>
-          <li><b>キャッシュフロー計算書（CF）</b> — 1年間の<b>現金そのもの</b>の出入り。例えるなら「<b>預金通帳</b>の増減記録」。利益と現金は一致しないため、この表が必要になります。</li>
-        </ul>
-        <p>
-          ポイントは「BSは<b>一時点</b>、PLとCFは<b>期間</b>」という違いです。写真（BS）を毎年並べると体格の変化がわかり、家計簿（PL）と通帳（CF）を突き合わせると、儲けの中身が見えてきます。
-        </p>
-      </div>
-
-      <p class="toc">
-        このページの流れ：
-        <a href="#sec-val">① 株価は妥当か</a>
-        <a href="#sec-bs">② BSの読み方</a>
-        <a href="#sec-pl">③ PLの読み方</a>
-        <a href="#sec-cf">④ CFの読み方</a>
-        <a href="#sec-kpi">⑤ 主要指標の意味</a>
-        <a href="#sec-obs">⑥ 注目点</a>
-        <a href="#sec-peer">⑦ 競合比較</a>
-      </p>
+    <div class="card" style="margin-top:24px">
+      <h1 class="co">トヨタ自動車 <span style="font-size:14px;color:var(--faint);font-weight:500">7203・東証プライム</span></h1>
+      <p class="co-meta">輸送用機器 / 自動車　<span class="tag2">2026年3月期</span><span class="tag2">連結・IFRS</span><span class="tag2">出典: 決算短信（トヨタ IR）</span></p>
     </div>
 
-    <!-- ================= 企業ヘッダ ================= -->
+    <div class="learn">
+      <div class="t">このページの読み方</div>
+      <p>下に並ぶのは、トヨタが実際に開示した<b>決算短信の財務諸表そのもの（実際の紙面のキャプチャ）</b>です。数字はすべて実際の開示値。各表の右側に「どこを・どう読むか」を、実際の行と金額に紐づけて解説します。</p>
+      <p style="margin:0;color:var(--accent-dark)">財務3表：<b>①貸借対照表（BS）＝ある時点の財産と借金</b>／<b>②損益計算書（PL）＝1年の儲け</b>／<b>③キャッシュ・フロー計算書（CF）＝現金の増減</b>。</p>
+    </div>
+
+    <!-- ===== BS ===== -->
     <div class="section">
-      <div class="company">
-        <div class="logo">T</div>
-        <div>
-          <h1>トヨタ自動車<small>7203・東証プライム</small></h1>
-          <div class="meta">輸送用機器 / 自動車　<span class="tag">3月決算</span><span class="tag">連結</span><span class="tag">出典: 金融庁 EDINET</span></div>
+      <div class="section-t">① 連結財政状態計算書（貸借対照表 / BS）</div>
+      <p class="section-lead">「会社が何を持ち（資産）、いくら借りていて（負債）、返さなくていい自分のお金（純資産）がどれだけあるか」を、ある時点で写した表。<b>資産合計＝負債合計＋資本合計</b>で必ず左右が一致します。</p>
+      <div class="stmt">
+        <div class="shot">
+          <div class="cap"><span class="pill">実際の開示</span>連結財政状態計算書（トヨタ 2026年3月期 決算短信）※右列が当期・単位:百万円</div>
+          <img src="/fin-stmt-bs.png" alt="トヨタ 連結財政状態計算書（実際の決算短信）" loading="lazy" />
         </div>
-        <div class="price">
-          <div class="p num">¥2,980</div>
-          <div class="c num">前日比 +1.4%（サンプル値）</div>
-        </div>
-      </div>
-      <p class="footnote">※ 以下の数値はすべてUIモック用のサンプルデータです。実データは金融庁EDINETの開示（XBRL）から取得予定です。</p>
-    </div>
-
-    <!-- ================= バリュエーション / 健全性 ================= -->
-    <div class="section" id="sec-val">
-      <h2 class="section-t">① いまの株価は妥当か（バリュエーション）</h2>
-      <p class="section-lead">
-        「割安・割高」とは、<b>会社の実力（利益・資産・配当）に対して、いまの株価が高いか安いか</b>という見方です。実力の測り方（モデル）が複数あるため、単一の正解値ではなく<b>前提を明示した参考レンジ</b>として示します。
-      </p>
-
-      <div class="learn">
-        <p class="t">理論株価の3つのモデル — それぞれ何を意味するか</p>
-        <ul>
-          <li><b>DCF法</b> — 「会社が将来生み出す現金を、いま受け取るならいくらか」に換算して合計する方法。将来のお金は不確実なぶん割り引いて（値引きして）評価します。将来予測と割引率の置き方で結果が大きく変わるのが弱点です。</li>
-          <li><b>配当割引モデル（DDM）</b> — 「株を持ち続けたら受け取れる配当の総額は、いまの価値でいくらか」を計算する方法。配当を重視する会社に向き、配当が少ない成長企業には向きません。</li>
-          <li><b>PER・PBRマルチプル</b> — 「似た会社や過去の自分は、利益・純資産の何倍の株価で取引されてきたか」という<b>相場感</b>との比較。計算が簡単で直感的ですが、比較対象の選び方に左右されます。</li>
-        </ul>
-        <p>どのモデルも一長一短なので、<b>複数のモデルを並べて「だいたいこの範囲」と幅で捉える</b>のが実務的な使い方です。</p>
-      </div>
-
-      <div class="grid g2">
-        <div class="card">
-          <h3>理論株価の参考レンジ</h3>
-          <p class="sub">3モデルの結果を幅で提示（助言ではなく計算結果です）</p>
-          <div class="valnum">
-            <span class="fair num">¥2,600 – ¥3,400</span><small>参考レンジ</small>
-          </div>
-          <div class="range">
-            <span class="band" style="left:20%;width:53%"></span>
-            <span class="mk" style="left:45%"></span>
-          </div>
-          <div class="range-lbls"><span>¥2,000</span><span>¥3,000</span><span>¥4,000</span></div>
-          <div style="font-size:13px;margin-top:12px;color:var(--muted)">
-            現在値 <b class="num" style="color:var(--text)">¥2,980</b>（縦線）はレンジ内 ＝ <b style="color:var(--accent-dark)">概ね妥当圏</b>という計算結果です。
-          </div>
-          <div class="modelrow"><span>DCF</span><span class="track"><span class="fill" style="width:79%"></span></span><b class="num">¥3,150</b></div>
-          <div class="modelrow"><span>DDM</span><span class="track"><span class="fill" style="width:68%"></span></span><b class="num">¥2,720</b></div>
-          <div class="modelrow"><span>PER基準</span><span class="track"><span class="fill" style="width:72%"></span></span><b class="num">¥2,890</b></div>
-          <div class="modelrow"><span>PBR基準</span><span class="track"><span class="fill" style="width:74%"></span></span><b class="num">¥2,950</b></div>
-          <div class="assump">
-            前提: DCF＝割引率8.0%・永久成長率1.0%／DDM＝1株配当¥78・配当成長2.0%／マルチプル＝過去5年平均PER 9.5倍・平均PBR 1.09倍。<b>前提を変えると結果は変わります。投資判断はご自身の責任で。</b>
-          </div>
-        </div>
-
-        <div class="card">
-          <h3>財務健全性スコア</h3>
-          <p class="sub">決算書の数値から機械的に算出した客観指標（100点満点）</p>
-          <div style="display:flex;align-items:center;gap:18px;margin:6px 0 4px">
-            <div class="scoreBig num">78<small> /100</small></div>
-            <div style="font-size:13px;color:var(--muted)">総合<b style="color:var(--accent-dark)">良好</b>。特に安全性（借金への依存が低い）が高い構成です。</div>
-          </div>
-          <div class="subscores">
-            <div class="ss"><span>収益性</span><span class="track"><span class="fill" style="width:70%"></span></span><b class="num">70</b></div>
-            <div class="ss"><span>安全性</span><span class="track"><span class="fill" style="width:88%"></span></span><b class="num">88</b></div>
-            <div class="ss"><span>成長性</span><span class="track"><span class="fill" style="width:62%"></span></span><b class="num">62</b></div>
-            <div class="ss"><span>CF創出</span><span class="track"><span class="fill" style="width:80%"></span></span><b class="num">80</b></div>
-          </div>
-          <div class="assump">
-            収益性＝ROE・利益率、安全性＝自己資本比率・流動比率、成長性＝売上・利益の伸び、CF創出＝営業CFとフリーCF、をそれぞれ同業比較でスコア化しています。
-          </div>
+        <div class="reads">
+          <div class="read"><p class="row">現金及び現金同等物 <b>12,659,622</b> 百万円（約12.7兆円）</p><p class="mean">すぐ使える現金。潤沢にあり、不測の事態への耐性が高いことを示します。</p><span class="tag">BS・流動資産</span></div>
+          <div class="read"><p class="row">棚卸資産 <b>5,134,996</b> 百万円（約5.1兆円）</p><p class="mean">在庫（部品・製品など）。多すぎると資金が寝る、少なすぎると機会損失。売上との比で見ます。</p><span class="tag">BS・流動資産</span></div>
+          <div class="read"><p class="row">資産合計 <b>105,522,331</b> 百万円（約105.5兆円）</p><p class="mean">会社が持つ財産の総額。この額が <b>負債64.5兆＋純資産41.0兆</b> と一致します。</p><span class="tag">BS・合計</span></div>
+          <div class="read"><p class="row">資本合計（純資産）<b>41,020,068</b> 百万円／親会社持分 <b>39,918,854</b></p><p class="mean">返さなくてよい自分のお金。総資産に占める割合＝<b>自己資本比率 約37.8%</b>。厚いほど安全性が高い。</p><span class="tag">BS・純資産</span></div>
+          <div class="keyline"><b>読みどころ：</b>返さなくていいお金（純資産41兆）が総資産の約4割を占め、手元現金も約12.7兆と厚い。<b>財務の安全性は高い</b>水準です。</div>
         </div>
       </div>
     </div>
 
-    <!-- ================= BS ================= -->
-    <div class="section" id="sec-bs">
-      <h2 class="section-t">② 貸借対照表（BS）の読み方 — 会社の財産と借金</h2>
-      <p class="section-lead">
-        BS（バランスシート）は、決算日という<b>ある一時点</b>に、会社が「何を持っていて（資産）」「そのお金をどう調達したか（負債＋純資産）」を左右に並べた表です。
-      </p>
-
-      <div class="learn">
-        <p class="t">「資産 ＝ 負債 ＋ 純資産」の意味</p>
-        <p>
-          会社が持っている財産（資産）は、必ず「誰かから借りたお金（負債）」か「自分のお金（純資産）」のどちらかで買われています。だから左右は必ず一致（バランス）します。住宅にたとえると、<b>4,000万円の家（資産）＝ 3,000万円の住宅ローン（負債）＋ 1,000万円の頭金（純資産）</b>という関係です。
-        </p>
-        <p>
-          読み方のコツは「<b>返さなくていいお金（純資産）がどれくらい厚いか</b>」と「<b>すぐ返す借金に対して、すぐ使えるお金が足りているか</b>」の2点をまず見ることです。
-        </p>
-      </div>
-
-      <div class="card">
-        <h3>トヨタのBS構成（サンプル）</h3>
-        <p class="sub">総資産 ¥90.1兆 — 左（何を持っているか）と右（どう調達したか）は同額になります</p>
-        <div class="lblrow">資産サイド（お金の使いみち）</div>
-        <div class="stacked">
-          <div class="seg" style="width:44%;background:var(--accent)">流動資産 44%</div>
-          <div class="seg" style="width:56%;background:var(--accent-dark)">固定資産 56%</div>
+    <!-- ===== PL ===== -->
+    <div class="section">
+      <div class="section-t">② 連結損益計算書（PL）</div>
+      <p class="section-lead">1年間で「いくら売れて（売上）、いくら費用がかかり、いくら儲かったか（利益）」を段階的に示す表。上から順に費用を引いていき、最後に手元に残る利益になります。</p>
+      <div class="stmt">
+        <div class="shot">
+          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書（トヨタ 2026年3月期 決算短信）※右列が当期・単位:百万円</div>
+          <img src="/fin-stmt-pl.png" alt="トヨタ 連結損益計算書（実際の決算短信）" loading="lazy" />
         </div>
-        <div class="lblrow">調達サイド（お金の出どころ）</div>
-        <div class="stacked">
-          <div class="seg" style="width:30%;background:var(--gray-bar);color:#2b3640">流動負債 30%</div>
-          <div class="seg" style="width:32%;background:var(--gray-bar-dark)">固定負債 32%</div>
-          <div class="seg" style="width:38%;background:var(--accent)">純資産 38%</div>
+        <div class="reads">
+          <div class="read"><p class="row">営業収益合計 <b>50,684,952</b> 百万円（約50.7兆円）</p><p class="mean">会社の売上（本業の稼ぎの入口）。前期48.0兆から増収。</p><span class="tag">PL・売上</span></div>
+          <div class="read"><p class="row">売上原価 <b>39,141,418</b>／販管費 <b>4,697,524</b></p><p class="mean">売上を生むためにかかった費用。売上に対する原価の比率（原価率）が利益率を左右します。</p><span class="tag">PL・費用</span></div>
+          <div class="read"><p class="row">営業利益 <b>3,766,216</b> 百万円（約3.77兆円）</p><p class="mean">本業の儲け。<b>前期4.80兆 → 当期3.77兆と減益</b>。売上は増えたのに本業利益は減った＝<b>利益率が低下</b>（費用の増加が効いている）。</p><span class="tag">PL・営業利益</span></div>
+          <div class="read"><p class="row">税引前利益 <b>5,152,996</b> ＞ 営業利益 3,766,216</p><p class="mean">本業の利益より最終段階の利益が大きいのは、持分法投資利益など<b>営業外の収益</b>が上乗せされているため（トヨタの特徴）。</p><span class="tag">PL・営業外</span></div>
+          <div class="keyline"><b>読みどころ：</b>増収でも営業利益は3期連続で減少（下の推移参照）。<b>「売れているのに本業の利益は細っている」＝利益率の低下</b>が最大の注目点です。</div>
         </div>
-        <div class="legend">
-          <span><i style="background:var(--accent)"></i>流動資産 / 純資産</span>
-          <span><i style="background:var(--accent-dark)"></i>固定資産</span>
-          <span><i style="background:var(--gray-bar)"></i>流動負債</span>
-          <span><i style="background:var(--gray-bar-dark)"></i>固定負債</span>
-        </div>
-        <div class="assump">
-          読み解き（サンプル数値の意味）: 調達の<b>38%が返さなくていい自分のお金（純資産 ¥34.6兆）</b>で、土台は厚め。1年以内に返す流動負債（¥27.0兆）に対し、1年以内に現金化できる流動資産が¥39.6兆あり、<b>短期の支払い能力にも余裕がある</b>状態です（流動比率 146%）。
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>BSの主要科目 — それぞれ何を意味するか</h3>
-        <p class="sub">決算書に出てくる言葉を、意味から押さえます</p>
-        <dl class="dl">
-          <dt>流動資産</dt><dd>1年以内に現金に変えられる資産。<span class="ex">現金・売掛金・在庫など。会社の「すぐ動かせるお金」。</span></dd>
-          <dt>現金及び預金</dt><dd>文字どおりの手元資金。<span class="ex">多いほど不況への耐性が高い。トヨタは¥8.9兆（サンプル）。</span></dd>
-          <dt>売掛金</dt><dd>商品を売ったが、まだ代金を受け取っていない「ツケ」。<span class="ex">売上は立っているのに現金はまだ無い状態。急増していたら回収の遅れを疑う。</span></dd>
-          <dt>棚卸資産</dt><dd>いわゆる在庫。売るために持っている商品・部品・仕掛品。<span class="ex">売れ残ると現金化できず、値下がりリスクも抱える。</span></dd>
-          <dt>固定資産</dt><dd>1年を超えて長く使う資産。<span class="ex">工場・機械・土地、ソフトウェア、他社への投資など。メーカーは大きくなりがち。</span></dd>
-          <dt>流動負債</dt><dd>1年以内に支払う義務。<span class="ex">仕入代金の未払い（買掛金）、短期の借入金など。</span></dd>
-          <dt>固定負債</dt><dd>返済が1年より先の負債。<span class="ex">長期借入金・社債など。すぐには返さなくてよい借金。</span></dd>
-          <dt>有利子負債</dt><dd>利息を払う必要のある借金（借入金・社債）。<span class="ex">買掛金のような「利息のない負債」と区別する。多いほど金利上昇に弱い。</span></dd>
-          <dt>純資産</dt><dd>株主のお金＋過去の利益の蓄積。<b>返す必要がない</b>。<span class="ex">これが厚い会社ほど倒れにくい。</span></dd>
-        </dl>
-      </div>
-
-      <div class="learn">
-        <p class="t">安全性はここを見る — 2つの比率</p>
-        <ul>
-          <li><b>自己資本比率 ＝ 純資産 ÷ 総資産</b>。財産のうち「自分のお金」の割合。<b>目安: 30%以上で安定的、50%以上なら優良</b>（金融事業を持つ会社は構造的に低めに出ます）。トヨタは <b class="num">38.4%</b>（サンプル）。</li>
-          <li><b>流動比率 ＝ 流動資産 ÷ 流動負債</b>。1年以内の支払いを、1年以内に現金化できる資産でまかなえるか。<b>目安: 120%以上あれば一安心、100%割れは資金繰り注意</b>。トヨタは <b class="num">146%</b>（サンプル）。</li>
-        </ul>
-        <p>この2つを見るだけで「この会社は当面つぶれにくいか」のあたりが付きます。</p>
       </div>
     </div>
 
-    <!-- ================= PL ================= -->
-    <div class="section" id="sec-pl">
-      <h2 class="section-t">③ 損益計算書（PL）の読み方 — 1年間の儲け</h2>
-      <p class="section-lead">
-        PLは、1年間の「売上」から費用を段階的に引いていき、最後にいくら残ったかを示す表です。<b>どの段階で利益が削られているか</b>が分かるのが最大のポイントです。
-      </p>
-
-      <div class="learn">
-        <p class="t">4つの利益 — 何を引いた後の儲けか</p>
-        <ul>
-          <li><b>売上総利益（粗利）</b>＝ 売上 −<b>売上原価</b>（商品を作る・仕入れる直接コスト）。<b>商品そのものの儲ける力</b>。</li>
-          <li><b>営業利益</b>＝ 粗利 −<b>販管費</b>（人件費・広告・家賃など売るためのコスト）。<b>本業の儲ける力</b>。最重要の利益です。</li>
-          <li><b>経常利益</b>＝ 営業利益 ±<b>本業以外の損益</b>（受取利息・配当、為替差損益など）。<b>会社全体の普段の実力</b>。</li>
-          <li><b>純利益</b>＝ 経常利益 ±<b>一時的な損益</b>（工場売却益・災害損失など）−<b>税金</b>。<b>最終的に株主に残る儲け</b>。配当やROEの計算の元になります。</li>
-        </ul>
-        <p>
-          読み方のコツ: 「純利益が大きい＝良い会社」と即断せず、<b>営業利益が伸びているか</b>を先に見ます。純利益は資産の売却益などで一時的に膨らむことがあるためです。
-        </p>
-      </div>
-
-      <div class="card">
-        <h3>トヨタのPLを段階で見る（サンプル・FY26）</h3>
-        <p class="sub">バーの長さは売上高を100%とした割合です</p>
-        <div class="plrow"><span>売上高</span><span class="track"><span class="fill" style="width:100%"></span></span><b class="num">¥45.1兆</b></div>
-        <div class="plminus">− 売上原価 ¥35.7兆 <b>（原価率 79.2%）</b>… 車を作る材料費・工場コスト</div>
-        <div class="plrow"><span>売上総利益</span><span class="track"><span class="fill" style="width:20.8%"></span></span><b class="num">¥9.4兆</b></div>
-        <div class="plminus">− 販管費 ¥5.3兆 … 人件費・広告費・研究開発費など</div>
-        <div class="plrow"><span>営業利益</span><span class="track"><span class="fill" style="width:9.1%"></span></span><b class="num">¥4.1兆</b></div>
-        <div class="plminus">＋ 営業外損益 ¥1.1兆 … 受取利息・持分法投資利益・為替など</div>
-        <div class="plrow"><span>経常利益</span><span class="track"><span class="fill" style="width:11.5%"></span></span><b class="num">¥5.2兆</b></div>
-        <div class="plminus">− 税金等 ¥1.3兆</div>
-        <div class="plrow"><span>純利益</span><span class="track"><span class="fill" style="width:8.6%"></span></span><b class="num">¥3.9兆</b></div>
-        <div class="assump">
-          読み解き: 営業利益率は <b class="num">9.1%</b>（＝4.1÷45.1）。製造業の平均（4〜6%程度）より高く、本業の稼ぐ力は強い水準です。ただし前期の <b class="num">9.8%</b> からは低下しており、原価率の上昇（78.1%→79.2%）が要因です。「率」で見ると、売上が伸びても収益体質が良くなったかどうかを判別できます。
+    <!-- ===== CF ===== -->
+    <div class="section">
+      <div class="section-t">③ 連結キャッシュ・フロー計算書（CF）</div>
+      <p class="section-lead">利益とは別に「現金が実際にどれだけ増減したか」を、営業・投資・財務の3区分で示す表。利益が出ていても現金が減ることがあるため、稼ぐ力を現金で確かめます。</p>
+      <div class="stmt">
+        <div class="shot">
+          <div class="cap"><span class="pill">実際の開示</span>連結キャッシュ・フロー計算書（トヨタ 2026年3月期 決算短信）※右列が当期・単位:百万円</div>
+          <img src="/fin-stmt-cf.png" alt="トヨタ 連結キャッシュ・フロー計算書（実際の決算短信）" loading="lazy" />
         </div>
-      </div>
-
-      <div class="learn">
-        <p class="t">稼ぐ力はここを見る — 「額」より「率」と「推移」</p>
-        <ul>
-          <li><b>営業利益率 ＝ 営業利益 ÷ 売上高</b>。売上100円あたり本業で何円残るか。<b>会社の「商売のうまさ」</b>が最も端的に出ます。</li>
-          <li>単年で判断せず<b>3〜5年の推移</b>で見る。率が下がり続けていたら、値下げ競争かコスト上昇のサインです。</li>
-          <li>同業他社と比べる。業種によって標準的な利益率は全く違うため、<b>比較は必ず同業内で</b>行います（→ ⑦競合比較）。</li>
-        </ul>
+        <div class="reads">
+          <div class="read"><p class="row">営業活動によるCF <b>+5,472,920</b> 百万円（約+5.47兆円）</p><p class="mean">本業で実際に稼いだ現金。前期3.70兆から大きく増加＝<b>現金を稼ぐ力は強い</b>。</p><span class="tag">CF・営業</span></div>
+          <div class="read"><p class="row">投資活動によるCF <b>△1,520,307</b>（約-1.52兆円）</p><p class="mean">設備投資や投資に使った現金（マイナスが通常）。</p><span class="tag">CF・投資</span></div>
+          <div class="read"><p class="row">財務活動によるCF <b>△536,659</b>（約-0.54兆円）</p><p class="mean">借入返済・配当・自社株買いなど。マイナス＝株主還元や返済に回した。</p><span class="tag">CF・財務</span></div>
+          <div class="read"><p class="row">フリーCF（営業+投資）＝ 約 <b>+3.95兆円</b></p><p class="mean">投資を賄ってなお手元に残る現金。プラス＝<b>自己資金で投資を回せている</b>。</p><span class="tag">CF・営業+投資</span></div>
+          <div class="keyline"><b>読みどころ：</b>営業利益は減っても営業CFは潤沢でフリーCFは大きくプラス。<b>「利益は細っても現金はしっかり稼げている」</b>という実態が読み取れます。</div>
+        </div>
       </div>
     </div>
 
-    <!-- ================= CF ================= -->
-    <div class="section" id="sec-cf">
-      <h2 class="section-t">④ キャッシュフロー計算書（CF）の読み方 — 現金の動き</h2>
-      <p class="section-lead">
-        CF計算書は、1年間の<b>現金そのもの</b>の増減を3つの活動に分けて示します。利益は会計ルール上の計算結果ですが、現金は嘘をつきません。「利益の質」を確かめるための表です。
-      </p>
-
-      <div class="learn">
-        <p class="t">3つのCF — それぞれ何を意味するか</p>
-        <ul>
-          <li><b>営業CF</b> — 本業の商売で現金がいくら入ってきたか。<b>ここが継続的にプラスであることが健全さの大前提</b>。マイナスが続く会社は本業で現金が流出しています。</li>
-          <li><b>投資CF</b> — 工場・設備・株式などへの投資による現金の出入り。成長のために投資している会社は<b>マイナスが普通</b>。プラスの場合は資産を売って現金を作っている可能性があります。</li>
-          <li><b>財務CF</b> — 借入・返済・配当・自社株買いなど、資金調達まわりの出入り。<b>マイナスなら借金返済や株主還元をしている</b>ことが多く、成熟企業では自然な姿です。</li>
-        </ul>
-        <p>
-          健全な成熟企業の典型パターンは「<b>営業CF＋ / 投資CF− / 財務CF−</b>」：本業で稼ぎ、その範囲で投資し、余りで借金を返し配当を払う、という流れです。
-        </p>
-      </div>
-
-      <div class="card">
-        <h3>トヨタのCF（サンプル・FY26）</h3>
-        <p class="sub">中央の線が±0。左がマイナス、右がプラスです</p>
-        <div class="cfrow"><span>営業CF</span><span class="track"><span class="zero"></span><span class="bar" style="left:50%;width:44%;background:var(--accent)"></span></span><b class="num">＋¥4.9兆</b></div>
-        <div class="cfrow"><span>投資CF</span><span class="track"><span class="zero"></span><span class="bar" style="right:50%;width:30%;background:var(--gray-bar)"></span></span><b class="num">−¥3.3兆</b></div>
-        <div class="cfrow"><span>財務CF</span><span class="track"><span class="zero"></span><span class="bar" style="right:50%;width:10%;background:var(--gray-bar-dark)"></span></span><b class="num">−¥1.1兆</b></div>
-        <div class="cfrow" style="border-top:1px solid var(--line-soft);padding-top:10px"><span><b>フリーCF</b></span><span class="track"><span class="zero"></span><span class="bar" style="left:50%;width:14%;background:var(--accent-dark)"></span></span><b class="num">＋¥1.6兆</b></div>
-        <div class="assump">
-          読み解き: 「営業＋ / 投資− / 財務−」の<b>健全パターン</b>。本業で稼いだ¥4.9兆の範囲内で¥3.3兆を投資し、それでも¥1.6兆の現金（フリーCF）が残っています。この余剰が配当・自社株買い・借金返済（財務CF −¥1.1兆）の原資です。期末の現金及び預金は¥8.9兆。
+    <!-- ===== trend ===== -->
+    <div class="section">
+      <div class="section-t">売上と営業利益の推移（実績）</div>
+      <p class="section-lead">「増収なのに営業利益は3期連続で減少」という実際のトレンド。PLの利益率低下が数字で確認できます。</p>
+      <div class="trend">
+        <div class="card"><h3 style="margin:0 0 4px;font-size:15px">営業収益（兆円）</h3>
+          <div class="bars">
+            <div class="col"><div class="v">45.1</div><div class="bk" style="height:72%;background:var(--accent)"></div><div class="yr">2024/3</div></div>
+            <div class="col"><div class="v">48.0</div><div class="bk" style="height:85%;background:var(--accent)"></div><div class="yr">2025/3</div></div>
+            <div class="col"><div class="v">50.7</div><div class="bk" style="height:100%;background:var(--accent)"></div><div class="yr">2026/3</div></div>
+          </div>
+          <p style="font-size:12.5px;color:var(--muted);margin:8px 0 0">売上は右肩上がりで増加。</p>
         </div>
-      </div>
-
-      <div class="learn">
-        <p class="t">なぜ「利益が出ているのに現金が減る」のか？</p>
-        <p>
-          PLの売上・利益は「<b>商品を引き渡した時点</b>」で計上されますが、現金は「<b>代金を回収した時点</b>」でしか増えません。この時間差のため、利益と現金はズレます。典型的には —
-        </p>
-        <ul>
-          <li>売った代金がまだ回収できていない（<b>売掛金</b>が増える）→ 利益は出るが現金は増えない</li>
-          <li>作った商品が売れ残っている（<b>在庫</b>が増える）→ 現金が在庫に化けている</li>
-          <li>大きな設備投資をした → PLには一度に載らないが、現金は一気に出ていく</li>
-        </ul>
-        <p>
-          極端な場合、黒字なのに支払いに必要な現金が尽きて倒産する「<b>黒字倒産</b>」も起こります。だからこそ、<b>PLの利益と営業CFがだいたい連動しているか</b>を確かめることが、利益の質のチェックになります。
-        </p>
-      </div>
-
-      <div class="learn">
-        <p class="t">フリーCFの考え方</p>
-        <p>
-          <b>フリーCF ＝ 営業CF − 投資CF（投資に使った額）</b>。本業で稼いだ現金から、事業維持・成長に必要な投資を引いた「<b>自由に使えるお金</b>」です。これがプラスで安定している会社は、借金に頼らず配当や新規事業に資金を回せます。理論株価のDCF法（→①）が割り引いて合計しているのも、将来のこのフリーCFです。
-        </p>
+        <div class="card"><h3 style="margin:0 0 4px;font-size:15px">営業利益（兆円）</h3>
+          <div class="bars">
+            <div class="col"><div class="v">5.35</div><div class="bk" style="height:100%;background:#c98a2b"></div><div class="yr">2024/3</div></div>
+            <div class="col"><div class="v">4.80</div><div class="bk" style="height:90%;background:#c98a2b"></div><div class="yr">2025/3</div></div>
+            <div class="col"><div class="v">3.77</div><div class="bk" style="height:70%;background:#c98a2b"></div><div class="yr">2026/3</div></div>
+          </div>
+          <p style="font-size:12.5px;color:var(--muted);margin:8px 0 0">一方で営業利益は3期連続で減少＝利益率低下。</p>
+        </div>
       </div>
     </div>
 
-    <!-- ================= 主要指標 ================= -->
-    <div class="section" id="sec-kpi">
-      <h2 class="section-t">⑤ 主要指標の意味 — 数字の「ものさし」を持つ</h2>
-      <p class="section-lead">
-        財務3表の数字を組み合わせると、会社を比べるための「ものさし（指標）」になります。それぞれ<b>意味・計算式・目安</b>をセットで覚えると、初めて見る会社でも読めるようになります。トヨタの値はサンプルです。
-      </p>
-
+    <!-- ===== KPI ===== -->
+    <div class="section">
+      <div class="section-t">実データから計算した主要指標</div>
+      <p class="section-lead">下の指標は上の実際の決算書から計算したものです（PER・PBR等は株価が必要なため本モックでは省略）。</p>
       <div class="kpis">
-        <div class="kpi">
-          <div class="head"><span class="k">PER（株価収益率）</span><span class="v num">9.8倍</span></div>
-          <div class="body">
-            <div class="rowlbl"><span>意味</span><span>株価が「1年分の利益」の何年分か。<b>利益に対する株価の割高さ</b>を測る。</span></div>
-            <div class="rowlbl"><span>計算式</span><span>株価 ÷ 1株あたり純利益（¥2,980 ÷ ¥304）</span></div>
-            <div class="rowlbl"><span>目安</span><span>日本株の平均は15倍前後。低いほど割安だが、成長期待が低いだけの場合もある。</span></div>
-            <div class="rowlbl"><span>分かること</span><span>同業比較で「利益の割に買われすぎ／見放されすぎ」を判断する入口になる。</span></div>
-          </div>
-        </div>
-
-        <div class="kpi">
-          <div class="head"><span class="k">PBR（株価純資産倍率）</span><span class="v num">1.10倍</span></div>
-          <div class="body">
-            <div class="rowlbl"><span>意味</span><span>株価が「1株あたりの純資産（解散価値）」の何倍か。</span></div>
-            <div class="rowlbl"><span>計算式</span><span>株価 ÷ 1株あたり純資産（¥2,980 ÷ ¥2,709）</span></div>
-            <div class="rowlbl"><span>目安</span><span>1倍が理論上の下限ライン。1倍割れは「持っている財産より安く売られている」状態。</span></div>
-            <div class="rowlbl"><span>分かること</span><span>資産面から見た株価の割安さ。PERとセットで見ると評価の偏りに気づける。</span></div>
-          </div>
-        </div>
-
-        <div class="kpi">
-          <div class="head"><span class="k">ROE（自己資本利益率）</span><span class="v num">11.2%</span></div>
-          <div class="body">
-            <div class="rowlbl"><span>意味</span><span>株主のお金（純資産）を使って、1年でどれだけ利益を生んだか。<b>株主から見た運用利回り</b>。</span></div>
-            <div class="rowlbl"><span>計算式</span><span>純利益 ÷ 純資産（¥3.9兆 ÷ ¥34.6兆）</span></div>
-            <div class="rowlbl"><span>目安</span><span>8%以上で合格圏、10%以上なら優良とされることが多い。</span></div>
-            <div class="rowlbl"><span>分かること</span><span>経営の効率。ただし借金を増やしても上がる指標なので、自己資本比率と併せて見る。</span></div>
-          </div>
-        </div>
-
-        <div class="kpi">
-          <div class="head"><span class="k">ROA（総資産利益率）</span><span class="v num">4.3%</span></div>
-          <div class="body">
-            <div class="rowlbl"><span>意味</span><span>借金も含めた<b>全財産</b>を使って、どれだけ利益を生んだか。</span></div>
-            <div class="rowlbl"><span>計算式</span><span>純利益 ÷ 総資産（¥3.9兆 ÷ ¥90.1兆）</span></div>
-            <div class="rowlbl"><span>目安</span><span>5%以上で優良とされることが多い（業種差が大きい）。</span></div>
-            <div class="rowlbl"><span>分かること</span><span>ROEとの差が大きい会社は、借金（レバレッジ）でROEを底上げしている可能性がある。</span></div>
-          </div>
-        </div>
-
-        <div class="kpi">
-          <div class="head"><span class="k">自己資本比率</span><span class="v num">38.4%</span></div>
-          <div class="body">
-            <div class="rowlbl"><span>意味</span><span>全財産のうち「返さなくていい自分のお金」の割合。<b>倒れにくさ</b>の代表指標。</span></div>
-            <div class="rowlbl"><span>計算式</span><span>純資産 ÷ 総資産（¥34.6兆 ÷ ¥90.1兆）</span></div>
-            <div class="rowlbl"><span>目安</span><span>30%以上で安定的、50%以上で優良。金融事業を含む会社は低めに出る。</span></div>
-            <div class="rowlbl"><span>分かること</span><span>不況時の耐久力。低いと業績悪化時に資金繰りが苦しくなりやすい。</span></div>
-          </div>
-        </div>
-
-        <div class="kpi">
-          <div class="head"><span class="k">営業利益率</span><span class="v num">9.1%</span></div>
-          <div class="body">
-            <div class="rowlbl"><span>意味</span><span>売上100円あたり、本業で何円の利益が残るか。<b>商売のうまさ</b>。</span></div>
-            <div class="rowlbl"><span>計算式</span><span>営業利益 ÷ 売上高（¥4.1兆 ÷ ¥45.1兆）</span></div>
-            <div class="rowlbl"><span>目安</span><span>製造業は4〜6%程度が平均。10%を超えると高収益。</span></div>
-            <div class="rowlbl"><span>分かること</span><span>価格競争力とコスト管理の実力。推移で見ると収益体質の変化がわかる。</span></div>
-          </div>
-        </div>
-
-        <div class="kpi">
-          <div class="head"><span class="k">配当利回り</span><span class="v num">2.6%</span></div>
-          <div class="body">
-            <div class="rowlbl"><span>意味</span><span>いまの株価で買った場合、1年でもらえる配当が投資額の何%か。</span></div>
-            <div class="rowlbl"><span>計算式</span><span>1株配当 ÷ 株価（¥78 ÷ ¥2,980）</span></div>
-            <div class="rowlbl"><span>目安</span><span>日本株平均は2%前後。4%超は高配当だが、業績悪化で減配されるリスクも確認する。</span></div>
-            <div class="rowlbl"><span>分かること</span><span>インカム（受取配当）目線での投資妙味。純利益に対する配当の割合（配当性向、当社は約26%）も併せて見る。</span></div>
-          </div>
-        </div>
-
-        <div class="kpi">
-          <div class="head"><span class="k">流動比率</span><span class="v num">146%</span></div>
-          <div class="body">
-            <div class="rowlbl"><span>意味</span><span>1年以内の支払い義務を、1年以内に現金化できる資産でどれだけカバーできるか。</span></div>
-            <div class="rowlbl"><span>計算式</span><span>流動資産 ÷ 流動負債（¥39.6兆 ÷ ¥27.0兆）</span></div>
-            <div class="rowlbl"><span>目安</span><span>120%以上で一安心、100%割れは短期の資金繰りに注意。</span></div>
-            <div class="rowlbl"><span>分かること</span><span>短期的な支払い能力。自己資本比率（長期の安全性）とセットで見る。</span></div>
-          </div>
-        </div>
+        <div class="kpi"><div class="k">自己資本比率</div><div class="v">約37.8%</div><div class="n">親会社持分39.92兆 ÷ 総資産105.52兆</div></div>
+        <div class="kpi"><div class="k">営業利益率</div><div class="v">7.4%</div><div class="n">営業利益3.77兆 ÷ 売上50.68兆</div></div>
+        <div class="kpi"><div class="k">当期利益(親会社)</div><div class="v">3.85兆</div><div class="n">前期4.77兆から減益</div></div>
+        <div class="kpi"><div class="k">フリーCF</div><div class="v">+3.95兆</div><div class="n">営業CF+5.47兆 と 投資CF-1.52兆</div></div>
       </div>
     </div>
 
-    <!-- ================= 注目点 ================= -->
-    <div class="section" id="sec-obs">
-      <h2 class="section-t">⑥ 注目点 — 決算書のここを見る</h2>
-      <p class="section-lead">
-        この会社の決算書を読むときに注目したい箇所を、<b>財務諸表の具体的な場所（出典）とセット</b>で整理します。数値はデータ由来の事実、コメントは中立的な解説です。売買の推奨ではありません。
-      </p>
-
-      <div class="obs">
-        <div class="h">利益率が緩やかに低下している</div>
-        <p>売上高は過去最高水準を更新した一方、営業利益率は前期 9.8% → 当期 9.1% に低下。売上原価率が 78.1% → 79.2%（+1.1pt）へ上昇しており、原材料費・労務費の上昇分を売価に転嫁しきれていない構図です。</p>
-        <div class="why">読み方のポイント: 売上（額）が伸びていても、原価率（率）が上がっていれば収益体質は悪化方向。PLは「率の変化」で読みます（→ ③）。</div>
-        <div class="srcline">
-          <span class="srctag">出典 <b>PL・売上原価</b>（原価率 79.2%, 前期比+1.1pt）</span>
-          <a class="srclink" href="#">有価証券報告書 該当箇所 →</a>
-        </div>
-      </div>
-
-      <div class="obs">
-        <div class="h">自己資本が厚く、手元現金も潤沢</div>
-        <p>自己資本比率 38.4% は同業中央値と同水準で、金融事業を抱える構造を踏まえると高い安全性です。現金及び預金は ¥8.9兆 と月商の2倍超あり、急な業績悪化への耐久力があります。</p>
-        <div class="why">読み方のポイント: 「純資産の厚み」と「現金の量」はBSで最初に確認する2点です（→ ②）。</div>
-        <div class="srcline">
-          <span class="srctag">出典 <b>BS・純資産 / 現金及び預金</b>（¥34.6兆 / ¥8.9兆）</span>
-          <a class="srclink" href="#">有価証券報告書 該当箇所 →</a>
-        </div>
-      </div>
-
-      <div class="obs">
-        <div class="h">営業CFが投資を十分にカバーしている</div>
-        <p>営業CF ＋¥4.9兆 に対して投資CF −¥3.3兆 と、本業の稼ぎの範囲内で投資が完結し、フリーCFは ＋¥1.6兆 のプラス。設備投資や研究開発を借金に頼らず自己資金で賄えている状態です。</p>
-        <div class="why">読み方のポイント: 「営業＋ / 投資− / 財務−」は成熟企業の健全パターンです（→ ④）。</div>
-        <div class="srcline">
-          <span class="srctag">出典 <b>CF・営業CF / 投資CF</b>（＋¥4.9兆 / −¥3.3兆）</span>
-          <a class="srclink" href="#">有価証券報告書 該当箇所 →</a>
-        </div>
-      </div>
-
-      <div class="obs">
-        <div class="h">有利子負債が増加している</div>
-        <p>金融事業（販売金融）の拡大に伴い、短期借入金を中心に有利子負債が前期比 +8.2% 増加。自己資本の厚さから安全性は保たれていますが、金利上昇局面では利息負担の増加要因になります。</p>
-        <div class="why">読み方のポイント: 負債は「利息の有無」で分けて見ます。有利子負債の増減と金利環境はセットで確認します（→ ②）。</div>
-        <div class="srcline">
-          <span class="srctag">出典 <b>BS・流動負債（短期借入金）</b>（前期比 +8.2%）</span>
-          <a class="srclink" href="#">有価証券報告書 該当箇所 →</a>
-        </div>
-      </div>
-    </div>
-
-    <!-- ================= 競合比較 ================= -->
-    <div class="section" id="sec-peer">
-      <h2 class="section-t">⑦ 競合他社との比較 — 指標は比べて初めて意味を持つ</h2>
-      <p class="section-lead">
-        利益率や PER の「良し悪し」は業種によって水準が違うため、<b>同業他社と並べて</b>初めて判断できます。ここでは同じ自動車メーカーのホンダ・日産と比較します（サンプルデータ）。
-      </p>
-
-      <div class="card" style="padding:8px 8px 4px">
-        <div class="tbl-scroll">
-        <table>
-          <thead><tr><th>企業</th><th>PER</th><th>ROE</th><th>営業利益率</th><th>自己資本比率</th><th>売上成長(3年)</th></tr></thead>
-          <tbody>
-            <tr class="me"><td>トヨタ自動車</td><td>9.8倍</td><td>11.2%</td><td>9.1%</td><td>38.4%</td><td>+7.2%</td></tr>
-            <tr><td>ホンダ</td><td>8.1倍</td><td>9.6%</td><td>6.8%</td><td>44.1%</td><td>+5.1%</td></tr>
-            <tr><td>日産自動車</td><td>7.4倍</td><td>4.2%</td><td>3.1%</td><td>29.3%</td><td>+2.0%</td></tr>
-            <tr><td style="color:var(--muted)">同業中央値</td><td>8.1倍</td><td>9.6%</td><td>6.8%</td><td>38.4%</td><td>+5.1%</td></tr>
-          </tbody>
-        </table>
-        </div>
-      </div>
-
-      <div class="learn">
-        <p class="t">差はどこから来るか — 財務諸表のどこに表れているか</p>
-        <ul>
-          <li><b>トヨタ</b>は3社の中で ROE・営業利益率がともに最も高く、収益性で頭ひとつ抜けています。この差は <b>PLの営業利益の段階</b>（原価率・販管費率の低さ）に表れます。PER が同業より高い（9.8倍 &gt; 中央値8.1倍）のは、この収益力に市場が相対的に高い評価を与えているためと読めます。</li>
-          <li><b>ホンダ</b>は自己資本比率 44.1% と3社で最も高く、<b>BSの純資産の厚さ</b>が特徴。安全性重視の財務構成ですが、利益率はトヨタに及びません。</li>
-          <li><b>日産</b>は営業利益率 3.1%・ROE 4.2% と収益性が低く、その原因は <b>PLの営業利益段階</b>（コスト構造）と、<b>BSの純資産の相対的な薄さ</b>（自己資本比率 29.3%）の両方に表れています。PER が最も低いのは、市場の期待が低いことの裏返しでもあります。</li>
-        </ul>
-        <p>このように「指標の差 → 財務諸表のどの行に原因があるか」と往復して読むのが、決算書分析の基本動作です。</p>
-      </div>
-    </div>
-
-    <!-- ================= 免責 ================= -->
     <div class="disc">
-      <b>ご利用にあたって</b><br>
-      ・本画面は<b>UIモックアップ（サンプルデータ）</b>です。掲載の数値・比率はすべて例示であり、実在の開示数値ではありません。実データは金融庁 EDINET の開示資料（XBRL）から取得予定です。<br>
-      ・理論株価・割安/割高の表示は<b>前提を明示した客観的な計算結果</b>であり、特定銘柄の売買の推奨・勧誘や目標株価の助言ではありません。前提が変われば結果も変わります。<b>投資判断はご自身の責任でお願いします。</b><br>
-      ・出典: 金融庁 EDINET（公共データ利用規約 PDL1.0）。
+      ※ 本画面はUIモックですが、<b>財務3表の数値と画像はトヨタ自動車 2026年3月期 決算短信（IFRS連結）の実際の開示</b>に基づきます。本番サービスでは、企業を検索すると<b>金融庁EDINETのXBRL/開示資料</b>からこうした実際の財務諸表を自動取得し、同様に読み解きます。本ページは公開情報の整理・教育を目的とし、特定銘柄の売買を推奨するものではありません。<b>投資判断はご自身の責任で。</b>出典: トヨタ自動車 IR（決算短信）/ 金融庁 EDINET。
     </div>
-
   </div>
 </body>
 </html>
