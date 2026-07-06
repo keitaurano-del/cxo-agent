@@ -27,6 +27,7 @@
 //   DELETE /chat/history      → { ok: true }（会話を論理クリア）
 //   POST   /chat/upload       multipart files[] → { ok, media: [{ id, kind, url, mime, name, size }] }
 //   GET    /chat/media/:id    → メディア実体をストリーム配信（Range 対応）
+//   POST   /glossary/detail   { term, meaning?, category? } → SSE or JSON（単語帳 1 語の深掘り解説）
 
 import { randomUUID } from 'node:crypto';
 import {
@@ -48,6 +49,7 @@ import {
   WORK_CHAT_MEDIA_DIR,
   WORK_CHAT_MEDIA_MAX_FILES,
   WORK_CHAT_VIDEO_MAX_BYTES,
+  WORK_GLOSSARY_MODEL,
 } from './config.js';
 import { processAssistantText } from './lib/workMedia.js';
 import {
@@ -59,7 +61,145 @@ import {
   startExchange,
   type ChatMedia,
 } from './lib/workChatStore.js';
-import { runClaudeStream } from './lib/notebookClaude.js';
+import { runClaudeStream, runClaudeStreamJson } from './lib/notebookClaude.js';
+
+// ─── 単語帳「もっと詳しく見る」（用語の深掘り解説）─────────────────────────
+// 単語帳（WorkGlossaryTab）の各カードから、その用語 1 語を ECL/PMO 案件の文脈で
+// 深掘り解説する（意味・実務での具体的な使い方・関連論点・注意点）。壁打ちチャットと同じ
+// claude + WebSearch/WebFetch 機構（runClaudeStream + WORK_ALLOWED_TOOLS）を流用するが、
+// 会話履歴の永続やジョブ管理は不要な単発生成なので、SSE で本文を流して終える薄い経路にする。
+// 生成結果は Markdown（ChatMarkdown で描画）。捏造禁止・出典方針は WORK_SYSTEM_PROMPT に準拠。
+const MAX_GLOSSARY_FIELD_CHARS = 500;
+
+// 単語帳深掘り専用の軽量システムプロンプト（壁打ち用の巨大 WORK_SYSTEM_PROMPT は使わない）。
+// 目的は「用語 1 語をその場で速く・正確に解説する」こと。WebSearch/WebFetch・メディア埋め込み・
+// 壁打ち導線・ワークブック解説などは不要なので載せない（＝ツール往復とプロンプト肥大による遅延を排除）。
+// 用語集の語は PD/LGD/EAD・IFRS9 3ステージ・与信/引当などモデルが確実に知っている基礎概念なので、
+// 自分の知識だけで即答してよい。ただし日本基準の ECL は公開草案段階なので断定を避け「要確認」と明示する。
+const GLOSSARY_SYSTEM_PROMPT = [
+  'あなたは、ECL（予想信用損失／Expected Credit Loss）・IFRS9・銀行会計・与信管理・銀行業務・データ基盤・PMO に精通した専門アドバイザーです。相談者（Keita さん）は、会計基準変更（ECL の算出方法の変更）に対応するシステム導入プロジェクトに PMO として参画します。',
+  '',
+  '【この依頼の性質】用語集の 1 語を、初学者でも実務で使いこなせるように、その場で手早く解説してください。あなたが既に持っている知識だけで完結させてよく、Web 検索やページ取得は行いません（このタスクにツールはありません）。出典リンクや参考メディアの埋め込みも不要です。',
+  '',
+  '【口調・体裁】常にですます調で、簡潔かつ論理的に。返答は Markdown として表示されます。見出し（「## 」）・箇条書き（「- 」）で構造化し、要点は太字（**…**）で強調してください（強調しすぎない）。CJK の太字の落とし穴として、全角括弧（）や鉤括弧「」の直後に閉じ `**` を置くと太字が無効化されるので、太字スパンの末尾を全角括弧・鉤括弧で終わらせないでください（読み仮名・英語名は太字の外に出す）。',
+  '',
+  '【正確さ】一般的な会計・銀行・IT・PMO の定義や実務は、あなたの知識で自信を持って解説してかまいません。ただし日本基準の予想信用損失（ECL）・償却原価は、企業会計基準委員会（ASBJ）が公表した公開草案（企業会計基準公開草案第89号・適用指針公開草案第88号）を中心に検討が進む段階で、最終基準・適用時期・経過措置は未確定です。日本基準の具体的な規定・スケジュール（例: 2030年4月 適用）に触れるときは断定せず「公開草案段階では…」「未確定」「要確認」と明示してください。うろ覚えの数値・日付を確定事項のように述べないこと。',
+  '',
+  '【出典】このタスクでは URL を検証できないため、出典リンクは付けないでください（記憶からの URL 捏造は厳禁）。事実確認が必要な点は本文で「要確認」と示すに留めます。',
+  '',
+  '必ず日本語・ですます調で答えてください。',
+].join('\n');
+
+/** 用語の深掘り解説の「依頼」プロンプトを組む（システムプロンプトは --system-prompt で別途渡す）。 */
+function buildGlossaryDetailPrompt(term: string, meaning: string, category: string): string {
+  return [
+    '単語帳（用語集）の次の 1 語について、相談者（Keita さん）が実務で使いこなせるよう、深掘りして解説してください。',
+    `- 用語: ${term}`,
+    meaning ? `- 現在の簡易説明: ${meaning}` : '',
+    category ? `- カテゴリ: ${category}` : '',
+    '',
+    '【解説の構成（Markdown の見出しで構造化する）】',
+    '- 「## 意味」: この用語の意味を、簡易説明より一段深く正確に。',
+    '- 「## 実務での具体的な使い方」: ECL システム導入 PMO 案件の現場で、どんな場面・作業でこの用語が出てくるか、具体例つきで。',
+    '- 「## 関連論点」: 関連する用語・論点・混同しやすい概念との違い。',
+    '- 「## 注意点」: 実務・会計基準・監査上、気をつけるべき点や落とし穴。',
+    '',
+    '簡潔に、要点を押さえて手早く答えてください（冗長にしない）。必ず日本語・ですます調で。',
+  ]
+    .filter((l) => l !== '')
+    .join('\n');
+}
+
+// POST /glossary/detail — 単語帳 1 語の深掘り解説。Accept: text/event-stream で SSE、無ければ JSON。
+// 会話履歴には残さない単発生成（壁打ちチャットとは独立）。
+async function handleGlossaryDetail(req: Request, res: Response): Promise<void> {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const term =
+    typeof body.term === 'string' ? body.term.trim().slice(0, MAX_GLOSSARY_FIELD_CHARS) : '';
+  const meaning =
+    typeof body.meaning === 'string' ? body.meaning.trim().slice(0, MAX_GLOSSARY_FIELD_CHARS) : '';
+  const category =
+    typeof body.category === 'string' ? body.category.trim().slice(0, MAX_GLOSSARY_FIELD_CHARS) : '';
+  if (!term) {
+    res.status(400).json({ error: 'term（用語）が必要です。' });
+    return;
+  }
+
+  const prompt = buildGlossaryDetailPrompt(term, meaning, category);
+  const wantsStream = (req.headers.accept ?? '').includes('text/event-stream');
+
+  if (wantsStream) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+    // WebSearch 中の無音でトンネルに切断されないよう keep-alive ping を流す（POST /chat と同方針）。
+    const keepAlive = setInterval(() => {
+      try {
+        res.write(`: ping ${Date.now()}\n\n`);
+      } catch {
+        /* 切断済みなら close ハンドラで掃除 */
+      }
+    }, 15_000);
+    let closed = false;
+    res.on('close', () => {
+      closed = true;
+      clearInterval(keepAlive);
+    });
+    try {
+      // 単語帳の 1 語解説は「速く・逐次・脱線なし」を最優先: トークンストリーム（stream-json）で
+      // 逐次配信し、ツール無効・中立 cwd・軽量 system-prompt でリポジトリ探索/巨大プロンプトの遅延を排除。
+      const result = await runClaudeStreamJson(
+        prompt,
+        (chunk) => {
+          if (!closed) sseWrite(res, { type: 'chunk', text: chunk });
+        },
+        { model: WORK_GLOSSARY_MODEL, systemPrompt: GLOSSARY_SYSTEM_PROMPT },
+      );
+      const answer = (result.stdout || '').trim();
+      const failed = !result.ok || (answer.length > 0 && answer.length < 400 && looksLikeLimit(answer));
+      if (!closed) {
+        if (failed && !answer) {
+          const fallback = looksLikeLimit(`${result.stdout ?? ''}\n${result.error ?? ''}`)
+            ? LIMIT_MESSAGE
+            : ERROR_MESSAGE;
+          sseWrite(res, { type: 'done', answer: fallback, status: 'error' });
+        } else {
+          sseWrite(res, { type: 'done', answer, status: 'done' });
+        }
+      }
+    } catch (err) {
+      console.error('[work-glossary] detail failed:', err);
+      if (!closed) sseWrite(res, { type: 'done', answer: ERROR_MESSAGE, status: 'error' });
+    } finally {
+      clearInterval(keepAlive);
+      if (!closed) res.end();
+    }
+    return;
+  }
+
+  // 非ストリーム（JSON）経路: 生成完了を待って本文を返す。glossary は軽量ストリーム経路で即答。
+  try {
+    const result = await runClaudeStreamJson(prompt, () => {}, {
+      model: WORK_GLOSSARY_MODEL,
+      systemPrompt: GLOSSARY_SYSTEM_PROMPT,
+    });
+    const answer = (result.stdout || '').trim();
+    const failed = !result.ok || (answer.length > 0 && answer.length < 400 && looksLikeLimit(answer));
+    if (failed && !answer) {
+      const fallback = looksLikeLimit(`${result.stdout ?? ''}\n${result.error ?? ''}`)
+        ? LIMIT_MESSAGE
+        : ERROR_MESSAGE;
+      res.status(200).json({ answer: fallback, status: 'error' });
+      return;
+    }
+    res.status(200).json({ answer, status: 'done' });
+  } catch (err) {
+    console.error('[work-glossary] detail failed:', err);
+    res.status(502).json({ error: ERROR_MESSAGE });
+  }
+}
 
 // ─── ペルソナ（ECL/PMO アドバイザー兼壁打ち相手）────────────────────────────
 // アプリ内文言は中立的な丁寧体（です・ます）。返答は Markdown としてレンダリングされる。
@@ -905,5 +1045,6 @@ export function workChatRouter(): Router {
   router.post('/chat/upload', (req, res) => void handleUpload(req, res));
   router.get('/chat/media/:id', (req, res) => handleStreamMedia(req, res));
   router.post('/chat', (req, res) => void handleChat(req, res));
+  router.post('/glossary/detail', (req, res) => void handleGlossaryDetail(req, res));
   return router;
 }

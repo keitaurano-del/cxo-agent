@@ -136,6 +136,14 @@ export const NOTEBOOK_CLAUDE_FALLBACK_MODEL = env(
   'claude-opus-4-8',
 );
 
+/**
+ * 単語帳「深掘り」1 語解説に使うモデル（既定 Haiku）。
+ * 用語集の語は PD/LGD/EAD・IFRS9・与信/引当などモデルが確実に知っている基礎概念で、Web 検索も
+ * リポジトリ探索も不要な単発解説なので、速さを優先して Haiku を既定にする（Sonnet だと拡張思考で
+ * 15〜20 秒待たされ体感が悪い）。品質を上げたいときは env で Sonnet 等に差し替え可。
+ */
+export const WORK_GLOSSARY_MODEL = env('WORK_GLOSSARY_MODEL', 'claude-haiku-4-5-20251001');
+
 // ─── エージェント気持ち/思考（mood コレクタ MC-165 拡張）──────────────────
 //
 // AgentsLive の各カードに「一人称の今の気持ち＋考えてること」を 1 行＋感情絵文字で表示する。

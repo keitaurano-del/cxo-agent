@@ -8,6 +8,7 @@
 // 上限を超えたリクエストは空きが出るまで待つ。タイムアウト・巨大 stdout 上限も設ける。
 
 import { execFile, spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import {
   NOTEBOOK_CLAUDE_BIN,
   NOTEBOOK_CLAUDE_TIMEOUT_MS,
@@ -242,6 +243,147 @@ export async function runClaudeStream(
     `[notebook-claude] sonnet limit hit → fallback to opus (${NOTEBOOK_CLAUDE_FALLBACK_MODEL})`,
   );
   return runClaudeStreamOnce(notebookDir, prompt, NOTEBOOK_CLAUDE_FALLBACK_MODEL, onChunk, opts);
+}
+
+// ─── 軽量トークンストリーム（単語帳の 1 語解説など、ツール不要の単発生成向け）───────────
+//
+// 通常の runClaudeStream は `claude -p`（テキスト出力）を使うが、パイプ出力（非 TTY）だと
+// claude は本文を逐次吐かず「生成完了後に一括」で出す＝体感で数十秒の無言になる。さらに cwd を
+// リポジトリにすると CLAUDE.md 読み込み・Bash/Edit 等の全ツール有効で、モデルが用語解説のつもりが
+// リポジトリを grep し始めて余計に遅くなる事故もあった。
+//
+// この関数は単発の知識回答に特化し、次で「速く・逐次・脱線なし」を担保する:
+//   --output-format stream-json --include-partial-messages … 本文をトークン単位で逐次配信
+//   --tools ""                                              … 全ツール無効（リポジトリ探索・脱線を封じる）
+//   cwd = 中立の一時ディレクトリ                             … CLAUDE.md を読ませない
+//   --system-prompt                                         … Claude Code 既定の巨大プロンプトを置換
+// thinking_delta は本文ではないので落とし、text_delta のみ onText に渡す。
+
+export interface ClaudeStreamJsonOptions {
+  /** 使用モデル（未指定なら NOTEBOOK_CLAUDE_MODEL）。 */
+  model?: string;
+  /** Claude Code 既定のシステムプロンプトを丸ごと置き換える（--system-prompt）。 */
+  systemPrompt?: string;
+  /** 作業ディレクトリ（未指定なら中立の一時ディレクトリ＝CLAUDE.md を読ませない）。 */
+  cwd?: string;
+  /** --tools に渡す値。既定 '' ＝全ツール無効。'default' で全ツール。 */
+  tools?: string;
+}
+
+/**
+ * claude をトークンストリーム（stream-json + partial messages）で起動し、本文の text_delta を
+ * onText に逐次渡す。thinking は本文でないので渡さない。完了後に ClaudeRunResult を返す
+ * （stdout に本文全体・失敗は throw せず error で返す）。単語帳の 1 語解説など単発生成向け。
+ */
+export function runClaudeStreamJson(
+  prompt: string,
+  onText: (text: string) => void,
+  opts?: ClaudeStreamJsonOptions,
+): Promise<ClaudeRunResult> {
+  const model = opts?.model ?? NOTEBOOK_CLAUDE_MODEL;
+  const cwd = opts?.cwd ?? tmpdir();
+  const tools = opts?.tools ?? '';
+  return new Promise<ClaudeRunResult>((res) => {
+    void acquire().then(() => {
+      const args = [
+        '--model',
+        model,
+        '--tools',
+        tools,
+        '--output-format',
+        'stream-json',
+        '--include-partial-messages',
+        '--verbose',
+      ];
+      if (opts?.systemPrompt) args.push('--system-prompt', opts.systemPrompt);
+      args.push('-p', prompt);
+
+      // MAX_THINKING_TOKENS=0 で拡張思考を無効化する。単語帳の 1 語解説に思考は不要で、
+      // 有効だと first token まで 10〜15 秒（Haiku）/ 15〜20 秒（Sonnet）待たされる。切ると ~2 秒で書き始める。
+      const child = spawn(NOTEBOOK_CLAUDE_BIN, args, {
+        cwd,
+        env: { ...process.env, MAX_THINKING_TOKENS: '0' },
+      });
+
+      let answer = ''; // 本文（text_delta の連結）
+      let stderr = '';
+      let lineBuf = ''; // NDJSON 行の途中断片を保持
+      let timedOut = false;
+
+      const timer = setTimeout(() => {
+        timedOut = true;
+        child.kill('SIGTERM');
+      }, NOTEBOOK_CLAUDE_TIMEOUT_MS);
+
+      try {
+        child.stdin?.end();
+      } catch {
+        /* noop */
+      }
+
+      const handleEvent = (obj: unknown): void => {
+        if (!obj || typeof obj !== 'object') return;
+        const o = obj as Record<string, unknown>;
+        if (o.type !== 'stream_event') return;
+        const ev = o.event as Record<string, unknown> | undefined;
+        if (!ev || ev.type !== 'content_block_delta') return;
+        const delta = ev.delta as Record<string, unknown> | undefined;
+        if (!delta || delta.type !== 'text_delta') return; // thinking_delta 等は本文でないので無視
+        const text = typeof delta.text === 'string' ? delta.text : '';
+        if (!text) return;
+        if (answer.length + text.length > MAX_STDOUT_BYTES) return;
+        answer += text;
+        onText(text);
+      };
+
+      child.stdout?.on('data', (chunk: Buffer) => {
+        lineBuf += chunk.toString();
+        let nl = lineBuf.indexOf('\n');
+        while (nl >= 0) {
+          const line = lineBuf.slice(0, nl).trim();
+          lineBuf = lineBuf.slice(nl + 1);
+          if (line) {
+            try {
+              handleEvent(JSON.parse(line));
+            } catch {
+              /* NDJSON でない/途中断片は無視 */
+            }
+          }
+          nl = lineBuf.indexOf('\n');
+        }
+      });
+
+      child.stderr?.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        release();
+        if (timedOut) {
+          res({
+            ok: false,
+            stdout: answer,
+            error: `claude がタイムアウトしました（${Math.round(NOTEBOOK_CLAUDE_TIMEOUT_MS / 1000)}s）`,
+          });
+          return;
+        }
+        // 上限・エラーは本文が空のまま stderr/短文に出ることが多い。ok 判定は「終了コード0かつ本文あり」。
+        if (code !== 0 && !answer) {
+          const errDetail = stderr ? ` | ${stderr.slice(0, 500)}` : '';
+          res({ ok: false, stdout: answer, error: `claude 実行に失敗しました（終了コード ${code}）${errDetail}` });
+          return;
+        }
+        res({ ok: true, stdout: answer, error: stderr ? stderr.slice(0, 500) : undefined });
+      });
+
+      child.on('error', (err) => {
+        clearTimeout(timer);
+        release();
+        res({ ok: false, stdout: answer, error: `claude 実行に失敗しました: ${err.message}` });
+      });
+    });
+  });
 }
 
 /** spawn ベースの 1 回ぶんのストリーム実行（指定モデル）。失敗は throw せず result で返す。 */
