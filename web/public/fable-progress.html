@@ -1,6 +1,6 @@
 <!doctype html><html lang=ja><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>Fable 5 進捗 — Zaimu.ai モック v9 — 財務諸表を画像→HTML表（選択・ハイライト可能）</title>
+<title>Fable 5 進捗 — Zaimu.ai モック v10 — 財務諸表の値をタップ→『なぜこの値か』の分析・内訳を表示</title>
 <style>
 :root{color-scheme:dark} *{box-sizing:border-box}
 body{margin:0;background:#0e1420;color:#e6ecf5;font:15px/1.65 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
@@ -24,83 +24,133 @@ b{color:#eaf1fb} .foot{color:#6b7f9c;font-size:12px;margin-top:10px;text-align:c
 .cch{background:#16202f;padding:6px 10px;font-size:13px}
 .ccd{margin:0;padding:8px 10px;background:#0b1119;font-family:ui-monospace,monospace;font-size:11.5px;line-height:1.5;overflow-x:auto}
 </style></head><body><div class=wrap>
-<h1>🛰 Fable 5 — Zaimu.ai モック v9 — 財務諸表を画像→HTML表（選択・ハイライト可能）</h1>
-<div class=sub><span style='color:#1e8e5a'>■ 完了</span> ・ 更新停止（完了） ・ 総操作 36</div>
-<div class=card><div class=phase>✅ 完了しました</div><div class=now>いま: 完成しました。v9仕様どおり、財務諸表のキャプチャ画像を statements.json 由来のHTML表に置き換え、public と dist の両方を更新済みです（両ファイル同一を diff で確認）。
+<h1>🛰 Fable 5 — Zaimu.ai モック v10 — 財務諸表の値をタップ→『なぜこの値か』の分析・内訳を表示</h1>
+<div class=sub><span style='color:#1e8e5a'>■ 完了</span> ・ 更新停止（完了） ・ 総操作 26</div>
+<div class=card><div class=phase>✅ 完了しました</div><div class=now>いま: 完成しました。`web/public/fin-mockup.html` を v10 化し、`web/dist/fin-mockup.html` へコピー済みです（diff一致確認済み・build/git/再起動なし）。
 
-やったこと
-- 8表すべてをHTML表化: トヨタ BS/PL/CF・任天堂 BS/PL/CF・キーエンス BS/PL。`&lt;img fin-*.png&gt;` と絶対配置ピンは財務諸表セクションから全廃（実機レンダリングで fin画像0件を確認）
-- 表は「科目｜前期2025/3期｜当期2026/3期」の3列。数値は右寄せ・tabular-nums、字下げは i を padding-left に反映、値なし行は見出し（太字・薄背景）、合計行は罫線強調。通常のHTMLテキストなので選択・ハイライト可（選択色はアクセント系の --mark）
-- 行ホバーで薄背景＋左アクセントバー</div></div>
-<div class=card><p class=h>作っている機能（▶=着手済みの推定）</p><div class='feat'><span style='color:#5b9dff'>▶</span> 各社の決算書キャプチャ画像をHTMLの表(科目|前期|当期)に置換</div>
-<div class='feat'><span style='color:#5b9dff'>▶</span> 実データは/tmp/statements.jsonから（実際の決算短信の実数）</div>
-<div class='feat'><span style='color:#5b9dff'>▶</span> テキストを選択・ドラッグでハイライトできる</div>
-<div class='feat'><span style='color:#5b9dff'>▶</span> 行ホバー/タップで強調＋指定行に『ここがポイント』吹き出し</div>
-<div class='feat'><span style='color:#5b9dff'>▶</span> 会社切替・指標の意味解説・折りたたみは維持</div>
-<div class='feat'><span style='color:#5b9dff'>▶</span> ビジーにしない（罫線控えめ・既定はマーカーのみ）</div></div>
-<div class=card><p class=h>作業のようす（上が最新・左が時刻JST）</p><div class=feed><div class='ev'><span class='t'>13:11:40</span><span class='ic'>💬</span><span class='tx'>完成しました。v9仕様どおり、財務諸表のキャプチャ画像を statements.json 由来のHTML表に置き換え、public と dist の両方を更新済みです（両ファイル同一を diff で確認）。
+実装内容:
+- 財務諸表HTML表の値がある全219行をタップ可能化。タップで行直下に詳細パネルが展開されます
+- パネル内容: 科目名大きめ＋タグ（BS/PL/CF・区分。区分は合計行で自動的に閉じる方式で誤表示を防止）→ 前期→当期の増減を p,c から実計算（カンマ・△を正しく解釈。例: 現金 8,982,404→12,659,622 増減+3,677,218・+40.9%。増加は緑系accent・減少は控えめな橙）→ why_analysis の該当分析文。分析が無い行は増減サマリ＋「詳しい要因分析は主要項目で提供」の一言
+- 同時に1つだけ表示。再タップ・✕・E</div></div>
+<div class=card><p class=h>作っている機能（▶=着手済みの推定）</p><div class='feat'><span style='color:#5b9dff'>▶</span> 財務諸表の各行をタップ→詳細パネル(ズームインして詳しく)</div>
+<div class='feat'><span style='color:#5b9dff'>▶</span> 前期→当期の増減額・増減率を実データから計算表示</div>
+<div class='feat'><span style='color:#5b9dff'>▶</span> 『なぜこの値か』の理由・内訳・示唆(why_analysis.jsonの31行)</div>
+<div class='feat'><span style='color:#5b9dff'>▶</span> 同時に1つだけ・タップで開閉・ビジー回避</div>
+<div class='feat'><span style='color:#5b9dff'>▶</span> HTML表/テキスト選択/会社切替/指標の意味解説は維持</div>
+<div class='feat'><span style='color:#5b9dff'>▶</span> 画像には戻さない・非AIデザイン維持</div></div>
+<div class=card><p class=h>作業のようす（上が最新・左が時刻JST）</p><div class=feed><div class='ev'><span class='t'>17:07:04</span><span class='ic'>💬</span><span class='tx'>完成しました。`web/public/fin-mockup.html` を v10 化し、`web/dist/fin-mockup.html` へコピー済みです（diff一致確認済み・build/git/再起動なし）。
 
-やったこと
-- 8表すべてをHTML表化: トヨタ BS/PL/CF・任天堂 BS/PL/CF・キーエンス BS/PL。`&lt;img fin-*.png&gt;` と絶対配置ピンは財務諸表セクションから全廃（実機レンダリングで fin画像0件を確認）
-- 表は「科目｜前期2025/3期｜当期2026/3期」の3列。数値は右寄せ・tabular-nums、字下げは i を padding-left に反映、値なし行は見出し（太字・薄背景）、合計行は罫線強調。通常のHTMLテキストなので選択・ハイライト可（選択色はアクセント系の --mark）
-- 行ホバーで薄背景＋左アクセントバー</span></div>
-<div class='ev'><span class='t'>13:11:18</span><span class='ic'></span><span class='tx'>💻 コマンド実行: <span class=mono>cp /home/dev/projects/cxo-agent/web/public/fin-mockup.html /home/dev/projects/cxo-agent/we</span></span></div>
-<div class='ev'><span class='t'>13:11:08</span><span class='ic'>📖</span><span class='tx'><b>fin-v9-toyota-bs.png</b> を読んでいます</span></div>
-<div class='ev'><span class='t'>13:11:03</span><span class='ic'></span><span class='tx'>🔬 <b>動作を検証</b>しています（実ブラウザ/PDF確認）</span></div>
-<div class='ev'><span class='t'>13:11:00</span><span class='ic'>💬</span><span class='tx'>表要素を直接キャプチャし直します:</span></div>
-<div class='ev'><span class='t'>13:10:52</span><span class='ic'>📖</span><span class='tx'><b>fin-v9-toyota-bs.png</b> を読んでいます</span></div>
-<div class='ev'><span class='t'>13:10:46</span><span class='ic'></span><span class='tx'>🔬 <b>動作を検証</b>しています（実ブラウザ/PDF確認）</span></div>
-<div class='ev'><span class='t'>13:10:30</span><span class='ic'></span><span class='tx'>🔬 <b>動作を検証</b>しています（実ブラウザ/PDF確認）</span></div>
-<div class='ev'><span class='t'>13:10:11</span><span class='ic'></span><span class='tx'>💻 コマンド実行: <span class=mono>node -e &quot;
-const fs=require(&#x27;fs&#x27;);
-const html=fs.readFileSync(&#x27;web/publ</span></span></div>
-<div class='ev'><span class='t'>13:10:05</span><span class='ic'>💬</span><span class='tx'>レンダリングロジックを机上実行してポイント行のマッチとノイズ除去を検証します:</span></div>
-<div class='ev'><span class='t'>13:09:55</span><span class='ic'></span><span class='tx'>💻 コマンド実行: <span class=mono>cd /home/dev/projects/cxo-agent &amp;&amp; node -e &quot;
-const fs=require(&#x27;fs&#x27;)</span></span></div>
-<div class='ev'><span class='t'>13:09:51</span><span class='ic'>🔎</span><span class='tx'><b>fin-.*\.png|imgwrap</b> を検索しています</span></div>
-<div class='ev'><span class='t'>13:09:50</span><span class='ic'>💬</span><span class='tx'>検証します。財務諸表セクションに `&lt;img fin-*&gt;` が残っていないか、JS構文、実データ数値の整合をチェック:</span></div>
-<div class='ev'><span class='t'>13:09:43</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:09:42</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:09:40</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:09:39</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:09:37</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:09:25</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:09:23</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:09:15</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:07:19</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:07:13</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:07:08</span><span class='ic'>💬</span><span class='tx'>キーエンスの2表:</span></div>
-<div class='ev'><span class='t'>13:07:02</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:06:59</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:06:54</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:06:49</span><span class='ic'>💬</span><span class='tx'>任天堂の3表:</span></div>
-<div class='ev'><span class='t'>13:06:44</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:06:37</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:06:24</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:06:10</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
-<div class='ev'><span class='t'>13:03:15</span><span class='ic'>📖</span><span class='tx'><b>fin-mockup.html</b> を読んでいます</span></div>
-<div class='ev'><span class='t'>13:03:08</span><span class='ic'>📖</span><span class='tx'><b>fin-mockup.html</b> を読んでいます</span></div>
-<div class='ev'><span class='t'>13:03:04</span><span class='ic'>📖</span><span class='tx'><b>statements.json</b> を読んでいます</span></div>
-<div class='ev'><span class='t'>13:03:03</span><span class='ic'>📖</span><span class='tx'><b>fin-mockup-spec-v9.md</b> を読んでいます</span></div></div></div>
-<div class=card><p class=h>コード変更（実際に書いている差分・上が最新／緑=追加 赤=削除）</p><div class=ccwrap><div class='cc'><div class='cch'><span class='t'>13:09:43</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>- 財務諸表の数値・画像・主要指標は&lt;b&gt;キーエンス</div>
-<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+ 財務諸表の数値・主要指標は&lt;b&gt;キーエンス</div></pre></div>
-<div class='cc'><div class='cch'><span class='t'>13:09:42</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>- 財務3表の数値・画像・主要指標は&lt;b&gt;任天堂</div>
-<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+ 財務3表の数値・主要指標は&lt;b&gt;任天堂</div></pre></div>
-<div class='cc'><div class='cch'><span class='t'>13:09:40</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>- &lt;b&gt;財務3表の数値・画像、主要指標、および上記テキスト</div>
-<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+ &lt;b&gt;財務3表の数値（HTML表）、主要指標、および上記テキスト</div></pre></div>
-<div class='cc'><div class='cch'><span class='t'>13:09:39</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>- （2枚目）&lt;/span&gt;</div>
-<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+ &lt;/span&gt;</div></pre></div>
-<div class='cc'><div class='cch'><span class='t'>13:09:37</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>- &lt;b&gt;日本の財政状態計算書は左右対称ではなく、上から「資産 → 負債 → 純資産」と縦に続きます&lt;/b&gt;（1枚目＝資産の部、2枚目＝負債・純資産の部）。</div>
-<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+ &lt;b&gt;日本の財政状態計算書は左右対称ではなく、上から「資産 → 負債 → 純資産」と縦に続きます&lt;/b&gt;（下の表も資産の部→負債・純資産の部の順）。</div></pre></div>
-<div class='cc'><div class='cch'><span class='t'>13:09:25</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-     if (searchInput) searchInput.value = COMPANY_NAMES[key];</div>
+実装内容:
+- 財務諸表HTML表の値がある全219行をタップ可能化。タップで行直下に詳細パネルが展開されます
+- パネル内容: 科目名大きめ＋タグ（BS/PL/CF・区分。区分は合計行で自動的に閉じる方式で誤表示を防止）→ 前期→当期の増減を p,c から実計算（カンマ・△を正しく解釈。例: 現金 8,982,404→12,659,622 増減+3,677,218・+40.9%。増加は緑系accent・減少は控えめな橙）→ why_analysis の該当分析文。分析が無い行は増減サマリ＋「詳しい要因分析は主要項目で提供」の一言
+- 同時に1つだけ表示。再タップ・✕・E</span></div>
+<div class='ev'><span class='t'>17:06:38</span><span class='ic'>📖</span><span class='tx'><b>fin-mockup-v10-panel.png</b> を読んでいます</span></div>
+<div class='ev'><span class='t'>17:06:31</span><span class='ic'></span><span class='tx'>🔬 <b>動作を検証</b>しています（実ブラウザ/PDF確認）</span></div>
+<div class='ev'><span class='t'>17:06:16</span><span class='ic'></span><span class='tx'>💻 コマンド実行: <span class=mono>python3 -c &quot;
+import json
+d=json.load(open(&#x27;/tmp/statements.json&#x27;))
+print(ty</span></span></div>
+<div class='ev'><span class='t'>17:06:02</span><span class='ic'></span><span class='tx'>🔬 <b>動作を検証</b>しています（実ブラウザ/PDF確認）</span></div>
+<div class='ev'><span class='t'>17:05:42</span><span class='ic'></span><span class='tx'>🔬 <b>動作を検証</b>しています（実ブラウザ/PDF確認）</span></div>
+<div class='ev'><span class='t'>17:05:21</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>17:05:18</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>17:04:37</span><span class='ic'></span><span class='tx'>🔬 <b>動作を検証</b>しています（実ブラウザ/PDF確認）</span></div>
+<div class='ev'><span class='t'>17:04:13</span><span class='ic'></span><span class='tx'>🔬 <b>動作を検証</b>しています（実ブラウザ/PDF確認）</span></div>
+<div class='ev'><span class='t'>17:04:04</span><span class='ic'></span><span class='tx'>💻 コマンド実行: <span class=mono>cd /home/dev/projects/cxo-agent/web &amp;&amp; node -e &quot;
+let JSDOM;try{JSDOM=require(</span></span></div>
+<div class='ev'><span class='t'>17:03:46</span><span class='ic'></span><span class='tx'>💻 コマンド実行: <span class=mono>cd /home/dev/projects/cxo-agent/web/public &amp;&amp; node -e &quot;
+const fs=require(&#x2</span></span></div>
+<div class='ev'><span class='t'>17:03:41</span><span class='ic'>💬</span><span class='tx'>JSの構文検証をしてから dist へコピーします:</span></div>
+<div class='ev'><span class='t'>17:03:38</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>17:03:36</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>17:03:32</span><span class='ic'>💬</span><span class='tx'>残りの参照箇所（外側クリック・Esc・会社切替）を `closeDetail` に更新:</span></div>
+<div class='ev'><span class='t'>17:03:28</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>17:02:52</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>17:02:22</span><span class='ic'>💬</span><span class='tx'>次に WHY データの埋め込み:</span></div>
+<div class='ev'><span class='t'>17:02:18</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>17:02:17</span><span class='ic'>✏️</span><span class='tx'><b>fin-mockup.html</b> を編集しています</span></div>
+<div class='ev'><span class='t'>16:58:29</span><span class='ic'>📖</span><span class='tx'><b>fin-mockup.html</b> を読んでいます</span></div>
+<div class='ev'><span class='t'>16:58:25</span><span class='ic'>📖</span><span class='tx'><b>fin-mockup.html</b> を読んでいます</span></div>
+<div class='ev'><span class='t'>16:58:21</span><span class='ic'>📖</span><span class='tx'><b>fin-mockup.html</b> を読んでいます</span></div>
+<div class='ev'><span class='t'>16:58:21</span><span class='ic'>📖</span><span class='tx'><b>why_analysis.json</b> を読んでいます</span></div>
+<div class='ev'><span class='t'>16:58:20</span><span class='ic'>📖</span><span class='tx'><b>fin-mockup-spec-v10.md</b> を読んでいます</span></div></div></div>
+<div class=card><p class=h>コード変更（実際に書いている差分・上が最新／緑=追加 赤=削除）</p><div class=ccwrap><div class='cc'><div class='cch'><span class='t'>17:05:21</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-       } else {</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-         cls.push(&quot;tap&quot;);                          /* 値のある行＝全行タップで詳細 */</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-         if (/合計$/.test(r.l)) cls.push(&quot;tt&quot;);    /* 合計行 */</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-         if (pt) cls.push(&quot;point&quot;);</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-         infos.push({ key: key, l: r.l, p: r.p, c: r.c, sec: sec, pt: pt ? pt.t : &quot;&quot; });</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-       }</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+       } else {</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+         cls.push(&quot;tap&quot;);                          /* 値のある行＝全行タップで詳細 */</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+         if (/合計$/.test(r.l)) cls.push(&quot;tt&quot;);    /* 合計行 */</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+         if (pt) cls.push(&quot;point&quot;);</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+         if (r.l === sec + &quot;合計&quot; || r.l === sec) sec = &quot;&quot;; /* 区分の合計行で区分を閉じる */</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+         infos.push({ key: key, l: r.l, p: r.p, c: r.c, sec: sec, pt: pt ? pt.t : &quot;&quot; });</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+       }</div></pre></div>
+<div class='cc'><div class='cch'><span class='t'>17:05:18</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-   var SECTION_RE = /^(資産|流動資産|非流動資産|固定資産|負債|流動負債|固定負債|非流動負債|資本|純資産|株主資本|営業収益|営業外収益|営業外費用|特別利益|特別損失|営業活動によるキャッシュ・フロー|投資活動によるキャッシュ・フロー|財務活動によるキャッシュ・フロー)$/;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   var SECTION_RE = /^(資産|流動資産|非流動資産|固定資産|負債|流動負債|固定負債|非流動負債|資本|純資産|株主資本|営業収益|営業外収益|営業外費用|営業活動によるキャッシュ・フロー|投資活動によるキャッシュ・フロー|財務活動によるキャッシュ・フロー)$/;</div></pre></div>
+<div class='cc'><div class='cch'><span class='t'>17:03:38</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-     if (searchInput) searchInput.value = COMPANY_NAMES[key];</div>
 <div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-     closeAllRows(null);</div>
 <div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-     closeAllPins(null);</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-     closeAllPoints(null);</div>
 <div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-   }</div>
 <div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     if (searchInput) searchInput.value = COMPANY_NAMES[key];</div>
 <div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     closeAllRows(null);</div>
 <div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     closeAllPins(null);</div>
-<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     closeAllPoints(null);</div>
-<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   }</div></pre></div></div></div>
-<div class=card style="font-size:13px;color:#9fb2cd">ツール使用: Edit 17回 ・ Read 6回 ・ Bash 6回 ・ Grep 1回<br>完了すると自動で「■完了」に変わり、確定結果は Son からチャットで届きます。</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     closeDetail();</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   }</div></pre></div>
+<div class='cc'><div class='cch'><span class='t'>17:03:36</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-   document.addEventListener(&quot;click&quot;, function(e){</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-     if (!e.target.closest(&quot;.irow&quot;)) closeAllRows(null);</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-     if (!e.target.closest(&quot;.ppin&quot;)) closeAllPins(null);</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-     if (!e.target.closest(&quot;.fintbl tr.point&quot;)) closeAllPoints(null);</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-   });</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-   document.addEventListener(&quot;keydown&quot;, function(e){</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-     if (e.key === &quot;Escape&quot;) { closeAllRows(null); closeAllPins(null); closeAllPoints(null); }</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-   });</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   document.addEventListener(&quot;click&quot;, function(e){</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     if (!e.target.closest(&quot;.irow&quot;)) closeAllRows(null);</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     if (!e.target.closest(&quot;.ppin&quot;)) closeAllPins(null);</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     if (!e.target.closest(&quot;.fintbl tr.tap&quot;) &amp;&amp; !e.target.closest(&quot;.fintbl tr.fdetail&quot;)) closeDetail();</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   });</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   document.addEventListener(&quot;keydown&quot;, function(e){</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     if (e.key === &quot;Escape&quot;) { closeAllRows(null); closeAllPins(null); closeDetail(); }</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   });</div></pre></div>
+<div class='cc'><div class='cch'><span class='t'>17:03:28</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-   Array.prototype.forEach.call(document.querySelectorAll(&quot;.fintbl[data-stmt]&quot;), function(box){</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-     var data = STMT[box.getAttribute(&quot;data-stmt&quot;)] || [];</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-     var pts = (POINTS[box.getAttribute(&quot;data-stmt&quot;)] || []).slice();</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-     var html = &#x27;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th class=&quot;fl&quot; scope=&quot;col&quot;&gt;科目&lt;/th&gt;&lt;th scope=&quot;col&quot;&gt;前期&lt;br&gt;2025/3期&lt;/th&gt;&lt;th scope=</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-     Array.prototype.forEach.call(data, function(r){</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-       if (isNoiseRow(r)) return;</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-       var pt = null;</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-       if (r.c !== &quot;&quot;) {</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-         for (var j = 0; j &lt; pts.length; j++) {</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-           if (pts[j] &amp;&amp; pts[j].l === r.l) { pt = pts[j]; pts[j] = null; break; }</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-         }</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-       }</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-       var cls = [];</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-       if (r.c === &quot;&quot;) cls.push(&quot;hd&quot;);            /* 区分見出し・値なし行 */</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-       else if (/合計$/.test(r.l)) cls.push(&quot;tt&quot;); /* 合計行 */</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-       if (pt) cls.push(&quot;point&quot;);</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-       html += &quot;&lt;tr&quot; + (cls.length ? &#x27; class=&quot;&#x27; + cls.join(&quot; &quot;) + &#x27;</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   /* v10: 行タップ→「前期→当期の増減（実データから計算）＋なぜこの値か」詳細パネル */</div></pre></div>
+<div class='cc'><div class='cch'><span class='t'>17:02:52</span> ✏️ <b>fin-mockup.html</b></div><pre class='ccd'><div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-     key_pl: [</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-       {l: &quot;売上原価&quot;, t: &quot;原価率わずか17%＝高付加価値（粗利率83%）&quot;},</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-       {l: &quot;営業利益&quot;, t: &quot;営業利益率51%＝驚異的な高収益&quot;}</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-     ]</div>
+<div style='color:#e88;white-space:pre-wrap;word-break:break-all'>-   };</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     key_pl: [</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+       {l: &quot;売上原価&quot;, t: &quot;原価率わずか17%＝高付加価値（粗利率83%）&quot;},</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+       {l: &quot;営業利益&quot;, t: &quot;営業利益率51%＝驚異的な高収益&quot;}</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     ]</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   };</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+ </div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   /* v10: 「なぜこの値か」分析（why_analysis.json 由来・実開示ベース） */</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+   var WHY = {</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+     toyota_bs: {</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+       &quot;現金及び現金同等物&quot;: &quot;営業CF+5.47兆で本業から潤沢に現金を稼ぎ、投資(-1.52兆)・財務(-0.54兆)の流出を上回ったため手元現金が+3.7兆増加。金融事業を抱えるため厚めの現金を持つ。&quot;,</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+       &quot;金融事業に係る債権&quot;: &quot;トヨタは自動車ローン・リース等の金融事業(トヨタファイナンス等)を持ち、その貸付が債権として計上される。流動+非流動で約39兆と大きく、BSが膨らむ主因。見合いで有利子負債も大きい。&quot;,</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+       &quot;棚卸資産&quot;: &quot;増産・在庫積み増しや為替換算で+0.54兆。売上50.7兆に対し約10%で、過大な水準ではない。&quot;,</div>
+<div style='color:#7fd39a;white-space:pre-wrap;word-break:break-all'>+       &quot;有利子負債&quot;: &quot;大半は金融事業の資金調達(ローンの原資)で、金融債権と見合い。製造業単体の借金ではなく、手元現金12.7兆を引いた『純有利子負債』で実態を見るのが妥当。&quot;,</div></pre></div></div></div>
+<div class=card style="font-size:13px;color:#9fb2cd">ツール使用: Edit 8回 ・ Bash 8回 ・ Read 6回<br>完了すると自動で「■完了」に変わり、確定結果は Son からチャットで届きます。</div>
 <div class=foot>Apollo / Fable 5 live progress</div>
 </div></body></html>

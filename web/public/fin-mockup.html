@@ -100,6 +100,29 @@
   @media(hover:hover){.fintbl tr.point:hover .fbub{display:block}}
   @media(max-width:560px){.fintbl table{font-size:11px}.fintbl td{padding:4px 7px}.fintbl th{padding:5px 7px}.fintbl td.fn{font-size:10.5px}}
 
+  /* v10: 行タップ→「なぜこの値か」詳細パネル（行の直下に展開・同時に1つだけ） */
+  .fintbl tr.tap{cursor:pointer}
+  .fintbl tr.tap.open td{background:var(--accent-soft)}
+  .fintbl tr.tap.open td.fl{box-shadow:inset 3px 0 0 var(--accent)}
+  .fintbl tr.tap.open .lbl{border-bottom-color:var(--accent)}
+  .fintbl tbody tr.fdetail td,.fintbl tbody tr.fdetail:hover td{padding:0;border-top:0;background:#fbfdfc}
+  .fdet{position:relative;border-left:3px solid var(--accent);border-bottom:1px solid var(--line-soft);padding:12px 14px 13px}
+  .fdet .h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding-right:32px}
+  .fdet .nm{font-size:14.5px;font-weight:700}
+  .fdet .tg{font-size:10px;font-weight:700;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:1px 8px;white-space:nowrap}
+  .fdet .x{position:absolute;top:8px;right:8px;width:24px;height:24px;border:1px solid var(--line);border-radius:50%;background:#fff;color:var(--muted);font-size:11px;line-height:1;cursor:pointer;font-family:inherit;padding:0}
+  .fdet .x:hover{border-color:var(--accent);color:var(--accent-dark)}
+  .fdet .dl{font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.7}
+  .fdet .dl b{color:var(--text)}
+  .fdet .dv{font-weight:700;white-space:nowrap}
+  .fdet .dv.up{color:var(--accent-dark)}
+  .fdet .dv.dn{color:#a06f1e}
+  .fdet .pt2{font-size:11.5px;font-weight:700;color:var(--accent-dark);margin:8px 0 0;line-height:1.7}
+  .fdet .why{font-size:12.5px;line-height:1.8;margin-top:9px;border-top:1px dashed var(--line-soft);padding-top:8px}
+  .fdet .why .wt{display:block;font-size:10.5px;font-weight:700;color:var(--accent-dark);margin-bottom:2px}
+  .fdet .why.none{color:var(--faint);font-size:11.5px}
+  @media(max-width:560px){.fdet{padding:10px 10px 11px}.fdet .nm{font-size:13px}.fdet .why{font-size:12px}}
+
   /* v8: 決算書キャプチャ上の「ここがポイント」ピン（既定はピンだけ・ふれると吹き出し） */
   .imgwrap{position:relative}
   .ppin{position:absolute;right:8px;transform:translateY(-50%);width:22px;height:22px;border-radius:50%;
@@ -427,7 +450,7 @@
       <p class="section-lead">「会社が何を持ち（資産）、いくら借りていて（負債）、返さなくていい自分のお金（純資産）があるか」を、ある時点で写した表。<b>日本の財政状態計算書は左右対称ではなく、上から「資産 → 負債 → 純資産」と縦に続きます</b>（下の表も資産の部→負債・純資産の部の順）。最後の<b>資産合計</b>と<b>負債及び資本合計</b>は必ず一致します（どちらも105.5兆円）。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結財政状態計算書（資産→負債→資本）— トヨタ 2026年3月期 決算短信 ※単位:百万円・△はマイナス<span class="pinlbl">●ピン＝ここがポイント（ふれると開く）</span></div>
+          <div class="cap"><span class="pill">実際の開示</span>連結財政状態計算書（資産→負債→資本）— トヨタ 2026年3月期 決算短信 ※単位:百万円・△はマイナス<span class="pinlbl">行をタップ→増減＋なぜこの値か（●＝特に注目）</span></div>
           <div class="fintbl" data-stmt="toyota_bs"></div>
         </div>
         <div class="reads num">
@@ -457,7 +480,7 @@
       <p class="section-lead">1年間で「いくら売れて（売上）、いくら費用がかかり、いくら儲かったか（利益）」を段階的に示す表。上から順に費用を引いていき、最後に手元に残る利益になります。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書（トヨタ 2026年3月期 決算短信）※単位:百万円・△はマイナス<span class="pinlbl">●ピン＝ここがポイント（ふれると開く）</span></div>
+          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書（トヨタ 2026年3月期 決算短信）※単位:百万円・△はマイナス<span class="pinlbl">行をタップ→増減＋なぜこの値か（●＝特に注目）</span></div>
           <div class="fintbl" data-stmt="toyota_pl"></div>
         </div>
         <div class="reads num">
@@ -485,7 +508,7 @@
       <p class="section-lead">利益とは別に「現金が実際にどれだけ増減したか」を、営業・投資・財務の3区分で示す表。利益が出ていても現金が減ることがあるため、稼ぐ力を現金で確かめます。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結キャッシュ・フロー計算書（トヨタ 2026年3月期 決算短信）※単位:百万円・△はマイナス<span class="pinlbl">●ピン＝ここがポイント（ふれると開く）</span></div>
+          <div class="cap"><span class="pill">実際の開示</span>連結キャッシュ・フロー計算書（トヨタ 2026年3月期 決算短信）※単位:百万円・△はマイナス<span class="pinlbl">行をタップ→増減＋なぜこの値か（●＝特に注目）</span></div>
           <div class="fintbl" data-stmt="toyota_cf"></div>
         </div>
         <div class="reads num">
@@ -620,7 +643,7 @@
       <p class="section-lead">「会社が何を持ち（資産）、いくら借りていて（負債）、返さなくていい自分のお金（純資産）があるか」。任天堂の特徴は<b>現金の厚さと負債の少なさ</b>です。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結貸借対照表 — 任天堂 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス<span class="pinlbl">●ピン＝ここがポイント（ふれると開く）</span></div>
+          <div class="cap"><span class="pill">実際の開示</span>連結貸借対照表 — 任天堂 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス<span class="pinlbl">行をタップ→増減＋なぜこの値か（●＝特に注目）</span></div>
           <div class="fintbl" data-stmt="ntt_bs"></div>
         </div>
         <div class="reads num">
@@ -646,7 +669,7 @@
       <p class="section-lead">1年間で「いくら売れて、いくら儲かったか」。今期の任天堂は<b>Switch2発売で売上がほぼ倍増</b>した年です。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書 — 任天堂 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス<span class="pinlbl">●ピン＝ここがポイント（ふれると開く）</span></div>
+          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書 — 任天堂 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス<span class="pinlbl">行をタップ→増減＋なぜこの値か（●＝特に注目）</span></div>
           <div class="fintbl" data-stmt="ntt_pl"></div>
         </div>
         <div class="reads num">
@@ -773,7 +796,7 @@
       <p class="section-lead">キーエンスのBSの特徴は一目瞭然＝<b>負債がほとんどない</b>ことです。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結貸借対照表（流動資産の部）— キーエンス 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス<span class="pinlbl">●ピン＝ここがポイント（ふれると開く）</span></div>
+          <div class="cap"><span class="pill">実際の開示</span>連結貸借対照表（流動資産の部）— キーエンス 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス<span class="pinlbl">行をタップ→増減＋なぜこの値か（●＝特に注目）</span></div>
           <div class="fintbl" data-stmt="key_bs"></div>
         </div>
         <div class="reads num">
@@ -795,7 +818,7 @@
       <p class="section-lead">キーエンスのPLの見どころは<b>「原価の小ささ」と「営業利益率51%」</b>。売上の半分以上が本業の利益になります。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書 — キーエンス 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス<span class="pinlbl">●ピン＝ここがポイント（ふれると開く）</span></div>
+          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書 — キーエンス 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス<span class="pinlbl">行をタップ→増減＋なぜこの値か（●＝特に注目）</span></div>
           <div class="fintbl" data-stmt="key_pl"></div>
         </div>
         <div class="reads num">
@@ -869,6 +892,55 @@
     ]
   };
 
+  /* v10: 「なぜこの値か」分析（why_analysis.json 由来・実開示ベース） */
+  var WHY = {
+    toyota_bs: {
+      "現金及び現金同等物": "営業CF+5.47兆で本業から潤沢に現金を稼ぎ、投資(-1.52兆)・財務(-0.54兆)の流出を上回ったため手元現金が+3.7兆増加。金融事業を抱えるため厚めの現金を持つ。",
+      "金融事業に係る債権": "トヨタは自動車ローン・リース等の金融事業(トヨタファイナンス等)を持ち、その貸付が債権として計上される。流動+非流動で約39兆と大きく、BSが膨らむ主因。見合いで有利子負債も大きい。",
+      "棚卸資産": "増産・在庫積み増しや為替換算で+0.54兆。売上50.7兆に対し約10%で、過大な水準ではない。",
+      "有利子負債": "大半は金融事業の資金調達(ローンの原資)で、金融債権と見合い。製造業単体の借金ではなく、手元現金12.7兆を引いた『純有利子負債』で実態を見るのが妥当。",
+      "資産合計": "金融債権・現金・有形固定資産の増加で総資産が前期比+11.9兆(+12.7%)に拡大。105.5兆=負債64.5兆+純資産41.0兆で必ず一致。",
+      "利益剰余金": "当期純利益3.85兆を稼ぎ、配当・自社株買いを差し引いた残りが積み上がって+2.87兆。自己資本の源泉。",
+      "資本合計": "利益剰余金の増加で自己資本が厚くなり41.0兆。総資産に対する比率=自己資本比率37.8%で安全性は高い。"
+    },
+    toyota_pl: {
+      "営業収益合計": "車両販売台数・販売構成の改善(+約1.9兆)と金融収益の増加で+5.5%の増収。過去最高水準の売上。",
+      "売上原価": "原材料・労務費の上昇と増販でコスト増(+3.6兆)。売上の伸び以上に原価が膨らみ、利益率を圧迫した。",
+      "営業利益": "増収なのに▲21.5%の減益。会社はMD&Aで『諸経費の増加＝米国関税の影響1.38兆円を含む』が主因と説明。為替差益の減少(前期比▲0.3兆)も響いた。",
+      "税引前利益": "営業利益3.77兆に、持分法投資利益(5,527億)・その他金融収益・為替差益(4,008億)など営業外がプラスされ、営業利益を上回る5.15兆に。",
+      "当期利益": "税引前5.15兆から法人所得税1.17兆を控除。親会社帰属は3.85兆で、EPS換算¥295.25。"
+    },
+    toyota_cf: {
+      "営業活動によるキャッシュ・フロー": "利益は減っても、減価償却の足し戻しや運転資本の改善で本業の現金創出は前期3.70兆→当期5.47兆に増加。稼ぐ力は依然強い。",
+      "投資活動によるキャッシュ・フロー": "設備投資や金融事業の債権増減など。前期(-4.19兆)より流出が縮小(-1.52兆)。",
+      "財務活動によるキャッシュ・フロー": "配当・自社株買いなどの株主還元と借入の増減の差し引きで-0.54兆。"
+    },
+    ntt_pl: {
+      "売上高": "Nintendo Switch 2の発売で本体・ソフトが伸び、前期1.16兆からほぼ倍増(+98.6%)の2.31兆。新ハードの立ち上がり効果が最大の要因。",
+      "売上原価": "ハード増産に伴い原価も増加。新ハードは初期の原価率が高めで、粗利率は前期より低下する局面。",
+      "営業利益": "増収効果で本業利益も+27.5%増。ただしSwitch2立ち上げの費用もあり営業利益率は15.6%。",
+      "経常利益": "1.79兆の現金・預金からの受取利息や為替差益など営業外収益が大きく、営業利益(3,601億)を上回る5,422億に。",
+      "親会社株主に帰属する当期純利益": "経常利益から税金を控除して4,241億。無借金・現金潤沢な財務構造が最終利益を底上げ。"
+    },
+    ntt_bs: {
+      "現金及び預金": "毎年の利益の蓄積で1.79兆と潤沢。無借金経営で、この現金が経常利益(受取利息)や不況耐性の源泉になっている。",
+      "資産合計": "大半が現金・投資有価証券などの金融資産。自社工場に依存しない事業モデルで設備は軽い。",
+      "純資産": "利益剰余金2.98兆の積み上げで自己資本比率77.7%。実質無借金。"
+    },
+    key_pl: {
+      "売上高": "FA(工場自動化)向けセンサー等の需要で+10.4%の増収。過去最高を更新。",
+      "売上原価": "原価率わずか17%。自社工場を持たないファブレス＋高付加価値製品で製造コストが極小。",
+      "売上総利益": "粗利率83%という高さ。顧客の課題解決に踏み込む直販モデルで高い価格決定力を持つ。",
+      "営業利益": "厚い粗利に対し販管費を引いても営業利益率51%。コンサルティング型直販の高効率が生む驚異的な収益性。",
+      "経常利益": "潤沢な現金・有価証券の受取利息等で、営業利益をさらに上回る6,358億に。"
+    },
+    key_bs: {
+      "資産合計": "大半が現金・有価証券。工場を持たないため固定資産が小さく、キャッシュリッチなBS。",
+      "負債合計": "借金がほぼ無く、負債は買掛金・未払法人税等が中心でわずか0.20兆。",
+      "純資産": "利益の蓄積で自己資本比率94.6%＝ほぼ全額が自己資本の超健全なBS。"
+    }
+  };
+
   /* 抽出ノイズ行（PDFのページヘッダ等）は表示しない */
   function isNoiseRow(r){
     return r.i === 3 || r.l.indexOf("決算短信") >= 0 || (r.l.charAt(0) === "（" && r.l.indexOf("連結") >= 0);
@@ -876,9 +948,72 @@
   function escHtml(s){
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
+  /* v10: 行タップ→「前期→当期の増減（実データから計算）＋なぜこの値か」詳細パネル */
+  var STMT_TYPE = { bs: "BS・貸借対照表", pl: "PL・損益計算書", cf: "CF・キャッシュ・フロー計算書" };
+  var SECTION_RE = /^(資産|流動資産|非流動資産|固定資産|負債|流動負債|固定負債|非流動負債|資本|純資産|株主資本|営業収益|営業外収益|営業外費用|営業活動によるキャッシュ・フロー|投資活動によるキャッシュ・フロー|財務活動によるキャッシュ・フロー)$/;
+  function parseNum(s){
+    if (!s) return null;
+    var t = String(s).replace(/,/g, "");
+    var neg = t.indexOf("△") >= 0;
+    t = t.replace(/△/g, "");
+    if (!/^\d+(\.\d+)?$/.test(t)) return null;
+    return neg ? -parseFloat(t) : parseFloat(t);
+  }
+  function fmtComma(n){ return String(Math.round(Math.abs(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+  function fmtSigned(n){ return (n < 0 ? "△" : "+") + fmtComma(n); }
+  function whyFor(key, label){
+    var m = WHY[key] || {};
+    return m[label] || m[label.replace(/合計$/, "")] || "";
+  }
+  function buildDetail(info){
+    var typ = STMT_TYPE[info.key.split("_")[1]] || "";
+    var pv = parseNum(info.p), cv = parseNum(info.c), delta = "";
+    if (pv !== null && cv !== null) {
+      var d = cv - pv;
+      var pct = pv !== 0 ? d / Math.abs(pv) * 100 : null;
+      delta = '前期 <b>' + escHtml(info.p) + '</b> → 当期 <b>' + escHtml(info.c) + '</b>　' +
+              '<span class="dv ' + (d < 0 ? "dn" : "up") + '">増減 ' + fmtSigned(d) +
+              (pct === null ? "" : "（" + (pct < 0 ? "△" : "+") + Math.abs(pct).toFixed(1) + "%）") + '</span>';
+    } else if (cv !== null) {
+      delta = '当期 <b>' + escHtml(info.c) + '</b>（前期の開示値なし）';
+    }
+    var why = whyFor(info.key, info.l);
+    return '<div class="fdet" role="region">' +
+      '<button type="button" class="x" aria-label="詳細を閉じる">✕</button>' +
+      '<div class="h"><span class="nm">' + escHtml(info.l) + '</span>' +
+      (typ ? '<span class="tg">' + typ + '</span>' : "") +
+      (info.sec && info.sec !== info.l ? '<span class="tg">' + escHtml(info.sec) + '</span>' : "") +
+      '</div>' +
+      (delta ? '<p class="dl num">' + delta + '<span style="color:var(--faint)">　単位: 百万円</span></p>' : "") +
+      (info.pt ? '<p class="pt2">● ここがポイント：' + escHtml(info.pt) + '</p>' : "") +
+      (why ? '<div class="why"><span class="wt">なぜこの値か（AI分析・実開示ベース）</span>' + escHtml(why) + '</div>'
+           : '<div class="why none">詳しい要因分析は主要項目で提供しています（本モックはサンプル）。</div>') +
+      '</div>';
+  }
+  var openRow = null, detailTr = null;
+  function closeDetail(){
+    if (detailTr && detailTr.parentNode) detailTr.parentNode.removeChild(detailTr);
+    if (openRow) { openRow.classList.remove("open"); openRow.setAttribute("aria-expanded", "false"); }
+    detailTr = null; openRow = null;
+  }
+  function toggleDetail(tr){
+    if (openRow === tr) { closeDetail(); return; }
+    closeDetail();
+    detailTr = document.createElement("tr");
+    detailTr.className = "fdetail";
+    detailTr.innerHTML = '<td colspan="3">' + buildDetail(tr._info) + '</td>';
+    tr.parentNode.insertBefore(detailTr, tr.nextSibling);
+    tr.classList.add("open");
+    tr.setAttribute("aria-expanded", "true");
+    openRow = tr;
+    detailTr.querySelector(".x").addEventListener("click", function(e){ e.stopPropagation(); closeDetail(); });
+  }
+
   Array.prototype.forEach.call(document.querySelectorAll(".fintbl[data-stmt]"), function(box){
-    var data = STMT[box.getAttribute("data-stmt")] || [];
-    var pts = (POINTS[box.getAttribute("data-stmt")] || []).slice();
+    var key = box.getAttribute("data-stmt");
+    var data = STMT[key] || [];
+    var pts = (POINTS[key] || []).slice();
+    var infos = [], sec = "";
     var html = '<table><thead><tr><th class="fl" scope="col">科目</th><th scope="col">前期<br>2025/3期</th><th scope="col">当期<br>2026/3期</th></tr></thead><tbody>';
     Array.prototype.forEach.call(data, function(r){
       if (isNoiseRow(r)) return;
@@ -889,32 +1024,29 @@
         }
       }
       var cls = [];
-      if (r.c === "") cls.push("hd");            /* 区分見出し・値なし行 */
-      else if (/合計$/.test(r.l)) cls.push("tt"); /* 合計行 */
-      if (pt) cls.push("point");
-      html += "<tr" + (cls.length ? ' class="' + cls.join(" ") + '"' : "") + (pt ? ' tabindex="0" aria-expanded="false"' : "") + ">";
+      if (r.c === "") {
+        cls.push("hd");                           /* 区分見出し・値なし行＝タップ詳細なし */
+        if (SECTION_RE.test(r.l)) sec = r.l;
+      } else {
+        cls.push("tap");                          /* 値のある行＝全行タップで詳細 */
+        if (/合計$/.test(r.l)) cls.push("tt");    /* 合計行 */
+        if (pt) cls.push("point");
+        if (r.l === sec + "合計" || r.l === sec) sec = ""; /* 区分の合計行で区分を閉じる */
+        infos.push({ key: key, l: r.l, p: r.p, c: r.c, sec: sec, pt: pt ? pt.t : "" });
+      }
+      html += "<tr" + (cls.length ? ' class="' + cls.join(" ") + '"' : "") + (r.c !== "" ? ' tabindex="0" aria-expanded="false"' : "") + ">";
       html += '<td class="fl" style="padding-left:' + (10 + (r.i || 0) * 14) + 'px">' +
               (pt ? '<span class="fmark" aria-hidden="true">!</span>' : "") +
               '<span class="lbl">' + escHtml(r.l) + "</span>" +
-              (pt ? '<span class="fbub" role="tooltip"><span class="pt">ここがポイント</span>' + escHtml(pt.t) + "</span>" : "") +
               '</td><td class="fn prev">' + escHtml(r.p) + '</td><td class="fn">' + escHtml(r.c) + "</td></tr>";
     });
     box.innerHTML = html + "</tbody></table>";
-  });
-
-  /* ポイント行: ホバーはCSS、タップ/クリックで吹き出しトグル（同時に1つだけ） */
-  var pointRows = document.querySelectorAll(".fintbl tr.point");
-  function closeAllPoints(except){
-    Array.prototype.forEach.call(pointRows, function(t){
-      if (t !== except) { t.classList.remove("open"); t.setAttribute("aria-expanded", "false"); }
-    });
-  }
-  Array.prototype.forEach.call(pointRows, function(t){
-    t.addEventListener("click", function(){
-      var willOpen = !t.classList.contains("open");
-      closeAllPoints(t);
-      t.classList.toggle("open", willOpen);
-      t.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    Array.prototype.forEach.call(box.querySelectorAll("tr.tap"), function(tr, i){
+      tr._info = infos[i];
+      tr.addEventListener("click", function(){ toggleDetail(tr); });
+      tr.addEventListener("keydown", function(e){
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleDetail(tr); }
+      });
     });
   });
 
@@ -992,10 +1124,10 @@
   document.addEventListener("click", function(e){
     if (!e.target.closest(".irow")) closeAllRows(null);
     if (!e.target.closest(".ppin")) closeAllPins(null);
-    if (!e.target.closest(".fintbl tr.point")) closeAllPoints(null);
+    if (!e.target.closest(".fintbl tr.tap") && !e.target.closest(".fintbl tr.fdetail")) closeDetail();
   });
   document.addEventListener("keydown", function(e){
-    if (e.key === "Escape") { closeAllRows(null); closeAllPins(null); closeAllPoints(null); }
+    if (e.key === "Escape") { closeAllRows(null); closeAllPins(null); closeDetail(); }
   });
 
   /* ③ v7: 会社切替（セレクタで data-company ブロックを出し分け・検索窓も連動） */
@@ -1016,7 +1148,7 @@
     if (searchInput) searchInput.value = COMPANY_NAMES[key];
     closeAllRows(null);
     closeAllPins(null);
-    closeAllPoints(null);
+    closeDetail();
   }
   Array.prototype.forEach.call(coBtns, function(btn){
     btn.addEventListener("click", function(){ selectCompany(btn.getAttribute("data-co")); });
