@@ -45,6 +45,25 @@
   .chip{font-size:12px;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:3px 12px;cursor:pointer}
   .chip:hover{border-color:var(--accent);color:var(--accent-dark)}
 
+  /* v7: 会社セレクタ（人気企業チップを機能させる） */
+  .cosel{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+  .cosel .lbl{font-size:11.5px;color:var(--faint)}
+  .cochip{font-size:12.5px;font-family:inherit;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:5px 14px;cursor:pointer;line-height:1.5}
+  .cochip:hover{border-color:var(--accent);color:var(--accent-dark)}
+  .cochip.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  [data-company]{display:none}
+  [data-company].co-active{display:block}
+
+  /* v7: 3社比較表 */
+  .cmp-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:4px}
+  .cmp{width:100%;border-collapse:collapse;font-size:13px;min-width:600px}
+  .cmp th,.cmp td{border:1px solid var(--line-soft);padding:7px 12px;text-align:right;white-space:nowrap}
+  .cmp thead th{background:var(--bg);font-size:12.5px;font-weight:700}
+  .cmp td:first-child,.cmp th:first-child{text-align:left;color:var(--muted);font-size:12px}
+  .cmp td{font-variant-numeric:tabular-nums}
+  .cmp td b{color:var(--accent-dark)}
+  .cmp .std{background:var(--accent-soft);color:var(--accent-dark);font-weight:700}
+
   /* company header + price */
   .co-head{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
   .co-head .l{flex:1;min-width:240px}
@@ -157,7 +176,7 @@
 <body>
   <div class="topbar"><div class="inner">
     <div class="brand">Zaimu.ai<small>決算書をAIで読む企業分析</small></div>
-    <span class="badge-demo">Zaimu.ai UIモック / 財務3表＝トヨタ 2026年3月期 実績（IFRS連結・決算短信より）</span>
+    <span class="badge-demo">Zaimu.ai UIモック / トヨタ・任天堂・キーエンス 2026年3月期 実績（決算短信より）</span>
   </div></div>
 
   <div class="wrap">
@@ -168,15 +187,44 @@
         <input type="text" value="トヨタ自動車" placeholder="企業名・証券コードで検索（例: トヨタ / 7203）" aria-label="企業名・証券コードで検索" />
         <button class="go" type="submit">検索</button>
       </form>
-      <div class="chips">
-        <span class="lbl">人気の企業:</span>
-        <span class="chip">トヨタ自動車 7203</span>
-        <span class="chip">ソニーG 6758</span>
-        <span class="chip">三菱UFJ 8306</span>
-        <span class="chip">任天堂 7974</span>
-        <span class="chip">キーエンス 6861</span>
+      <div class="cosel" role="group" aria-label="会社を選んで分析">
+        <span class="lbl">会社を選んで分析:</span>
+        <button type="button" class="cochip active" data-co="toyota" aria-pressed="true">トヨタ自動車 7203</button>
+        <button type="button" class="cochip" data-co="nintendo" aria-pressed="false">任天堂 7974</button>
+        <button type="button" class="cochip" data-co="keyence" aria-pressed="false">キーエンス 6861</button>
       </div>
     </div>
+
+    <!-- ===== 3社比較表（v7） ===== -->
+    <div class="card" style="border-left:3px solid var(--accent)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:700;color:#fff;background:var(--accent);border-radius:20px;padding:2px 11px">3社比較</span>
+        <span style="font-size:12px;color:var(--faint)">同じ指標でも、会社の性格でこんなに違う（2026年3月期 実績・株価は2026年7月上旬）</span>
+      </div>
+      <div class="cmp-scroll">
+        <table class="cmp num">
+          <thead><tr><th>指標</th><th>トヨタ自動車 7203</th><th>任天堂 7974</th><th>キーエンス 6861</th></tr></thead>
+          <tbody>
+            <tr><td>業種</td><td>自動車</td><td>ゲーム</td><td>FA機器（センサー）</td></tr>
+            <tr><td>会計基準</td><td>IFRS</td><td>日本基準</td><td>日本基準</td></tr>
+            <tr><td>売上高</td><td><b>50.69兆</b></td><td>2.31兆</td><td>1.17兆</td></tr>
+            <tr><td>営業利益</td><td>3.77兆</td><td>0.36兆（3,601億）</td><td>0.60兆（5,958億）</td></tr>
+            <tr><td>営業利益率</td><td>7.4%</td><td>15.6%</td><td class="std">51.0%</td></tr>
+            <tr><td>純利益</td><td>3.85兆</td><td>0.42兆（4,241億）</td><td>0.45兆（4,452億）</td></tr>
+            <tr><td>自己資本比率</td><td>37.8%</td><td>77.7%</td><td class="std">94.6%</td></tr>
+            <tr><td>ROE</td><td>9.6%</td><td>14.4%</td><td>12.8%</td></tr>
+            <tr><td>PER</td><td>9.9倍</td><td>19.1倍</td><td>43.7倍</td></tr>
+            <tr><td>PBR</td><td>0.95倍</td><td>2.74倍</td><td>5.61倍</td></tr>
+            <tr><td>時価総額</td><td>42.66兆</td><td>9.05兆</td><td>19.53兆</td></tr>
+            <tr><td>ひとことで</td><td>巨大・低利益率・割安評価</td><td>Switch2で急成長・無借金</td><td>超高収益・高評価</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="font-size:12.5px;color:var(--muted);margin:12px 0 0;line-height:1.8"><b>比較の読みどころ：</b>営業利益率は <b>7.4% → 15.6% → 51%</b> と桁違い。PBRも <b>0.95 → 2.74 → 5.61倍</b>で、市場は「稼ぐ力と質」に応じて評価を変えています。<b>トヨタは規模で稼ぎ、任天堂はIPで急伸、キーエンスは高付加価値で圧倒的利益率</b>。下のセレクタ（または上の会社チップ）で各社の分析に切り替えられます。</p>
+    </div>
+
+    <!-- ================= トヨタ自動車（既存・参照実装） ================= -->
+    <div data-company="toyota" class="co-active">
 
     <!-- ===== company header ===== -->
     <div class="card">
@@ -498,6 +546,286 @@
     <div class="disc">
       ※ 本画面は <b>Zaimu.ai のUIモック</b>ですが、<b>財務3表の数値・画像、主要指標、および上記テキスト（リスク／MD&amp;A／経営方針／セグメント）はトヨタ自動車 2026年3月期の実際の開示（決算短信・有価証券報告書 IFRS連結）と2026-07-06時点の市場データ</b>に基づきます。本番サービスでは、企業を検索すると<b>金融庁EDINETのXBRL/開示書類</b>から財務数値と定性テキストを自動取得し、同様に読み解きます。理論株価・テクニカル指標は<b>客観的な計算結果・一般的な解説であり、特定銘柄の売買推奨や目標株価の助言ではありません</b>。前提を変えれば結果は変わります。<b>投資判断はご自身の責任で。</b>出典: トヨタ自動車 IR（決算短信・有価証券報告書）/ 金融庁 EDINET。
     </div>
+
+    </div><!-- /data-company=toyota -->
+
+    <!-- ================= 任天堂（v7） ================= -->
+    <div data-company="nintendo">
+
+    <!-- company header -->
+    <div class="card">
+      <div class="co-head">
+        <div class="l">
+          <h1 class="co">任天堂 <span style="font-size:14px;color:var(--faint);font-weight:500">7974・東証プライム</span></h1>
+          <p class="co-meta">その他製品 / ゲーム　<span class="tag2">2026年3月期</span><span class="tag2">連結・日本基準</span><span class="tag2">出典: 決算短信（任天堂 IR）</span></p>
+        </div>
+        <div class="r">
+          <div class="px num">¥7,033 <small>2026-07-06 終値</small></div>
+          <div class="px-sub num">時価総額 <b>¥9.05兆</b>　PER <b>19.1倍</b>　PBR <b>2.74倍</b></div>
+          <div class="px-sub num">EPS 約¥367.8　BPS 約¥2,564　ROE 14.4%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AIサマリー -->
+    <div class="card" style="border-left:3px solid var(--accent)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:700;color:#fff;background:var(--accent);border-radius:20px;padding:2px 11px">AIサマリー</span>
+        <span style="font-size:12px;color:var(--faint)">検索した会社の要点を、決算・有報からAIが最初に要約します</span>
+      </div>
+      <p style="margin:0 0 12px;font-size:14.5px;line-height:1.9">
+        <b>任天堂</b>は世界的なゲーム企業。2026年3月期は<b>Nintendo Switch 2の好発進で売上2.31兆円と前期比ほぼ倍増</b>、営業利益3,601億円。<b>実質無借金（自己資本比率77.7%）で現金1.79兆円</b>と潤沢＝<b>経常利益が営業利益を上回る</b>（受取利息・為替差益）。株価¥7,033は<b>PER19.1倍・PBR2.74倍</b>で成長を織り込む水準。<b>強み＝強力なIPと財務体力</b>、<b>注目点＝Switch2サイクルの持続</b>。
+      </p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <span style="font-size:11.5px;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:3px 11px">売上ほぼ倍増（Switch2効果）</span>
+        <span style="font-size:11.5px;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:3px 11px">実質無借金・現金1.79兆</span>
+        <span style="font-size:11.5px;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:3px 11px">経常利益 ＞ 営業利益</span>
+        <span style="font-size:11.5px;color:#8a6d1f;background:var(--mark);border:1px solid var(--mark-line);border-radius:20px;padding:3px 11px">成長を織り込む株価（PER19倍）</span>
+      </div>
+      <p style="font-size:11px;color:var(--faint);margin:11px 0 0">※ 開示された決算の実データをもとにAIが要約（本モックはサンプル）。投資助言ではありません。</p>
+    </div>
+
+    <!-- key metrics -->
+    <div class="section" style="margin-top:36px">
+      <div><span class="section-t">主要指標（すべて計算方法つき）</span></div>
+      <p class="section-lead">下の実際の決算書（①②③）と株価（2026-07-06）から計算した実データです。各カードの<b>「計算方法」をタップすると計算式が開きます</b>。</p>
+      <div class="kpis num">
+        <div class="kpi"><div class="k">株価</div><div class="v">¥7,033</div><div class="n">2026-07-06 終値</div>
+          <div class="f">すべての株価系指標の出発点。EPS・BPSと組み合わせて割安/割高を測ります。</div></div>
+        <div class="kpi"><div class="k">時価総額</div><div class="v">¥9.05兆</div><div class="n">市場がつけた会社全体の値段</div>
+          <div class="f"><span class="fx">株価 × 発行済株式数</span>（2026-07-06 時点 9兆0,533億円）</div></div>
+        <div class="kpi"><div class="k">PER（株価収益率）</div><div class="v">19.1倍</div><div class="n">利益の何年分の株価か</div>
+          <div class="f"><span class="fx">株価 ÷ EPS</span> ＝ 7,033 ÷ 367.8 ≈ 19.1倍。成長期待を織り込む水準。</div></div>
+        <div class="kpi"><div class="k">PBR（株価純資産倍率）</div><div class="v">2.74倍</div><div class="n">純資産に対する株価</div>
+          <div class="f"><span class="fx">株価 ÷ BPS</span> ＝ 7,033 ÷ 2,564 ≈ 2.74倍。純資産の2.7倍の評価。</div></div>
+        <div class="kpi"><div class="k">売上高（前期比）</div><div class="v">2.31兆</div><div class="n">前期1.16兆から <b>+98.6%</b></div>
+          <div class="f"><span class="fx">（当期売上 − 前期売上）÷ 前期売上</span> ＝ (2,313,051 − 1,164,922) ÷ 1,164,922 ≈ +98.6%＝Switch2効果でほぼ倍増。</div></div>
+        <div class="kpi"><div class="k">営業利益率</div><div class="v">15.6%</div><div class="n">本業の儲けの効率</div>
+          <div class="f"><span class="fx">営業利益 ÷ 売上高</span> ＝ 3,601億 ÷ 2.31兆 ≈ 15.6%</div></div>
+        <div class="kpi"><div class="k">ROE（自己資本利益率）</div><div class="v">14.4%</div><div class="n">株主のお金でどれだけ稼いだか</div>
+          <div class="f"><span class="fx">親会社純利益 ÷ 自己資本</span> ＝ 4,241億 ÷ 2.96兆 ≈ 14.4%</div></div>
+        <div class="kpi"><div class="k">自己資本比率</div><div class="v">77.7%</div><div class="n">財務の安全性＝実質無借金</div>
+          <div class="f"><span class="fx">自己資本 ÷ 総資産</span> ＝ 2.96兆 ÷ 3.81兆 ≈ 77.7%。極めて高い安全性。</div></div>
+      </div>
+    </div>
+
+    <!-- BS -->
+    <div class="section">
+      <div class="section-t">① 連結貸借対照表（BS）</div>
+      <p class="section-lead">「会社が何を持ち（資産）、いくら借りていて（負債）、返さなくていい自分のお金（純資産）があるか」。任天堂の特徴は<b>現金の厚さと負債の少なさ</b>です。</p>
+      <div class="stmt">
+        <div class="shot">
+          <div class="cap"><span class="pill">実際の開示</span>連結貸借対照表 — 任天堂 2026年3月期 決算短信（日本基準）※単位:百万円</div>
+          <img src="/fin-ntt-bs.png" alt="任天堂 連結貸借対照表（実際の決算短信）" loading="lazy" />
+        </div>
+        <div class="reads num">
+          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">現金及び預金</span><span class="iv">1,791,802</span>
+            <span class="ibub" role="tooltip"><b>1,791,802</b> 百万円（約1.79兆円）。総資産の約半分が現金。<b>潤沢な現金と実質無借金の源泉</b>で、下の「経常利益が営業利益を上回る」構造にもつながります。<span class="itag">BS・流動資産</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">流動資産合計</span><span class="iv">3,009,784</span>
+            <span class="ibub" role="tooltip"><b>3,009,784</b> 百万円（約3.01兆円）。1年以内に現金化しやすい資産の合計。総資産の約8割を占めます。<span class="itag">BS・資産</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">資産合計</span><span class="iv">3,805,312</span>
+            <span class="ibub" role="tooltip"><b>3,805,312</b> 百万円（約3.81兆円）。会社が持つ財産の総額。<b>負債0.85兆＋純資産2.96兆</b>と必ず一致します。<span class="itag">BS・合計</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">負債合計</span><span class="iv">850,132</span>
+            <span class="ibub" role="tooltip"><b>850,132</b> 百万円（約0.85兆円）。返済義務のあるお金。総資産に対して小さく、有利子負債はほぼゼロ＝<b>実質無借金</b>です。<span class="itag">BS・負債</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">純資産合計</span><span class="iv">2,955,180</span>
+            <span class="ibub" role="tooltip"><b>2,955,180</b> 百万円（約2.96兆円）。返さなくてよい自己資本。総資産に占める割合＝<b>自己資本比率 77.7%</b>＝実質無借金の高い安全性。<span class="itag">BS・純資産</span></span></button>
+          <div class="keyline"><b>読みどころ：</b>現金1.79兆・自己資本比率77.7%。<b>「攻めなくても死なない」財務体力</b>が、長いゲーム開発サイクルを支えています。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PL -->
+    <div class="section">
+      <div class="section-t">② 連結損益計算書（PL）</div>
+      <p class="section-lead">1年間で「いくら売れて、いくら儲かったか」。今期の任天堂は<b>Switch2発売で売上がほぼ倍増</b>した年です。</p>
+      <div class="stmt">
+        <div class="shot">
+          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書 — 任天堂 2026年3月期 決算短信（日本基準）※単位:百万円</div>
+          <img src="/fin-ntt-pl.png" alt="任天堂 連結損益計算書（実際の決算短信）" loading="lazy" />
+        </div>
+        <div class="reads num">
+          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">売上高</span><span class="iv">2,313,051</span>
+            <span class="ibub" role="tooltip"><b>2,313,051</b> 百万円（約2.31兆円）。前期 <b>1,164,922</b> から<b>ほぼ倍増（+98.6%）＝Nintendo Switch 2 効果</b>。ハード発売年に売上が跳ねるのがゲーム機ビジネスの特徴です。<span class="itag">PL・売上</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">売上原価</span><span class="iv">1,404,094</span>
+            <span class="ibub" role="tooltip"><b>1,404,094</b> 百万円（約1.40兆円）。ハード（本体）は原価が重く、ソフトは原価が軽い。ハード比率が高い発売年は原価率が上がりやすい構造です。<span class="itag">PL・費用</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">営業利益</span><span class="iv">360,117</span>
+            <span class="ibub" role="tooltip"><b>360,117</b> 百万円（約3,601億円）。本業の儲け。<b>営業利益率15.6%</b>。今後ソフト販売比率が高まると利益率が上がるのが過去サイクルのパターン。<span class="itag">PL・営業利益</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">経常利益</span><span class="iv">542,196</span>
+            <span class="ibub" role="tooltip"><b>542,196</b> 百万円（約5,422億円）。<b>営業利益（3,601億）を大きく上回ります</b>。潤沢な現金が生む<b>受取利息や為替差益（営業外収益）</b>が上乗せされるため＝財務体力が利益に直結する任天堂らしい構造。<span class="itag">PL・営業外</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">親会社株主に帰属する当期純利益</span><span class="iv">424,056</span>
+            <span class="ibub" role="tooltip"><b>424,056</b> 百万円（約4,241億円）。最終的に残る利益。1株当たり（EPS）約<b>¥367.8</b>。<span class="itag">PL・純利益</span></span></button>
+          <div class="keyline"><b>読みどころ：</b>Switch2で売上ほぼ倍増。さらに<b>経常利益が営業利益を上回る</b>＝現金と為替が「第2の稼ぎ手」になっているのが特徴です。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CF -->
+    <div class="section">
+      <div class="section-t">③ 連結キャッシュ・フロー計算書（CF）</div>
+      <p class="section-lead">現金が実際にどれだけ増減したか。営業・投資・財務の3区分で見ます。</p>
+      <div class="stmt">
+        <div class="shot">
+          <div class="cap"><span class="pill">実際の開示</span>連結キャッシュ・フロー計算書 — 任天堂 2026年3月期 決算短信（日本基準）</div>
+          <img src="/fin-ntt-cf.png" alt="任天堂 連結キャッシュ・フロー計算書（実際の決算短信）" loading="lazy" />
+        </div>
+        <div class="reads num">
+          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。</p>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">営業活動によるCF</span><span class="iv">+2,898億</span>
+            <span class="ibub" role="tooltip">約<b>+2,898億円</b>。本業で実際に稼いだ現金。売上倍増の年でもしっかりプラスです。<span class="itag">CF・営業</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">投資活動によるCF</span><span class="iv">△2,101億</span>
+            <span class="ibub" role="tooltip">約<b>−2,101億円</b>。設備投資や有価証券への投資など。余剰現金の運用も含まれます。<span class="itag">CF・投資</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">財務活動によるCF</span><span class="iv">△2,497億</span>
+            <span class="ibub" role="tooltip">約<b>−2,497億円</b>。配当や自社株買いなどの株主還元が中心。借入返済ではなく<b>還元でマイナス</b>になるのが無借金企業の形です。<span class="itag">CF・財務</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">現金及び現金同等物の期末残高</span><span class="iv">1.32兆</span>
+            <span class="ibub" role="tooltip">約<b>1.32兆円</b>。還元・投資をしてなお手元に厚い現金が残ります。<span class="itag">CF・期末残高</span></span></button>
+          <div class="keyline"><b>読みどころ：</b>稼いだ現金で投資と株主還元を賄ってなお現金1.3兆超。<b>財務体力の再生産</b>が続いています。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 特徴・注目点 -->
+    <div class="section">
+      <div class="section-t">この会社の特徴・注目点</div>
+      <div class="reads" style="gap:12px;margin-top:14px">
+        <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">Switch2の好発進で売上ほぼ倍増</p><p class="mean num">売上高2.31兆円（前期比<b>+98.6%</b>）。ハード発売年特有のジャンプで、今後は<b>ソフト販売比率の上昇→利益率改善</b>が過去サイクルのパターンです。</p><span class="tag">成長</span></div>
+        <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">実質無借金・現金1.79兆の財務体力</p><p class="mean num">自己資本比率<b>77.7%</b>・現金及び預金<b>1.79兆円</b>。<b>経常利益（5,422億）が営業利益（3,601億）を上回る</b>のは、この現金が生む利息・為替差益のためです。</p><span class="tag">財務</span></div>
+        <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">株価は成長を織り込む水準</p><p class="mean num">株価¥7,033は<b>PER19.1倍・PBR2.74倍</b>。トヨタ（PER9.9倍）より高い評価＝市場はSwitch2サイクルの成長を先に織り込んでいます。<b>注目点＝Switch2サイクルの持続性・ソフト販売</b>。</p><span class="tag">株価・評価</span></div>
+      </div>
+      <div class="keyline">※ 理論株価・テクニカル・最近のニュース・開示テキスト（文字情報）の分析は、参照実装として<b>トヨタ自動車のページで実装済み</b>です（本番サービスでは全社に同じ詳細分析を提供します）。</div>
+    </div>
+
+    <div class="disc">
+      ※ 本画面は <b>Zaimu.ai のUIモック</b>ですが、財務3表の数値・画像・主要指標は<b>任天堂 2026年3月期の実際の開示（決算短信・日本基準）と2026-07-06時点の市場データ</b>に基づきます。売買推奨や目標株価の助言ではありません。<b>投資判断はご自身の責任で。</b>出典: 任天堂 IR（決算短信）/ 金融庁 EDINET。
+    </div>
+
+    </div><!-- /data-company=nintendo -->
+
+    <!-- ================= キーエンス（v7） ================= -->
+    <div data-company="keyence">
+
+    <!-- company header -->
+    <div class="card">
+      <div class="co-head">
+        <div class="l">
+          <h1 class="co">キーエンス <span style="font-size:14px;color:var(--faint);font-weight:500">6861・東証プライム</span></h1>
+          <p class="co-meta">電気機器 / FA機器（センサー）　<span class="tag2">2026年3月期</span><span class="tag2">連結・日本基準</span><span class="tag2">出典: 決算短信（キーエンス IR）</span></p>
+        </div>
+        <div class="r">
+          <div class="px num">¥80,300 <small>2026-07-03 終値</small></div>
+          <div class="px-sub num">時価総額 <b>¥19.53兆</b>　PER <b>43.7倍</b>　PBR <b>5.61倍</b></div>
+          <div class="px-sub num">EPS 約¥1,836　BPS 約¥14,314　ROE 12.8%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AIサマリー -->
+    <div class="card" style="border-left:3px solid var(--accent)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:700;color:#fff;background:var(--accent);border-radius:20px;padding:2px 11px">AIサマリー</span>
+        <span style="font-size:12px;color:var(--faint)">検索した会社の要点を、決算・有報からAIが最初に要約します</span>
+      </div>
+      <p style="margin:0 0 12px;font-size:14.5px;line-height:1.9">
+        <b>キーエンス</b>はFA（工場自動化）用センサー等の高収益企業。2026年3月期は売上1.17兆円・営業利益5,958億円で<b>営業利益率51%</b>という突出した収益性。<b>売上原価率わずか17%</b>、負債ほぼゼロ（<b>自己資本比率94.6%</b>）。株価¥80,300は<b>PER43.7倍・PBR5.61倍</b>と高評価ですが、価格決定力と高利益率という「質」を市場が織り込んでいます。<b>注目点＝高バリュエーションの持続</b>。
+      </p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <span style="font-size:11.5px;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:3px 11px">営業利益率51%（過去最高）</span>
+        <span style="font-size:11.5px;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:3px 11px">原価率17%＝粗利率83%</span>
+        <span style="font-size:11.5px;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:3px 11px">負債ほぼゼロ（自己資本比率94.6%）</span>
+        <span style="font-size:11.5px;color:#8a6d1f;background:var(--mark);border:1px solid var(--mark-line);border-radius:20px;padding:3px 11px">高バリュエーション（PER43.7倍）</span>
+      </div>
+      <p style="font-size:11px;color:var(--faint);margin:11px 0 0">※ 開示された決算の実データをもとにAIが要約（本モックはサンプル）。投資助言ではありません。</p>
+    </div>
+
+    <!-- key metrics -->
+    <div class="section" style="margin-top:36px">
+      <div><span class="section-t">主要指標（すべて計算方法つき）</span></div>
+      <p class="section-lead">下の実際の決算書（①②）と株価（2026-07-03）から計算した実データです。各カードの<b>「計算方法」をタップすると計算式が開きます</b>。</p>
+      <div class="kpis num">
+        <div class="kpi"><div class="k">株価</div><div class="v">¥80,300</div><div class="n">2026-07-03 終値</div>
+          <div class="f">すべての株価系指標の出発点。EPS・BPSと組み合わせて割安/割高を測ります。</div></div>
+        <div class="kpi"><div class="k">時価総額</div><div class="v">¥19.53兆</div><div class="n">市場がつけた会社全体の値段</div>
+          <div class="f"><span class="fx">株価 × 発行済株式数</span>（2026-07-03 時点 19兆5,296億円）</div></div>
+        <div class="kpi"><div class="k">PER（株価収益率）</div><div class="v">43.7倍</div><div class="n">利益の何年分の株価か</div>
+          <div class="f"><span class="fx">株価 ÷ EPS</span> ＝ 80,300 ÷ 1,836 ≈ 43.7倍。「質」への高い評価＝高バリュエーション。</div></div>
+        <div class="kpi"><div class="k">PBR（株価純資産倍率）</div><div class="v">5.61倍</div><div class="n">純資産に対する株価</div>
+          <div class="f"><span class="fx">株価 ÷ BPS</span> ＝ 80,300 ÷ 14,314 ≈ 5.61倍。純資産の5.6倍の評価。</div></div>
+        <div class="kpi"><div class="k">営業利益率</div><div class="v">51.0%</div><div class="n">本業の儲けの効率＝突出</div>
+          <div class="f"><span class="fx">営業利益 ÷ 売上高</span> ＝ 5,958億 ÷ 1.17兆 ≈ 51.0%。上場製造業でも突出した水準。</div></div>
+        <div class="kpi"><div class="k">粗利率（売上総利益率）</div><div class="v">83%</div><div class="n">原価率はわずか17%</div>
+          <div class="f"><span class="fx">（売上高 − 売上原価）÷ 売上高</span> ＝ (1,169,289 − 198,552) ÷ 1,169,289 ≈ 83%＝高付加価値・価格決定力。</div></div>
+        <div class="kpi"><div class="k">ROE（自己資本利益率）</div><div class="v">12.8%</div><div class="n">株主のお金でどれだけ稼いだか</div>
+          <div class="f"><span class="fx">親会社純利益 ÷ 自己資本</span> ＝ 4,452億 ÷ 3.47兆 ≈ 12.8%。自己資本が厚いためROEは見かけ上おだやか。</div></div>
+        <div class="kpi"><div class="k">自己資本比率</div><div class="v">94.6%</div><div class="n">財務の安全性＝負債ほぼゼロ</div>
+          <div class="f"><span class="fx">自己資本 ÷ 総資産</span> ＝ 3.47兆 ÷ 3.67兆 ≈ 94.6%。負債合計はわずか0.20兆円。</div></div>
+      </div>
+    </div>
+
+    <!-- BS -->
+    <div class="section">
+      <div class="section-t">① 連結貸借対照表（BS）</div>
+      <p class="section-lead">キーエンスのBSの特徴は一目瞭然＝<b>負債がほとんどない</b>ことです。</p>
+      <div class="stmt">
+        <div class="shot">
+          <div class="cap"><span class="pill">実際の開示</span>連結貸借対照表 — キーエンス 2026年3月期 決算短信（日本基準）※単位:百万円</div>
+          <img src="/fin-key-bs.png" alt="キーエンス 連結貸借対照表（実際の決算短信）" loading="lazy" />
+        </div>
+        <div class="reads num">
+          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">資産合計</span><span class="iv">3,670,655</span>
+            <span class="ibub" role="tooltip"><b>3,670,655</b> 百万円（約3.67兆円）。会社が持つ財産の総額。<b>負債0.20兆＋純資産3.47兆</b>と必ず一致します。<span class="itag">BS・合計</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">負債合計</span><span class="iv">199,183</span>
+            <span class="ibub" role="tooltip"><b>199,183</b> 百万円（<b>わずか約0.20兆円</b>）。総資産3.67兆に対して極めて小さく、借金に頼らず自己資金だけで事業を回しています。<span class="itag">BS・負債</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">純資産合計</span><span class="iv">3,471,472</span>
+            <span class="ibub" role="tooltip"><b>3,471,472</b> 百万円（約3.47兆円）。返さなくてよい自己資本。総資産に占める割合＝<b>自己資本比率 94.6%</b>＝ほぼ無借金の極めて高い安全性。<span class="itag">BS・純資産</span></span></button>
+          <div class="keyline"><b>読みどころ：</b>総資産の<b>94.6%が自己資本</b>。稼いだ利益の蓄積だけで巨大なBSを作った、日本屈指の「借りない経営」です。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PL -->
+    <div class="section">
+      <div class="section-t">② 連結損益計算書（PL）</div>
+      <p class="section-lead">キーエンスのPLの見どころは<b>「原価の小ささ」と「営業利益率51%」</b>。売上の半分以上が本業の利益になります。</p>
+      <div class="stmt">
+        <div class="shot">
+          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書 — キーエンス 2026年3月期 決算短信（日本基準）※単位:百万円</div>
+          <img src="/fin-key-pl.png" alt="キーエンス 連結損益計算書（実際の決算短信）" loading="lazy" />
+        </div>
+        <div class="reads num">
+          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">売上高</span><span class="iv">1,169,289</span>
+            <span class="ibub" role="tooltip"><b>1,169,289</b> 百万円（約1.17兆円）。トヨタ（50.7兆）の約1/43の規模ですが、時価総額はトヨタの約半分＝<b>市場は規模でなく「質」を評価</b>しています。<span class="itag">PL・売上</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">売上原価</span><span class="iv">198,552</span>
+            <span class="ibub" role="tooltip"><b>198,552</b> 百万円。売上に対する原価率は<b>わずか17%（＝粗利率83%）</b>。ファブレス（自社工場を持たない）と高付加価値製品による<b>圧倒的な価格決定力</b>の証拠です。<span class="itag">PL・費用</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">営業利益</span><span class="iv">595,759</span>
+            <span class="ibub" role="tooltip"><b>595,759</b> 百万円（約5,958億円・過去最高）。<b>営業利益率51.0%</b>＝売上の半分以上が本業の利益という驚異的な水準（トヨタ7.4%・任天堂15.6%）。<span class="itag">PL・営業利益</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">経常利益</span><span class="iv">635,756</span>
+            <span class="ibub" role="tooltip"><b>635,756</b> 百万円（約6,358億円）。運用収益など営業外収益が上乗せされ、営業利益をさらに上回ります。<span class="itag">PL・営業外</span></span></button>
+          <button type="button" class="irow" aria-expanded="false"><span class="il">親会社株主に帰属する当期純利益</span><span class="iv">445,185</span>
+            <span class="ibub" role="tooltip"><b>445,185</b> 百万円（約4,452億円）。最終的に残る利益。1株当たり（EPS）約<b>¥1,836</b>。<span class="itag">PL・純利益</span></span></button>
+          <div class="keyline num"><b>読みどころ：</b>原価率17%→営業利益率51%。<b>CF実績も営業CF+4,307億／投資CF−3,124億／財務CF−1,137億</b>と現金創出は堅調です（CFのキャプチャは本モックでは省略）。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 特徴・注目点 -->
+    <div class="section">
+      <div class="section-t">この会社の特徴・注目点</div>
+      <div class="reads" style="gap:12px;margin-top:14px">
+        <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">営業利益率51%という突出した高収益</p><p class="mean num">原価率<b>17%</b>＝高付加価値・価格決定力の証拠。直販コンサル営業と企画特化（ファブレス）のビジネスモデルが、売上1.17兆円から<b>営業利益5,958億円（過去最高）</b>を生んでいます。</p><span class="tag">収益性</span></div>
+        <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">負債ほぼゼロの鉄壁バランスシート</p><p class="mean num">負債合計はわずか<b>0.20兆円</b>・自己資本比率<b>94.6%</b>。利益の蓄積だけで総資産3.67兆円を築いた「借りない経営」です。</p><span class="tag">財務</span></div>
+        <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">高い評価＝高い期待という裏返し</p><p class="mean num">株価¥80,300は<b>PER43.7倍・PBR5.61倍</b>。市場は高収益・高ROICの「質」を織り込んでいますが、その分<b>成長鈍化には敏感</b>。<b>注目点＝高バリュエーションの正当化・成長持続</b>。</p><span class="tag">株価・評価</span></div>
+      </div>
+      <div class="keyline">※ 理論株価・テクニカル・最近のニュース・開示テキスト(文字情報)の分析は、参照実装として<b>トヨタ自動車のページで実装済み</b>です（本番サービスでは全社に同じ詳細分析を提供します）。</div>
+    </div>
+
+    <div class="disc">
+      ※ 本画面は <b>Zaimu.ai のUIモック</b>ですが、財務諸表の数値・画像・主要指標は<b>キーエンス 2026年3月期の実際の開示（決算短信・日本基準）と2026-07-03時点の市場データ</b>に基づきます。売買推奨や目標株価の助言ではありません。<b>投資判断はご自身の責任で。</b>出典: キーエンス IR（決算短信）/ 金融庁 EDINET。
+    </div>
+
+    </div><!-- /data-company=keyence -->
   </div>
 
 <script>
@@ -564,6 +892,29 @@
   document.addEventListener("keydown", function(e){
     if (e.key === "Escape") closeAllRows(null);
   });
+
+  /* ③ v7: 会社切替（セレクタで data-company ブロックを出し分け・検索窓も連動） */
+  var COMPANY_NAMES = { toyota: "トヨタ自動車", nintendo: "任天堂", keyence: "キーエンス" };
+  var searchInput = document.querySelector(".search input");
+  var coBtns = document.querySelectorAll(".cochip[data-co]");
+  var coBlocks = document.querySelectorAll("[data-company]");
+  function selectCompany(key){
+    if (!COMPANY_NAMES[key]) return;
+    Array.prototype.forEach.call(coBlocks, function(b){
+      b.classList.toggle("co-active", b.getAttribute("data-company") === key);
+    });
+    Array.prototype.forEach.call(coBtns, function(btn){
+      var on = btn.getAttribute("data-co") === key;
+      btn.classList.toggle("active", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    if (searchInput) searchInput.value = COMPANY_NAMES[key];
+    closeAllRows(null);
+  }
+  Array.prototype.forEach.call(coBtns, function(btn){
+    btn.addEventListener("click", function(){ selectCompany(btn.getAttribute("data-co")); });
+  });
+  selectCompany("toyota");
 })();
 </script>
 </body>
