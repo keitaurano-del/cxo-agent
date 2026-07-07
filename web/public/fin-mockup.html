@@ -18,22 +18,18 @@
   a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
   b,strong{font-weight:700}
   .num{font-variant-numeric:tabular-nums}
-  .wrap{max-width:1000px;margin:0 auto;padding:0 20px 72px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 20px 48px}
   .topbar{background:var(--card);border-bottom:1px solid var(--line)}
   .topbar .inner{max-width:1000px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:14px 20px;flex-wrap:wrap}
   .brand{font-weight:700;font-size:17px;letter-spacing:.2px}
   .brand small{font-weight:500;color:var(--faint);font-size:12px;margin-left:8px;letter-spacing:0}
   .badge-demo{margin-left:auto;font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:3px 10px;background:var(--bg)}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:22px 24px;margin:0 0 16px}
-  .section{margin-top:52px}
-  .section-t{font-size:20px;font-weight:700;margin:0 0 6px;padding-top:8px;border-top:3px solid var(--accent);display:inline-block}
-  .section-lead{color:var(--muted);font-size:14px;margin:4px 0 18px;max-width:820px}
-  .learn{background:var(--accent-soft);border:1px solid #d2e4e0;border-radius:8px;padding:16px 20px;margin:0 0 18px;font-size:14px}
-  .learn .t{font-weight:700;color:var(--accent-dark);margin:0 0 6px}
-  .learn p{margin:0 0 8px}.learn p:last-child{margin:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:22px 24px;margin:0 0 12px}
+  .section{margin-top:32px}
+  .section-t{font-size:20px;font-weight:700;margin:0 0 14px;padding-top:8px;border-top:3px solid var(--accent);display:inline-block}
 
   /* search */
-  .search{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:20px 24px;margin:24px 0 16px}
+  .search{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:20px 24px;margin:16px 0 12px}
   .search .box{display:flex;align-items:center;gap:10px;border:1.5px solid var(--line);border-radius:8px;background:#fff;padding:4px 6px 4px 14px;transition:border-color .15s}
   .search .box:focus-within{border-color:var(--accent)}
   .search .box svg{flex:none;color:var(--faint)}
@@ -71,7 +67,6 @@
   .shot .cap{font-size:11.5px;color:var(--muted);padding:7px 10px;border-bottom:1px solid var(--line-soft);background:var(--bg);display:flex;gap:8px;align-items:center}
   .shot .cap .pill{font-size:10px;font-weight:700;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:1px 8px;white-space:nowrap}
   .shot img{display:block;width:100%;height:auto}
-  .cap .pinlbl{margin-left:auto;font-size:10px;color:var(--accent-dark);font-weight:700;white-space:nowrap}
 
   /* v9: 財務諸表HTML表（statements.json 由来の実データ・テキスト選択/ハイライト可） */
   .fintbl{background:#fff}
@@ -146,7 +141,6 @@
   .keyline{font-size:13px;color:var(--muted);margin-top:14px;border-top:1px solid var(--line-soft);padding-top:12px}
 
   /* interactive statement rows (v6: ホバー/タップで解説の吹き出し) */
-  .ihint{font-size:11.5px;color:var(--faint);margin:0 0 2px}
   .irow{position:relative;display:flex;align-items:baseline;gap:10px;width:100%;margin:0;text-align:left;font-family:inherit;background:#fff;border:1px solid var(--line);border-left:3px solid var(--line);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);cursor:pointer;line-height:1.6}
   .irow .il{flex:1;min-width:0;border-bottom:2px solid transparent;padding-bottom:1px}
   .irow .iv{font-weight:700;white-space:nowrap;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -225,7 +219,7 @@
   .titem .tf{font-size:11px;color:var(--muted);margin-top:7px;border-top:1px dashed var(--line-soft);padding-top:6px;line-height:1.55}
   .titem .tf .fx{color:var(--accent-dark);font-weight:700}
 
-  .disc{margin-top:26px;font-size:11.5px;color:var(--faint);border:1px solid var(--line);border-radius:8px;padding:14px 16px;background:#fff}
+  .disc{margin-top:20px;font-size:11.5px;color:var(--faint);border:1px solid var(--line);border-radius:8px;padding:14px 16px;background:#fff}
   h1.co{margin:0;font-size:22px}
   .co-meta{color:var(--muted);font-size:13px;margin:2px 0 0}
   .tag2{display:inline-block;font-size:11px;padding:1px 8px;border-radius:4px;background:var(--bg);color:var(--muted);border:1px solid var(--line);margin-right:4px}
@@ -275,7 +269,6 @@
     <div class="card" style="border-left:3px solid var(--accent)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap">
         <span style="font-size:11px;font-weight:700;color:#fff;background:var(--accent);border-radius:20px;padding:2px 11px">AIサマリー</span>
-        <span style="font-size:12px;color:var(--faint)">検索した会社の要点を、決算・有報からAIが最初に要約します</span>
       </div>
       <p style="margin:0 0 12px;font-size:14.5px;line-height:1.9">
         <b>トヨタ自動車</b>は世界最大級の自動車メーカー。2026年3月期は<b>売上高50.7兆円と過去最高</b>を更新する一方、<b>営業利益は3.77兆円と3期連続の減益</b>（会社はMD&amp;Aで「諸経費の増加＝<b>米国関税の影響1.38兆円を含む</b>」が主因と説明）。ただし<b>手元現金12.7兆円・自己資本比率37.8%</b>と財務の安全性は高く、<b>営業CFも5.47兆円</b>と現金を稼ぐ力は強い。株価¥2,923は<b>PER9.9倍・PBR0.95倍</b>で、指標上は割高感の乏しい水準。<b>強み＝規模と財務体力</b>、<b>注目点＝利益率の低下と関税・為替の影響</b>。
@@ -287,19 +280,11 @@
         <span style="font-size:11.5px;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:3px 11px">潤沢な営業CF</span>
         <span style="font-size:11.5px;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:3px 11px">指標上は割高感 乏しい</span>
       </div>
-      <p style="font-size:11px;color:var(--faint);margin:11px 0 0">※ 開示された決算・有価証券報告書の実データをもとにAIが要約（本モックはサンプル）。投資助言ではありません。</p>
-    </div>
-
-    <div class="learn">
-      <div class="t">このページの読み方</div>
-      <p>Zaimu.ai は、実際に開示された<b>決算書（数字）と開示テキスト（文字情報）</b>をAIで読み解く企業分析サービスです。上から順に、<b>主要指標 → 理論株価 → テクニカル → 実際の決算書そのもの → 定性情報</b>の順で、1社を多面的に確認できます。指標にはすべて<b>「どう計算するか」</b>を添えています。</p>
-      <p style="margin:0;color:var(--accent-dark)">財務3表：<b>①貸借対照表（BS）＝ある時点の財産と借金</b>／<b>②損益計算書（PL）＝1年の儲け</b>／<b>③キャッシュ・フロー計算書（CF）＝現金の増減</b>。</p>
     </div>
 
     <!-- ===== key metrics ===== -->
-    <div class="section" style="margin-top:36px">
-      <div><span class="section-t">主要指標（すべて計算方法つき）</span><button type="button" class="fall" id="kpiFallBtn" aria-expanded="false">すべて展開 ▾</button></div>
-      <p class="section-lead">下の実際の決算書（①②③）と株価（2026-07-06）から計算した実データです。各カードの<b>「計算方法」をタップすると計算式が開きます</b>。</p>
+    <div class="section">
+      <div><span class="section-t">主要指標</span><button type="button" class="fall" id="kpiFallBtn" aria-expanded="false">すべて展開 ▾</button></div>
       <div class="kpis num">
         <div class="kpi"><div class="k">株価</div><div class="v">¥2,923</div><div class="n">2026-07-06 終値</div>
           <div class="f">すべての株価系指標の出発点。<span class="gd">意味: 1株の値段。単体では割高/割安は判断できず、EPS・BPSと組み合わせて見ます</span></div></div>
@@ -330,8 +315,7 @@
 
     <!-- ===== theoretical price ===== -->
     <div class="section">
-      <div class="section-t">理論株価（参考レンジ・計算方法つき）</div>
-      <p class="section-lead">「今の株価は、会社の利益や資産と比べてどの水準か」を複数のモデルで機械的に計算したものです。<b>客観的な計算結果であり、売買推奨や目標株価の助言ではありません。</b>前提を変えれば結果も変わります。</p>
+      <div class="section-t">理論株価（参考レンジ）</div>
       <div class="models num">
         <div class="model"><div class="mk">PERベース</div><div class="mv">約 ¥2,953</div>
           <div class="mf"><span class="fx">想定PER × EPS</span>。同業・過去平均なみのPER 10倍を想定すると、10 × 295.25 ＝ 約¥2,953。市場が「利益の10年分」まで買うなら、の水準。</div></div>
@@ -346,14 +330,13 @@
         <div style="font-size:13px;font-weight:700">理論株価レンジ（参考）≈ ¥2,700〜¥3,200　と　現在値 ¥2,923</div>
         <div class="gauge"><div class="pin" style="left:44.6%">現在値 ¥2,923</div></div>
         <div class="gauge-ends"><span>割安側　¥2,700</span><span>レンジ上限　¥3,200</span></div>
-        <p class="note-ref">上記PER/PBRベース等の計算結果を束ねた参考レンジです。現在値はレンジ内・中央よりやや下。<b>想定PERや割引率などの前提を変えればレンジも変わります。</b>投資判断はご自身の責任で。</p>
+        <p class="note-ref">PER/PBRベース等の計算結果を束ねた参考レンジ。現在値はレンジ内・中央よりやや下。</p>
       </div>
     </div>
 
     <!-- ===== technical ===== -->
     <div class="section">
-      <div class="section-t">テクニカル分析（指標の意味と計算方法つき）</div>
-      <p class="section-lead">ここまでのファンダメンタルズ（財務）が「会社の中身」を見るのに対し、テクニカルは「<b>価格の動き</b>」そのものを見ます。Zaimu.ai では両方を並べて確認できます。実データ: 現在値 <b>¥2,923</b>／年初来高値 <b>¥4,000</b>（2/9）／年初来安値 <b>¥2,686</b>（6/24）。</p>
+      <div class="section-t">テクニカル分析</div>
 
       <div class="chart">
         <div class="ct">株価チャート（2026年 年初来）<span class="pill">参考イメージ（本番では株価データを取得）</span></div>
@@ -391,7 +374,6 @@
           <line x1="180" y1="222" x2="204" y2="222" stroke="#b3bec7" stroke-width="1.6" stroke-dasharray="2 4"/>
           <text x="210" y="226" font-size="10" fill="#5c6b78">75日移動平均（イメージ）</text>
         </svg>
-        <p style="font-size:11.5px;color:var(--faint);margin:6px 0 8px">ラインの形は参考イメージです。ラベルの数値（¥4,000／¥2,686／¥2,923）のみ実データ。本番では日次株価を取得して描画します。</p>
       </div>
 
       <div class="tech">
@@ -414,26 +396,23 @@
           <div class="tm num">株価が反発しやすい下値（サポート）と、跳ね返されやすい上値（レジスタンス）。トヨタの実データでは<b>年初来安値 ¥2,686（6/24）が下値目安</b>、<b>年初来高値 ¥4,000（2/9）が上値目安</b>。現在値 ¥2,923 は安値圏からの戻り局面。</div>
           <div class="tf"><span class="fx">求め方：過去に何度も止まった価格帯（直近の高値・安値など）を目安にする</span>。計算式というより「価格の記憶」を読む考え方。</div></div>
       </div>
-      <div class="keyline" style="border:0"><b>使い分け：</b>テクニカルは「価格の動き」を、ファンダメンタルズ（財務）は「会社の中身」を見るものです。Zaimu.ai では、この下に続く<b>実際の決算書</b>と上のテクニカルを、同じ画面で並べて確認できます。</div>
     </div>
 
     <!-- ===== 現在の株価の分析 ===== -->
     <div class="section">
       <div class="section-t">現在の株価の分析</div>
-      <p class="section-lead">今の株価 <b>¥2,923</b> が「どういう位置にあるか」を、水準・バリュエーション・値動きの3面から客観的に整理します（売買推奨ではありません）。</p>
       <div class="reads" style="gap:12px">
         <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">水準：年初来の下半分・安値圏からの戻り</p><p class="mean">年初来高値 ¥4,000（2/9）から約<b>27%下落</b>し、安値 ¥2,686（6/24）をつけたあと ¥2,923 まで反発。今は年初来レンジの下半分に位置します。</p><span class="tag">株価・水準</span></div>
         <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">バリュエーション：純資産割れ（PBR 0.95倍）</p><p class="mean">株価¥2,923が1株純資産(BPS)¥3,063を<b>下回る＝会計上の解散価値未満</b>の評価。PER9.9倍も市場平均以下で、指標上は<b>割安圏</b>。ただし「安い＝買い」ではなく、減益を織り込んでいる可能性もあります。</p><span class="tag">株価・バリュエーション</span></div>
         <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">弱さの背景（ファンダと符合）</p><p class="mean">3期連続の営業減益、来期(2027/3期)も営業利益3兆円への<b>減益見通し</b>、米国関税1.4兆円・為替の逆風が重し。株価の弱さは業績・ニュースと符合しています。</p><span class="tag">株価・要因</span></div>
         <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">支え・注目材料</p><p class="mean">高い財務安全性（自己資本比率37.8%・現金12.7兆）、<b>PBR1倍割れ</b>は下値の目安になりやすい点、7月の<b>日米関税合意（27.5%→15%）</b>によるコスト緩和期待が反発材料です。</p><span class="tag">株価・支え</span></div>
       </div>
-      <div class="keyline"><b>まとめ：</b>指標上は割安圏（PBR1倍割れ）ですが、それは減益・関税という逆風の裏返し。<b>関税緩和が業績に効くか</b>が今後の焦点です。※客観的な整理であり、投資判断はご自身の責任で。</div>
+      <div class="keyline"><b>まとめ：</b>指標上は割安圏（PBR1倍割れ）ですが、それは減益・関税という逆風の裏返し。<b>関税緩和が業績に効くか</b>が今後の焦点です。</div>
     </div>
 
     <!-- ===== 最近の主要ニュースと分析 ===== -->
     <div class="section">
       <div class="section-t">最近の主要ニュースと分析</div>
-      <p class="section-lead">会社に関する最近の主要ニュースを、<b>財務・株価への意味</b>とあわせて整理します（各社報道・会社開示より）。</p>
       <div class="reads" style="gap:12px">
         <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">2026/5 決算発表：増収・大幅減益</p><p class="mean">営業収益50.7兆（+5.5%）に対し営業利益3.77兆（<b>▲21.5%</b>）。→「売れているのに利益が細る」構図で、PLの営業利益段階に直結。</p><span class="tag">ニュース・決算</span></div>
         <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">米国関税の影響 1兆4,000億円を計上</p><p class="mean">車両1兆＋部品4,000億。<b>営業利益減少の最大要因</b>で、有報のMD&amp;A（文字情報）の説明とも一致します。</p><span class="tag">ニュース・関税/コスト</span></div>
@@ -441,20 +420,18 @@
         <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">2027年3月期 見通し：営業利益3兆円（さらに減益）</p><p class="mean">会社は<b>慎重な見通し</b>。中東情勢の悪影響▲2,700億円も想定。→ 株価が上値を追いにくい一因。</p><span class="tag">ニュース・見通し</span></div>
         <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">電動車（HEV/BEV等）が初の500万台超え</p><p class="mean">電動化シフトの進展。HEV中心の強みが販売数量に表れており、中長期の競争力・成長の材料です。</p><span class="tag">ニュース・電動化</span></div>
       </div>
-      <div class="keyline"><b>読み解き：</b>「関税で減益 → 7月に関税緩和 → それでも来期は慎重見通し」という流れ。<b>ニュースは、決算の数字と株価の弱さの“背景”を説明</b>します。※本モックはサンプル。出典: 各社報道・トヨタ IR。</div>
+      <div class="keyline"><b>読み解き：</b>「関税で減益 → 7月に関税緩和 → それでも来期は慎重見通し」という流れ。<b>ニュースは、決算の数字と株価の弱さの“背景”を説明</b>します。</div>
     </div>
 
     <!-- ===== BS ===== -->
     <div class="section">
       <div class="section-t">① 連結財政状態計算書（貸借対照表 / BS）</div>
-      <p class="section-lead">「会社が何を持ち（資産）、いくら借りていて（負債）、返さなくていい自分のお金（純資産）があるか」を、ある時点で写した表。<b>日本の財政状態計算書は左右対称ではなく、上から「資産 → 負債 → 純資産」と縦に続きます</b>（下の表も資産の部→負債・純資産の部の順）。最後の<b>資産合計</b>と<b>負債及び資本合計</b>は必ず一致します（どちらも105.5兆円）。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結財政状態計算書（資産→負債→資本）— トヨタ 2026年3月期 決算短信 ※単位:百万円・△はマイナス<span class="pinlbl">行をタップ→増減＋なぜこの値か（●＝特に注目）</span></div>
+          <div class="cap"><span class="pill">実際の開示</span>連結財政状態計算書（資産→負債→資本）— トヨタ 2026年3月期 決算短信 ※単位:百万円・△はマイナス</div>
           <div class="fintbl" data-stmt="toyota_bs"></div>
         </div>
         <div class="reads num">
-          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
           <button type="button" class="irow" aria-expanded="false"><span class="il">現金及び現金同等物</span><span class="iv">12,659,622</span>
             <span class="ibub" role="tooltip"><b>12,659,622</b> 百万円（約12.66兆円）。すぐ使える現金。潤沢＝不測の事態への耐性が高いことを示します。<span class="itag">BS・流動資産</span></span></button>
           <button type="button" class="irow" aria-expanded="false"><span class="il">棚卸資産</span><span class="iv">5,134,996</span>
@@ -477,14 +454,12 @@
     <!-- ===== PL ===== -->
     <div class="section">
       <div class="section-t">② 連結損益計算書（PL）</div>
-      <p class="section-lead">1年間で「いくら売れて（売上）、いくら費用がかかり、いくら儲かったか（利益）」を段階的に示す表。上から順に費用を引いていき、最後に手元に残る利益になります。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書（トヨタ 2026年3月期 決算短信）※単位:百万円・△はマイナス<span class="pinlbl">行をタップ→増減＋なぜこの値か（●＝特に注目）</span></div>
+          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書（トヨタ 2026年3月期 決算短信）※単位:百万円・△はマイナス</div>
           <div class="fintbl" data-stmt="toyota_pl"></div>
         </div>
         <div class="reads num">
-          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
           <button type="button" class="irow" aria-expanded="false"><span class="il">営業収益合計</span><span class="iv">50,684,952</span>
             <span class="ibub" role="tooltip"><b>50,684,952</b> 百万円（約50.69兆円）。会社の売上（本業の稼ぎの入口）。前期48.04兆から増収です。<span class="itag">PL・売上</span></span></button>
           <button type="button" class="irow" aria-expanded="false"><span class="il">売上原価</span><span class="iv">39,141,418</span>
@@ -505,14 +480,12 @@
     <!-- ===== CF ===== -->
     <div class="section">
       <div class="section-t">③ 連結キャッシュ・フロー計算書（CF）</div>
-      <p class="section-lead">利益とは別に「現金が実際にどれだけ増減したか」を、営業・投資・財務の3区分で示す表。利益が出ていても現金が減ることがあるため、稼ぐ力を現金で確かめます。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結キャッシュ・フロー計算書（トヨタ 2026年3月期 決算短信）※単位:百万円・△はマイナス<span class="pinlbl">行をタップ→増減＋なぜこの値か（●＝特に注目）</span></div>
+          <div class="cap"><span class="pill">実際の開示</span>連結キャッシュ・フロー計算書（トヨタ 2026年3月期 決算短信）※単位:百万円・△はマイナス</div>
           <div class="fintbl" data-stmt="toyota_cf"></div>
         </div>
         <div class="reads num">
-          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
           <button type="button" class="irow" aria-expanded="false"><span class="il">営業活動によるCF</span><span class="iv">+5,472,920</span>
             <span class="ibub" role="tooltip"><b>+5,472,920</b> 百万円（約+5.47兆円）。本業で実際に稼いだ現金。前期3.70兆から大きく増加＝<b>現金を稼ぐ力は強い</b>。<span class="itag">CF・営業</span></span></button>
           <button type="button" class="irow" aria-expanded="false"><span class="il">投資活動によるCF</span><span class="iv">△1,520,307</span>
@@ -529,7 +502,6 @@
     <!-- ===== trend ===== -->
     <div class="section">
       <div class="section-t">売上と営業利益の推移（実績）</div>
-      <p class="section-lead">「増収なのに営業利益は3期連続で減少」という実際のトレンド。PLの利益率低下が数字で確認できます。</p>
       <div class="trend">
         <div class="card"><h3 style="margin:0 0 4px;font-size:15px">営業収益（兆円）</h3>
           <div class="bars">
@@ -552,12 +524,7 @@
 
     <!-- ===== 文字情報（定性開示）の分析 ===== -->
     <div class="section">
-      <div class="section-t">④ 数字だけじゃない ― 開示テキスト（文字情報）の分析</div>
-      <p class="section-lead">有価証券報告書には財務諸表（数字）のほかに、<b>事業等のリスク・経営者による分析(MD&amp;A)・経営方針</b>など大量の「文字情報」があります。ここでは実際の有報テキストをAIで要約し、<b>数字と突き合わせ</b>ます。数字が「いくらか」なら、テキストは「<b>なぜそうなったか・これから何が効くか</b>」を語ります。</p>
-      <div class="learn">
-        <div class="t">テキスト分析でできること（＝どこまで言えるか）</div>
-        <p style="margin:0">① リスク要因・経営戦略の<b>要約</b>　② 数字の<b>“理由”付け</b>（MD&amp;Aと財務数値の突合）　③ セグメント・注記の読み解き　④ 経年での<b>トーン／強調点の変化</b>　⑤ 同業比較でのリスク・戦略の違い。以下は実際のトヨタ2026年3月期 有報からの実例です。</p>
-      </div>
+      <div class="section-t">④ 開示テキスト（文字情報）の分析</div>
       <div class="reads" style="gap:14px">
         <div class="read"><p class="row" style="font-size:13.5px;color:var(--accent-dark)"><b>A. 会社自身の説明（MD&amp;A）が、数字の“理由”を語る</b></p>
           <p class="mean">有報の経営者分析はこう書いています ―「営業利益は<b>3兆7,662億円</b>と、前期に比べ<b>1兆293億円（21.5%）の減益</b>。<b>諸経費の増加（米国関税の影響 1兆3,800億円を含む）</b>が主因」。為替差損益も前期比3,045億円の減益。<br>→ PLの「増収なのに営業利益は減少」の<b>理由</b>が、まさにテキストに書かれています。数字だけでは見えない背景（関税・為替・費用増）を文字情報が説明します。</p><span class="tag">有報・経営者による分析（MD&amp;A）</span></div>
@@ -568,7 +535,6 @@
         <div class="read"><p class="row" style="font-size:13.5px;color:var(--accent-dark)"><b>D. セグメント別（数字＋説明の合わせ技）</b></p>
           <p class="mean">有報のセグメント説明より ― <b>自動車事業</b>：営業収益45兆4,177億円（+5.1%増収）に対し営業利益は<b>2兆7,770億円へ減益</b>。<b>金融事業</b>：営業収益4兆8,571億円・営業利益<b>8,517億円（+1,682億の増益）</b>。<br>→ 全社の減益は主に<b>自動車事業</b>で起き、金融事業はむしろ増益。テキスト＋数字で「どこで何が起きたか」を分解できます。</p><span class="tag">有報・セグメント情報</span></div>
       </div>
-      <div class="keyline" style="border:0;margin-top:14px">「テキストはどこまで言えるか」の答え：<b>数字の“結果”に対して、テキストは“理由・背景・これからの打ち手”を与えます。</b>本番では有報の該当箇所を引用しつつ、リスク・MD&amp;A・戦略・注記を要約し、財務数値と突き合わせて提示します。</div>
     </div>
 
     <div class="disc">
@@ -599,7 +565,6 @@
     <div class="card" style="border-left:3px solid var(--accent)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap">
         <span style="font-size:11px;font-weight:700;color:#fff;background:var(--accent);border-radius:20px;padding:2px 11px">AIサマリー</span>
-        <span style="font-size:12px;color:var(--faint)">検索した会社の要点を、決算・有報からAIが最初に要約します</span>
       </div>
       <p style="margin:0 0 12px;font-size:14.5px;line-height:1.9">
         <b>任天堂</b>は世界的なゲーム企業。2026年3月期は<b>Nintendo Switch 2の好発進で売上2.31兆円と前期比ほぼ倍増</b>、営業利益3,601億円。<b>実質無借金（自己資本比率77.7%）で現金1.79兆円</b>と潤沢＝<b>経常利益が営業利益を上回る</b>（受取利息・為替差益）。株価¥7,033は<b>PER19.1倍・PBR2.74倍</b>で成長を織り込む水準。<b>強み＝強力なIPと財務体力</b>、<b>注目点＝Switch2サイクルの持続</b>。
@@ -610,13 +575,11 @@
         <span style="font-size:11.5px;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:3px 11px">経常利益 ＞ 営業利益</span>
         <span style="font-size:11.5px;color:#8a6d1f;background:var(--mark);border:1px solid var(--mark-line);border-radius:20px;padding:3px 11px">成長を織り込む株価（PER19倍）</span>
       </div>
-      <p style="font-size:11px;color:var(--faint);margin:11px 0 0">※ 開示された決算の実データをもとにAIが要約（本モックはサンプル）。投資助言ではありません。</p>
     </div>
 
     <!-- key metrics -->
-    <div class="section" style="margin-top:36px">
-      <div><span class="section-t">主要指標（すべて計算方法つき）</span></div>
-      <p class="section-lead">下の実際の決算書（①②③）と株価（2026-07-06）から計算した実データです。各カードの<b>「計算方法」をタップすると計算式が開きます</b>。</p>
+    <div class="section">
+      <div><span class="section-t">主要指標</span></div>
       <div class="kpis num">
         <div class="kpi"><div class="k">株価</div><div class="v">¥7,033</div><div class="n">2026-07-06 終値</div>
           <div class="f">すべての株価系指標の出発点。<span class="gd">意味: 1株の値段。単体では割高/割安は判断できず、EPS・BPSと組み合わせて見ます</span></div></div>
@@ -640,14 +603,12 @@
     <!-- BS -->
     <div class="section">
       <div class="section-t">① 連結貸借対照表（BS）</div>
-      <p class="section-lead">「会社が何を持ち（資産）、いくら借りていて（負債）、返さなくていい自分のお金（純資産）があるか」。任天堂の特徴は<b>現金の厚さと負債の少なさ</b>です。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結貸借対照表 — 任天堂 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス<span class="pinlbl">行をタップ→増減＋なぜこの値か（●＝特に注目）</span></div>
+          <div class="cap"><span class="pill">実際の開示</span>連結貸借対照表 — 任天堂 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス</div>
           <div class="fintbl" data-stmt="ntt_bs"></div>
         </div>
         <div class="reads num">
-          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
           <button type="button" class="irow" aria-expanded="false"><span class="il">現金及び預金</span><span class="iv">1,791,802</span>
             <span class="ibub" role="tooltip"><b>1,791,802</b> 百万円（約1.79兆円）。総資産の約半分が現金。<b>潤沢な現金と実質無借金の源泉</b>で、下の「経常利益が営業利益を上回る」構造にもつながります。<span class="itag">BS・流動資産</span></span></button>
           <button type="button" class="irow" aria-expanded="false"><span class="il">流動資産合計</span><span class="iv">3,009,784</span>
@@ -666,14 +627,12 @@
     <!-- PL -->
     <div class="section">
       <div class="section-t">② 連結損益計算書（PL）</div>
-      <p class="section-lead">1年間で「いくら売れて、いくら儲かったか」。今期の任天堂は<b>Switch2発売で売上がほぼ倍増</b>した年です。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書 — 任天堂 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス<span class="pinlbl">行をタップ→増減＋なぜこの値か（●＝特に注目）</span></div>
+          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書 — 任天堂 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス</div>
           <div class="fintbl" data-stmt="ntt_pl"></div>
         </div>
         <div class="reads num">
-          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
           <button type="button" class="irow" aria-expanded="false"><span class="il">売上高</span><span class="iv">2,313,051</span>
             <span class="ibub" role="tooltip"><b>2,313,051</b> 百万円（約2.31兆円）。前期 <b>1,164,922</b> から<b>ほぼ倍増（+98.6%）＝Nintendo Switch 2 効果</b>。ハード発売年に売上が跳ねるのがゲーム機ビジネスの特徴です。<span class="itag">PL・売上</span></span></button>
           <button type="button" class="irow" aria-expanded="false"><span class="il">売上原価</span><span class="iv">1,404,094</span>
@@ -692,14 +651,12 @@
     <!-- CF -->
     <div class="section">
       <div class="section-t">③ 連結キャッシュ・フロー計算書（CF）</div>
-      <p class="section-lead">現金が実際にどれだけ増減したか。営業・投資・財務の3区分で見ます。</p>
       <div class="stmt">
         <div class="shot">
           <div class="cap"><span class="pill">実際の開示</span>連結キャッシュ・フロー計算書 — 任天堂 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス</div>
           <div class="fintbl" data-stmt="ntt_cf"></div>
         </div>
         <div class="reads num">
-          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。</p>
           <button type="button" class="irow" aria-expanded="false"><span class="il">営業活動によるCF</span><span class="iv">+2,898億</span>
             <span class="ibub" role="tooltip">約<b>+2,898億円</b>。本業で実際に稼いだ現金。売上倍増の年でもしっかりプラスです。<span class="itag">CF・営業</span></span></button>
           <button type="button" class="irow" aria-expanded="false"><span class="il">投資活動によるCF</span><span class="iv">△2,101億</span>
@@ -721,7 +678,6 @@
         <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">実質無借金・現金1.79兆の財務体力</p><p class="mean num">自己資本比率<b>77.7%</b>・現金及び預金<b>1.79兆円</b>。<b>経常利益（5,422億）が営業利益（3,601億）を上回る</b>のは、この現金が生む利息・為替差益のためです。</p><span class="tag">財務</span></div>
         <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">株価は成長を織り込む水準</p><p class="mean num">株価¥7,033は<b>PER19.1倍・PBR2.74倍</b>。トヨタ（PER9.9倍）より高い評価＝市場はSwitch2サイクルの成長を先に織り込んでいます。<b>注目点＝Switch2サイクルの持続性・ソフト販売</b>。</p><span class="tag">株価・評価</span></div>
       </div>
-      <div class="keyline">※ 理論株価・テクニカル・最近のニュース・開示テキスト（文字情報）の分析は、参照実装として<b>トヨタ自動車のページで実装済み</b>です（本番サービスでは全社に同じ詳細分析を提供します）。</div>
     </div>
 
     <div class="disc">
@@ -752,7 +708,6 @@
     <div class="card" style="border-left:3px solid var(--accent)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap">
         <span style="font-size:11px;font-weight:700;color:#fff;background:var(--accent);border-radius:20px;padding:2px 11px">AIサマリー</span>
-        <span style="font-size:12px;color:var(--faint)">検索した会社の要点を、決算・有報からAIが最初に要約します</span>
       </div>
       <p style="margin:0 0 12px;font-size:14.5px;line-height:1.9">
         <b>キーエンス</b>はFA（工場自動化）用センサー等の高収益企業。2026年3月期は売上1.17兆円・営業利益5,958億円で<b>営業利益率51%</b>という突出した収益性。<b>売上原価率わずか17%</b>、負債ほぼゼロ（<b>自己資本比率94.6%</b>）。株価¥80,300は<b>PER43.7倍・PBR5.61倍</b>と高評価ですが、価格決定力と高利益率という「質」を市場が織り込んでいます。<b>注目点＝高バリュエーションの持続</b>。
@@ -763,13 +718,11 @@
         <span style="font-size:11.5px;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:3px 11px">負債ほぼゼロ（自己資本比率94.6%）</span>
         <span style="font-size:11.5px;color:#8a6d1f;background:var(--mark);border:1px solid var(--mark-line);border-radius:20px;padding:3px 11px">高バリュエーション（PER43.7倍）</span>
       </div>
-      <p style="font-size:11px;color:var(--faint);margin:11px 0 0">※ 開示された決算の実データをもとにAIが要約（本モックはサンプル）。投資助言ではありません。</p>
     </div>
 
     <!-- key metrics -->
-    <div class="section" style="margin-top:36px">
-      <div><span class="section-t">主要指標（すべて計算方法つき）</span></div>
-      <p class="section-lead">下の実際の決算書（①②）と株価（2026-07-03）から計算した実データです。各カードの<b>「計算方法」をタップすると計算式が開きます</b>。</p>
+    <div class="section">
+      <div><span class="section-t">主要指標</span></div>
       <div class="kpis num">
         <div class="kpi"><div class="k">株価</div><div class="v">¥80,300</div><div class="n">2026-07-03 終値</div>
           <div class="f">すべての株価系指標の出発点。<span class="gd">意味: 1株の値段。単体では割高/割安は判断できず、EPS・BPSと組み合わせて見ます</span></div></div>
@@ -793,14 +746,12 @@
     <!-- BS -->
     <div class="section">
       <div class="section-t">① 連結貸借対照表（BS）</div>
-      <p class="section-lead">キーエンスのBSの特徴は一目瞭然＝<b>負債がほとんどない</b>ことです。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結貸借対照表（流動資産の部）— キーエンス 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス<span class="pinlbl">行をタップ→増減＋なぜこの値か（●＝特に注目）</span></div>
+          <div class="cap"><span class="pill">実際の開示</span>連結貸借対照表（流動資産の部）— キーエンス 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス</div>
           <div class="fintbl" data-stmt="key_bs"></div>
         </div>
         <div class="reads num">
-          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
           <button type="button" class="irow" aria-expanded="false"><span class="il">資産合計</span><span class="iv">3,670,655</span>
             <span class="ibub" role="tooltip"><b>3,670,655</b> 百万円（約3.67兆円）。会社が持つ財産の総額。<b>負債0.20兆＋純資産3.47兆</b>と必ず一致します。<span class="itag">BS・合計</span></span></button>
           <button type="button" class="irow" aria-expanded="false"><span class="il">負債合計</span><span class="iv">199,183</span>
@@ -815,14 +766,12 @@
     <!-- PL -->
     <div class="section">
       <div class="section-t">② 連結損益計算書（PL）</div>
-      <p class="section-lead">キーエンスのPLの見どころは<b>「原価の小ささ」と「営業利益率51%」</b>。売上の半分以上が本業の利益になります。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書 — キーエンス 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス<span class="pinlbl">行をタップ→増減＋なぜこの値か（●＝特に注目）</span></div>
+          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書 — キーエンス 2026年3月期 決算短信（日本基準）※単位:百万円・△はマイナス</div>
           <div class="fintbl" data-stmt="key_pl"></div>
         </div>
         <div class="reads num">
-          <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
           <button type="button" class="irow" aria-expanded="false"><span class="il">売上高</span><span class="iv">1,169,289</span>
             <span class="ibub" role="tooltip"><b>1,169,289</b> 百万円（約1.17兆円）。トヨタ（50.7兆）の約1/43の規模ですが、時価総額はトヨタの約半分＝<b>市場は規模でなく「質」を評価</b>しています。<span class="itag">PL・売上</span></span></button>
           <button type="button" class="irow" aria-expanded="false"><span class="il">売上原価</span><span class="iv">198,552</span>
@@ -846,7 +795,6 @@
         <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">負債ほぼゼロの鉄壁バランスシート</p><p class="mean num">負債合計はわずか<b>0.20兆円</b>・自己資本比率<b>94.6%</b>。利益の蓄積だけで総資産3.67兆円を築いた「借りない経営」です。</p><span class="tag">財務</span></div>
         <div class="read"><p style="font-size:13.5px;font-weight:700;color:var(--accent-dark);margin:0 0 4px">高い評価＝高い期待という裏返し</p><p class="mean num">株価¥80,300は<b>PER43.7倍・PBR5.61倍</b>。市場は高収益・高ROICの「質」を織り込んでいますが、その分<b>成長鈍化には敏感</b>。<b>注目点＝高バリュエーションの正当化・成長持続</b>。</p><span class="tag">株価・評価</span></div>
       </div>
-      <div class="keyline">※ 理論株価・テクニカル・最近のニュース・開示テキスト(文字情報)の分析は、参照実装として<b>トヨタ自動車のページで実装済み</b>です（本番サービスでは全社に同じ詳細分析を提供します）。</div>
     </div>
 
     <div class="disc">
