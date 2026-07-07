@@ -54,16 +54,6 @@
   [data-company]{display:none}
   [data-company].co-active{display:block}
 
-  /* v7: 3社比較表 */
-  .cmp-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:4px}
-  .cmp{width:100%;border-collapse:collapse;font-size:13px;min-width:600px}
-  .cmp th,.cmp td{border:1px solid var(--line-soft);padding:7px 12px;text-align:right;white-space:nowrap}
-  .cmp thead th{background:var(--bg);font-size:12.5px;font-weight:700}
-  .cmp td:first-child,.cmp th:first-child{text-align:left;color:var(--muted);font-size:12px}
-  .cmp td{font-variant-numeric:tabular-nums}
-  .cmp td b{color:var(--accent-dark)}
-  .cmp .std{background:var(--accent-soft);color:var(--accent-dark);font-weight:700}
-
   /* company header + price */
   .co-head{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
   .co-head .l{flex:1;min-width:240px}
@@ -81,6 +71,22 @@
   .shot .cap{font-size:11.5px;color:var(--muted);padding:7px 10px;border-bottom:1px solid var(--line-soft);background:var(--bg);display:flex;gap:8px;align-items:center}
   .shot .cap .pill{font-size:10px;font-weight:700;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #cfe2de;border-radius:20px;padding:1px 8px;white-space:nowrap}
   .shot img{display:block;width:100%;height:auto}
+  .cap .pinlbl{margin-left:auto;font-size:10px;color:var(--accent-dark);font-weight:700;white-space:nowrap}
+
+  /* v8: 決算書キャプチャ上の「ここがポイント」ピン（既定はピンだけ・ふれると吹き出し） */
+  .imgwrap{position:relative}
+  .ppin{position:absolute;right:8px;transform:translateY(-50%);width:22px;height:22px;border-radius:50%;
+        background:var(--accent);color:#fff;border:2px solid #fff;box-shadow:0 1px 4px rgba(32,48,60,.28);
+        font-size:12.5px;font-weight:700;line-height:18px;text-align:center;cursor:pointer;padding:0;font-family:inherit;z-index:4}
+  .ppin:hover,.ppin.open{background:var(--accent-dark)}
+  .pbub{display:none;position:absolute;right:38px;transform:translateY(-50%);z-index:5;
+        width:min(320px,calc(100% - 60px));background:#fff;border:1px solid var(--accent);border-radius:8px;
+        padding:9px 12px;font-size:12px;line-height:1.7;color:var(--text);box-shadow:0 4px 14px rgba(32,48,60,.16);text-align:left}
+  .pbub::after{content:"";position:absolute;right:-6px;top:50%;margin-top:-5px;width:10px;height:10px;
+        background:#fff;border-right:1px solid var(--accent);border-top:1px solid var(--accent);transform:rotate(45deg)}
+  .pbub .pt{display:block;font-size:10.5px;font-weight:700;color:var(--accent-dark);margin-bottom:2px}
+  .ppin.open + .pbub{display:block}
+  @media(hover:hover){.ppin:hover + .pbub{display:block}}
   .reads{display:flex;flex-direction:column;gap:12px}
   .read{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:12px 14px;background:#fff}
   .read .row{font-size:12.5px;color:var(--muted);margin:0 0 3px}
@@ -129,6 +135,8 @@
   .kpi .f{display:none;font-size:11px;color:var(--muted);margin-top:4px;line-height:1.55}
   .kpi .f.open{display:block}
   .kpi .f .fx{color:var(--accent-dark);font-weight:700}
+  /* v8: 指標の意味/平均/すごい水準の解説（展開時のみ表示） */
+  .kpi .f .gd{display:block;margin-top:6px;padding-top:6px;border-top:1px dashed var(--line-soft);color:var(--faint);font-size:10.5px;line-height:1.65;font-weight:400}
   /* v6: 計算式のデフォルト折りたたみトグル */
   .ftog{display:block;width:100%;text-align:left;margin:8px 0 0;border:0;border-top:1px dashed var(--line-soft);background:none;padding:6px 0 0;font-family:inherit;font-size:11px;font-weight:700;color:var(--accent-dark);cursor:pointer}
   .ftog:hover{color:var(--accent)}
@@ -195,34 +203,6 @@
       </div>
     </div>
 
-    <!-- ===== 3社比較表（v7） ===== -->
-    <div class="card" style="border-left:3px solid var(--accent)">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-        <span style="font-size:11px;font-weight:700;color:#fff;background:var(--accent);border-radius:20px;padding:2px 11px">3社比較</span>
-        <span style="font-size:12px;color:var(--faint)">同じ指標でも、会社の性格でこんなに違う（2026年3月期 実績・株価は2026年7月上旬）</span>
-      </div>
-      <div class="cmp-scroll">
-        <table class="cmp num">
-          <thead><tr><th>指標</th><th>トヨタ自動車 7203</th><th>任天堂 7974</th><th>キーエンス 6861</th></tr></thead>
-          <tbody>
-            <tr><td>業種</td><td>自動車</td><td>ゲーム</td><td>FA機器（センサー）</td></tr>
-            <tr><td>会計基準</td><td>IFRS</td><td>日本基準</td><td>日本基準</td></tr>
-            <tr><td>売上高</td><td><b>50.69兆</b></td><td>2.31兆</td><td>1.17兆</td></tr>
-            <tr><td>営業利益</td><td>3.77兆</td><td>0.36兆（3,601億）</td><td>0.60兆（5,958億）</td></tr>
-            <tr><td>営業利益率</td><td>7.4%</td><td>15.6%</td><td class="std">51.0%</td></tr>
-            <tr><td>純利益</td><td>3.85兆</td><td>0.42兆（4,241億）</td><td>0.45兆（4,452億）</td></tr>
-            <tr><td>自己資本比率</td><td>37.8%</td><td>77.7%</td><td class="std">94.6%</td></tr>
-            <tr><td>ROE</td><td>9.6%</td><td>14.4%</td><td>12.8%</td></tr>
-            <tr><td>PER</td><td>9.9倍</td><td>19.1倍</td><td>43.7倍</td></tr>
-            <tr><td>PBR</td><td>0.95倍</td><td>2.74倍</td><td>5.61倍</td></tr>
-            <tr><td>時価総額</td><td>42.66兆</td><td>9.05兆</td><td>19.53兆</td></tr>
-            <tr><td>ひとことで</td><td>巨大・低利益率・割安評価</td><td>Switch2で急成長・無借金</td><td>超高収益・高評価</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p style="font-size:12.5px;color:var(--muted);margin:12px 0 0;line-height:1.8"><b>比較の読みどころ：</b>営業利益率は <b>7.4% → 15.6% → 51%</b> と桁違い。PBRも <b>0.95 → 2.74 → 5.61倍</b>で、市場は「稼ぐ力と質」に応じて評価を変えています。<b>トヨタは規模で稼ぎ、任天堂はIPで急伸、キーエンスは高付加価値で圧倒的利益率</b>。下のセレクタ（または上の会社チップ）で各社の分析に切り替えられます。</p>
-    </div>
-
     <!-- ================= トヨタ自動車（既存・参照実装） ================= -->
     <div data-company="toyota" class="co-active">
 
@@ -272,27 +252,27 @@
       <p class="section-lead">下の実際の決算書（①②③）と株価（2026-07-06）から計算した実データです。各カードの<b>「計算方法」をタップすると計算式が開きます</b>。</p>
       <div class="kpis num">
         <div class="kpi"><div class="k">株価</div><div class="v">¥2,923</div><div class="n">2026-07-06 終値</div>
-          <div class="f">すべての株価系指標の出発点。EPS・BPSと組み合わせて割安/割高を測ります。</div></div>
+          <div class="f">すべての株価系指標の出発点。<span class="gd">意味: 1株の値段。単体では割高/割安は判断できず、EPS・BPSと組み合わせて見ます</span></div></div>
         <div class="kpi"><div class="k">時価総額</div><div class="v">¥42.66兆</div><div class="n">市場がつけた会社全体の値段</div>
-          <div class="f"><span class="fx">株価 × 発行済株式数</span>（2026-07-06 時点 42兆6,611億円）</div></div>
+          <div class="f"><span class="fx">株価 × 発行済株式数</span>（2026-07-06 時点 42兆6,611億円）<span class="gd">意味: 会社全体の市場価値／目安: 1兆円超で大型株</span></div></div>
         <div class="kpi"><div class="k">PER（株価収益率）</div><div class="v">9.9倍</div><div class="n">利益の何年分の株価か</div>
-          <div class="f"><span class="fx">株価 ÷ EPS</span> ＝ 2,923 ÷ 295.25 ≈ 9.9倍。低いほど利益に対して割安。</div></div>
+          <div class="f"><span class="fx">株価 ÷ EPS</span> ＝ 2,923 ÷ 295.25 ≈ 9.9倍。低いほど利益に対して割安。<span class="gd">意味: 株価が1株利益の何年分か（割高/割安の目安）／平均: 日本株 約15倍前後／目安: 15倍未満で割安圏、20倍超は高成長期待</span></div></div>
         <div class="kpi"><div class="k">PBR（株価純資産倍率）</div><div class="v">0.95倍</div><div class="n">純資産に対する株価</div>
-          <div class="f"><span class="fx">株価 ÷ BPS</span> ＝ 2,923 ÷ 3,063 ≈ 0.95倍。1倍未満＝解散価値を下回る水準。</div></div>
+          <div class="f"><span class="fx">株価 ÷ BPS</span> ＝ 2,923 ÷ 3,063 ≈ 0.95倍。1倍未満＝解散価値を下回る水準。<span class="gd">意味: 株価が1株純資産の何倍か／平均: 日本株 約1.3〜1.5倍／目安: 1倍が分岐点、1倍割れは「解散価値未満」＝割安とされやすい</span></div></div>
         <div class="kpi"><div class="k">EPS（1株利益）</div><div class="v">¥295.25</div><div class="n">前期 ¥359.56 から減少</div>
-          <div class="f"><span class="fx">親会社純利益 ÷ 発行済株式数（自己株控除）</span> ＝ 3.85兆 ÷ 約13.03億株 ≈ ¥295.25</div></div>
+          <div class="f"><span class="fx">親会社純利益 ÷ 発行済株式数（自己株控除）</span> ＝ 3.85兆 ÷ 約13.03億株 ≈ ¥295.25<span class="gd">意味: 1株当たりの純利益。PERの計算のもとになる</span></div></div>
         <div class="kpi"><div class="k">BPS（1株純資産）</div><div class="v">¥3,063</div><div class="n">1株あたりの自己資本</div>
-          <div class="f"><span class="fx">親会社所有者持分 ÷ 株式数</span> ＝ 39.92兆 ÷ 約13.03億株 ≈ ¥3,063</div></div>
+          <div class="f"><span class="fx">親会社所有者持分 ÷ 株式数</span> ＝ 39.92兆 ÷ 約13.03億株 ≈ ¥3,063<span class="gd">意味: 1株当たりの純資産（解散価値の目安）</span></div></div>
         <div class="kpi"><div class="k">ROE（自己資本利益率）</div><div class="v">9.6%</div><div class="n">株主のお金でどれだけ稼いだか</div>
-          <div class="f"><span class="fx">親会社純利益 ÷ 自己資本</span> ＝ 3.85兆 ÷ 39.92兆 ≈ 9.6%</div></div>
+          <div class="f"><span class="fx">親会社純利益 ÷ 自己資本</span> ＝ 3.85兆 ÷ 39.92兆 ≈ 9.6%<span class="gd">意味: 自己資本を使ってどれだけ稼いだか（株主資本の効率）／平均: 日本企業 約9%／目安: 8%が合格ライン、10%超で優秀、15%超は高収益</span></div></div>
         <div class="kpi"><div class="k">ROA（総資産利益率）</div><div class="v">3.6%</div><div class="n">資産全体でどれだけ稼いだか</div>
-          <div class="f"><span class="fx">純利益 ÷ 総資産</span> ＝ 3.85兆 ÷ 105.52兆 ≈ 3.6%</div></div>
+          <div class="f"><span class="fx">純利益 ÷ 総資産</span> ＝ 3.85兆 ÷ 105.52兆 ≈ 3.6%<span class="gd">意味: 総資産をどれだけ効率的に利益化したか／平均: 製造業で3〜5%／目安: 5%超で優秀</span></div></div>
         <div class="kpi"><div class="k">自己資本比率</div><div class="v">37.8%</div><div class="n">財務の安全性</div>
-          <div class="f"><span class="fx">自己資本 ÷ 総資産</span> ＝ 39.92兆 ÷ 105.52兆 ≈ 37.8%</div></div>
+          <div class="f"><span class="fx">自己資本 ÷ 総資産</span> ＝ 39.92兆 ÷ 105.52兆 ≈ 37.8%<span class="gd">意味: 総資産のうち返済不要の自己資本の割合（安全性）／平均: 製造業40〜50%／目安: 40%超で安全、20%未満は注意</span></div></div>
         <div class="kpi"><div class="k">営業利益率</div><div class="v">7.4%</div><div class="n">本業の儲けの効率</div>
-          <div class="f"><span class="fx">営業利益 ÷ 売上高</span> ＝ 3.77兆 ÷ 50.68兆 ≈ 7.4%</div></div>
+          <div class="f"><span class="fx">営業利益 ÷ 売上高</span> ＝ 3.77兆 ÷ 50.68兆 ≈ 7.4%<span class="gd">意味: 売上に対する本業の利益率（稼ぐ力）／平均: 製造業5〜10%／目安: 10%超で優良、20%超は高収益、50%超は極めて稀</span></div></div>
         <div class="kpi"><div class="k">配当利回り（参考）</div><div class="v">—</div><div class="n">予想配当は本番でIRから取得</div>
-          <div class="f"><span class="fx">1株あたり年間配当 ÷ 株価</span>。株価が同じなら配当が多いほど利回りは高い。</div></div>
+          <div class="f"><span class="fx">1株あたり年間配当 ÷ 株価</span>。株価が同じなら配当が多いほど利回りは高い。<span class="gd">意味: 株価に対する年間配当の割合／平均: 日本株 約2%／目安: 4%超で高配当</span></div></div>
         <div class="kpi"><div class="k">フリーCF</div><div class="v">+3.95兆</div><div class="n">投資後に残った現金</div>
           <div class="f"><span class="fx">営業CF ＋ 投資CF</span> ＝ +5.47兆 −1.52兆 ≈ +3.95兆。プラス＝自己資金で投資を回せている。</div></div>
       </div>
@@ -420,8 +400,14 @@
       <p class="section-lead">「会社が何を持ち（資産）、いくら借りていて（負債）、返さなくていい自分のお金（純資産）があるか」を、ある時点で写した表。<b>日本の財政状態計算書は左右対称ではなく、上から「資産 → 負債 → 純資産」と縦に続きます</b>（1枚目＝資産の部、2枚目＝負債・純資産の部）。最後の<b>資産合計</b>と<b>負債及び資本合計</b>は必ず一致します（どちらも105.5兆円）。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結財政状態計算書（1/2）資産の部 — トヨタ 2026年3月期 決算短信 ※右列が当期・単位:百万円</div>
-          <img src="/fin-stmt-bs.png" alt="トヨタ 連結財政状態計算書 資産の部（実際の決算短信）" loading="lazy" />
+          <div class="cap"><span class="pill">実際の開示</span>連結財政状態計算書（1/2）資産の部 — トヨタ 2026年3月期 決算短信 ※右列が当期・単位:百万円<span class="pinlbl">●ピン＝ここがポイント（ふれると開く）</span></div>
+          <div class="imgwrap">
+            <img src="/fin-stmt-bs.png" alt="トヨタ 連結財政状態計算書 資産の部（実際の決算短信）" loading="lazy" />
+            <button type="button" class="ppin" style="top:18.5%" aria-expanded="false" aria-label="ここがポイント：現金及び現金同等物">!</button>
+            <span class="pbub" style="top:18.5%" role="tooltip"><span class="pt">ここがポイント</span>すぐ使える現金12.7兆円。潤沢で不測の事態に強い</span>
+            <button type="button" class="ppin" style="top:66.6%" aria-expanded="false" aria-label="ここがポイント：資産合計">!</button>
+            <span class="pbub" style="top:66.6%" role="tooltip"><span class="pt">ここがポイント</span>資産合計105.5兆＝負債64.5兆＋純資産41.0兆でピタリ一致</span>
+          </div>
           <div class="cap" style="border-top:1px solid var(--line-soft)"><span class="pill">実際の開示</span>連結財政状態計算書（2/2）負債・純資産の部 — 同 ※資産の続き（縦に接続）</div>
           <img src="/fin-stmt-bs2.png" alt="トヨタ 連結財政状態計算書 負債・純資産の部（実際の決算短信）" loading="lazy" />
         </div>
@@ -452,8 +438,14 @@
       <p class="section-lead">1年間で「いくら売れて（売上）、いくら費用がかかり、いくら儲かったか（利益）」を段階的に示す表。上から順に費用を引いていき、最後に手元に残る利益になります。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書（トヨタ 2026年3月期 決算短信）※右列が当期・単位:百万円</div>
-          <img src="/fin-stmt-pl.png" alt="トヨタ 連結損益計算書（実際の決算短信）" loading="lazy" />
+          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書（トヨタ 2026年3月期 決算短信）※右列が当期・単位:百万円<span class="pinlbl">●ピン＝ここがポイント（ふれると開く）</span></div>
+          <div class="imgwrap">
+            <img src="/fin-stmt-pl.png" alt="トヨタ 連結損益計算書（実際の決算短信）" loading="lazy" />
+            <button type="button" class="ppin" style="top:33.9%" aria-expanded="false" aria-label="ここがポイント：営業利益">!</button>
+            <span class="pbub" style="top:33.9%" role="tooltip"><span class="pt">ここがポイント</span>本業の儲け3.77兆。前期4.80兆から▲21.5%減益（米国関税1.4兆が主因）</span>
+            <button type="button" class="ppin" style="top:44.1%" aria-expanded="false" aria-label="ここがポイント：税引前利益">!</button>
+            <span class="pbub" style="top:44.1%" role="tooltip"><span class="pt">ここがポイント</span>営業利益より大きい＝持分法・金融など“営業外”がプラスに効く</span>
+          </div>
         </div>
         <div class="reads num">
           <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
@@ -591,21 +583,21 @@
       <p class="section-lead">下の実際の決算書（①②③）と株価（2026-07-06）から計算した実データです。各カードの<b>「計算方法」をタップすると計算式が開きます</b>。</p>
       <div class="kpis num">
         <div class="kpi"><div class="k">株価</div><div class="v">¥7,033</div><div class="n">2026-07-06 終値</div>
-          <div class="f">すべての株価系指標の出発点。EPS・BPSと組み合わせて割安/割高を測ります。</div></div>
+          <div class="f">すべての株価系指標の出発点。<span class="gd">意味: 1株の値段。単体では割高/割安は判断できず、EPS・BPSと組み合わせて見ます</span></div></div>
         <div class="kpi"><div class="k">時価総額</div><div class="v">¥9.05兆</div><div class="n">市場がつけた会社全体の値段</div>
-          <div class="f"><span class="fx">株価 × 発行済株式数</span>（2026-07-06 時点 9兆0,533億円）</div></div>
+          <div class="f"><span class="fx">株価 × 発行済株式数</span>（2026-07-06 時点 9兆0,533億円）<span class="gd">意味: 会社全体の市場価値／目安: 1兆円超で大型株</span></div></div>
         <div class="kpi"><div class="k">PER（株価収益率）</div><div class="v">19.1倍</div><div class="n">利益の何年分の株価か</div>
-          <div class="f"><span class="fx">株価 ÷ EPS</span> ＝ 7,033 ÷ 367.8 ≈ 19.1倍。成長期待を織り込む水準。</div></div>
+          <div class="f"><span class="fx">株価 ÷ EPS</span> ＝ 7,033 ÷ 367.8 ≈ 19.1倍。成長期待を織り込む水準。<span class="gd">意味: 株価が1株利益の何年分か（割高/割安の目安）／平均: 日本株 約15倍前後／目安: 15倍未満で割安圏、20倍超は高成長期待</span></div></div>
         <div class="kpi"><div class="k">PBR（株価純資産倍率）</div><div class="v">2.74倍</div><div class="n">純資産に対する株価</div>
-          <div class="f"><span class="fx">株価 ÷ BPS</span> ＝ 7,033 ÷ 2,564 ≈ 2.74倍。純資産の2.7倍の評価。</div></div>
+          <div class="f"><span class="fx">株価 ÷ BPS</span> ＝ 7,033 ÷ 2,564 ≈ 2.74倍。純資産の2.7倍の評価。<span class="gd">意味: 株価が1株純資産の何倍か／平均: 日本株 約1.3〜1.5倍／目安: 1倍が分岐点、1倍割れは「解散価値未満」＝割安とされやすい</span></div></div>
         <div class="kpi"><div class="k">売上高（前期比）</div><div class="v">2.31兆</div><div class="n">前期1.16兆から <b>+98.6%</b></div>
           <div class="f"><span class="fx">（当期売上 − 前期売上）÷ 前期売上</span> ＝ (2,313,051 − 1,164,922) ÷ 1,164,922 ≈ +98.6%＝Switch2効果でほぼ倍増。</div></div>
         <div class="kpi"><div class="k">営業利益率</div><div class="v">15.6%</div><div class="n">本業の儲けの効率</div>
-          <div class="f"><span class="fx">営業利益 ÷ 売上高</span> ＝ 3,601億 ÷ 2.31兆 ≈ 15.6%</div></div>
+          <div class="f"><span class="fx">営業利益 ÷ 売上高</span> ＝ 3,601億 ÷ 2.31兆 ≈ 15.6%<span class="gd">意味: 売上に対する本業の利益率（稼ぐ力）／平均: 製造業5〜10%／目安: 10%超で優良、20%超は高収益、50%超は極めて稀</span></div></div>
         <div class="kpi"><div class="k">ROE（自己資本利益率）</div><div class="v">14.4%</div><div class="n">株主のお金でどれだけ稼いだか</div>
-          <div class="f"><span class="fx">親会社純利益 ÷ 自己資本</span> ＝ 4,241億 ÷ 2.96兆 ≈ 14.4%</div></div>
+          <div class="f"><span class="fx">親会社純利益 ÷ 自己資本</span> ＝ 4,241億 ÷ 2.96兆 ≈ 14.4%<span class="gd">意味: 自己資本を使ってどれだけ稼いだか（株主資本の効率）／平均: 日本企業 約9%／目安: 8%が合格ライン、10%超で優秀、15%超は高収益</span></div></div>
         <div class="kpi"><div class="k">自己資本比率</div><div class="v">77.7%</div><div class="n">財務の安全性＝実質無借金</div>
-          <div class="f"><span class="fx">自己資本 ÷ 総資産</span> ＝ 2.96兆 ÷ 3.81兆 ≈ 77.7%。極めて高い安全性。</div></div>
+          <div class="f"><span class="fx">自己資本 ÷ 総資産</span> ＝ 2.96兆 ÷ 3.81兆 ≈ 77.7%。極めて高い安全性。<span class="gd">意味: 総資産のうち返済不要の自己資本の割合（安全性）／平均: 製造業40〜50%／目安: 40%超で安全、20%未満は注意</span></div></div>
       </div>
     </div>
 
@@ -615,8 +607,12 @@
       <p class="section-lead">「会社が何を持ち（資産）、いくら借りていて（負債）、返さなくていい自分のお金（純資産）があるか」。任天堂の特徴は<b>現金の厚さと負債の少なさ</b>です。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結貸借対照表 — 任天堂 2026年3月期 決算短信（日本基準）※単位:百万円</div>
-          <img src="/fin-ntt-bs.png" alt="任天堂 連結貸借対照表（実際の決算短信）" loading="lazy" />
+          <div class="cap"><span class="pill">実際の開示</span>連結貸借対照表 — 任天堂 2026年3月期 決算短信（日本基準）※単位:百万円<span class="pinlbl">●ピン＝ここがポイント（ふれると開く）</span></div>
+          <div class="imgwrap">
+            <img src="/fin-ntt-bs.png" alt="任天堂 連結貸借対照表（実際の決算短信）" loading="lazy" />
+            <button type="button" class="ppin" style="top:19.3%" aria-expanded="false" aria-label="ここがポイント：現金及び預金">!</button>
+            <span class="pbub" style="top:19.3%" role="tooltip"><span class="pt">ここがポイント</span>現金1.79兆＝実質無借金経営の源泉</span>
+          </div>
         </div>
         <div class="reads num">
           <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
@@ -641,8 +637,14 @@
       <p class="section-lead">1年間で「いくら売れて、いくら儲かったか」。今期の任天堂は<b>Switch2発売で売上がほぼ倍増</b>した年です。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書 — 任天堂 2026年3月期 決算短信（日本基準）※単位:百万円</div>
-          <img src="/fin-ntt-pl.png" alt="任天堂 連結損益計算書（実際の決算短信）" loading="lazy" />
+          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書 — 任天堂 2026年3月期 決算短信（日本基準）※単位:百万円<span class="pinlbl">●ピン＝ここがポイント（ふれると開く）</span></div>
+          <div class="imgwrap">
+            <img src="/fin-ntt-pl.png" alt="任天堂 連結損益計算書（実際の決算短信）" loading="lazy" />
+            <button type="button" class="ppin" style="top:15.7%" aria-expanded="false" aria-label="ここがポイント：売上高">!</button>
+            <span class="pbub" style="top:15.7%" role="tooltip"><span class="pt">ここがポイント</span>Switch2効果で売上2.31兆＝前期からほぼ倍増（+98.6%）</span>
+            <button type="button" class="ppin" style="top:43.0%" aria-expanded="false" aria-label="ここがポイント：経常利益">!</button>
+            <span class="pbub" style="top:43.0%" role="tooltip"><span class="pt">ここがポイント</span>経常が営業を上回る＝潤沢な現金の受取利息・為替差益</span>
+          </div>
         </div>
         <div class="reads num">
           <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
@@ -744,21 +746,21 @@
       <p class="section-lead">下の実際の決算書（①②）と株価（2026-07-03）から計算した実データです。各カードの<b>「計算方法」をタップすると計算式が開きます</b>。</p>
       <div class="kpis num">
         <div class="kpi"><div class="k">株価</div><div class="v">¥80,300</div><div class="n">2026-07-03 終値</div>
-          <div class="f">すべての株価系指標の出発点。EPS・BPSと組み合わせて割安/割高を測ります。</div></div>
+          <div class="f">すべての株価系指標の出発点。<span class="gd">意味: 1株の値段。単体では割高/割安は判断できず、EPS・BPSと組み合わせて見ます</span></div></div>
         <div class="kpi"><div class="k">時価総額</div><div class="v">¥19.53兆</div><div class="n">市場がつけた会社全体の値段</div>
-          <div class="f"><span class="fx">株価 × 発行済株式数</span>（2026-07-03 時点 19兆5,296億円）</div></div>
+          <div class="f"><span class="fx">株価 × 発行済株式数</span>（2026-07-03 時点 19兆5,296億円）<span class="gd">意味: 会社全体の市場価値／目安: 1兆円超で大型株</span></div></div>
         <div class="kpi"><div class="k">PER（株価収益率）</div><div class="v">43.7倍</div><div class="n">利益の何年分の株価か</div>
-          <div class="f"><span class="fx">株価 ÷ EPS</span> ＝ 80,300 ÷ 1,836 ≈ 43.7倍。「質」への高い評価＝高バリュエーション。</div></div>
+          <div class="f"><span class="fx">株価 ÷ EPS</span> ＝ 80,300 ÷ 1,836 ≈ 43.7倍。「質」への高い評価＝高バリュエーション。<span class="gd">意味: 株価が1株利益の何年分か（割高/割安の目安）／平均: 日本株 約15倍前後／目安: 15倍未満で割安圏、20倍超は高成長期待</span></div></div>
         <div class="kpi"><div class="k">PBR（株価純資産倍率）</div><div class="v">5.61倍</div><div class="n">純資産に対する株価</div>
-          <div class="f"><span class="fx">株価 ÷ BPS</span> ＝ 80,300 ÷ 14,314 ≈ 5.61倍。純資産の5.6倍の評価。</div></div>
+          <div class="f"><span class="fx">株価 ÷ BPS</span> ＝ 80,300 ÷ 14,314 ≈ 5.61倍。純資産の5.6倍の評価。<span class="gd">意味: 株価が1株純資産の何倍か／平均: 日本株 約1.3〜1.5倍／目安: 1倍が分岐点、1倍割れは「解散価値未満」＝割安とされやすい</span></div></div>
         <div class="kpi"><div class="k">営業利益率</div><div class="v">51.0%</div><div class="n">本業の儲けの効率＝突出</div>
-          <div class="f"><span class="fx">営業利益 ÷ 売上高</span> ＝ 5,958億 ÷ 1.17兆 ≈ 51.0%。上場製造業でも突出した水準。</div></div>
+          <div class="f"><span class="fx">営業利益 ÷ 売上高</span> ＝ 5,958億 ÷ 1.17兆 ≈ 51.0%。上場製造業でも突出した水準。<span class="gd">意味: 売上に対する本業の利益率（稼ぐ力）／平均: 製造業5〜10%／目安: 10%超で優良、20%超は高収益、50%超は極めて稀</span></div></div>
         <div class="kpi"><div class="k">粗利率（売上総利益率）</div><div class="v">83%</div><div class="n">原価率はわずか17%</div>
           <div class="f"><span class="fx">（売上高 − 売上原価）÷ 売上高</span> ＝ (1,169,289 − 198,552) ÷ 1,169,289 ≈ 83%＝高付加価値・価格決定力。</div></div>
         <div class="kpi"><div class="k">ROE（自己資本利益率）</div><div class="v">12.8%</div><div class="n">株主のお金でどれだけ稼いだか</div>
-          <div class="f"><span class="fx">親会社純利益 ÷ 自己資本</span> ＝ 4,452億 ÷ 3.47兆 ≈ 12.8%。自己資本が厚いためROEは見かけ上おだやか。</div></div>
+          <div class="f"><span class="fx">親会社純利益 ÷ 自己資本</span> ＝ 4,452億 ÷ 3.47兆 ≈ 12.8%。自己資本が厚いためROEは見かけ上おだやか。<span class="gd">意味: 自己資本を使ってどれだけ稼いだか（株主資本の効率）／平均: 日本企業 約9%／目安: 8%が合格ライン、10%超で優秀、15%超は高収益</span></div></div>
         <div class="kpi"><div class="k">自己資本比率</div><div class="v">94.6%</div><div class="n">財務の安全性＝負債ほぼゼロ</div>
-          <div class="f"><span class="fx">自己資本 ÷ 総資産</span> ＝ 3.47兆 ÷ 3.67兆 ≈ 94.6%。負債合計はわずか0.20兆円。</div></div>
+          <div class="f"><span class="fx">自己資本 ÷ 総資産</span> ＝ 3.47兆 ÷ 3.67兆 ≈ 94.6%。負債合計はわずか0.20兆円。<span class="gd">意味: 総資産のうち返済不要の自己資本の割合（安全性）／平均: 製造業40〜50%／目安: 40%超で安全、20%未満は注意</span></div></div>
       </div>
     </div>
 
@@ -768,8 +770,12 @@
       <p class="section-lead">キーエンスのBSの特徴は一目瞭然＝<b>負債がほとんどない</b>ことです。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結貸借対照表 — キーエンス 2026年3月期 決算短信（日本基準）※単位:百万円</div>
-          <img src="/fin-key-bs.png" alt="キーエンス 連結貸借対照表（実際の決算短信）" loading="lazy" />
+          <div class="cap"><span class="pill">実際の開示</span>連結貸借対照表 — キーエンス 2026年3月期 決算短信（日本基準）※単位:百万円<span class="pinlbl">●ピン＝ここがポイント（ふれると開く）</span></div>
+          <div class="imgwrap">
+            <img src="/fin-key-bs.png" alt="キーエンス 連結貸借対照表（実際の決算短信）" loading="lazy" />
+            <button type="button" class="ppin" style="top:63.7%" aria-expanded="false" aria-label="ここがポイント：資産合計">!</button>
+            <span class="pbub" style="top:63.7%" role="tooltip"><span class="pt">ここがポイント</span>負債はごくわずか＝ほぼ自己資本(94.6%)のほぼ無借金BS</span>
+          </div>
         </div>
         <div class="reads num">
           <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
@@ -790,8 +796,14 @@
       <p class="section-lead">キーエンスのPLの見どころは<b>「原価の小ささ」と「営業利益率51%」</b>。売上の半分以上が本業の利益になります。</p>
       <div class="stmt">
         <div class="shot">
-          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書 — キーエンス 2026年3月期 決算短信（日本基準）※単位:百万円</div>
-          <img src="/fin-key-pl.png" alt="キーエンス 連結損益計算書（実際の決算短信）" loading="lazy" />
+          <div class="cap"><span class="pill">実際の開示</span>連結損益計算書 — キーエンス 2026年3月期 決算短信（日本基準）※単位:百万円<span class="pinlbl">●ピン＝ここがポイント（ふれると開く）</span></div>
+          <div class="imgwrap">
+            <img src="/fin-key-pl.png" alt="キーエンス 連結損益計算書（実際の決算短信）" loading="lazy" />
+            <button type="button" class="ppin" style="top:18.0%" aria-expanded="false" aria-label="ここがポイント：売上原価">!</button>
+            <span class="pbub" style="top:18.0%" role="tooltip"><span class="pt">ここがポイント</span>原価率わずか17%＝高付加価値の証拠（粗利率83%）</span>
+            <button type="button" class="ppin" style="top:22.5%" aria-expanded="false" aria-label="ここがポイント：営業利益">!</button>
+            <span class="pbub" style="top:22.5%" role="tooltip"><span class="pt">ここがポイント</span>営業利益率51%＝驚異的な高収益</span>
+          </div>
         </div>
         <div class="reads num">
           <p class="ihint">主要な行に<b>ふれる（ホバー／タップ）</b>と、その行の意味が吹き出しで出ます。単位: 百万円</p>
@@ -886,11 +898,29 @@
       r.setAttribute("aria-expanded", willOpen ? "true" : "false");
     });
   });
+  /* v8: 決算書キャプチャの「ここがポイント」ピン（タップで開閉・同時に1つだけ） */
+  var pins = document.querySelectorAll(".ppin");
+  function closeAllPins(except){
+    Array.prototype.forEach.call(pins, function(p){
+      if (p !== except) { p.classList.remove("open"); p.setAttribute("aria-expanded", "false"); }
+    });
+  }
+  Array.prototype.forEach.call(pins, function(p){
+    p.addEventListener("click", function(e){
+      e.stopPropagation();
+      var willOpen = !p.classList.contains("open");
+      closeAllPins(p);
+      p.classList.toggle("open", willOpen);
+      p.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    });
+  });
+
   document.addEventListener("click", function(e){
     if (!e.target.closest(".irow")) closeAllRows(null);
+    if (!e.target.closest(".ppin")) closeAllPins(null);
   });
   document.addEventListener("keydown", function(e){
-    if (e.key === "Escape") closeAllRows(null);
+    if (e.key === "Escape") { closeAllRows(null); closeAllPins(null); }
   });
 
   /* ③ v7: 会社切替（セレクタで data-company ブロックを出し分け・検索窓も連動） */
@@ -910,6 +940,7 @@
     });
     if (searchInput) searchInput.value = COMPANY_NAMES[key];
     closeAllRows(null);
+    closeAllPins(null);
   }
   Array.prototype.forEach.call(coBtns, function(btn){
     btn.addEventListener("click", function(){ selectCompany(btn.getAttribute("data-co")); });
