@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Governance.ai — 公開情報から企業ガバナンスを自動採点</title>
+<style>
+  :root{
+    --bg:#0b0f17; --bg2:#111726; --card:#151d2e; --line:#243349;
+    --ink:#e8edf6; --sub:#95a3bd; --mut:#6b7a95;
+    --a:#4f8cff; --a2:#7aa9ff;
+    --gA:#34d399; --gB:#7dd3a8; --gC:#fbbf24; --gD:#fb923c; --gE:#f87171;
+    --shadow:0 10px 40px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,#16233d 0,transparent 60%),var(--bg);
+    color:var(--ink);font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    line-height:1.7;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+  .badge{display:inline-block;font-size:12px;letter-spacing:.08em;color:var(--a2);
+    background:rgba(79,140,255,.1);border:1px solid rgba(79,140,255,.28);padding:5px 12px;border-radius:999px}
+
+  /* nav */
+  nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(12px);
+    background:rgba(11,15,23,.72);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;letter-spacing:-.01em}
+  .logo .mark{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--a),#8b5cf6);
+    display:grid;place-items:center;font-size:15px;box-shadow:0 4px 14px rgba(79,140,255,.5)}
+  .logo b{color:var(--a2)}
+  .navlinks{display:flex;gap:26px;font-size:14px;color:var(--sub)}
+  .navlinks a:hover{color:var(--ink)}
+  .btn{background:linear-gradient(135deg,var(--a),#6d5cff);color:#fff;padding:9px 18px;border-radius:10px;
+    font-size:14px;font-weight:700;border:0;cursor:pointer;box-shadow:0 6px 18px rgba(79,140,255,.35)}
+  .btn.ghost{background:transparent;border:1px solid var(--line);box-shadow:none;color:var(--ink)}
+  @media(max-width:760px){.navlinks{display:none}}
+
+  /* hero */
+  .hero{padding:90px 0 60px;text-align:center}
+  .hero h1{font-size:52px;line-height:1.15;margin:20px 0 16px;letter-spacing:-.02em}
+  .hero h1 .g{background:linear-gradient(120deg,#7aa9ff,#a78bfa);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p{font-size:19px;color:var(--sub);max-width:640px;margin:0 auto 30px}
+  .cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  .trust{margin-top:34px;color:var(--mut);font-size:13px}
+  .trust b{color:var(--sub)}
+  @media(max-width:760px){.hero h1{font-size:34px}.hero p{font-size:16px}}
+
+  /* pipeline */
+  .pipe{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin:44px 0 10px}
+  .pipe .step{flex:1;min-width:200px;max-width:250px;background:var(--card);border:1px solid var(--line);
+    border-radius:14px;padding:20px;text-align:left}
+  .pipe .step .n{font-size:12px;color:var(--a2);font-weight:700;letter-spacing:.1em}
+  .pipe .step h4{margin:6px 0 6px;font-size:16px}
+  .pipe .step p{margin:0;font-size:13px;color:var(--sub);line-height:1.6}
+
+  section{padding:58px 0}
+  .h2{font-size:30px;text-align:center;margin:0 0 8px;letter-spacing:-.01em}
+  .sub{text-align:center;color:var(--sub);margin:0 auto 40px;max-width:560px}
+
+  /* scorecard */
+  .card{background:linear-gradient(180deg,var(--card),#121a29);border:1px solid var(--line);
+    border-radius:20px;box-shadow:var(--shadow);overflow:hidden}
+  .sc-head{display:flex;align-items:center;justify-content:space-between;gap:20px;
+    padding:24px 28px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .co{display:flex;align-items:center;gap:16px}
+  .co .ic{width:52px;height:52px;border-radius:12px;background:#1c2740;display:grid;place-items:center;
+    font-size:22px;border:1px solid var(--line)}
+  .co h3{margin:0;font-size:20px}
+  .co .meta{color:var(--mut);font-size:13px;margin-top:2px}
+  .overall{text-align:center}
+  .overall .grade{font-size:56px;font-weight:800;line-height:1;background:linear-gradient(135deg,#7dd3a8,#34d399);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .overall .lbl{font-size:12px;color:var(--mut);letter-spacing:.1em}
+
+  .axes{display:grid;grid-template-columns:1fr 1fr;gap:0}
+  @media(max-width:720px){.axes{grid-template-columns:1fr}}
+  .axis{padding:18px 28px;border-bottom:1px solid var(--line);border-right:1px solid var(--line)}
+  .axis:nth-child(2n){border-right:0}
+  .axis .top{display:flex;align-items:center;justify-content:space-between}
+  .axis .name{font-size:14px;font-weight:600}
+  .axis .g{font-weight:800;font-size:18px}
+  .bar{height:7px;border-radius:6px;background:#1d283c;margin:10px 0 8px;overflow:hidden}
+  .bar > i{display:block;height:100%;border-radius:6px}
+  .axis .note{font-size:12px;color:var(--sub);margin:0}
+  .gA{color:var(--gA)} .gB{color:var(--gB)} .gC{color:var(--gC)} .gD{color:var(--gD)} .gE{color:var(--gE)}
+  .fA{background:linear-gradient(90deg,#059669,var(--gA))}
+  .fB{background:linear-gradient(90deg,#34d399,var(--gB))}
+  .fC{background:linear-gradient(90deg,#d97706,var(--gC))}
+  .fD{background:linear-gradient(90deg,#ea580c,var(--gD))}
+  .fE{background:linear-gradient(90deg,#dc2626,var(--gE))}
+
+  .sc-foot{padding:20px 28px;display:flex;gap:26px;flex-wrap:wrap;color:var(--sub);font-size:13px;
+    background:#0f1725}
+  .sc-foot .k{color:var(--mut)}
+  .sc-foot b{color:var(--ink)}
+  .flag{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:8px;
+    border:1px solid var(--line);margin:2px 6px 2px 0}
+  .flag.warn{color:var(--gC);border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.07)}
+  .flag.ok{color:var(--gB);border-color:rgba(125,211,168,.3);background:rgba(52,211,153,.06)}
+
+  /* features */
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  @media(max-width:760px){.grid3{grid-template-columns:1fr}}
+  .feat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px}
+  .feat .fi{font-size:24px;margin-bottom:10px}
+  .feat h4{margin:0 0 6px;font-size:17px}
+  .feat p{margin:0;color:var(--sub);font-size:14px}
+
+  /* sources */
+  .srcs{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+  .src{border:1px solid var(--line);background:var(--bg2);border-radius:10px;padding:10px 16px;font-size:13px;color:var(--sub)}
+  .src b{color:var(--ink)}
+
+  footer{border-top:1px solid var(--line);padding:34px 0;color:var(--mut);font-size:13px;text-align:center}
+  .disc{max-width:720px;margin:20px auto 0;font-size:12px;color:var(--mut);line-height:1.6}
+  .mock{position:fixed;bottom:14px;right:14px;font-size:11px;color:var(--mut);
+    background:rgba(0,0,0,.5);border:1px solid var(--line);padding:6px 11px;border-radius:8px;z-index:30}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <div class="logo"><span class="mark">◆</span>Governance<b>.ai</b></div>
+  <div class="navlinks">
+    <a href="#how">仕組み</a>
+    <a href="#demo">スコアカード</a>
+    <a href="#feat">機能</a>
+    <a href="#src">データ</a>
+  </div>
+  <button class="btn">無料で試す</button>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <span class="badge">EDINET × AI ガバナンス評価</span>
+  <h1>公開情報から、<br><span class="g">企業ガバナンスを自動採点。</span></h1>
+  <p>有価証券報告書・コーポレートガバナンス報告書・議決権行使結果——
+     世に出ている一次情報だけを AI が読み込み、機関投資家の目線でスコアカード化します。</p>
+  <div class="cta">
+    <button class="btn">企業を採点する（無料）</button>
+    <button class="btn ghost">サンプルレポートを見る</button>
+  </div>
+  <div class="trust">上場<b>3,900社</b>を網羅 ・ 出典は<b>すべて一次ソース</b> ・ 推測ではなく<b>開示ベース</b></div>
+</div></header>
+
+<section id="how"><div class="wrap">
+  <h2 class="h2">3ステップで、採点まで</h2>
+  <p class="sub">人手のリサーチを、開示のフォーマットに合わせて自動化しています。</p>
+  <div class="pipe">
+    <div class="step"><div class="n">01 収集</div><h4>一次情報を自動取得</h4>
+      <p>EDINET から有報、東証からCG報告書、各社IRから招集通知・議決権行使結果を収集。</p></div>
+    <div class="step"><div class="n">02 抽出</div><h4>AIが定型項目を構造化</h4>
+      <p>社外取締役比率・役員報酬・政策保有株式・買収防衛策などを章立てから抽出し数値化。</p></div>
+    <div class="step"><div class="n">03 採点</div><h4>基準に照らしてスコア化</h4>
+      <p>CGコードとISS/グラスルイスの基準でルール採点。経年トレンドまで反映。</p></div>
+  </div>
+</div></section>
+
+<section id="demo"><div class="wrap">
+  <h2 class="h2">ガバナンス・スコアカード</h2>
+  <p class="sub">1社あたり8軸で採点。出典リンク付きで、どの開示から導いたかまで追えます。</p>
+
+  <div class="card">
+    <div class="sc-head">
+      <div class="co">
+        <div class="ic">🏭</div>
+        <div>
+          <h3>サンプル製作所 株式会社 <span style="color:var(--mut);font-size:14px;font-weight:400">(証券コード 0000・東証プライム)</span></h3>
+          <div class="meta">機械 ・ 時価総額 4,820億円 ・ 監査等委員会設置会社 ・ 更新 2026-06 期</div>
+        </div>
+      </div>
+      <div class="overall">
+        <div class="grade">B+</div>
+        <div class="lbl">総合スコア 74 / 100</div>
+      </div>
+    </div>
+
+    <div class="axes">
+      <div class="axis"><div class="top"><span class="name">取締役会の独立性</span><span class="g gA">A</span></div>
+        <div class="bar"><i class="fA" style="width:88%"></i></div>
+        <p class="note">独立社外取締役 5/9名（55.6%）。過半数を確保。指名・報酬委員会とも過半数が独立。</p></div>
+
+      <div class="axis"><div class="top"><span class="name">取締役会の多様性</span><span class="g gB">B</span></div>
+        <div class="bar"><i class="fB" style="width:70%"></i></div>
+        <p class="note">女性比率 22%（2名）、外国籍1名。スキルマトリックス開示あり。女性比率は業種平均超。</p></div>
+
+      <div class="axis"><div class="top"><span class="name">資本効率（ROE/PBR）</span><span class="g gC">C</span></div>
+        <div class="bar"><i class="fC" style="width:52%"></i></div>
+        <p class="note">ROE 5年平均 6.8%、PBR 0.9倍。東証の改善要請対象。改善計画は開示済だが未達。</p></div>
+
+      <div class="axis"><div class="top"><span class="name">政策保有株式</span><span class="g gB">B</span></div>
+        <div class="bar"><i class="fB" style="width:66%"></i></div>
+        <p class="note">純資産比 11.4%（前期 14.1%）。3期連続で削減。銘柄数 48→39。方向性は良好。</p></div>
+
+      <div class="axis"><div class="top"><span class="name">役員報酬の透明性</span><span class="g gA">A</span></div>
+        <div class="bar"><i class="fA" style="width:84%"></i></div>
+        <p class="note">業績連動比率 48%、報酬委員会（独立過半）で決定。KPIと算定式まで開示。</p></div>
+
+      <div class="axis"><div class="top"><span class="name">株主の権利・平等</span><span class="g gB">B</span></div>
+        <div class="bar"><i class="fB" style="width:72%"></i></div>
+        <p class="note">買収防衛策なし。取締役選任 賛成率 91.2%。書面/電子の議決権行使に対応。</p></div>
+
+      <div class="axis"><div class="top"><span class="name">情報開示・IR</span><span class="g gB">B</span></div>
+        <div class="bar"><i class="fB" style="width:76%"></i></div>
+        <p class="note">統合報告書・英文開示あり。CGコード 全83原則コンプライ、explainは2原則のみ。</p></div>
+
+      <div class="axis"><div class="top"><span class="name">リスク・コンプライアンス</span><span class="g gD">C-</span></div>
+        <div class="bar"><i class="fD" style="width:44%"></i></div>
+        <p class="note">直近3期に品質不正1件の開示。第三者委員会報告・再発防止策は公表済。監視継続。</p></div>
+    </div>
+
+    <div class="sc-foot">
+      <div><span class="k">機関設計</span> <b>監査等委員会設置会社</b></div>
+      <div><span class="k">社外取比率</span> <b>55.6%</b></div>
+      <div><span class="k">CGコード</span> <b>81/83 コンプライ</b></div>
+      <div style="flex-basis:100%;margin-top:6px">
+        <span class="flag ok">✔ 政策保有 3期連続削減</span>
+        <span class="flag ok">✔ 買収防衛策なし</span>
+        <span class="flag warn">⚠ PBR 1倍割れ</span>
+        <span class="flag warn">⚠ 過去に品質不正の開示</span>
+      </div>
+    </div>
+  </div>
+  <p style="text-align:center;color:var(--mut);font-size:12px;margin-top:16px">
+    ※ 上記はモックアップ用のダミー企業・数値です。実データではありません。</p>
+</div></section>
+
+<section id="feat" style="background:var(--bg2)"><div class="wrap">
+  <h2 class="h2">なぜ Governance.ai か</h2>
+  <p class="sub">「読めば分かる」を、「一覧で比べられる」に。</p>
+  <div class="grid3">
+    <div class="feat"><div class="fi">🔍</div><h4>出典まで追える</h4>
+      <p>すべてのスコアに一次ソースのリンク。有報の何ページ・どの章から導いたかまで開示。推測しません。</p></div>
+    <div class="feat"><div class="fi">📈</div><h4>経年トレンドで見る</h4>
+      <p>単年の数値ではなく「削減しているか」「増やしているか」の方向性を評価。実態が映ります。</p></div>
+    <div class="feat"><div class="fi">⚖️</div><h4>投資家目線の基準</h4>
+      <p>CGコード＋ISS/グラスルイスの推奨基準で採点。エンゲージメントや議決権行使の判断材料に。</p></div>
+    <div class="feat"><div class="fi">🏢</div><h4>同業ピア比較</h4>
+      <p>同一セクター内での相対順位を表示。業種特性を踏まえた偏差で強み・弱みが一目で分かります。</p></div>
+    <div class="feat"><div class="fi">🚩</div><h4>レッドフラグ検知</h4>
+      <p>買収防衛策・低い選任賛成率・不祥事開示などの注意信号を自動でハイライト。</p></div>
+    <div class="feat"><div class="fi">📄</div><h4>PDF/API出力</h4>
+      <p>スコアカードをPDF書き出し、またはAPIで自社の分析基盤に統合。ウォッチリスト監視も。</p></div>
+  </div>
+</div></section>
+
+<section id="src"><div class="wrap">
+  <h2 class="h2">すべて公開の一次ソース</h2>
+  <p class="sub">私たちは新しい情報を作りません。散らばった開示を、比較可能な形に整えます。</p>
+  <div class="srcs">
+    <div class="src"><b>EDINET</b> 有価証券報告書</div>
+    <div class="src"><b>東証</b> コーポレートガバナンス報告書</div>
+    <div class="src"><b>各社IR</b> 招集通知・議決権行使結果</div>
+    <div class="src"><b>統合報告書</b> スキルマトリックス</div>
+    <div class="src"><b>TDnet</b> 適時開示</div>
+    <div class="src"><b>ISS / グラスルイス</b> 基準</div>
+  </div>
+</div></section>
+
+<section style="text-align:center"><div class="wrap">
+  <div class="card" style="padding:44px 24px">
+    <h2 class="h2" style="margin-bottom:12px">気になる1社を、いま採点してみる。</h2>
+    <p class="sub" style="margin-bottom:24px">企業名を入れるだけ。最初のスコアカードは無料です。</p>
+    <div class="cta"><button class="btn">無料で採点する</button><button class="btn ghost">料金を見る</button></div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <div class="logo" style="justify-content:center;margin-bottom:8px"><span class="mark">◆</span>Governance<b>.ai</b></div>
+  <div>© 2026 Governance.ai — 公開情報からの企業ガバナンス評価</div>
+  <p class="disc">本サービスは公開されている一次情報に基づく分析を提供するものであり、投資助言・格付け行為ではありません。
+     スコアは独自基準による参考情報です。投資判断はご自身の責任で行ってください。</p>
+</div></footer>
+
+<div class="mock">🤝 モックアップ / Son</div>
+</body>
+</html>
