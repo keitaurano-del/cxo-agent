@@ -149,11 +149,25 @@ function runTmux(t: TerminalDef, args: string[]): Promise<ExecResult> {
   );
 }
 
+// ─── tmux ターゲットの完全一致化（MC: Ops/Sub 取り違え対策）─────────
+// tmux は `-t openclaw` を前方一致でも解決するため、セッション 'openclaw'(Ops) と
+// 'openclaw-son'(Sub) が併存すると `-t openclaw` が 'openclaw-son' に化ける（capture-pane/
+// send-keys が Sub を掴む＝Ops の出力に Sub の履歴が出る）。`=name` で完全一致を強制し、
+// pane 操作は `=name:`（そのセッションのアクティブ window/pane）で明示する。tmux 3.4 実測で確認。
+/** has-session 等: 完全一致セッションターゲット。 */
+function sessTarget(t: TerminalDef): string {
+  return `=${t.tmuxSession}`;
+}
+/** capture-pane / send-keys 等: 完全一致セッションのアクティブ pane ターゲット。 */
+function paneTarget(t: TerminalDef): string {
+  return `=${t.tmuxSession}:`;
+}
+
 // ─── 状態取得 ────────────────────────────────────────────────
 
 /** 指定ターミナルの tmux セッションが存在するか（has-session の exit code で判定）。 */
 async function tmuxSessionExistsFor(t: TerminalDef): Promise<boolean> {
-  const r = await runTmux(t, ['has-session', '-t', t.tmuxSession]);
+  const r = await runTmux(t, ['has-session', '-t', sessTarget(t)]);
   return r.code === 0;
 }
 
@@ -379,8 +393,10 @@ async function collectOutput(t: TerminalDef, lines: number): Promise<{ ok: true;
     // spare 等が未起動でもエラーにせず ok:false（空相当）で返す。UI 側で穏当に表示する。
     return { ok: false, error: `tmux セッション '${t.tmuxSession}' が見つかりません。` };
   }
-  // -p: stdout 出力、-t: ターゲット、-S -N: 末尾から N 行（負の行数で末尾基点）。
-  const r = await runTmux(t, ['capture-pane', '-p', '-t', t.tmuxSession, '-S', String(-lines)]);
+  // -e: ANSI エスケープ（色）を保持、-p: stdout 出力、-t: ターゲット、-S -N: 末尾から N 行（負の行数で末尾基点）。
+  // -e を付けることで OpenClaw TUI のユーザー発言色（38;5;230）等が content に残り、
+  // フロントの OutputModal がユーザー発言をハイライトできる（他のコードは strip される）。
+  const r = await runTmux(t, ['capture-pane', '-e', '-p', '-t', paneTarget(t), '-S', String(-lines)]);
   if (r.code !== 0) {
     return { ok: false, error: `tmux capture-pane に失敗しました（code ${r.code}）: ${r.stderr.trim() || r.stdout.trim()}` };
   }
@@ -422,7 +438,7 @@ async function handleSendKeys(req: Request, res: Response): Promise<void> {
   const body = (req.body ?? {}) as { keys?: unknown; terminal?: unknown };
   const keys = body.keys;
   const t = resolveTerminal(body.terminal ?? req.query.terminal);
-  const target = t.tmuxSession;
+  const target = paneTarget(t);   // 完全一致 pane（'openclaw' が 'openclaw-son' に化けるのを防ぐ）
 
   // バリデーション
   if (typeof keys !== 'string' || keys.length === 0 || keys.length > 400) {
