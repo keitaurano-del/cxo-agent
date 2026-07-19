@@ -5,29 +5,31 @@
 // 横断検索からの遷移に影響を出さない。
 import { NavLink, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
+import { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { useLiveStream, useLiveResource } from './lib/useLiveData';
 import { LiveContext } from './lib/liveContext';
 import type { ApprovalsResponse } from './lib/types';
 import {
   BoardIcon,
   GridIcon,
-  DotIcon,
+  ApolloMark,
   DocumentsIcon,
   TerminalIcon,
   BabyIcon,
   ChajiIcon,
   WorkIcon,
-  ClockIcon,
   CodeIcon,
   RestoreIcon,
-  SunIcon,
-  MoonIcon,
   SettingsIcon,
+  SearchIcon,
+  UsageIcon,
 } from './components/icons';
+import { GlobalSearch } from './components/GlobalSearch';
 import DashboardLayout from './components/DashboardLayout';
 import { isDashboardPath } from './lib/nav';
 // 着地ビュー（/ の最初に出る画面）は eager のまま first paint を遅らせない。
+// 既定着地はカウントダウン（ダッシュボードの固定先頭タブ）。
+import Countdown from './views/Countdown';
 import AgentsLive from './views/AgentsLive';
 // それ以外の二次的なビューは route 単位で遅延ロードし、初回エントリJSから切り離す（MC-194）。
 const Agents = lazy(() => import('./views/Agents'));
@@ -40,9 +42,14 @@ const PlanUsage = lazy(() => import('./views/PlanUsage'));
 const Childcare = lazy(() => import('./views/Childcare'));
 const Chaji = lazy(() => import('./views/Chaji'));
 const Work = lazy(() => import('./views/Work'));
+const ClaudeChat = lazy(() => import('./views/ClaudeChat'));
 const Schedule = lazy(() => import('./views/Schedule'));
 const Development = lazy(() => import('./views/Development'));
 const Terminal = lazy(() => import('./views/Terminal'));
+const BuildProgress = lazy(() => import('./views/BuildProgress'));
+const Pdca = lazy(() => import('./views/Pdca'));
+// 収益コックピット（ClipItNow の収益・トラフィック統合・2026-07-19）。
+const Revenue = lazy(() => import('./views/Revenue'));
 import BottomNav from './components/BottomNav';
 import { SortableNav, DragHandle } from './components/SortableNav';
 import type { DragHandleProps } from './components/SortableNav';
@@ -104,7 +111,7 @@ function nextMode(current: ThemeMode): ThemeMode {
 }
 
 /** ThemeController: 初期化・1分ごとの自動切替・手動トグルを管理する Hook。 */
-function useTheme(): { mode: ThemeMode; isDark: boolean; toggle: () => void } {
+function useTheme(): { mode: ThemeMode; isDark: boolean; toggle: () => void; setMode: (m: ThemeMode) => void } {
   const [mode, setMode] = useState<ThemeMode>(() => {
     const m = loadTheme();
     applyDark(resolveTheme(m));
@@ -140,7 +147,14 @@ function useTheme(): { mode: ThemeMode; isDark: boolean; toggle: () => void } {
     });
   }, []);
 
-  return { mode, isDark, toggle };
+  // 特定モードを直接セット（設定モーダルのテーマ選択用）。
+  const setModeDirect = useCallback((next: ThemeMode) => {
+    localStorage.setItem(THEME_KEY, next);
+    applyDark(resolveTheme(next));
+    setMode(next);
+  }, []);
+
+  return { mode, isDark, toggle, setMode: setModeDirect };
 }
 
 // ---- ナビ ----
@@ -149,19 +163,27 @@ interface NavItem {
   label: string;
   shortLabel: string;
   icon: ReactNode;
+  external?: boolean; // true の場合は React ルートでなく実リンク（別タブ）で開く（例: /site/ の独立サイト）。
 }
 
 const NAV: NavItem[] = [
+  { to: '/progress', label: '実装進捗', shortLabel: '進捗', icon: <RestoreIcon /> },
   { to: '/', label: 'ダッシュボード', shortLabel: 'ダッシュ', icon: <GridIcon /> },
   { to: '/tasks', label: 'タスクボード', shortLabel: 'ボード', icon: <BoardIcon /> },
   // 承認フローは独立ナビから外し、タスクボードページ内の「承認フロー」タブに統合した（/approvals は後方互換で残す）。
   // Vault は独立ナビから外し、ドキュメントページ内の「Vault」タブに統合した（/vault は後方互換で残す）。
   // RAG は独立ナビから外し、ドキュメントページ内の「RAG」タブに統合した（/notebooks は後方互換で残す）。
   { to: '/deliverables', label: 'ドキュメント', shortLabel: 'ドキュ', icon: <DocumentsIcon /> },
+  // PDF.ai（公開PDFエディタ）は廃止し関連画面/ルートを撤去した（2026-07-19 Keita）。
+  // 動画DL（ClipItNow）はサイドメニューから外し、仕事ページの「動画DL」タブに集約した（2026-07-16 Keita）。
+  // ライブサイトは https://clipitnow.net/（旧 videodl.apollomansion.com は301転送）。
+  // 収益コックピット: ClipItNow の広告収益・トラフィックを 1 画面で見る（2026-07-19）。
+  { to: '/revenue', label: '収益', shortLabel: '収益', icon: <UsageIcon /> },
   { to: '/childcare', label: '育児', shortLabel: '育児', icon: <BabyIcon /> },
   { to: '/chaji', label: '茶事', shortLabel: '茶事', icon: <ChajiIcon /> },
   { to: '/work', label: '仕事', shortLabel: '仕事', icon: <WorkIcon /> },
-  { to: '/schedule', label: 'スケジュール', shortLabel: '予定', icon: <ClockIcon /> },
+  // Claude は未使用のためサイドメニューから削除（2026-06-30 Keita）。/claude ルートは後方互換で残置。
+  // スケジュールは未使用のためサイドメニューから削除（2026-06-29 Keita）。/schedule ルートは後方互換で残置。
   { to: '/dev', label: '開発', shortLabel: '開発', icon: <CodeIcon /> },
   // 成長日記は独立ナビから外し、育児ページ内の「成長日記」タブに統合した（/baby-diary は後方互換で残す）。
   // ターミナル: iframe ホスト用 React ルートは /terminal-view。
@@ -184,47 +206,40 @@ function NavBadge({ count }: { count: number }) {
 }
 
 function Sidebar({
-  connected,
   badges,
   open,
   onToggle,
-  themeMode,
-  isDark,
-  onThemeToggle,
   navItems,
   onReorder,
   onSettingsClick,
+  onSearchClick,
 }: {
-  connected: boolean;
   badges: Partial<Record<string, number>>;
   open: boolean;
   onToggle: () => void;
-  themeMode: ThemeMode;
-  isDark: boolean;
-  onThemeToggle: () => void;
   navItems: NavItem[];
   onReorder: (next: NavItem[]) => void;
   onSettingsClick: () => void;
+  onSearchClick: () => void;
 }) {
   const { pathname } = useLocation();
   const dashActive = isDashboardPath(pathname);
 
-  // 折りたたみ時: 細いストリップにトグルボタンだけ表示
+  // 折りたたみ時: サイドバーをレイアウトから完全に外す（細い縦ラインも消す）。
+  // 本文を全幅で使えるよう、開くための小さなトグルだけを左上に fixed で浮かせる（2026-06-27 Keita）。
   if (!open) {
     return (
-      <aside className="hidden w-8 shrink-0 flex-col items-center border-r border-border bg-surface pt-3 md:flex">
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-label="サイドバーを開く"
-          className="rounded p-1 text-text-muted hover:bg-surface-2 hover:text-text"
-        >
-          {/* › */}
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-      </aside>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label="サイドバーを開く"
+        className="fixed left-1 top-2.5 z-40 hidden rounded-md border border-border bg-surface/90 p-1 text-text-muted shadow-sm backdrop-blur hover:bg-surface-2 hover:text-text md:block"
+      >
+        {/* › */}
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+          <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
     );
   }
 
@@ -233,7 +248,7 @@ function Sidebar({
       <div className="flex items-center justify-between px-5 py-4">
         <div className="flex items-center gap-2">
           <span className="text-accent" aria-hidden>
-            <GridIcon width={22} height={22} />
+            <ApolloMark width={22} height={22} />
           </span>
           <div>
             <div className="text-sm font-bold leading-tight text-text">Apollo</div>
@@ -251,11 +266,30 @@ function Sidebar({
           </svg>
         </button>
       </div>
-      <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
+      {/* 検索は下部フッター（左下）へ移動した（2026-06-27 Keita）。 */}
+      {/* ナビ一覧は min-h-0 + overflow-y-auto でスクロール可能にし、低いウィンドウでも
+          下のフッター（検索・設定・再読み込み）が画面外に押し出されないようにする。 */}
+      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
         <SortableNav items={navItems} onReorder={onReorder} direction="vertical">
           {(item: NavItem, handle: DragHandleProps) => {
             const forceActive = item.to === '/' && dashActive;
             const badge = badges[item.to] ?? 0;
+            if (item.external) {
+              // 独立サイト（/site/ 等）は React ルート外なので実リンクで別タブに開く。
+              return (
+                <a
+                  key={item.to}
+                  href={item.to}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors text-text-muted hover:bg-surface-2 hover:text-text"
+                >
+                  <span aria-hidden>{item.icon}</span>
+                  {item.label}
+                  <DragHandle handleProps={handle.handleProps} className="ml-auto opacity-0 group-hover:opacity-100" />
+                </a>
+              );
+            }
             return (
               <NavLink
                 key={item.to}
@@ -278,24 +312,19 @@ function Sidebar({
           }}
         </SortableNav>
       </nav>
-      <div className="border-t border-border px-5 py-3 flex flex-col gap-2">
-        {/* テーマトグル */}
+      <div className="shrink-0 border-t border-border px-5 py-3 flex flex-col gap-2">
+        {/* 横断検索（MC-73）。表示整理のため左下フッターへ集約。Cmd/Ctrl+K でも開く。 */}
         <button
           type="button"
-          onClick={onThemeToggle}
-          aria-label={`テーマ: ${themeMode === 'auto' ? '自動' : themeMode === 'dark' ? 'ダーク固定' : 'ライト固定'}`}
-          className="flex items-center gap-2 text-[11px] text-text-muted hover:text-text rounded px-1 -ml-1 py-0.5 transition-colors"
+          onClick={onSearchClick}
+          aria-label="横断検索を開く"
+          className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-2 py-1.5 text-xs text-text-faint hover:bg-surface-3 hover:text-text transition-colors"
         >
           <span aria-hidden>
-            {isDark ? <MoonIcon width={13} height={13} /> : <SunIcon width={13} height={13} />}
+            <SearchIcon width={14} height={14} />
           </span>
-          <span>
-            {themeMode === 'auto'
-              ? `自動 (${isDark ? '夜間' : '日中'})`
-              : themeMode === 'dark'
-              ? 'ダーク固定'
-              : 'ライト固定'}
-          </span>
+          <span className="flex-1 text-left">検索</span>
+          <kbd className="rounded border border-border px-1 text-[10px] text-text-muted">⌘K</kbd>
         </button>
         {/* 設定ボタン（MC-178） */}
         <button
@@ -309,23 +338,7 @@ function Sidebar({
           </span>
           <span>設定</span>
         </button>
-        {/* 接続状態 */}
-        <div
-          className="flex items-center gap-2 text-[11px]"
-          role="status"
-          aria-label={connected ? 'ライブ接続中' : 'ポーリング更新中'}
-        >
-          <span
-            style={{ color: connected ? 'var(--mc-active)' : 'var(--mc-idle)' }}
-            className={connected ? 'mc-pulse' : ''}
-            aria-hidden
-          >
-            <DotIcon width={10} height={10} />
-          </span>
-          <span className="text-text-muted">
-            {connected ? 'ライブ接続中' : 'ポーリング更新中'}
-          </span>
-        </div>
+        {/* 接続状態表示（ライブ接続中）は不要のため撤去（2026-06-27 Keita）。 */}
         {/* 再読み込み（リロード）ボタン。サイドメニュー最下部・ページ全体を再読み込みする。 */}
         <button
           type="button"
@@ -345,99 +358,55 @@ function Sidebar({
 
 export default function App() {
   const { pathname } = useLocation();
-  const { ticks, connected } = useLiveStream();
+  const { ticks } = useLiveStream();
   const { data: approvals } = useLiveResource<ApprovalsResponse>('/api/approvals', ticks.tasks);
   const approvalCount = approvals?.total ?? 0;
 
   // フォントサイズ設定（MC-178）
   const { fontPx } = useFontSize();
   const [showSettings, setShowSettings] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
-  const pathnameRef = useRef(pathname);
-  pathnameRef.current = pathname;
-
-  // ページ別バッジ: SSE update イベントの type → nav path にマッピング
-  // ページを訪問したら badge.{path} を 0 にリセットする
-  // tasks バッジは不要（MC-159）
-  // エージェントの通知は出さない（Keita 指示）。agents 種別は SSE で流れ続けてよいが
-  // ホーム '/' バッジには使わない。vault/deliverables のバッジ挙動は不変。
-  const NAV_BADGE_MAP: Record<string, string> = {
-    vault: '/vault',
-    deliverables: '/deliverables',
-  };
-  const loadBadge = (path: string) => parseInt(localStorage.getItem(`badge.${path}`) ?? '0', 10) || 0;
-  const [navBadges, setNavBadges] = useState<Record<string, number>>(() => ({
-    '/vault': loadBadge('/vault'),
-    '/deliverables': loadBadge('/deliverables'),
-  }));
-
-  // ページ訪問時にそのバッジをリセット
+  // Cmd/Ctrl+K で横断検索を開閉。入力欄にフォーカス中でも効く（検索はグローバル機能のため）。
   useEffect(() => {
-    const path = pathname;
-    if (navBadges[path] > 0) {
-      localStorage.setItem(`badge.${path}`, '0');
-      setNavBadges((prev) => ({ ...prev, [path]: 0 }));
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setShowSearch((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Vault / Deliverables の通知バッジは廃止（2026-06-25 Keita「消えない」）。
+  // watch.ts が obsidian-vault / deliverables の変更を監視しており、ニュース生成・各エージェント・
+  // 同期などで vault が変わるたびに update が流れてバッジが加算される。ドキュメントページに常駐
+  // しない限り消えず、モバイルのメニュー合計バッジが残り続けていた。ノイズ通知のため取りやめる
+  // （「エージェント通知は出さない」方針に揃える）。溜まった localStorage バッジも一度掃除する。
+  useEffect(() => {
+    try {
+      localStorage.removeItem('badge./vault');
+      localStorage.removeItem('badge./deliverables');
+    } catch {
+      /* localStorage 不可環境では無視 */
     }
-  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // SSE update イベントでバッジをインクリメント（表示中のページ以外）
-  useEffect(() => {
-    const es2 = new EventSource('/api/stream');
-    es2.addEventListener('update', (e) => {
-      try {
-        const data = JSON.parse((e as MessageEvent).data) as { types?: string[] };
-        for (const type of data.types ?? []) {
-          const navPath = NAV_BADGE_MAP[type];
-          // 現在そのページを見ていたら増やさない
-          const cur = pathnameRef.current;
-          const isActive = navPath ? cur.startsWith(navPath) : false;
-
-          if (navPath && !isActive) {
-            setNavBadges((prev) => {
-              const next = (prev[navPath] ?? 0) + 1;
-              localStorage.setItem(`badge.${navPath}`, String(next));
-              return { ...prev, [navPath]: next };
-            });
-          }
-
-        }
-      } catch { /* ignore */ }
-    });
-    es2.onerror = () => { /* 自動再接続 */ };
-    return () => es2.close();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const badges: Partial<Record<string, number>> = {
-    // 承認フローはタスクボードページのタブに統合したため、要承認バッジはタスクボード項目（/tasks）に出す。
+    // 要承認件数のみ（タスクボードページのタブに統合）。Vault/Deliverables の通知は廃止。
     '/tasks': approvalCount,
-    ...navBadges,
   };
 
-  const { mode: themeMode, isDark, toggle: toggleTheme } = useTheme();
+  const { mode: themeMode, isDark, setMode: setThemeMode } = useTheme();
 
   // ナビ並び順（サーバ保存・端末横断同期 MC-158）。サイドメニューと下部メニューは
   // 同じ NAV を描くので、並び順を1つ持てば desktop/mobile 両方に効く。
   const { items: navItems, reorder: reorderNav } = useNavOrder('sidebar', NAV);
 
-  // ダッシュボード配下のタブ順序（MC-174）。初期表示の遷移先を決める。
-  // NOTE: これは画面表示には使わず、初期リダイレクト判定だけに使う。
-  const dashboardTabDefaults = [
-    { to: '/agents-live' },
-    { to: '/feed' },
-    { to: '/news' },
-    { to: '/activity' },
-    { to: '/plan-usage' },
-  ];
-  const { items: dashboardTabs } = useNavOrder('dashboard', dashboardTabDefaults);
-
-  // MC-165: / の着地先。エージェント擬人化ライブを最優先で着地先にする（要件: トップに大きく出す）。
-  // 保存済みのタブ並び替えがあっても /agents-live を必ず先頭着地にし、過去の「見えない場所に作る」
-  // 失敗を繰り返さない。/agents-live が無い異常時のみ保存順の先頭 → /plan-usage にフォールバック。
-  const dashboardLanding = dashboardTabs.some((t) => t.to === '/agents-live')
-    ? '/agents-live'
-    : dashboardTabs.length > 0
-      ? dashboardTabs[0].to
-      : '/plan-usage';
+  // ダッシュボード（/）をタップした時の既定着地は「カウントダウン」。
+  // DashboardLayout で並べ替え不可の固定先頭タブにしているので、保存順に依らず常にここへ着地する。
+  const dashboardLanding = '/countdown';
 
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     return localStorage.getItem('apollo-sidebar-open') !== 'false';
@@ -466,16 +435,13 @@ export default function App() {
       <UploadProvider>
         <div className="flex h-dvh overflow-hidden bg-bg text-text" style={{ '--font-scale': String(fontPx / 16) } as any}>
           <Sidebar
-            connected={connected}
             badges={badges}
             open={sidebarOpen}
             onToggle={toggleSidebar}
-            themeMode={themeMode}
-            isDark={isDark}
-            onThemeToggle={toggleTheme}
             navItems={navItems}
             onReorder={reorderNav}
             onSettingsClick={() => setShowSettings(true)}
+            onSearchClick={() => setShowSearch(true)}
           />
           <main className="dashboard-container flex-1 overflow-hidden">
             <Suspense fallback={<ViewFallback />}>
@@ -487,7 +453,9 @@ export default function App() {
                   path="/"
                   element={<Navigate to={dashboardLanding} replace />}
                 />
-                {/* MC-165: エージェント擬人化ライブ（ダッシュボード先頭タブ／/ の着地先） */}
+                {/* カウントダウン（ダッシュボードの固定先頭タブ／/ の既定着地先） */}
+                <Route path="/countdown" element={<Countdown />} />
+                {/* MC-165: エージェント擬人化ライブ */}
                 <Route path="/agents-live" element={<AgentsLive />} />
                 <Route path="/feed" element={<Feed />} />
                 <Route path="/news" element={<News />} />
@@ -499,6 +467,8 @@ export default function App() {
                 <Route path="/agents" element={<Navigate to="/" replace />} />
                 <Route path="/agents/:agentId" element={<Agents />} />
                 <Route path="/plan-usage" element={<PlanUsage />} />
+                {/* ClipItNow PDCA 可視化 */}
+                <Route path="/pdca" element={<Pdca />} />
               </Route>
               <Route path="/tasks" element={<TasksTabs />} />
               {/* 承認フローは「タスクボード」ページの承認フロータブへ統合（旧 /approvals は後方互換でタブ着地）。 */}
@@ -511,11 +481,16 @@ export default function App() {
               <Route path="/childcare" element={<Childcare />} />
               <Route path="/chaji" element={<Chaji />} />
               <Route path="/work" element={<Work />} />
+              <Route path="/claude" element={<ClaudeChat />} />
               {/* 旧 /baby-diary は育児ページの「成長日記」タブに着地（古いリンク/ブックマーク互換）。 */}
               <Route path="/baby-diary" element={<Childcare initialTab="diary" />} />
               <Route path="/schedule" element={<Schedule />} />
               <Route path="/dev" element={<Development />} />
+              <Route path="/progress" element={<BuildProgress />} />
+              {/* 収益コックピット（ClipItNow） */}
+              <Route path="/revenue" element={<Revenue />} />
               <Route path="/terminal-view" element={<div className="flex h-full flex-col overflow-hidden"><Terminal /></div>} />
+              <Route path="/terminal-view/:id" element={<div className="flex h-full flex-col overflow-hidden"><Terminal /></div>} />
               <Route path="/terminal-standalone" element={<Terminal />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
@@ -527,24 +502,19 @@ export default function App() {
             onReorder={reorderNav}
             footerActions={(close) => (
               <>
-                {/* テーマ切替（デスクトップ footer と同じハンドラ・アイコン） */}
+                {/* 横断検索（モバイル） */}
                 <button
                   type="button"
-                  onClick={() => { toggleTheme(); close(); }}
-                  aria-label={`テーマ切替: ${themeMode === 'auto' ? '自動' : themeMode === 'dark' ? 'ダーク固定' : 'ライト固定'}`}
+                  onClick={() => { setShowSearch(true); close(); }}
+                  aria-label="横断検索を開く"
                   className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-text-muted hover:bg-surface-2 hover:text-text"
                 >
                   <span className="shrink-0" aria-hidden>
-                    {isDark ? <MoonIcon /> : <SunIcon />}
+                    <SearchIcon />
                   </span>
-                  <span>
-                    {themeMode === 'auto'
-                      ? `自動 (${isDark ? '夜間' : '日中'})`
-                      : themeMode === 'dark'
-                      ? 'ダーク固定'
-                      : 'ライト固定'}
-                  </span>
+                  <span>検索</span>
                 </button>
+                {/* テーマ切替はモバイルメニューから外し、設定モーダルへ統合（2026-06-29 Keita）。 */}
                 {/* 設定（デスクトップ footer と同じく設定モーダルを開く） */}
                 <button
                   type="button"
@@ -574,7 +544,14 @@ export default function App() {
           />
           {pathname === '/tasks' && <AddTaskFab />}
           <UploadToast />
-          <Settings open={showSettings} onClose={() => setShowSettings(false)} />
+          <Settings
+            open={showSettings}
+            onClose={() => setShowSettings(false)}
+            themeMode={themeMode}
+            isDark={isDark}
+            onThemeChange={setThemeMode}
+          />
+          <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
         </div>
       </UploadProvider>
     </LiveContext.Provider>

@@ -22,7 +22,7 @@ import { basename, dirname, join, resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
-import { PORT, CLAUDE_PROJECTS_DIR, VAULT_DIR, STALL_MINUTES, AGENT_LOG_TTL_MS, DELIVERABLES_DIR } from './config.js';
+import { PORT, CLAUDE_PROJECTS_DIR, VAULT_DIR, STALL_MINUTES, AGENT_LOG_TTL_MS, DELIVERABLES_DIR, CLIPITNOW_PDCA_STATE_FILE } from './config.js';
 import { collectAgents, collectAgentGroups, collectAgentFeed } from './collectors/agents.js';
 import { collectSecretaries } from './collectors/secretaries.js';
 import { collectMoods, type MoodInput } from './collectors/moods.js';
@@ -97,11 +97,13 @@ import { navOrderRouter } from './navOrderRouter.js';
 import { babyDiaryRouter } from './babyDiaryRouter.js';
 import { childcareChatRouter } from './childcareChatRouter.js';
 import { chajiChatRouter } from './chajiChatRouter.js';
+import { claudeChatRouter } from './claudeChatRouter.js';
 import { workChatRouter } from './workChatRouter.js';
 import { workKnowledgeRouter } from './workKnowledgeRouter.js';
 import { googleRouter } from './googleRouter.js';
 import { plannerRouter } from './plannerRouter.js';
 import { devMockupRouter } from './devMockupRouter.js';
+import { revenueRouter } from './revenueRouter.js';
 
 const HEALTHZ_PATH = '/api/healthz';
 
@@ -478,6 +480,12 @@ app.use('/api/approvals', approvalRouter());
 // 1 つ選んで決裁し、結果を要求元エージェントへ notify 配送する（MC-203。承認とは別系統・別タブ）。
 app.use('/api/decisions', decisionRouter(broadcast));
 
+// ─── 収益コックピット（2026-07-19）──────────────────────────────
+// GET /api/revenue/summary — ClipItNow(:4319 stats/exostats/adstats) +
+// PDCA 状態を 1 レスポンスに集約。上流 1 ソース死んでも部分データで返す（fail-soft）。
+// 60 秒メモリキャッシュ。認証ミドルウェア配下。
+app.use('/api/revenue', revenueRouter());
+
 app.get('/api/usage', (_req, res) => {
   safeJson(res, () => collectUsage());
 });
@@ -553,6 +561,25 @@ app.get('/api/ticks', (req, res) => {
       ? req.query.scope.trim()
       : undefined;
     return collectTicks(scope);
+  });
+});
+
+// ─── ClipItNow PDCA 永続ループの状態（2026-07-19）──────────────────
+// 林の cron スクリプトが $HOME/logs/clipitnow-pdca-state.json にサイクル状態を書く。
+// Apollo は read-only で参照するだけ（書かない）。認証ミドルウェア配下。
+// ファイルが無い/壊れている場合も 200 で安全なデフォルトを返す（500 にしない）。
+app.get('/api/clipitnow/pdca', (_req, res) => {
+  safeJson(res, () => {
+    const fallback = { cycle: 0, phase: 'unknown', pendingApprovalId: '', lastReportDate: null };
+    if (!existsSync(CLIPITNOW_PDCA_STATE_FILE)) return fallback;
+    try {
+      const raw = readFileSync(CLIPITNOW_PDCA_STATE_FILE, 'utf-8');
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+      return fallback;
+    } catch {
+      return fallback;
+    }
   });
 });
 
@@ -1391,6 +1418,13 @@ app.use('/api/chaji', chajiChatRouter());
 app.use('/api/work', workChatRouter());
 app.use('/api/work', workKnowledgeRouter());
 
+// ─── 汎用 Claude チャット（/claude）──────────────────────────────────────
+// 話題を限定しない汎用 AI アシスタントチャット。仕事チャット（workChatRouter）のメディア対応・
+// SSE/JSON・サーバ永続・出典確認（WebSearch）の作法をそのまま踏襲し、ペルソナだけを汎用化する。
+// 会話履歴・添付メディアは data/ 配下の専用ファイル（claude-chat.jsonl / claude-chat-media/）に蓄積する。
+// auth ミドルウェア配下＝Cookie/Bearer 必須。
+app.use('/api/claude', claudeChatRouter());
+
 // ─── Google 連携（成長日記 MC-233 Phase2/3）──────────────────────
 // 成長日記から Google Calendar（予定の読み書き）・Google Photos Picker（写真取り込み）を
 // 使うためのサーバ側 OAuth + API 連携。マルチアカウント（keita.urano + keita.urano2 等）対応。
@@ -1515,7 +1549,7 @@ if (existsSync(WEB_DIST)) {
       },
     }),
   );
-  app.get('/*splat', (_req, res) => {
+  app.get('/*splat', (_req: Request, res: Response) => {
     res.set('Cache-Control', 'no-cache, must-revalidate');
     res.sendFile(join(WEB_DIST, 'index.html'));
   });
@@ -1566,7 +1600,6 @@ const server = app.listen(PORT, () => {
         '公開バインド前に必ず MC_TOKEN を設定してください。',
     );
   }
-
 });
 
 // ─── WebSocket upgrade（MC-92 Web ターミナル）──────────────────────

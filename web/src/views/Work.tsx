@@ -13,87 +13,39 @@ import { PageHeader } from '../components/PageHeader';
 import ChatMarkdown from '../components/ChatMarkdown';
 import { UserChatBody } from '../components/mediaEmbed';
 import {
+  ActivityIcon,
   ChatIcon,
   CheckIcon,
   CloseIcon,
+  DownloadIcon,
   EditIcon,
+  ExpandIcon,
+  EyeIcon,
   ImageFileIcon,
   InfoIcon,
+  LinkIcon,
+  LoopIcon,
   NotebookIcon,
   PlusIcon,
   SearchIcon,
   SendIcon,
-  SheetIcon,
+  ShrinkIcon,
   SparkIcon,
   TagIcon,
   TextFileIcon,
   TrashIcon,
+  VideoFileIcon,
 } from '../components/icons';
 import { WORK_OVERVIEW_MARKDOWN } from './workData';
+// ピボット／課題管理費／PwC転職 の各タブはサイドメニュー整理でUIから削除し、内容は Vault
+// （40-Resources/work-ecl/*.md）へ格納した（2026-07-06 Keita）。ガイド原文の
+// workPivotGuide / workCostPivotGuide / workPwcGuide とその図解コンポーネントはリポジトリに残置。
 import {
-  PIVOT_INTRO_MD,
-  PIVOT_STEPS_INTRO_MD,
-  PIVOT_STEP_INSERT_MD,
-  PIVOT_STEP_FIELDS_MD,
-  PIVOT_AGG_INTRO_MD,
-  PIVOT_RESULT_INTRO_MD,
-  PIVOT_TIPS_MD,
-  PIVOT_PRACTICE_MD,
-  PIVOT_PRO_INTRO_MD,
-  PIVOT_PRO_POWERQUERY_MD,
-  PIVOT_PRO_DATAMODEL_MD,
-  PIVOT_PRO_SHOWVALUES_MD,
-  PIVOT_PRO_BRIDGE_MD,
-  PIVOT_PRO_TOPN_MD,
-  PIVOT_PRO_DECKLINK_MD,
-  PIVOT_PRO_QA_MD,
-} from './workPivotGuide';
-import {
-  PivotBeforeAfterDiagram,
-  PivotBoxRolesDiagram,
-  PivotRibbonDiagram,
-  PivotFieldPaneDiagram,
-  PivotValueSettingsDiagram,
-  PivotResultDiagram,
-  PivotProPowerQueryDiagram,
-  PivotProDataModelDaxDiagram,
-  PivotProShowValuesDiagram,
-  PivotProBridgeDiagram,
-  PivotProTopNDiagram,
-  PivotProDeckLinkDiagram,
-  PivotProQADiagram,
-} from './workPivotDiagrams';
-import {
-  COST_PIVOT_INTRO_MD,
-  COST_PIVOT_STEPS_INTRO_MD,
-  COST_PIVOT_FIELDS_MD,
-  COST_PIVOT_CALC_INTRO_MD,
-  COST_PIVOT_GROUPING_INTRO_MD,
-  COST_PIVOT_FORMAT_MD,
-  COST_PIVOT_RESULT_INTRO_MD,
-  COST_PIVOT_TIPS_MD,
-  COST_PIVOT_PRACTICE_MD,
-  COST_PIVOT_ADV_INTRO_MD,
-  COST_PIVOT_ADV_CALCFIELD_MD,
-  COST_PIVOT_ADV_TRENDFORMAT_MD,
-  COST_PIVOT_ADV_PARETO_MD,
-  COST_PIVOT_ADV_HEATMAP_MD,
-  COST_PIVOT_ADV_BUDGETACTUAL_MD,
-  COST_PIVOT_ADV_EXTRAS_MD,
-} from './workCostPivotGuide';
-import {
-  CostPivotBeforeAfterDiagram,
-  CostPivotFieldPaneDiagram,
-  CostPivotCalcDiagram,
-  CostPivotGroupingDiagram,
-  CostPivotResultDiagram,
-  CostPivotCalcFieldDiagram,
-  CostPivotTrendFormatDiagram,
-  CostPivotParetoDiagram,
-  CostPivotHeatmapDiagram,
-  CostPivotBudgetActualDiagram,
-} from './workCostPivotDiagrams';
-import { WORK_GLOSSARY, GLOSSARY_CATEGORIES, type GlossaryCategory } from './workGlossary';
+  WORK_GLOSSARY,
+  GLOSSARY_CATEGORIES,
+  type GlossaryCategory,
+  type GlossaryTerm,
+} from './workGlossary';
 
 // ナレッジのカテゴリ既定リスト（server: workKnowledgeStore.KNOWLEDGE_CATEGORIES と一致させる）。
 const WORK_CATEGORIES = [
@@ -125,135 +77,6 @@ function WorkOverview() {
           日本の 2030 年 4 月 ECL 移行の具体（会計基準の最終内容・適用範囲・経過措置・確定スケジュール等）は
           流動的・未確定な部分があります。壁打ちでも、確定していない事項は「要確認」として扱います。
         </p>
-      </section>
-    </div>
-  );
-}
-
-// ─── ピボットタブ（Excel ピボットの使い方ガイド）──────────────────────
-// 1 枚の長い Markdown ではなく、説明文（ChatMarkdown）と SVG 図解（workPivotDiagrams）を
-// 交互に並べて、Excel の実操作を「見ただけで手が動く」レベルでイメージできるようにする（MC-261）。
-// ChatMarkdown は rehype-raw 無しで raw SVG をテキスト化するため、図は React コンポーネントで実装。
-function WorkPivotTab() {
-  return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
-      <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
-        <div className="mb-3">
-          <h2 className="text-base font-bold text-text">Excel ピボットの使い方</h2>
-          <p className="mt-1 text-xs text-text-muted">
-            ECL の集計・点検に役立つピボットテーブルの使い方を、図解で順番に説明します。練習用 Excel はドキュメントの「大手町」フォルダにあります。
-          </p>
-        </div>
-        <div className="mc-markdown">
-          {/* イントロ → 図1: before→after のクロス集計 */}
-          <ChatMarkdown body={PIVOT_INTRO_MD} />
-          <PivotBeforeAfterDiagram />
-
-          {/* 手順導入 → 図2: リボン［挿入］→［ピボットテーブル］ */}
-          <ChatMarkdown body={PIVOT_STEPS_INTRO_MD} />
-          <PivotRibbonDiagram />
-          <ChatMarkdown body={PIVOT_STEP_INSERT_MD} />
-
-          {/* 図3: フィールドペイン（4ボックスへドラッグ） → 役割の概念図 */}
-          <PivotFieldPaneDiagram />
-          <ChatMarkdown body={PIVOT_STEP_FIELDS_MD} />
-          <PivotBoxRolesDiagram />
-
-          {/* 集計方法の変更 → 図4: 値フィールドの設定 */}
-          <ChatMarkdown body={PIVOT_AGG_INTRO_MD} />
-          <PivotValueSettingsDiagram />
-
-          {/* 完成イメージ → 図5: クロス集計＋スライサー */}
-          <ChatMarkdown body={PIVOT_RESULT_INTRO_MD} />
-          <PivotResultDiagram />
-
-          {/* よく使う操作・使いどころ */}
-          <ChatMarkdown body={PIVOT_TIPS_MD} />
-
-          {/* ── 応用・実務（コンサル水準）── データ準備/モデル/表示形式/要因分解/Top-N/成果物/QA */}
-          <ChatMarkdown body={PIVOT_PRO_INTRO_MD} />
-          <ChatMarkdown body={PIVOT_PRO_POWERQUERY_MD} />
-          <PivotProPowerQueryDiagram />
-          <ChatMarkdown body={PIVOT_PRO_DATAMODEL_MD} />
-          <PivotProDataModelDaxDiagram />
-          <ChatMarkdown body={PIVOT_PRO_SHOWVALUES_MD} />
-          <PivotProShowValuesDiagram />
-          <ChatMarkdown body={PIVOT_PRO_BRIDGE_MD} />
-          <PivotProBridgeDiagram />
-          <ChatMarkdown body={PIVOT_PRO_TOPN_MD} />
-          <PivotProTopNDiagram />
-          <ChatMarkdown body={PIVOT_PRO_DECKLINK_MD} />
-          <PivotProDeckLinkDiagram />
-          <ChatMarkdown body={PIVOT_PRO_QA_MD} />
-          <PivotProQADiagram />
-
-          {/* 練習ファイル案内（末尾） */}
-          <ChatMarkdown body={PIVOT_PRACTICE_MD} />
-        </div>
-      </section>
-    </div>
-  );
-}
-
-// ─── 課題管理費タブ（課題管理費＝プロジェクト費用 をピボットで集計する図解ガイド）────
-// 既存の「ピボット」タブ（ECL残高のクロス集計）より一段詳しく、費用集計に特化した実務ガイド。
-// 費目×月のクロス集計、構成比%・累計（計算の種類）、月→四半期のグループ化、表示形式、
-// スライサーまで、説明文（ChatMarkdown）と SVG 図解（workCostPivotDiagrams）を交互に並べる。
-function WorkCostPivotTab() {
-  return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
-      <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
-        <div className="mb-3">
-          <h2 className="text-base font-bold text-text">課題管理費の集計（ピボット）</h2>
-          <p className="mt-1 text-xs text-text-muted">
-            課題管理費（プロジェクトの費用）を、費目別・月別・担当（ベンダー）別に集計する手順を、図解で順番に説明します。構成比・累計・四半期まとめまで、数式なしで作れます。
-          </p>
-        </div>
-        <div className="mc-markdown">
-          {/* イントロ → 図1: 費用一覧 → 費目×月のクロス集計 */}
-          <ChatMarkdown body={COST_PIVOT_INTRO_MD} />
-          <CostPivotBeforeAfterDiagram />
-
-          {/* 手順導入 → 図2: フィールド配置（費目=行 / 月=列 / 費用=値） */}
-          <ChatMarkdown body={COST_PIVOT_STEPS_INTRO_MD} />
-          <CostPivotFieldPaneDiagram />
-          <ChatMarkdown body={COST_PIVOT_FIELDS_MD} />
-
-          {/* 計算の種類（構成比%・累計）→ 図3 */}
-          <ChatMarkdown body={COST_PIVOT_CALC_INTRO_MD} />
-          <CostPivotCalcDiagram />
-
-          {/* 月→四半期グループ化 → 図4 */}
-          <ChatMarkdown body={COST_PIVOT_GROUPING_INTRO_MD} />
-          <CostPivotGroupingDiagram />
-
-          {/* 表示形式・並べ替え */}
-          <ChatMarkdown body={COST_PIVOT_FORMAT_MD} />
-
-          {/* 完成イメージ＋スライサー → 図5 */}
-          <ChatMarkdown body={COST_PIVOT_RESULT_INTRO_MD} />
-          <CostPivotResultDiagram />
-
-          {/* よく使う操作・使いどころ */}
-          <ChatMarkdown body={COST_PIVOT_TIPS_MD} />
-
-          {/* ── より高度な分析 ── 計算フィールド／トレンド／パレート／ヒートマップ／予実対比 */}
-          <ChatMarkdown body={COST_PIVOT_ADV_INTRO_MD} />
-          <ChatMarkdown body={COST_PIVOT_ADV_CALCFIELD_MD} />
-          <CostPivotCalcFieldDiagram />
-          <ChatMarkdown body={COST_PIVOT_ADV_TRENDFORMAT_MD} />
-          <CostPivotTrendFormatDiagram />
-          <ChatMarkdown body={COST_PIVOT_ADV_PARETO_MD} />
-          <CostPivotParetoDiagram />
-          <ChatMarkdown body={COST_PIVOT_ADV_HEATMAP_MD} />
-          <CostPivotHeatmapDiagram />
-          <ChatMarkdown body={COST_PIVOT_ADV_BUDGETACTUAL_MD} />
-          <CostPivotBudgetActualDiagram />
-          <ChatMarkdown body={COST_PIVOT_ADV_EXTRAS_MD} />
-
-          {/* 練習ファイル案内（末尾） */}
-          <ChatMarkdown body={COST_PIVOT_PRACTICE_MD} />
-        </div>
       </section>
     </div>
   );
@@ -295,8 +118,12 @@ interface WorkMessage {
 }
 
 const WORK_STORAGE_KEY = 'apollo.workChat.history.v1';
+// 壁打ちアドバイザーの名前（2026-07-06 Keita「名前を付けて」）。表示名のみで、変更はこの1箇所で可。
+const WORK_ADVISOR_NAME = 'クレア';
+// フローティングチャットの開閉状態を端末に保持するキー（「いつも右下に置いてある」ため既定は開）。
+const WORK_CHAT_OPEN_KEY = 'apollo.workChat.open.v1';
 const WORK_WELCOME =
-  'ECL（予想信用損失）・IFRS9・銀行会計・与信管理・データ基盤・PMO に精通したアドバイザー兼「壁打ち相手」です。2030 年 4 月の会計基準変更に対応する ECL システム導入プロジェクトについて、概要の学習から、システム実装の論点、与信管理・銀行業務・DB、PMO の進め方まで、何でもご相談ください。考えの整理・抜け漏れの指摘・段取りの提案もします。事実情報には Web で確認した出典を添えます。';
+  `ECL/PMO 壁打ちアドバイザーの「${WORK_ADVISOR_NAME}」です。ECL（予想信用損失）・IFRS9・銀行会計・与信管理・データ基盤・PMO に精通しています。2030 年 4 月の会計基準変更に対応する ECL システム導入プロジェクトについて、概要の学習から、システム実装の論点、与信管理・銀行業務・DB、PMO の進め方まで、何でもご相談ください。考えの整理・抜け漏れの指摘・段取りの提案もします。事実情報には Web で確認した出典を添えます。`;
 const WORK_CHAT_NOTE =
   '事実情報には Web 検索で確認した出典を添えます。日本の 2030 年 4 月 ECL 移行など未確定の事項は「要確認」として扱い、断定しません。';
 
@@ -456,9 +283,10 @@ function useWorkChat() {
    * され、結果はサーバに永続化される。SSE が繋がっている間は逐次表示するが、完了の正本はサーバ。
    * 接続が切れても失敗確定せず pending のままにして history ポーリング／タブ復帰で結果を取りに行く。
    */
-  const send = useCallback(async () => {
-    const text = input.trim();
-    const media = pending;
+  // overrideText を渡すと入力欄の値ではなくその文言で送信する（単語帳からの深掘り種まきに使う）。
+  const send = useCallback(async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
+    const media = overrideText != null ? [] : pending;
     if ((!text && media.length === 0) || sending) return;
 
     const userMsg: WorkMessage = { role: 'user', content: text || '（画像/動画を添付しました）' };
@@ -865,49 +693,120 @@ function WorkComposer({ chat }: { chat: WorkChat }) {
 }
 
 // ─── 壁打ちタブ ──────────────────────────────────────────────────────
-function WorkChatTab() {
-  const chat = useWorkChat();
+// ─── フローティング壁打ちチャット（仕事画面の右下に常設）──────────────────
+// 2026-07-06 Keita「壁打ちチャットに名前を付けて、仕事画面の右下にいつも置いてある状態に」。
+// 従来はタブの1つだったが、どのタブにいても相談できるよう画面右下のドック型ウィジェットにした。
+// チャット本体（useWorkChat）は Work コンポーネントで1インスタンスだけ生成して渡す（状態の二重化回避）。
+function FloatingWorkChat({
+  chat,
+  open,
+  onToggle,
+}: {
+  chat: WorkChat;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // 全画面表示フラグ。折りたたみ時は常に通常サイズへ戻す（[fullscreen]は open 中のみ意味を持つ）。
+  const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
-    void chat.restore();
-    // restore は安定参照（useCallback）。初回のみ実行する。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
+    if (!open) return;
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [chat.messages, chat.streaming]);
+  }, [chat.messages, chat.streaming, open, fullscreen]);
+
+  const pending = chat.messages.some((m) => m.role === 'assistant' && m.status === 'pending');
+
+  // 最小化時は全画面フラグもリセットして通常の折りたたみに戻す。
+  const handleClose = () => {
+    setFullscreen(false);
+    onToggle();
+  };
+
+  // 折りたたみ時: 右下に開くためのランチャー（ピル）。応答生成中はドットを出す。
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={`${WORK_ADVISOR_NAME}に相談する`}
+        className="pointer-events-auto absolute bottom-4 right-4 z-30 flex items-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-bg shadow-lg transition-transform hover:scale-105"
+      >
+        <ChatIcon width={18} height={18} />
+        <span>{WORK_ADVISOR_NAME}に相談</span>
+        {pending && (
+          <span className="h-2 w-2 animate-pulse rounded-full bg-bg" aria-label="応答生成中" />
+        )}
+      </button>
+    );
+  }
 
   return (
-    <div className="mx-auto flex h-full max-w-3xl flex-col">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <div
+      className={
+        fullscreen
+          ? 'pointer-events-auto absolute inset-2 z-30 flex flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-2xl md:inset-4'
+          : 'pointer-events-auto absolute bottom-4 right-4 z-30 flex h-[min(34rem,calc(100%-2rem))] w-[min(26rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-2xl'
+      }
+    >
+      {/* ヘッダ（名前＋全画面／最小化／履歴消去） */}
+      <div className="flex items-center justify-between gap-2 border-b border-border bg-surface px-3 py-2.5">
         <div className="flex min-w-0 items-center gap-2.5">
           <span
             aria-hidden
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent"
           >
-            <ChatIcon width={20} height={20} />
+            <ChatIcon width={18} height={18} />
           </span>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-text">アドバイザーに相談</p>
-            <p className="truncate text-[11px] text-text-muted">ECL/PMO の学習・壁打ち・過去の相談も残ります</p>
+            <p className="text-sm font-bold text-text">{WORK_ADVISOR_NAME}</p>
+            <p className="truncate text-[10px] text-text-muted">ECL/PMO 壁打ちアドバイザー</p>
           </div>
         </div>
-        {chat.messages.length > 0 && (
+        <div className="flex shrink-0 items-center gap-1">
+          {chat.messages.length > 0 && (
+            <button
+              type="button"
+              onClick={chat.clearHistory}
+              className="rounded-md px-2 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+            >
+              履歴を消去
+            </button>
+          )}
           <button
             type="button"
-            onClick={chat.clearHistory}
-            className="shrink-0 rounded-md px-2 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+            onClick={() => setFullscreen((v) => !v)}
+            aria-label={fullscreen ? '全画面を解除' : '全画面表示'}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text"
           >
-            履歴を消去
+            {fullscreen ? (
+              <ShrinkIcon width={16} height={16} />
+            ) : (
+              <ExpandIcon width={16} height={16} />
+            )}
           </button>
-        )}
+          <button
+            type="button"
+            onClick={handleClose}
+            aria-label="チャットを最小化"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text"
+          >
+            <CloseIcon width={16} height={16} />
+          </button>
+        </div>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-bg">
-        <WorkMessageList chat={chat} scrollRef={(el) => (scrollRef.current = el)} />
-        <WorkComposer chat={chat} />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div
+          className={
+            fullscreen
+              ? 'mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden'
+              : 'flex min-h-0 flex-1 flex-col overflow-hidden'
+          }
+        >
+          <WorkMessageList chat={chat} scrollRef={(el) => (scrollRef.current = el)} />
+          <WorkComposer chat={chat} />
+        </div>
       </div>
     </div>
   );
@@ -1569,7 +1468,185 @@ function EmptyKnowledge({ onCreate, onStructure }: { onCreate: () => void; onStr
 // ─── 単語帳 ──────────────────────────────────────────────────────────
 // 銀行・会計（ECL）・データ/システム・PMO・本案件の用語を、意味と「使う場面」つきで一覧する。
 // 静的データ（workGlossary）を検索・カテゴリ絞り込みして表示する読み取り専用タブ。
-function WorkGlossaryTab() {
+// 単語帳「もっと詳しく見る」1 語ぶんの取得状態。
+interface GlossaryDetailState {
+  loading: boolean;
+  text: string;
+  error: boolean;
+}
+
+// ─── 単語帳 1 語のカード（意味・使う場面＋AI 深掘り／壁打ち導線）──────────
+// 「もっと詳しく見る」でその用語の深掘り解説（/api/work/glossary/detail・SSE）をカード内に展開し、
+// 「この単語を深掘りする」で壁打ちタブへ種まきメッセージを渡してハンドオフする。
+function GlossaryCard({ term, onSeedChat }: { term: GlossaryTerm; onSeedChat: (seed: string) => void }) {
+  const [open, setOpen] = useState(false);
+  // 取得結果は term をキーにカード内に保持し、再タップでは再取得しない（キャッシュ）。
+  const [detail, setDetail] = useState<GlossaryDetailState | null>(null);
+
+  // その用語の深掘り解説を SSE で取得する。共有サーバは数分おきに再起動されることがあり（デプロイ・
+  // 番人 restart 等）、モバイルはトンネル経由なので、生成の途中（~15 秒）で接続が切れて「done を受け取れ
+  // ないまま止まる」ことがある。そこで done を受け取れずに終わった場合は自動でもう一度取り直す
+  // （最大 MAX_ATTEMPTS 回）。生成自体は速い（Haiku・数十秒未満）ので、やり直しは軽い。
+  const fetchDetail = useCallback(async () => {
+    const MAX_ATTEMPTS = 3;
+    setDetail({ loading: true, text: '', error: false });
+    let acc = '';
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      acc = '';
+      let gotDone = false;
+      let finalAnswer: string | null = null;
+      let status = 'done';
+      try {
+        const res = await fetch('/api/work/glossary/detail', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+          body: JSON.stringify({ term: term.term, meaning: term.meaning, category: term.category }),
+        });
+        if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            let evt: { type?: string; text?: string; answer?: string; status?: string } = {};
+            try {
+              evt = JSON.parse(line.slice(6)) as typeof evt;
+            } catch {
+              continue;
+            }
+            if (evt.type === 'chunk' && typeof evt.text === 'string') {
+              acc += evt.text;
+              setDetail({ loading: true, text: acc, error: false });
+            } else if (evt.type === 'done') {
+              gotDone = true;
+              finalAnswer = typeof evt.answer === 'string' && evt.answer ? evt.answer : acc;
+              if (evt.status === 'error') status = 'error';
+            }
+          }
+        }
+        if (gotDone) {
+          const answer = (finalAnswer ?? acc).trim();
+          if (!answer) throw new Error('empty');
+          setDetail({ loading: false, text: answer, error: status === 'error' });
+          return; // 正常完了
+        }
+        // done を受け取れずにストリームが終わった＝途中で切れた。下でリトライ判定へ。
+      } catch {
+        // ネットワーク/HTTP エラー。下でリトライ判定へ。
+      }
+      if (attempt < MAX_ATTEMPTS) {
+        // 途中まで出た本文は見せたまま、少し待って取り直す（サーバ再起動の復帰待ち）。
+        setDetail({ loading: true, text: acc, error: false });
+        await new Promise((r) => setTimeout(r, 900));
+        continue;
+      }
+      // 最終試行も未完了。途中本文があればそれを見せつつエラー表示（再試行ボタンを出す）。
+      setDetail({ loading: false, text: acc.trim(), error: true });
+    }
+  }, [term.term, term.meaning, term.category]);
+
+  const onMoreDetail = () => {
+    setOpen(true);
+    // 未取得（または前回エラーで本文が無い）ときだけ取りに行く。成功結果はキャッシュ。
+    if (!detail || (detail.error && !detail.text)) void fetchDetail();
+  };
+
+  const onDeepDive = () => {
+    onSeedChat(
+      `「${term.term}」について深掘りしたいです。意味・実務での使い方・関連する論点を教えてください。`,
+    );
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-surface p-4">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <h3 className="text-sm font-bold text-text">{term.term}</h3>
+        {term.reading && <span className="text-[11px] text-text-faint">{term.reading}</span>}
+        <span className="ml-auto">
+          <CategoryBadge category={term.category} />
+        </span>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-text">{term.meaning}</p>
+      <div className="mt-2 flex gap-2 rounded-md border border-border bg-surface-2/50 px-3 py-2">
+        <span className="shrink-0 text-[11px] font-bold text-accent">使う場面</span>
+        <span className="text-[12px] leading-relaxed text-text-muted">{term.usage}</span>
+      </div>
+
+      {/* AI アクション（深掘り解説をカード内展開 / 壁打ちタブへハンドオフ）。 */}
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onMoreDetail}
+          className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-[11px] font-medium text-accent hover:bg-accent/20"
+        >
+          <SparkIcon width={13} height={13} /> もっと詳しく見る
+        </button>
+        <button
+          type="button"
+          onClick={onDeepDive}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium text-text-muted hover:bg-surface-2 hover:text-text"
+        >
+          <ChatIcon width={13} height={13} /> この単語を深掘りする
+        </button>
+      </div>
+
+      {/* 深掘り解説（インライン展開）。 */}
+      {open && (
+        <div className="mt-2.5 rounded-md border border-border bg-bg px-3 py-2.5">
+          {detail?.loading && !detail.text ? (
+            <WorkThinking />
+          ) : detail?.error && !detail.text ? (
+            <div className="flex flex-col items-start gap-2">
+              <p className="text-[12px] text-blocked">
+                解説の取得に失敗しました。もう一度お試しください。
+              </p>
+              <button
+                type="button"
+                onClick={() => void fetchDetail()}
+                className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+              >
+                再試行
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="mc-markdown">
+                <ChatMarkdown body={detail?.text ?? ''} />
+              </div>
+              {detail?.loading && (
+                <div className="mt-1.5">
+                  <WorkThinking />
+                </div>
+              )}
+              {detail?.error && detail.text && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <p className="text-[11px] text-blocked">
+                    ※ 途中で中断された可能性があります（自動での再取得も失敗しました）。
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void fetchDetail()}
+                    className="rounded-md border border-border px-2 py-0.5 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+                  >
+                    再試行
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WorkGlossaryTab({ onSeedChat }: { onSeedChat: (seed: string) => void }) {
   const [query, setQuery] = useState('');
   const [catFilter, setCatFilter] = useState<GlossaryCategory | 'all'>('all');
 
@@ -1636,20 +1713,7 @@ function WorkGlossaryTab() {
       ) : (
         <div className="flex flex-col gap-2.5">
           {filtered.map((t) => (
-            <div key={t.term} className="rounded-lg border border-border bg-surface p-4">
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <h3 className="text-sm font-bold text-text">{t.term}</h3>
-                {t.reading && <span className="text-[11px] text-text-faint">{t.reading}</span>}
-                <span className="ml-auto">
-                  <CategoryBadge category={t.category} />
-                </span>
-              </div>
-              <p className="mt-2 text-sm leading-relaxed text-text">{t.meaning}</p>
-              <div className="mt-2 flex gap-2 rounded-md border border-border bg-surface-2/50 px-3 py-2">
-                <span className="shrink-0 text-[11px] font-bold text-accent">使う場面</span>
-                <span className="text-[12px] leading-relaxed text-text-muted">{t.usage}</span>
-              </div>
-            </div>
+            <GlossaryCard key={t.term} term={t} onSeedChat={onSeedChat} />
           ))}
         </div>
       )}
@@ -1657,8 +1721,571 @@ function WorkGlossaryTab() {
   );
 }
 
+// ─── 動画DL「ClipItNow」広告収益化計画タブ ─────────────────────────────
+// ClipItNow（videodl.apollomansion.com）の広告収益化計画の要約。
+// 全文は Vault 30-Projects/videodl/ad-strategy-adult.md（2026-07-11 Keita決定）。
+function WorkVideoDlTab() {
+  return (
+    <div className="mx-auto flex max-w-3xl flex-col gap-4">
+      <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <VideoFileIcon width={18} height={18} />
+          <h2 className="text-base font-bold text-text">
+            動画DL「ClipItNow」広告収益化計画（2026-07-11）
+          </h2>
+        </div>
+
+        <div className="flex flex-col gap-4 text-sm leading-relaxed text-text">
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">方針</h3>
+            <p className="text-text-muted">
+              ClipItNow（videodl.apollomansion.com）は普通の動画DLサイトとして構成（アダルトコンテンツも扱うが明示しない方針）。
+              年齢確認ゲートは廃止し、年齢・コンテンツ規定は利用規約/プライバシーに通常条項として記載。
+              児童ポルノ等の違法コンテンツは規約で禁止。広告枠は実装済・ライブ。
+            </p>
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">広告 三本柱</h3>
+            <ul className="flex list-disc flex-col gap-1 pl-5 text-text-muted">
+              <li>① ExoClick（基盤・全フォーマット・即日審査）</li>
+              <li>② 忍者AdMax（日本語RTB併走）</li>
+              <li>
+                ③ アダルトアフィリ FANZA/DMM＋ライブチャットCPA（dl-x未着手の差別化・第二エンジン）
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">配置</h3>
+            <p className="text-text-muted">
+              DL結果ページ集中＋ランキンググリッド。DLボタン被せオーバーレイは不採用（誤クリック誘導＝規約違反/BANリスク）。
+              ポップアンダーは1回/24h。
+            </p>
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">収益想定</h3>
+            <p className="text-text-muted">
+              月10万PVで ¥1.5〜4万／dl-x級（月70〜100万PV）で ¥25〜60万/月。
+            </p>
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">ロードマップ</h3>
+            <ul className="flex list-disc flex-col gap-1 pl-5 text-text-muted">
+              <li>P0＝通常法務（利用規約/プライバシー）＋ExoClick3枠＋計測（法務は完了済）</li>
+              <li>P1＝アフィリ＋SEO・TikTok系集客</li>
+              <li>P2＝TrafficJunky追加・多網比較</li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">残ブロッカー</h3>
+            <p className="text-text-muted">
+              広告網アカウント（ExoClick/忍者AdMax/FANZA・DMM）取得→実タグ挿入、連絡先メール実値、集客（現状 累計DL32件）。
+            </p>
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">参照</h3>
+            <p className="text-text-muted">
+              Vault <code className="text-xs">30-Projects/videodl/ad-strategy-adult.md</code>（全文）。
+            </p>
+          </div>
+
+          <a
+            href="https://videodl.apollomansion.com/"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex w-fit items-center gap-2 rounded-md border border-border bg-surface-2/50 px-3 py-2 text-sm text-text transition-colors hover:border-accent hover:text-accent"
+          >
+            <LinkIcon width={16} height={16} />
+            ライブサイトを開く（videodl.apollomansion.com）
+          </a>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// ─── ClipItNow「状況」タブ ────────────────────────────────────────────
+// ClipItNow（https://clipitnow.net）の現況サマリ＋ファーストパーティのライブ統計。
+// 統計は公開エンドポイント（CORS 許可済み）から取得する。GA4 は実 ID 設定待ち。
+// レスポンス形: { generated_ts, pageviews:{24h,7d,all}, downloads:{24h,7d,all}, top_paths_24h:[{path,views}] }
+interface NameCount {
+  name: string;
+  count: number;
+}
+interface ClipItNowStats {
+  generated_ts?: number;
+  pageviews: { '24h': number; '7d': number; all: number };
+  downloads: { '24h': number; '7d': number; all: number };
+  top_paths_24h: { path: string; views: number }[];
+  referrers_24h: NameCount[];
+  languages_24h: NameCount[];
+  top_downloads_7d: NameCount[];
+  download_sources_7d: NameCount[];
+  events_24h: NameCount[];
+}
+interface ExoDay {
+  date: string;
+  impressions: number;
+  clicks: number;
+  video_views: number;
+  revenue: number;
+}
+interface ExoStats {
+  available: boolean;
+  impressions_7d?: number;
+  clicks_7d?: number;
+  video_views_7d?: number;
+  revenue_7d?: number;
+  ctr_7d?: number;
+  today?: { date?: string; impressions: number; clicks: number; video_views: number; revenue: number };
+  daily?: ExoDay[];
+}
+
+const CLIPITNOW_STATS_URL = 'https://clipitnow.net/api/stats';
+const CLIPITNOW_EXOSTATS_URL = 'https://clipitnow.net/api/exostats';
+
+function numOr0(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
+
+function normNameCounts(v: unknown): NameCount[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((x) => {
+      const r = (x ?? {}) as Record<string, unknown>;
+      return { name: typeof r.name === 'string' ? r.name : '', count: numOr0(r.count) };
+    })
+    .filter((x) => x.name);
+}
+
+function normalizeExoStats(raw: unknown): ExoStats {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  if (!o.available) return { available: false };
+  const t = (o.today ?? {}) as Record<string, unknown>;
+  const daily = Array.isArray(o.daily)
+    ? o.daily.map((d) => {
+        const r = (d ?? {}) as Record<string, unknown>;
+        return {
+          date: typeof r.date === 'string' ? r.date : '',
+          impressions: numOr0(r.impressions),
+          clicks: numOr0(r.clicks),
+          video_views: numOr0(r.video_views),
+          revenue: numOr0(r.revenue),
+        };
+      })
+    : [];
+  return {
+    available: true,
+    impressions_7d: numOr0(o.impressions_7d),
+    clicks_7d: numOr0(o.clicks_7d),
+    video_views_7d: numOr0(o.video_views_7d),
+    revenue_7d: numOr0(o.revenue_7d),
+    ctr_7d: numOr0(o.ctr_7d),
+    today: {
+      date: typeof t.date === 'string' ? t.date : undefined,
+      impressions: numOr0(t.impressions),
+      clicks: numOr0(t.clicks),
+      video_views: numOr0(t.video_views),
+      revenue: numOr0(t.revenue),
+    },
+    daily,
+  };
+}
+
+/** /api/stats のレスポンスを安全に正規化する（欠損は 0／空配列）。 */
+function normalizeClipItNowStats(raw: unknown): ClipItNowStats {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const pv = (o.pageviews ?? {}) as Record<string, unknown>;
+  const dl = (o.downloads ?? {}) as Record<string, unknown>;
+  const paths = Array.isArray(o.top_paths_24h) ? o.top_paths_24h : [];
+  return {
+    generated_ts: typeof o.generated_ts === 'number' ? o.generated_ts : undefined,
+    pageviews: { '24h': numOr0(pv['24h']), '7d': numOr0(pv['7d']), all: numOr0(pv.all) },
+    downloads: { '24h': numOr0(dl['24h']), '7d': numOr0(dl['7d']), all: numOr0(dl.all) },
+    top_paths_24h: paths
+      .map((p) => {
+        const r = (p ?? {}) as Record<string, unknown>;
+        return { path: typeof r.path === 'string' ? r.path : '', views: numOr0(r.views) };
+      })
+      .filter((p) => p.path),
+    referrers_24h: normNameCounts(o.referrers_24h),
+    languages_24h: normNameCounts(o.languages_24h),
+    top_downloads_7d: normNameCounts(o.top_downloads_7d),
+    download_sources_7d: normNameCounts(o.download_sources_7d),
+    events_24h: normNameCounts(o.events_24h),
+  };
+}
+
+// 統計の 1 指標（累計／7日／24h の 3 数値）を出すカード。
+function StatMetricCard({
+  icon,
+  label,
+  data,
+}: {
+  icon: ReactNode;
+  label: string;
+  data: { '24h': number; '7d': number; all: number };
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
+      <div className="flex items-center gap-2 text-text-muted">
+        <span aria-hidden>{icon}</span>
+        <span className="text-xs font-semibold text-text">{label}</span>
+      </div>
+      <div className="flex items-baseline gap-1">
+        <span className="text-2xl font-bold tabular-nums text-text">
+          {data.all.toLocaleString()}
+        </span>
+        <span className="text-[11px] text-text-muted">累計</span>
+      </div>
+      <div className="flex gap-4 text-[11px] text-text-muted">
+        <span>
+          7日 <span className="font-semibold tabular-nums text-text">{data['7d'].toLocaleString()}</span>
+        </span>
+        <span>
+          24h <span className="font-semibold tabular-nums text-text">{data['24h'].toLocaleString()}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// 名前→件数の小リスト（参照元・言語・人気DL・DL元・クリック内訳で共用）。
+function NCList({
+  title,
+  items,
+  empty,
+  mono,
+}: {
+  title: string;
+  items: NameCount[];
+  empty?: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-surface-2/40 p-3">
+      <h3 className="mb-2 text-xs font-semibold text-text">{title}</h3>
+      {items.length === 0 ? (
+        <p className="text-[11px] text-text-muted">{empty ?? 'まだデータがありません。'}</p>
+      ) : (
+        <ul className="flex flex-col divide-y divide-border/60">
+          {items.map((it, i) => (
+            <li key={it.name + i} className="flex items-center justify-between gap-3 py-1.5">
+              <span className={`min-w-0 truncate text-[12px] text-text${mono ? ' font-mono' : ''}`}>
+                {it.name}
+              </span>
+              <span className="shrink-0 text-[12px] font-semibold tabular-nums text-text-muted">
+                {it.count.toLocaleString()}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ExoClick 広告実績（7日・本日・日別）。トークンはサーバ内、/api/exostats 経由で取得。
+// 現在の主収益源のため詳しく表示（収益・表示・クリック・動画視聴・CTR＋本日＋日別）。
+function ExoRevenuePanel({ exo }: { exo: ExoStats | null }) {
+  if (!exo) return null;
+  if (!exo.available) {
+    return (
+      <div className="rounded-lg border border-border bg-surface-2/40 p-3">
+        <h3 className="mb-1 text-xs font-semibold text-text">広告実績（ExoClick）</h3>
+        <p className="text-[11px] text-text-muted">
+          取得できませんでした（トークン未設定／API応答なし）。
+        </p>
+      </div>
+    );
+  }
+  const cell = (label: string, value: string, accent?: boolean) => (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] text-text-muted">{label}</span>
+      <span className={`text-base font-bold tabular-nums ${accent ? 'text-accent' : 'text-text'}`}>{value}</span>
+    </div>
+  );
+  const daily = (exo.daily ?? []).slice().reverse(); // 新しい日を上に
+  return (
+    <div className="rounded-lg border border-accent/30 bg-accent/[0.04] p-3">
+      <h3 className="mb-2 text-xs font-semibold text-text">広告実績（ExoClick・直近7日）</h3>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {cell('収益', `$${(exo.revenue_7d ?? 0).toFixed(4)}`, true)}
+        {cell('表示', (exo.impressions_7d ?? 0).toLocaleString())}
+        {cell('クリック', (exo.clicks_7d ?? 0).toLocaleString())}
+        {cell('動画視聴', (exo.video_views_7d ?? 0).toLocaleString())}
+        {cell('CTR', `${(exo.ctr_7d ?? 0).toFixed(2)}%`)}
+      </div>
+      {exo.today && (
+        <p className="mt-2 text-[10px] text-text-muted">
+          本日{exo.today.date ? `（${exo.today.date}）` : ''}: 収益 ${(exo.today.revenue ?? 0).toFixed(4)}
+          {' / '}表示 {(exo.today.impressions ?? 0).toLocaleString()}
+          {' / '}クリック {(exo.today.clicks ?? 0).toLocaleString()}
+          {' / '}動画視聴 {(exo.today.video_views ?? 0).toLocaleString()}
+        </p>
+      )}
+      {daily.length > 0 && (
+        <div className="mt-3 overflow-hidden rounded-md border border-border/70">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="bg-surface-2/60 text-text-muted">
+                <th className="px-2 py-1 text-left font-medium">日付</th>
+                <th className="px-2 py-1 text-right font-medium">収益</th>
+                <th className="px-2 py-1 text-right font-medium">表示</th>
+                <th className="px-2 py-1 text-right font-medium">クリック</th>
+                <th className="px-2 py-1 text-right font-medium">動画視聴</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/50">
+              {daily.map((d) => (
+                <tr key={d.date} className="text-text">
+                  <td className="px-2 py-1 tabular-nums text-text-muted">{d.date.slice(5)}</td>
+                  <td className="px-2 py-1 text-right font-semibold tabular-nums">${d.revenue.toFixed(4)}</td>
+                  <td className="px-2 py-1 text-right tabular-nums">{d.impressions.toLocaleString()}</td>
+                  <td className="px-2 py-1 text-right tabular-nums">{d.clicks.toLocaleString()}</td>
+                  <td className="px-2 py-1 text-right tabular-nums">{d.video_views.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ClipItNow のライブ統計パネル（訪問者数・DL・広告収益・参照元・言語・クリック内訳）。
+function ClipItNowStatsPanel() {
+  const [stats, setStats] = useState<ClipItNowStats | null>(null);
+  const [exo, setExo] = useState<ExoStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const [sRes, eRes] = await Promise.allSettled([
+        fetch(CLIPITNOW_STATS_URL, { headers: { Accept: 'application/json' } }),
+        fetch(CLIPITNOW_EXOSTATS_URL, { headers: { Accept: 'application/json' } }),
+      ]);
+      if (sRes.status === 'fulfilled' && sRes.value.ok) {
+        setStats(normalizeClipItNowStats((await sRes.value.json()) as unknown));
+      } else {
+        throw new Error('stats fetch failed');
+      }
+      if (eRes.status === 'fulfilled' && eRes.value.ok) {
+        setExo(normalizeExoStats((await eRes.value.json()) as unknown));
+      } else {
+        setExo({ available: false });
+      }
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const generatedLabel = stats?.generated_ts
+    ? formatDate(new Date(stats.generated_ts * 1000).toISOString())
+    : '';
+
+  return (
+    <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <ActivityIcon width={18} height={18} />
+          <h2 className="text-base font-bold text-text">ライブ統計</h2>
+        </div>
+        <button
+          type="button"
+          onClick={() => void load()}
+          disabled={loading}
+          aria-label="統計を再読込"
+          className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-[11px] text-text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <LoopIcon width={13} height={13} />
+          再読込
+        </button>
+      </div>
+
+      {loading && !stats ? (
+        <p className="py-6 text-center text-sm text-text-muted">読み込み中…</p>
+      ) : error && !stats ? (
+        <div className="flex flex-col items-start gap-2 rounded-md border border-blocked/30 bg-blocked/5 px-3 py-3">
+          <p className="text-[12px] text-blocked">統計を取得できませんでした。</p>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+          >
+            再試行
+          </button>
+        </div>
+      ) : stats ? (
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <StatMetricCard
+              icon={<EyeIcon width={16} height={16} />}
+              label="訪問者数（pageviews）"
+              data={stats.pageviews}
+            />
+            <StatMetricCard
+              icon={<DownloadIcon width={16} height={16} />}
+              label="ダウンロード数（downloads）"
+              data={stats.downloads}
+            />
+          </div>
+
+          {/* 広告実績（ExoClick・現在の主収益源） */}
+          <ExoRevenuePanel exo={exo} />
+
+          {/* 詳細内訳 */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <NCList
+              title="ページ別トップ（24h）"
+              items={stats.top_paths_24h.map((p) => ({ name: p.path, count: p.views }))}
+              empty="まだアクセスがありません。"
+              mono
+            />
+            <NCList title="参照元（24h）" items={stats.referrers_24h} />
+            <NCList title="訪問者の言語（24h）" items={stats.languages_24h} mono />
+            <NCList title="クリック内訳（24h）" items={stats.events_24h} mono />
+            <NCList title="人気ダウンロード（7日）" items={stats.top_downloads_7d} />
+            <NCList title="ダウンロード元サイト（7日）" items={stats.download_sources_7d} mono />
+          </div>
+
+          <p className="text-[10px] leading-relaxed text-text-faint">
+            ファーストパーティ計測（アドブロッカーでもカウント）。言語・クリック内訳は導入直後のため
+            数日で蓄積されます。広告実績は ExoClick API 由来。GA4 は任意（実 ID 差替で有効）。
+            {generatedLabel && <> 集計時刻 {generatedLabel}。</>}
+          </p>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+// ─── ClipItNow「状況」タブ ────────────────────────────────────────────
+function WorkClipItNowStatusTab() {
+  return (
+    <div className="mx-auto flex max-w-3xl flex-col gap-4">
+      {/* A. ライブ統計（最上部） */}
+      <ClipItNowStatsPanel />
+
+      {/* B. 現況サマリ */}
+      <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <InfoIcon width={18} height={18} />
+          <h2 className="text-base font-bold text-text">ClipItNow 現況</h2>
+        </div>
+
+        <div className="flex flex-col gap-4 text-sm leading-relaxed text-text">
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">ドメイン</h3>
+            <p className="text-text-muted">
+              https://clipitnow.net 稼働中（旧 videodl.apollomansion.com は 301 転送）。
+            </p>
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">SEO</h3>
+            <p className="text-text-muted">
+              技術SEO一式（title/description/canonical/OGP/JSON-LD）・robots.txt/sitemap.xml・og.png・
+              ソース別LP15本（/tiktok-download・/xvideos-download 他）。IndexNow 送信済（Bing/Yandex）。
+              Google 側は要 URL 検査申請（Keita）。
+            </p>
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">ランキング</h3>
+            <p className="text-text-muted">
+              人気動画50件を初期投入（xvideos/xhamster/pornhub）。再生回数は非表示・サムネ補完済。
+            </p>
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">多言語</h3>
+            <p className="text-text-muted">
+              5言語（日本語／English／한국어／中文／Español）に自動対応。判定は
+              ブラウザ言語→訪問国（Cloudflare CF-IPCountry）→英語。右上で手動切替＋記憶。
+              エラー文言も言語別。法務ページも同5言語。
+            </p>
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">UI</h3>
+            <p className="text-text-muted">
+              タイトル横に「Beta」バッジ。PCは左下にフローティング広告（×で閉じる・セッション記憶）。
+            </p>
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">計測</h3>
+            <p className="text-text-muted">
+              ファーストパーティ計測を拡張（PV・DL・参照元・訪問者の言語・人気DL・DL元サイト・
+              クリック内訳）。上のライブ統計に表示。GA4 は任意（実 ID 差替で有効）。
+            </p>
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">広告（ExoClick）</h3>
+            <p className="text-text-muted">
+              主収益源。ExoClick API 作成の実ゾーンを動画（VAST 自前再生・常時ループ）で配信：
+              トップ空きスペース／結果カード下／PC左下フロート／変換待ち中（captive）／保存後クローズ画面（最高CPM）。
+              表示・クリック・動画視聴・収益は上のパネルに表示。旧 Adsterra は clipitnow.net 未認可（Referer403）で
+              配信停止のため撤去済み。
+            </p>
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">残タスク（要Keita）</h3>
+            <ul className="flex list-decimal flex-col gap-1 pl-5 text-text-muted">
+              <li>実機（PC／スマホの通常回線）で広告表示を確認</li>
+              <li>Google URL 検査で LP インデックス申請</li>
+              <li>（任意）GA4 実 ID／Microsoft Clarity 導入</li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-text">リンク</h3>
+            <p className="text-text-muted">
+              詳細は Vault <code className="text-xs">30-Projects/videodl/README.md</code>。
+            </p>
+          </div>
+
+          <a
+            href="https://clipitnow.net/"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex w-fit items-center gap-2 rounded-md border border-border bg-surface-2/50 px-3 py-2 text-sm text-text transition-colors hover:border-accent hover:text-accent"
+          >
+            <LinkIcon width={16} height={16} />
+            サイトを開く（clipitnow.net）
+          </a>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 // ─── タブ統括 ────────────────────────────────────────────────────────
-type WorkTab = 'overview' | 'chat' | 'knowledge' | 'glossary' | 'pivot' | 'cost-pivot';
+type WorkTab =
+  | 'overview'
+  | 'chat'
+  | 'knowledge'
+  | 'glossary'
+  | 'videodl'
+  | 'clipitnow-status';
 
 function resolveInitialTab(): WorkTab {
   if (typeof window !== 'undefined') {
@@ -1667,9 +2294,9 @@ function resolveInitialTab(): WorkTab {
       t === 'chat' ||
       t === 'knowledge' ||
       t === 'glossary' ||
-      t === 'pivot' ||
-      t === 'cost-pivot' ||
-      t === 'overview'
+      t === 'overview' ||
+      t === 'videodl' ||
+      t === 'clipitnow-status'
     )
       return t;
   }
@@ -1679,11 +2306,10 @@ function resolveInitialTab(): WorkTab {
 function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) => void }) {
   const tabs: { id: WorkTab; label: string; icon: ReactNode }[] = [
     { id: 'overview', label: '概要', icon: <InfoIcon width={16} height={16} /> },
-    { id: 'chat', label: '壁打ち', icon: <ChatIcon width={16} height={16} /> },
     { id: 'knowledge', label: 'ナレッジ', icon: <NotebookIcon width={16} height={16} /> },
     { id: 'glossary', label: '単語帳', icon: <TextFileIcon width={16} height={16} /> },
-    { id: 'pivot', label: 'ピボット', icon: <SheetIcon width={16} height={16} /> },
-    { id: 'cost-pivot', label: '課題管理費', icon: <SheetIcon width={16} height={16} /> },
+    { id: 'videodl', label: '動画DL', icon: <VideoFileIcon width={16} height={16} /> },
+    { id: 'clipitnow-status', label: '状況解析', icon: <ActivityIcon width={16} height={16} /> },
   ];
   return (
     <div className="flex border-b border-border px-4 md:px-6" role="tablist" aria-label="仕事ページのタブ">
@@ -1714,6 +2340,32 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
 export default function Work() {
   const [tab, setTab] = useState<WorkTab>(() => resolveInitialTab());
 
+  // 壁打ちチャット本体は1インスタンスだけ生成し、右下のフローティングウィジェットに渡す。
+  const chat = useWorkChat();
+  // フローティングチャットの開閉。既定は開（「いつも右下に置いてある」）。端末に保持。
+  const [chatOpen, setChatOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return window.localStorage.getItem(WORK_CHAT_OPEN_KEY) !== 'false';
+  });
+  const toggleChat = () => {
+    setChatOpen((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(WORK_CHAT_OPEN_KEY, String(next));
+      } catch {
+        /* localStorage 不可環境では無視 */
+      }
+      return next;
+    });
+  };
+
+  // マウント時にサーバ保存の履歴を取り込む（従来 WorkChatTab が担っていた処理）。
+  useEffect(() => {
+    void chat.restore();
+    // restore は安定参照（useCallback）。初回のみ実行する。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const changeTab = (next: WorkTab) => {
     setTab(next);
     if (typeof window !== 'undefined') {
@@ -1722,8 +2374,14 @@ export default function Work() {
     }
   };
 
+  // 単語帳「この単語を深掘りする」→ 右下チャットを開いてそのまま送信する。
+  const seedChat = (seed: string) => {
+    if (!chatOpen) toggleChat();
+    void chat.send(seed);
+  };
+
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
       <PageHeader
         title="仕事"
         subtitle="ECL（予想信用損失）システム導入 PMO 案件のための、学習・壁打ちチャットとナレッジ蓄積ツールです。"
@@ -1731,20 +2389,20 @@ export default function Work() {
       />
       <WorkTabBar tab={tab} onChange={changeTab} />
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
-        {tab === 'chat' ? (
-          <WorkChatTab />
-        ) : tab === 'knowledge' ? (
+        {tab === 'knowledge' ? (
           <WorkKnowledgeTab />
         ) : tab === 'glossary' ? (
-          <WorkGlossaryTab />
-        ) : tab === 'pivot' ? (
-          <WorkPivotTab />
-        ) : tab === 'cost-pivot' ? (
-          <WorkCostPivotTab />
+          <WorkGlossaryTab onSeedChat={seedChat} />
+        ) : tab === 'videodl' ? (
+          <WorkVideoDlTab />
+        ) : tab === 'clipitnow-status' ? (
+          <WorkClipItNowStatusTab />
         ) : (
           <WorkOverview />
         )}
       </div>
+      {/* 右下に常設の壁打ちチャット（どのタブでも相談できる） */}
+      <FloatingWorkChat chat={chat} open={chatOpen} onToggle={toggleChat} />
     </div>
   );
 }
