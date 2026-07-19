@@ -35,6 +35,11 @@ export interface ApprovalRequest {
   comment?: string;
   /** オートモードによる自動承認のとき true（手動承認では付かない）。履歴で「オート」表示に使う。 */
   autoApproved?: boolean;
+  /**
+   * true のとき、承認オートモードが有効でも自動承認せず Keita の実押し承認を必須にする
+   * （2026-07-19 ClipItNow PDCA 要望）。監査・再現性のためレコードに保存する。未指定は自動承認対象。
+   */
+  requireHuman?: boolean;
 }
 
 /** JSONL ファイルを全走査して id ごとの最新レコードを返す（last-wins）。 */
@@ -78,6 +83,7 @@ export function createRequest(data: {
   title: string;
   description: string;
   category: ApprovalRequest['category'];
+  requireHuman?: boolean;
 }): ApprovalRequest {
   const rec: ApprovalRequest = {
     id: `req-${randomUUID()}`,
@@ -88,6 +94,7 @@ export function createRequest(data: {
     category: data.category,
     requestedAt: new Date().toISOString(),
     status: 'pending',
+    ...(data.requireHuman ? { requireHuman: true } : {}),
   };
   appendRecord(rec);
   return rec;

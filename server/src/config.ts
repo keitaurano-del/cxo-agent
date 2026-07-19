@@ -793,6 +793,17 @@ export const DEPLOY_GH_PATH = env(
 export const AUTONOMOUS_LOG_DIR = env('AUTONOMOUS_LOG_DIR', join(DATA_HOME, 'logs'));
 
 /**
+ * ClipItNow PDCA 永続ループの状態ファイル（2026-07-19）。
+ * 林の cron スクリプトが $HOME/logs/clipitnow-pdca-state.json にサイクル状態を書き、
+ * Apollo は GET /api/clipitnow/pdca で read-only 参照する（Apollo は書かない）。
+ * env CLIPITNOW_PDCA_STATE_FILE で差し替え可。
+ */
+export const CLIPITNOW_PDCA_STATE_FILE = env(
+  'CLIPITNOW_PDCA_STATE_FILE',
+  join(DATA_HOME, 'logs', 'clipitnow-pdca-state.json'),
+);
+
+/**
  * autonomous-*.log を拾う glob パターン（AUTONOMOUS_LOG_DIR 内、相対）。
  * 既定 'autonomous-*.log'。将来スコープ別ログが増えても自動で拾う。
  * env AUTONOMOUS_LOG_GLOB で差し替え可。
@@ -1107,6 +1118,34 @@ export const WORK_WEB_IMAGE_ALLOWED_HOSTS = env(
   .map((h) => h.trim().toLowerCase())
   .filter((h) => h.length > 0);
 
+// ─── 汎用 Claude チャット（/api/claude）──────────────────────────────────
+// 仕事チャット（WORK_CHAT_*）の作法をそのまま踏襲した、話題を限定しない汎用 Claude アシスタント。
+// 保存先・メディアディレクトリは Work とは別物にして干渉させない（いずれも data/ 配下・.gitignore 済み）。
+// バイト上限・枚数は Work と同値でミラーする。
+
+/** 汎用 Claude チャット会話履歴の JSONL（追記専用・全消去は cleared マーカ）。 */
+export const CLAUDE_CHAT_FILE = env('CLAUDE_CHAT_FILE', join(INBOX_DATA_DIR, 'claude-chat.jsonl'));
+
+/** 汎用 Claude チャット添付メディアの保存ディレクトリ（Work とは別ディレクトリ）。 */
+export const CLAUDE_CHAT_MEDIA_DIR = env(
+  'CLAUDE_CHAT_MEDIA_DIR',
+  join(INBOX_DATA_DIR, 'claude-chat-media'),
+);
+export const CLAUDE_CHAT_IMAGE_MAX_BYTES = envNum('CLAUDE_CHAT_IMAGE_MAX_BYTES', 10 * 1024 * 1024);
+export const CLAUDE_CHAT_VIDEO_MAX_BYTES = envNum('CLAUDE_CHAT_VIDEO_MAX_BYTES', 50 * 1024 * 1024);
+export const CLAUDE_CHAT_MEDIA_MAX_FILES = envNum('CLAUDE_CHAT_MEDIA_MAX_FILES', 5);
+
+// ─── 汎用 Claude チャットのアシスタント返却 Web 画像の信頼ホスト ──────────────
+// 汎用なので主題は限定しないが、Web 画像の取り込みは捏造・低品質回避のため信頼できる公的・学術・
+// 報道・主要メディアのホストに限定する。カンマ区切り env で上書き可。サブドメイン含む末尾一致。
+export const CLAUDE_WEB_IMAGE_ALLOWED_HOSTS = env(
+  'CLAUDE_WEB_IMAGE_ALLOWED_HOSTS',
+  'go.jp,lg.jp,ac.jp,nii.ac.jp,wikipedia.org,wikimedia.org,nasa.gov,who.int,un.org,edu',
+)
+  .split(',')
+  .map((h) => h.trim().toLowerCase())
+  .filter((h) => h.length > 0);
+
 /** メディア実体の保存ディレクトリ（<id>-<safe-name> でフラット保存）。 */
 export const BABY_DIARY_MEDIA_DIR = env('BABY_DIARY_MEDIA_DIR', join(BABY_DIARY_DIR, 'baby-diary-media'));
 
@@ -1170,7 +1209,10 @@ export function googleConfigured(): boolean {
  * Drive/Tasks スコープが付与されているかは token の scope 文字列に該当スコープが含まれるかで判定する。
  */
 export const GOOGLE_OAUTH_SCOPE =
-  'openid email https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/photospicker.mediaitems.readonly https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/tasks.readonly';
+  'openid email https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/photospicker.mediaitems.readonly https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/tasks.readonly https://www.googleapis.com/auth/webmasters.readonly';
+
+/** Search Console 読取スコープ（token の scope にこれが含まれるかで GSC 連携可否を判定）。ClipItNow 集客の GSC 自動取得用（2026-07-19）。 */
+export const GOOGLE_SEARCHCONSOLE_SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
 
 /** Drive 読取スコープ（token の scope にこれが含まれるかで driveScopeGranted を判定）。 */
 export const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
@@ -1228,14 +1270,33 @@ export const PLANNER_ESTIMATE_CACHE_FILE = join(INBOX_DATA_DIR, 'planner-estimat
 export const DEV_MOCKUPS_FILE = join(INBOX_DATA_DIR, 'dev-mockups.jsonl');
 
 /**
+ * 開発ページ生成器の主要（primary）モデル（MC-260 UI 品質強化）。
+ * コード生成・修正・仕上げレビューをこのモデルで実行する。既定を Opus に引き上げ、
+ * 生成物の作り込み・完成度を底上げする（従来は Sonnet 固定で見た目が安っぽかった）。
+ * 利用上限に当たった場合は DEV_MOCKUP_FALLBACK_MODEL（既定 Sonnet）へ自動フォールバックする。
+ * ※設計ステージ・アイデア生成・仕様書・コード学習は軽い/量産系なので従来どおり
+ *   NOTEBOOK_CLAUDE_MODEL（Sonnet）のまま（Opus で回すとコスト/待ち時間に見合わない）。
+ * env DEV_MOCKUP_MODEL で差し替え可。 */
+export const DEV_MOCKUP_MODEL = env('DEV_MOCKUP_MODEL', 'claude-opus-4-8');
+
+/**
  * 開発ページ生成器の利用上限フォールバックモデル（ノートブック RAG と同方針）。
- * 通常は NOTEBOOK_CLAUDE_MODEL（Sonnet）で生成するが、Sonnet 利用上限に当たって CLI が失敗
- * （"You've hit your Sonnet limit · resets ..." 等）したとき、このモデル（既定 Opus）で再生成して
- * エラー画面に落とさない。env DEV_MOCKUP_FALLBACK_MODEL で差し替え可。 */
+ * 通常は DEV_MOCKUP_MODEL（既定 Opus）で生成するが、利用上限に当たって CLI が失敗
+ * （"You've hit your ... limit · resets ..." 等）したとき、このモデル（既定 Sonnet）で再生成して
+ * エラー画面に落とさない。Opus→Sonnet フォールバックで「重い/上限」時も止めない。
+ * env DEV_MOCKUP_FALLBACK_MODEL で差し替え可。 */
 export const DEV_MOCKUP_FALLBACK_MODEL = env(
   'DEV_MOCKUP_FALLBACK_MODEL',
-  NOTEBOOK_CLAUDE_FALLBACK_MODEL,
+  NOTEBOOK_CLAUDE_MODEL,
 );
+
+/**
+ * Figma ワイヤーフレーム工程を有効にするか（MC-260・既定 false で工程スキップ）。
+ * HTML がそのまま成果物のため、最終 UI を Figma で起こす必要は無い（Keita 方針 2026-07-03）。
+ * false のとき runDesignFirstJob は wireframe ステージを常にスキップし「設計→コード→デザイン昇格」
+ * の 1 フローで作る。true に戻せば従来の Figma 先行フローが復活する（可逆・ハード削除しない）。
+ * env DEV_ENABLE_FIGMA=true で復活可。 */
+export const DEV_ENABLE_FIGMA = env('DEV_ENABLE_FIGMA', 'false').toLowerCase() === 'true';
 
 /** AI 見積りに使うモデル（haiku で安く。mood と同じ流儀。env で差し替え可）。 */
 export const PLANNER_ESTIMATE_MODEL = env('PLANNER_ESTIMATE_MODEL', AGENT_MOOD_MODEL);

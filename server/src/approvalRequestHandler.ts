@@ -85,6 +85,14 @@ export function approvalRequestHandler(req: Request, res: Response): void {
     });
     return;
   }
+  // requireHuman（optional・boolean）: true のとき、オートモードが有効でも自動承認せず
+  // pending のまま残し、Keita の実押し承認を必須にする（2026-07-19 ClipItNow PDCA 要望）。
+  // 未指定は false 扱い。グローバル automode 設定はこのフラグでは変えない（このリクエスト限定のオプトアウト）。
+  if (body.requireHuman !== undefined && typeof body.requireHuman !== 'boolean') {
+    res.status(400).json({ error: 'requireHuman must be a boolean' });
+    return;
+  }
+  const requireHuman = body.requireHuman === true;
 
   try {
     const rec = createRequest({
@@ -93,6 +101,7 @@ export function approvalRequestHandler(req: Request, res: Response): void {
       title: (body.title as string).trim(),
       description: (body.description as string).trim(),
       category: body.category as ApprovalRequest['category'],
+      requireHuman,
     });
 
     // オートモード（MC-186）: ON のとき自動承認する。
@@ -103,8 +112,9 @@ export function approvalRequestHandler(req: Request, res: Response): void {
     // 自動承認しないことで担保される（このハンドラはエージェント発リクエストのみを扱う）。
     // 自動承認のとき autoApproved:true を立て、履歴 UI で「オート」と判別できるようにする（要望2）。
     // 注: エージェント自身の push は autonomous-loop の NO_PUSH で別レイヤー抑止が継続。
+    // requireHuman:true のリクエストは automode が有効でも自動承認しない（pending のまま）。
     let status = rec.status;
-    if (readAutoMode().enabled) {
+    if (readAutoMode().enabled && !requireHuman) {
       const updated = updateRequest(rec.id, {
         status: 'approved',
         decidedAt: new Date().toISOString(),
