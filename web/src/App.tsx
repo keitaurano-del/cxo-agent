@@ -5,7 +5,7 @@
 // 横断検索からの遷移に影響を出さない。
 import { NavLink, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { useState, useEffect, useCallback, Suspense, lazy } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
 import { useLiveStream, useLiveResource } from './lib/useLiveData';
 import { LiveContext } from './lib/liveContext';
 import type { ApprovalsResponse } from './lib/types';
@@ -263,36 +263,106 @@ function FullscreenButton({ compact }: { compact?: boolean }) {
 // そのままドラッグで幅を調整できる。ドラッグ中は CSS 変数を直接更新して即時反映し、
 // 離した時点で localStorage に保存（リロード後も維持）。ダブルクリックで標準幅に戻る。
 // サイドバーは画面左端（x=0）起点なので、ポインタの clientX ≒ そのまま新しい幅になる。
+//
+// 反応を良くするための作り（2026-07-20 Keita「反応が悪すぎる」で改良）:
+// - setPointerCapture でハンドルがポインタを掴む＝速いドラッグでカーソルがハンドルを
+//   追い越しても・iframe（ターミナル等）の上を通っても、イベントを取りこぼさない。
+// - ドラッグ中は全画面オーバーレイを敷き、下の iframe / テキスト選択 / hover を遮断。
+//   カーソルも全画面 col-resize に固定してチラつきを無くす。
+// - 幅更新は requestAnimationFrame に間引いて 1 フレーム 1 回＝映像に同期して滑らかに。
+// - 当たり判定はホバー時 10px・見た目は境目の細ライン＋中央のグリップで掴む場所を明示。
 function SidebarResizeHandle() {
   const { changeSidebarPx } = useSidebarWidth();
   const [dragging, setDragging] = useState(false);
+  // rAF 間引き用（state にすると再レンダーが挟まるので ref）。
+  const rafRef = useRef(0);
+  const nextXRef = useRef(0);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // 左ボタン/タッチ/ペンのみ。右クリック等はメニューを邪魔しない。
+    if (e.button !== 0) return;
     e.preventDefault();
+    const el = e.currentTarget;
+    // ポインタキャプチャ: 以降の move/up は必ずこの要素に届く（iframe 上でも途切れない）。
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      /* 古いブラウザは window リスナーだけで動く */
+    }
     setDragging(true);
-    const onMove = (ev: PointerEvent) => applySidebarWidth(ev.clientX);
-    const onUp = (ev: PointerEvent) => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
+
+    const apply = (x: number) => {
+      nextXRef.current = x;
+      if (rafRef.current) return; // 既に次フレーム予約済み
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = 0;
+        applySidebarWidth(nextXRef.current);
+      });
+    };
+
+    const onMove = (ev: PointerEvent) => {
+      ev.preventDefault();
+      apply(ev.clientX);
+    };
+    const finish = (ev: PointerEvent) => {
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', finish);
+      el.removeEventListener('pointercancel', finish);
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+      }
       setDragging(false);
       changeSidebarPx(ev.clientX);
+      try {
+        el.releasePointerCapture(ev.pointerId);
+      } catch {
+        /* noop */
+      }
     };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', finish);
+    el.addEventListener('pointercancel', finish);
   };
 
   return (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="サイドメニューの幅を調整（ドラッグ・ダブルクリックで標準に戻す）"
-      title="ドラッグで幅を調整（ダブルクリックで標準幅）"
-      onPointerDown={onPointerDown}
-      onDoubleClick={() => changeSidebarPx(SIDEBAR_PX_DEFAULT)}
-      className={`absolute inset-y-0 -right-1 z-20 w-2 cursor-col-resize touch-none select-none transition-colors ${
-        dragging ? 'bg-accent/50' : 'hover:bg-accent/30'
-      }`}
-    />
+    <>
+      {/* ドラッグ中の全画面オーバーレイ: iframe・テキスト選択・hover を遮断し、
+          カーソルを画面全体で col-resize に固定する。 */}
+      {dragging && (
+        <div
+          aria-hidden
+          className="fixed inset-0 z-40 cursor-col-resize select-none"
+          style={{ touchAction: 'none' }}
+        />
+      )}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="サイドメニューの幅を調整（ドラッグ・ダブルクリックで標準に戻す）"
+        title="ドラッグで幅を調整（ダブルクリックで標準幅）"
+        onPointerDown={onPointerDown}
+        onDoubleClick={() => changeSidebarPx(SIDEBAR_PX_DEFAULT)}
+        className="group absolute inset-y-0 -right-[5px] z-50 flex w-[10px] cursor-col-resize items-center justify-center touch-none select-none"
+      >
+        {/* 境目のライン（ホバー/ドラッグ中に太く・アクセント色に） */}
+        <div
+          className={`h-full transition-all ${
+            dragging
+              ? 'w-[3px] bg-accent'
+              : 'w-[2px] bg-transparent group-hover:bg-accent/70'
+          }`}
+        />
+        {/* 中央のグリップ（掴める場所の目印。ホバーで表示） */}
+        <div
+          className={`absolute top-1/2 -translate-y-1/2 rounded-full border border-border bg-surface-2 px-[3px] py-2 shadow-sm transition-opacity ${
+            dragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+        >
+          <div className="h-6 w-[3px] rounded-full bg-text-muted/70" />
+        </div>
+      </div>
+    </>
   );
 }
 
