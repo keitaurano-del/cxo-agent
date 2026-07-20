@@ -1,61 +1,63 @@
-// サイドメニュー幅の設定管理（MC-322）。
-// 2026-07-20 Keita 指示:「サイドメニューの幅を選択して可変式にできるように」。
+// サイドメニュー幅の設定管理（MC-322 → MC-323）。
+// 2026-07-20 Keita 指示: 設定モーダルの3択ではなく「サイドメニューの境目にカーソルを
+// 持っていくと、そのままドラッグで幅を調整できる」方式へ変更。px 単位で保存する。
 // useFontSize（MC-178）と同じパターン: localStorage に保存し、CSS 変数
-// --sidebar-width を documentElement へ直接適用する（複数フック間の同期は DOM 経由で解決）。
+// --sidebar-width を documentElement へ直接適用する（ドラッグ中も同じ経路で即時反映）。
 // サイドバーはデスクトップ（md〜）のみ表示のため、モバイル表示には影響しない。
 
 import { useState, useCallback } from 'react';
 
-export type SidebarWidthMode = 'narrow' | 'standard' | 'wide';
-
 const SIDEBAR_WIDTH_KEY = 'apollo_sidebar_width';
 
-/** 選択肢（px）。standard=224px は従来の固定幅 w-56 と同じ。 */
-export const SIDEBAR_WIDTH_PX: Record<SidebarWidthMode, number> = {
-  narrow: 176,
-  standard: 224,
-  wide: 296,
-};
+/** 幅の許容範囲（px）。default=224px は従来の固定幅 w-56 と同じ。 */
+export const SIDEBAR_PX_MIN = 160;
+export const SIDEBAR_PX_MAX = 440;
+export const SIDEBAR_PX_DEFAULT = 224;
 
-export const SIDEBAR_WIDTH_OPTIONS: { value: SidebarWidthMode; label: string }[] = [
-  { value: 'narrow', label: '狭い' },
-  { value: 'standard', label: '標準' },
-  { value: 'wide', label: '広い' },
-];
-
-const DEFAULT_MODE: SidebarWidthMode = 'standard';
-
-function isMode(v: string | null): v is SidebarWidthMode {
-  return v === 'narrow' || v === 'standard' || v === 'wide';
+/** px を許容範囲にクランプし整数化する。 */
+export function clampSidebarPx(px: number): number {
+  if (!Number.isFinite(px)) return SIDEBAR_PX_DEFAULT;
+  const rounded = Math.round(px);
+  if (rounded < SIDEBAR_PX_MIN) return SIDEBAR_PX_MIN;
+  if (rounded > SIDEBAR_PX_MAX) return SIDEBAR_PX_MAX;
+  return rounded;
 }
 
-/** 保存済みの幅モードを読む（不正値・未設定は standard）。 */
-export function loadSidebarWidthMode(): SidebarWidthMode {
+/**
+ * 保存済みの幅（px）を読む（未設定は 224px）。
+ * 後方互換: 旧3択プリセット 'narrow'/'standard'/'wide'（MC-322 初版）は px へ移行。
+ */
+export function loadSidebarPx(): number {
   const v = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-  return isMode(v) ? v : DEFAULT_MODE;
+  if (v === null) return SIDEBAR_PX_DEFAULT;
+  if (v === 'narrow') return 176;
+  if (v === 'standard') return SIDEBAR_PX_DEFAULT;
+  if (v === 'wide') return 296;
+  const n = Number(v);
+  if (Number.isFinite(n)) return clampSidebarPx(n);
+  return SIDEBAR_PX_DEFAULT;
 }
 
-/** CSS 変数 --sidebar-width を適用する（aside が参照）。 */
-export function applySidebarWidth(mode: SidebarWidthMode) {
-  document.documentElement.style.setProperty(
-    '--sidebar-width',
-    `${SIDEBAR_WIDTH_PX[mode]}px`,
-  );
+/** CSS 変数 --sidebar-width を適用する（aside が参照）。ドラッグ中の live 反映にも使う。 */
+export function applySidebarWidth(px: number) {
+  document.documentElement.style.setProperty('--sidebar-width', `${clampSidebarPx(px)}px`);
 }
 
 /** サイドメニュー幅設定を管理する Hook。 */
 export function useSidebarWidth() {
-  const [sidebarWidthMode, setMode] = useState<SidebarWidthMode>(() => {
-    const loaded = loadSidebarWidthMode();
+  const [sidebarPx, setSidebarPx] = useState<number>(() => {
+    const loaded = loadSidebarPx();
     applySidebarWidth(loaded);
     return loaded;
   });
 
-  const changeSidebarWidth = useCallback((mode: SidebarWidthMode) => {
-    applySidebarWidth(mode);
-    localStorage.setItem(SIDEBAR_WIDTH_KEY, mode);
-    setMode(mode);
+  // 確定値の保存（ドラッグ終了時・リセット時に呼ぶ）。
+  const changeSidebarPx = useCallback((px: number) => {
+    const clamped = clampSidebarPx(px);
+    applySidebarWidth(clamped);
+    localStorage.setItem(SIDEBAR_WIDTH_KEY, String(clamped));
+    setSidebarPx(clamped);
   }, []);
 
-  return { sidebarWidthMode, changeSidebarWidth };
+  return { sidebarPx, changeSidebarPx };
 }

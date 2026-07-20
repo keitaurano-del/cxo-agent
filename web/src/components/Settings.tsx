@@ -1,6 +1,5 @@
 // 設定ダイアログ（MC-178 フォントサイズ等）
 import { FONT_PX_MAX, FONT_PX_MIN, FONT_PX_STEP, useFontSize } from '../lib/useFontSize';
-import { SIDEBAR_WIDTH_OPTIONS, useSidebarWidth } from '../lib/useSidebarWidth';
 import { CloseIcon } from './icons';
 
 type ThemeMode = 'auto' | 'dark' | 'light';
@@ -22,8 +21,6 @@ const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
 
 export default function Settings({ open, onClose, themeMode, isDark, onThemeChange }: SettingsProps) {
   const { fontPx, changeFontPx } = useFontSize();
-  // サイドメニュー幅（MC-322）。選択即時反映（CSS 変数経由）。
-  const { sidebarWidthMode, changeSidebarWidth } = useSidebarWidth();
 
   if (!open) return null;
 
@@ -86,35 +83,7 @@ export default function Settings({ open, onClose, themeMode, isDark, onThemeChan
             </div>
           )}
 
-          {/* サイドメニュー幅セクション（MC-322）。選択式・即時反映。 */}
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-text">サイドメニューの幅</h3>
-            <div className="grid grid-cols-3 gap-2">
-              {SIDEBAR_WIDTH_OPTIONS.map((opt) => {
-                const active = sidebarWidthMode === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => changeSidebarWidth(opt.value)}
-                    aria-pressed={active}
-                    className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
-                      active
-                        ? 'border-accent bg-accent font-semibold text-bg'
-                        : 'border-border bg-surface-2 text-text-muted hover:bg-surface-3 hover:text-text'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mt-3 text-xs text-text-faint">
-              左のサイドメニューの幅を切り替えます（選択した瞬間に反映）。
-              <br />
-              モバイル表示（メニューが上部に畳まれる画面）には影響しません。
-            </p>
-          </div>
+          {/* サイドメニュー幅は境目ドラッグで調整（MC-323。旧3択セクションは撤去） */}
 
           {/* フォントサイズ設定セクション */}
           <div>

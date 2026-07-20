@@ -60,7 +60,11 @@ import { UploadProvider } from './lib/UploadContext';
 import { UploadToast } from './components/UploadToast';
 import Settings from './components/Settings';
 import { useFontSize } from './lib/useFontSize';
-import { useSidebarWidth } from './lib/useSidebarWidth';
+import {
+  applySidebarWidth,
+  SIDEBAR_PX_DEFAULT,
+  useSidebarWidth,
+} from './lib/useSidebarWidth';
 
 // 遅延ロード中の軽量フォールバック（チャンク取得待ちの一瞬だけ表示）。
 function ViewFallback() {
@@ -254,6 +258,44 @@ function FullscreenButton({ compact }: { compact?: boolean }) {
   );
 }
 
+// ─── サイドメニュー幅のリサイズハンドル（MC-323）─────────────────────────
+// サイドバー右端（境目）にカーソルを持っていくと col-resize カーソルになり、
+// そのままドラッグで幅を調整できる。ドラッグ中は CSS 変数を直接更新して即時反映し、
+// 離した時点で localStorage に保存（リロード後も維持）。ダブルクリックで標準幅に戻る。
+// サイドバーは画面左端（x=0）起点なので、ポインタの clientX ≒ そのまま新しい幅になる。
+function SidebarResizeHandle() {
+  const { changeSidebarPx } = useSidebarWidth();
+  const [dragging, setDragging] = useState(false);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragging(true);
+    const onMove = (ev: PointerEvent) => applySidebarWidth(ev.clientX);
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      setDragging(false);
+      changeSidebarPx(ev.clientX);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="サイドメニューの幅を調整（ドラッグ・ダブルクリックで標準に戻す）"
+      title="ドラッグで幅を調整（ダブルクリックで標準幅）"
+      onPointerDown={onPointerDown}
+      onDoubleClick={() => changeSidebarPx(SIDEBAR_PX_DEFAULT)}
+      className={`absolute inset-y-0 -right-1 z-20 w-2 cursor-col-resize touch-none select-none transition-colors ${
+        dragging ? 'bg-accent/50' : 'hover:bg-accent/30'
+      }`}
+    />
+  );
+}
+
 function Sidebar({
   badges,
   open,
@@ -294,8 +336,8 @@ function Sidebar({
 
   return (
     <aside
-      className="hidden shrink-0 flex-col border-r border-border bg-surface md:flex"
-      // 幅は設定モーダルで選択可変（MC-322）。--sidebar-width は useSidebarWidth が適用する。
+      className="relative hidden shrink-0 flex-col border-r border-border bg-surface md:flex"
+      // 幅は右端ハンドルのドラッグで可変（MC-323）。--sidebar-width は useSidebarWidth が適用する。
       style={{ width: 'var(--sidebar-width, 224px)' }}
     >
       <div className="flex items-center justify-between px-5 py-4">
@@ -407,6 +449,8 @@ function Sidebar({
           <span>再読み込み</span>
         </button>
       </div>
+      {/* 右端の境目: ドラッグで幅調整（MC-323） */}
+      <SidebarResizeHandle />
     </aside>
   );
 }
