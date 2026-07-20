@@ -1,9 +1,9 @@
 // 仕事ページ（/work, MC-260）。メガバンクの ECL（予想信用損失）システム導入 PMO 案件向けの
 // 学習・壁打ち＋ナレッジ蓄積ツール。茶事ページ（Chaji）のタブ＋チャット構成を踏襲しつつ、
-// メディア添付は扱わない（テキストのみ）。3 タブ構成:
-//   - 概要   : 仕事ツールのオリエンテーション本文（workData.WORK_OVERVIEW_MARKDOWN）を ChatMarkdown で描画。
-//   - 壁打ち : ECL/PMO アドバイザーとの学習・壁打ちチャット（/api/work/chat・SSE/JSON・サーバ永続）。
+// メディア添付は扱わない（テキストのみ）。タブ構成（2026-07-20 Keita・MC-319 で
+// 概要／動画DL／状況解析を撤去。ナレッジ＋単語帳のみ。壁打ちは右下フローティングチャット）:
 //   - ナレッジ: 体系ナレッジの蓄積（CRUD ＋ 生インプットの AI 体系化）。/api/work/knowledge。
+//   - 単語帳 : ECL/PMO 用語集（workGlossary）。
 //
 // チャットは茶事チャットのジョブ方式（接続から切り離した非同期生成・pending→ポーリング解決）を踏襲。
 // 接続が切れても回答は失われず、再オープン／タブ復帰でサーバの確定結果を取りに行く。
@@ -13,18 +13,12 @@ import { PageHeader } from '../components/PageHeader';
 import ChatMarkdown from '../components/ChatMarkdown';
 import { UserChatBody } from '../components/mediaEmbed';
 import {
-  ActivityIcon,
   ChatIcon,
   CheckIcon,
   CloseIcon,
-  DownloadIcon,
   EditIcon,
   ExpandIcon,
-  EyeIcon,
   ImageFileIcon,
-  InfoIcon,
-  LinkIcon,
-  LoopIcon,
   NotebookIcon,
   PlusIcon,
   SearchIcon,
@@ -34,9 +28,7 @@ import {
   TagIcon,
   TextFileIcon,
   TrashIcon,
-  VideoFileIcon,
 } from '../components/icons';
-import { WORK_OVERVIEW_MARKDOWN } from './workData';
 // ピボット／課題管理費／PwC転職 の各タブはサイドメニュー整理でUIから削除し、内容は Vault
 // （40-Resources/work-ecl/*.md）へ格納した（2026-07-06 Keita）。ガイド原文の
 // workPivotGuide / workCostPivotGuide / workPwcGuide とその図解コンポーネントはリポジトリに残置。
@@ -58,29 +50,6 @@ const WORK_CATEGORIES = [
   'その他',
 ] as const;
 type WorkCategory = (typeof WORK_CATEGORIES)[number];
-
-// ─── 概要タブ ────────────────────────────────────────────────────────
-function WorkOverview() {
-  return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
-      <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
-        <div className="mb-3">
-          <h2 className="text-base font-bold text-text">仕事 — ECL／PMO 学習・ナレッジ</h2>
-          <p className="mt-1 text-xs text-text-muted">
-            ECL（予想信用損失）システム導入 PMO 案件のための、学習・壁打ちとナレッジ蓄積のツールです。
-          </p>
-        </div>
-        <div className="mc-markdown">
-          <ChatMarkdown body={WORK_OVERVIEW_MARKDOWN} />
-        </div>
-        <p className="mt-3 rounded-md border border-border bg-surface-2/50 px-3 py-2 text-[11px] leading-relaxed text-text-muted">
-          日本の 2030 年 4 月 ECL 移行の具体（会計基準の最終内容・適用範囲・経過措置・確定スケジュール等）は
-          流動的・未確定な部分があります。壁打ちでも、確定していない事項は「要確認」として扱います。
-        </p>
-      </section>
-    </div>
-  );
-}
 
 // ─── 壁打ちチャット（ECL/PMO アドバイザー）─────────────────────────────
 // 茶事チャットのメディア対応版を踏襲。API base は /api/work。送信側（相談者の画像/動画）と
@@ -1721,595 +1690,23 @@ function WorkGlossaryTab({ onSeedChat }: { onSeedChat: (seed: string) => void })
   );
 }
 
-// ─── 動画DL「ClipItNow」広告収益化計画タブ ─────────────────────────────
-// ClipItNow（videodl.apollomansion.com）の広告収益化計画の要約。
-// 全文は Vault 30-Projects/videodl/ad-strategy-adult.md（2026-07-11 Keita決定）。
-function WorkVideoDlTab() {
-  return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
-      <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
-        <div className="mb-3 flex items-center gap-2">
-          <VideoFileIcon width={18} height={18} />
-          <h2 className="text-base font-bold text-text">
-            動画DL「ClipItNow」広告収益化計画（2026-07-11）
-          </h2>
-        </div>
-
-        <div className="flex flex-col gap-4 text-sm leading-relaxed text-text">
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">方針</h3>
-            <p className="text-text-muted">
-              ClipItNow（videodl.apollomansion.com）は普通の動画DLサイトとして構成（アダルトコンテンツも扱うが明示しない方針）。
-              年齢確認ゲートは廃止し、年齢・コンテンツ規定は利用規約/プライバシーに通常条項として記載。
-              児童ポルノ等の違法コンテンツは規約で禁止。広告枠は実装済・ライブ。
-            </p>
-          </div>
-
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">広告 三本柱</h3>
-            <ul className="flex list-disc flex-col gap-1 pl-5 text-text-muted">
-              <li>① ExoClick（基盤・全フォーマット・即日審査）</li>
-              <li>② 忍者AdMax（日本語RTB併走）</li>
-              <li>
-                ③ アダルトアフィリ FANZA/DMM＋ライブチャットCPA（dl-x未着手の差別化・第二エンジン）
-              </li>
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">配置</h3>
-            <p className="text-text-muted">
-              DL結果ページ集中＋ランキンググリッド。DLボタン被せオーバーレイは不採用（誤クリック誘導＝規約違反/BANリスク）。
-              ポップアンダーは1回/24h。
-            </p>
-          </div>
-
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">収益想定</h3>
-            <p className="text-text-muted">
-              月10万PVで ¥1.5〜4万／dl-x級（月70〜100万PV）で ¥25〜60万/月。
-            </p>
-          </div>
-
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">ロードマップ</h3>
-            <ul className="flex list-disc flex-col gap-1 pl-5 text-text-muted">
-              <li>P0＝通常法務（利用規約/プライバシー）＋ExoClick3枠＋計測（法務は完了済）</li>
-              <li>P1＝アフィリ＋SEO・TikTok系集客</li>
-              <li>P2＝TrafficJunky追加・多網比較</li>
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">残ブロッカー</h3>
-            <p className="text-text-muted">
-              広告網アカウント（ExoClick/忍者AdMax/FANZA・DMM）取得→実タグ挿入、連絡先メール実値、集客（現状 累計DL32件）。
-            </p>
-          </div>
-
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">参照</h3>
-            <p className="text-text-muted">
-              Vault <code className="text-xs">30-Projects/videodl/ad-strategy-adult.md</code>（全文）。
-            </p>
-          </div>
-
-          <a
-            href="https://videodl.apollomansion.com/"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex w-fit items-center gap-2 rounded-md border border-border bg-surface-2/50 px-3 py-2 text-sm text-text transition-colors hover:border-accent hover:text-accent"
-          >
-            <LinkIcon width={16} height={16} />
-            ライブサイトを開く（videodl.apollomansion.com）
-          </a>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-// ─── ClipItNow「状況」タブ ────────────────────────────────────────────
-// ClipItNow（https://clipitnow.net）の現況サマリ＋ファーストパーティのライブ統計。
-// 統計は公開エンドポイント（CORS 許可済み）から取得する。GA4 は実 ID 設定待ち。
-// レスポンス形: { generated_ts, pageviews:{24h,7d,all}, downloads:{24h,7d,all}, top_paths_24h:[{path,views}] }
-interface NameCount {
-  name: string;
-  count: number;
-}
-interface ClipItNowStats {
-  generated_ts?: number;
-  pageviews: { '24h': number; '7d': number; all: number };
-  downloads: { '24h': number; '7d': number; all: number };
-  top_paths_24h: { path: string; views: number }[];
-  referrers_24h: NameCount[];
-  languages_24h: NameCount[];
-  top_downloads_7d: NameCount[];
-  download_sources_7d: NameCount[];
-  events_24h: NameCount[];
-}
-interface ExoDay {
-  date: string;
-  impressions: number;
-  clicks: number;
-  video_views: number;
-  revenue: number;
-}
-interface ExoStats {
-  available: boolean;
-  impressions_7d?: number;
-  clicks_7d?: number;
-  video_views_7d?: number;
-  revenue_7d?: number;
-  ctr_7d?: number;
-  today?: { date?: string; impressions: number; clicks: number; video_views: number; revenue: number };
-  daily?: ExoDay[];
-}
-
-const CLIPITNOW_STATS_URL = 'https://clipitnow.net/api/stats';
-const CLIPITNOW_EXOSTATS_URL = 'https://clipitnow.net/api/exostats';
-
-function numOr0(v: unknown): number {
-  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
-}
-
-function normNameCounts(v: unknown): NameCount[] {
-  if (!Array.isArray(v)) return [];
-  return v
-    .map((x) => {
-      const r = (x ?? {}) as Record<string, unknown>;
-      return { name: typeof r.name === 'string' ? r.name : '', count: numOr0(r.count) };
-    })
-    .filter((x) => x.name);
-}
-
-function normalizeExoStats(raw: unknown): ExoStats {
-  const o = (raw ?? {}) as Record<string, unknown>;
-  if (!o.available) return { available: false };
-  const t = (o.today ?? {}) as Record<string, unknown>;
-  const daily = Array.isArray(o.daily)
-    ? o.daily.map((d) => {
-        const r = (d ?? {}) as Record<string, unknown>;
-        return {
-          date: typeof r.date === 'string' ? r.date : '',
-          impressions: numOr0(r.impressions),
-          clicks: numOr0(r.clicks),
-          video_views: numOr0(r.video_views),
-          revenue: numOr0(r.revenue),
-        };
-      })
-    : [];
-  return {
-    available: true,
-    impressions_7d: numOr0(o.impressions_7d),
-    clicks_7d: numOr0(o.clicks_7d),
-    video_views_7d: numOr0(o.video_views_7d),
-    revenue_7d: numOr0(o.revenue_7d),
-    ctr_7d: numOr0(o.ctr_7d),
-    today: {
-      date: typeof t.date === 'string' ? t.date : undefined,
-      impressions: numOr0(t.impressions),
-      clicks: numOr0(t.clicks),
-      video_views: numOr0(t.video_views),
-      revenue: numOr0(t.revenue),
-    },
-    daily,
-  };
-}
-
-/** /api/stats のレスポンスを安全に正規化する（欠損は 0／空配列）。 */
-function normalizeClipItNowStats(raw: unknown): ClipItNowStats {
-  const o = (raw ?? {}) as Record<string, unknown>;
-  const pv = (o.pageviews ?? {}) as Record<string, unknown>;
-  const dl = (o.downloads ?? {}) as Record<string, unknown>;
-  const paths = Array.isArray(o.top_paths_24h) ? o.top_paths_24h : [];
-  return {
-    generated_ts: typeof o.generated_ts === 'number' ? o.generated_ts : undefined,
-    pageviews: { '24h': numOr0(pv['24h']), '7d': numOr0(pv['7d']), all: numOr0(pv.all) },
-    downloads: { '24h': numOr0(dl['24h']), '7d': numOr0(dl['7d']), all: numOr0(dl.all) },
-    top_paths_24h: paths
-      .map((p) => {
-        const r = (p ?? {}) as Record<string, unknown>;
-        return { path: typeof r.path === 'string' ? r.path : '', views: numOr0(r.views) };
-      })
-      .filter((p) => p.path),
-    referrers_24h: normNameCounts(o.referrers_24h),
-    languages_24h: normNameCounts(o.languages_24h),
-    top_downloads_7d: normNameCounts(o.top_downloads_7d),
-    download_sources_7d: normNameCounts(o.download_sources_7d),
-    events_24h: normNameCounts(o.events_24h),
-  };
-}
-
-// 統計の 1 指標（累計／7日／24h の 3 数値）を出すカード。
-function StatMetricCard({
-  icon,
-  label,
-  data,
-}: {
-  icon: ReactNode;
-  label: string;
-  data: { '24h': number; '7d': number; all: number };
-}) {
-  return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
-      <div className="flex items-center gap-2 text-text-muted">
-        <span aria-hidden>{icon}</span>
-        <span className="text-xs font-semibold text-text">{label}</span>
-      </div>
-      <div className="flex items-baseline gap-1">
-        <span className="text-2xl font-bold tabular-nums text-text">
-          {data.all.toLocaleString()}
-        </span>
-        <span className="text-[11px] text-text-muted">累計</span>
-      </div>
-      <div className="flex gap-4 text-[11px] text-text-muted">
-        <span>
-          7日 <span className="font-semibold tabular-nums text-text">{data['7d'].toLocaleString()}</span>
-        </span>
-        <span>
-          24h <span className="font-semibold tabular-nums text-text">{data['24h'].toLocaleString()}</span>
-        </span>
-      </div>
-    </div>
-  );
-}
-
-// 名前→件数の小リスト（参照元・言語・人気DL・DL元・クリック内訳で共用）。
-function NCList({
-  title,
-  items,
-  empty,
-  mono,
-}: {
-  title: string;
-  items: NameCount[];
-  empty?: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-surface-2/40 p-3">
-      <h3 className="mb-2 text-xs font-semibold text-text">{title}</h3>
-      {items.length === 0 ? (
-        <p className="text-[11px] text-text-muted">{empty ?? 'まだデータがありません。'}</p>
-      ) : (
-        <ul className="flex flex-col divide-y divide-border/60">
-          {items.map((it, i) => (
-            <li key={it.name + i} className="flex items-center justify-between gap-3 py-1.5">
-              <span className={`min-w-0 truncate text-[12px] text-text${mono ? ' font-mono' : ''}`}>
-                {it.name}
-              </span>
-              <span className="shrink-0 text-[12px] font-semibold tabular-nums text-text-muted">
-                {it.count.toLocaleString()}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-// ExoClick 広告実績（7日・本日・日別）。トークンはサーバ内、/api/exostats 経由で取得。
-// 現在の主収益源のため詳しく表示（収益・表示・クリック・動画視聴・CTR＋本日＋日別）。
-function ExoRevenuePanel({ exo }: { exo: ExoStats | null }) {
-  if (!exo) return null;
-  if (!exo.available) {
-    return (
-      <div className="rounded-lg border border-border bg-surface-2/40 p-3">
-        <h3 className="mb-1 text-xs font-semibold text-text">広告実績（ExoClick）</h3>
-        <p className="text-[11px] text-text-muted">
-          取得できませんでした（トークン未設定／API応答なし）。
-        </p>
-      </div>
-    );
-  }
-  const cell = (label: string, value: string, accent?: boolean) => (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] text-text-muted">{label}</span>
-      <span className={`text-base font-bold tabular-nums ${accent ? 'text-accent' : 'text-text'}`}>{value}</span>
-    </div>
-  );
-  const daily = (exo.daily ?? []).slice().reverse(); // 新しい日を上に
-  return (
-    <div className="rounded-lg border border-accent/30 bg-accent/[0.04] p-3">
-      <h3 className="mb-2 text-xs font-semibold text-text">広告実績（ExoClick・直近7日）</h3>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {cell('収益', `$${(exo.revenue_7d ?? 0).toFixed(4)}`, true)}
-        {cell('表示', (exo.impressions_7d ?? 0).toLocaleString())}
-        {cell('クリック', (exo.clicks_7d ?? 0).toLocaleString())}
-        {cell('動画視聴', (exo.video_views_7d ?? 0).toLocaleString())}
-        {cell('CTR', `${(exo.ctr_7d ?? 0).toFixed(2)}%`)}
-      </div>
-      {exo.today && (
-        <p className="mt-2 text-[10px] text-text-muted">
-          本日{exo.today.date ? `（${exo.today.date}）` : ''}: 収益 ${(exo.today.revenue ?? 0).toFixed(4)}
-          {' / '}表示 {(exo.today.impressions ?? 0).toLocaleString()}
-          {' / '}クリック {(exo.today.clicks ?? 0).toLocaleString()}
-          {' / '}動画視聴 {(exo.today.video_views ?? 0).toLocaleString()}
-        </p>
-      )}
-      {daily.length > 0 && (
-        <div className="mt-3 overflow-hidden rounded-md border border-border/70">
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="bg-surface-2/60 text-text-muted">
-                <th className="px-2 py-1 text-left font-medium">日付</th>
-                <th className="px-2 py-1 text-right font-medium">収益</th>
-                <th className="px-2 py-1 text-right font-medium">表示</th>
-                <th className="px-2 py-1 text-right font-medium">クリック</th>
-                <th className="px-2 py-1 text-right font-medium">動画視聴</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {daily.map((d) => (
-                <tr key={d.date} className="text-text">
-                  <td className="px-2 py-1 tabular-nums text-text-muted">{d.date.slice(5)}</td>
-                  <td className="px-2 py-1 text-right font-semibold tabular-nums">${d.revenue.toFixed(4)}</td>
-                  <td className="px-2 py-1 text-right tabular-nums">{d.impressions.toLocaleString()}</td>
-                  <td className="px-2 py-1 text-right tabular-nums">{d.clicks.toLocaleString()}</td>
-                  <td className="px-2 py-1 text-right tabular-nums">{d.video_views.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ClipItNow のライブ統計パネル（訪問者数・DL・広告収益・参照元・言語・クリック内訳）。
-function ClipItNowStatsPanel() {
-  const [stats, setStats] = useState<ClipItNowStats | null>(null);
-  const [exo, setExo] = useState<ExoStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
-      const [sRes, eRes] = await Promise.allSettled([
-        fetch(CLIPITNOW_STATS_URL, { headers: { Accept: 'application/json' } }),
-        fetch(CLIPITNOW_EXOSTATS_URL, { headers: { Accept: 'application/json' } }),
-      ]);
-      if (sRes.status === 'fulfilled' && sRes.value.ok) {
-        setStats(normalizeClipItNowStats((await sRes.value.json()) as unknown));
-      } else {
-        throw new Error('stats fetch failed');
-      }
-      if (eRes.status === 'fulfilled' && eRes.value.ok) {
-        setExo(normalizeExoStats((await eRes.value.json()) as unknown));
-      } else {
-        setExo({ available: false });
-      }
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const generatedLabel = stats?.generated_ts
-    ? formatDate(new Date(stats.generated_ts * 1000).toISOString())
-    : '';
-
-  return (
-    <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <ActivityIcon width={18} height={18} />
-          <h2 className="text-base font-bold text-text">ライブ統計</h2>
-        </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={loading}
-          aria-label="統計を再読込"
-          className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-[11px] text-text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <LoopIcon width={13} height={13} />
-          再読込
-        </button>
-      </div>
-
-      {loading && !stats ? (
-        <p className="py-6 text-center text-sm text-text-muted">読み込み中…</p>
-      ) : error && !stats ? (
-        <div className="flex flex-col items-start gap-2 rounded-md border border-blocked/30 bg-blocked/5 px-3 py-3">
-          <p className="text-[12px] text-blocked">統計を取得できませんでした。</p>
-          <button
-            type="button"
-            onClick={() => void load()}
-            className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
-          >
-            再試行
-          </button>
-        </div>
-      ) : stats ? (
-        <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <StatMetricCard
-              icon={<EyeIcon width={16} height={16} />}
-              label="訪問者数（pageviews）"
-              data={stats.pageviews}
-            />
-            <StatMetricCard
-              icon={<DownloadIcon width={16} height={16} />}
-              label="ダウンロード数（downloads）"
-              data={stats.downloads}
-            />
-          </div>
-
-          {/* 広告実績（ExoClick・現在の主収益源） */}
-          <ExoRevenuePanel exo={exo} />
-
-          {/* 詳細内訳 */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <NCList
-              title="ページ別トップ（24h）"
-              items={stats.top_paths_24h.map((p) => ({ name: p.path, count: p.views }))}
-              empty="まだアクセスがありません。"
-              mono
-            />
-            <NCList title="参照元（24h）" items={stats.referrers_24h} />
-            <NCList title="訪問者の言語（24h）" items={stats.languages_24h} mono />
-            <NCList title="クリック内訳（24h）" items={stats.events_24h} mono />
-            <NCList title="人気ダウンロード（7日）" items={stats.top_downloads_7d} />
-            <NCList title="ダウンロード元サイト（7日）" items={stats.download_sources_7d} mono />
-          </div>
-
-          <p className="text-[10px] leading-relaxed text-text-faint">
-            ファーストパーティ計測（アドブロッカーでもカウント）。言語・クリック内訳は導入直後のため
-            数日で蓄積されます。広告実績は ExoClick API 由来。GA4 は任意（実 ID 差替で有効）。
-            {generatedLabel && <> 集計時刻 {generatedLabel}。</>}
-          </p>
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-// ─── ClipItNow「状況」タブ ────────────────────────────────────────────
-function WorkClipItNowStatusTab() {
-  return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
-      {/* A. ライブ統計（最上部） */}
-      <ClipItNowStatsPanel />
-
-      {/* B. 現況サマリ */}
-      <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
-        <div className="mb-3 flex items-center gap-2">
-          <InfoIcon width={18} height={18} />
-          <h2 className="text-base font-bold text-text">ClipItNow 現況</h2>
-        </div>
-
-        <div className="flex flex-col gap-4 text-sm leading-relaxed text-text">
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">ドメイン</h3>
-            <p className="text-text-muted">
-              https://clipitnow.net 稼働中（旧 videodl.apollomansion.com は 301 転送）。
-            </p>
-          </div>
-
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">SEO</h3>
-            <p className="text-text-muted">
-              技術SEO一式（title/description/canonical/OGP/JSON-LD）・robots.txt/sitemap.xml・og.png・
-              ソース別LP15本（/tiktok-download・/xvideos-download 他）。IndexNow 送信済（Bing/Yandex）。
-              Google 側は要 URL 検査申請（Keita）。
-            </p>
-          </div>
-
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">ランキング</h3>
-            <p className="text-text-muted">
-              人気動画50件を初期投入（xvideos/xhamster/pornhub）。再生回数は非表示・サムネ補完済。
-            </p>
-          </div>
-
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">多言語</h3>
-            <p className="text-text-muted">
-              5言語（日本語／English／한국어／中文／Español）に自動対応。判定は
-              ブラウザ言語→訪問国（Cloudflare CF-IPCountry）→英語。右上で手動切替＋記憶。
-              エラー文言も言語別。法務ページも同5言語。
-            </p>
-          </div>
-
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">UI</h3>
-            <p className="text-text-muted">
-              タイトル横に「Beta」バッジ。PCは左下にフローティング広告（×で閉じる・セッション記憶）。
-            </p>
-          </div>
-
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">計測</h3>
-            <p className="text-text-muted">
-              ファーストパーティ計測を拡張（PV・DL・参照元・訪問者の言語・人気DL・DL元サイト・
-              クリック内訳）。上のライブ統計に表示。GA4 は任意（実 ID 差替で有効）。
-            </p>
-          </div>
-
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">広告（ExoClick）</h3>
-            <p className="text-text-muted">
-              主収益源。ExoClick API 作成の実ゾーンを動画（VAST 自前再生・常時ループ）で配信：
-              トップ空きスペース／結果カード下／PC左下フロート／変換待ち中（captive）／保存後クローズ画面（最高CPM）。
-              表示・クリック・動画視聴・収益は上のパネルに表示。旧 Adsterra は clipitnow.net 未認可（Referer403）で
-              配信停止のため撤去済み。
-            </p>
-          </div>
-
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">残タスク（要Keita）</h3>
-            <ul className="flex list-decimal flex-col gap-1 pl-5 text-text-muted">
-              <li>実機（PC／スマホの通常回線）で広告表示を確認</li>
-              <li>Google URL 検査で LP インデックス申請</li>
-              <li>（任意）GA4 実 ID／Microsoft Clarity 導入</li>
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-text">リンク</h3>
-            <p className="text-text-muted">
-              詳細は Vault <code className="text-xs">30-Projects/videodl/README.md</code>。
-            </p>
-          </div>
-
-          <a
-            href="https://clipitnow.net/"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex w-fit items-center gap-2 rounded-md border border-border bg-surface-2/50 px-3 py-2 text-sm text-text transition-colors hover:border-accent hover:text-accent"
-          >
-            <LinkIcon width={16} height={16} />
-            サイトを開く（clipitnow.net）
-          </a>
-        </div>
-      </section>
-    </div>
-  );
-}
-
 // ─── タブ統括 ────────────────────────────────────────────────────────
-type WorkTab =
-  | 'overview'
-  | 'chat'
-  | 'knowledge'
-  | 'glossary'
-  | 'videodl'
-  | 'clipitnow-status';
+type WorkTab = 'chat' | 'knowledge' | 'glossary';
 
 function resolveInitialTab(): WorkTab {
   if (typeof window !== 'undefined') {
     const t = new URLSearchParams(window.location.search).get('tab');
-    if (
-      t === 'chat' ||
-      t === 'knowledge' ||
-      t === 'glossary' ||
-      t === 'overview' ||
-      t === 'videodl' ||
-      t === 'clipitnow-status'
-    )
-      return t;
+    // 概要/動画DL/状況解析タブは削除（2026-07-20 Keita・MC-319）。旧 URL はナレッジへ寄せる。
+    if (t === 'chat' || t === 'knowledge' || t === 'glossary') return t;
   }
-  return 'overview';
+  return 'knowledge';
 }
 
 function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) => void }) {
+  // 概要（意味が薄い）・動画DL・状況解析は削除（2026-07-20 Keita・MC-319）。単語帳とナレッジは残す。
   const tabs: { id: WorkTab; label: string; icon: ReactNode }[] = [
-    { id: 'overview', label: '概要', icon: <InfoIcon width={16} height={16} /> },
     { id: 'knowledge', label: 'ナレッジ', icon: <NotebookIcon width={16} height={16} /> },
     { id: 'glossary', label: '単語帳', icon: <TextFileIcon width={16} height={16} /> },
-    { id: 'videodl', label: '動画DL', icon: <VideoFileIcon width={16} height={16} /> },
-    { id: 'clipitnow-status', label: '状況解析', icon: <ActivityIcon width={16} height={16} /> },
   ];
   return (
     <div className="flex border-b border-border px-4 md:px-6" role="tablist" aria-label="仕事ページのタブ">
@@ -2369,7 +1766,7 @@ export default function Work() {
   const changeTab = (next: WorkTab) => {
     setTab(next);
     if (typeof window !== 'undefined') {
-      const url = next === 'overview' ? '/work' : `/work?tab=${next}`;
+      const url = next === 'knowledge' ? '/work' : `/work?tab=${next}`;
       window.history.replaceState(null, '', url);
     }
   };
@@ -2389,17 +1786,8 @@ export default function Work() {
       />
       <WorkTabBar tab={tab} onChange={changeTab} />
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
-        {tab === 'knowledge' ? (
-          <WorkKnowledgeTab />
-        ) : tab === 'glossary' ? (
-          <WorkGlossaryTab onSeedChat={seedChat} />
-        ) : tab === 'videodl' ? (
-          <WorkVideoDlTab />
-        ) : tab === 'clipitnow-status' ? (
-          <WorkClipItNowStatusTab />
-        ) : (
-          <WorkOverview />
-        )}
+        {/* 概要/動画DL/状況解析は削除（MC-319）。既定＝ナレッジ。 */}
+        {tab === 'glossary' ? <WorkGlossaryTab onSeedChat={seedChat} /> : <WorkKnowledgeTab />}
       </div>
       {/* 右下に常設の壁打ちチャット（どのタブでも相談できる） */}
       <FloatingWorkChat chat={chat} open={chatOpen} onToggle={toggleChat} />

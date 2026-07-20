@@ -342,8 +342,9 @@ export const CARE_BASICS: CareBasic[] = [
 export const CARE_BASICS_CAPTION = '一般的な目安です。';
 
 // ───────────────────────────────────────────────────────────
-// セクション（新）: 新生児の1日のリズムの目安（DAILY_RHYTHM）
+// セクション（新）: 1日のリズムの目安（DAILY_RHYTHM）
 // 横バー/アイコン付きで視覚化する想定。
+// 2026-07-20 更新（MC-318）: 生後1か月〜1か月半（生後40日前後）の目安に更新。
 // ───────────────────────────────────────────────────────────
 
 export interface DailyRhythmItem {
@@ -353,12 +354,15 @@ export interface DailyRhythmItem {
 }
 
 export const DAILY_RHYTHM: DailyRhythmItem[] = [
-  { icon: '🍼', label: '授乳', value: '2〜3時間ごと（1日8〜12回）' },
-  { icon: '😴', label: '睡眠', value: '1日合計16〜18時間（昼夜問わずこま切れ）' },
-  { icon: '🧷', label: 'おむつ', value: '1日10回前後' },
+  { icon: '🍼', label: '授乳', value: '3〜4時間ごと（1日6〜8回に整いはじめる）' },
+  { icon: '😴', label: '睡眠', value: '1日合計14〜17時間（夜のまとまりが少しずつ）' },
+  { icon: '👀', label: '起きている時間', value: '1回30分〜1時間ほど。目で物を追い、あやすと反応も' },
+  { icon: '🧷', label: 'おむつ', value: '1日8〜10回程度' },
+  { icon: '🚶', label: '外気浴・散歩', value: '1か月健診後OK。短時間から少しずつ' },
 ];
 
-export const DAILY_RHYTHM_CAPTION = '昼夜の区別はまだ。少しずつ整います。';
+export const DAILY_RHYTHM_CAPTION =
+  '生後1か月〜1か月半の一般的な目安です。昼夜の区別はこれから。個人差が大きい時期なので、その子のペースで大丈夫です。';
 
 // ───────────────────────────────────────────────────────────
 // セクション（新）: 夜泣き・ぐずり対応（NIGHT_CRYING）
@@ -602,6 +606,8 @@ export interface AdminProcedure extends DueItem {
   source: string;
   /** 最優先フラグ（直近・最重要）。 */
   topPriority?: boolean;
+  /** 手続き完了フラグ（2026-07-20 Keita: 出生届・一時金など全て完了）。 */
+  done?: boolean;
 }
 
 export const ADMIN_CAPTION =
@@ -622,6 +628,7 @@ export const ADMIN_PROCEDURES: AdminProcedure[] = [
       '母子健康手帳を持参。',
     ],
     source: '出典: 法務省／市区町村',
+    done: true,
     topPriority: true,
   },
   {
@@ -637,6 +644,7 @@ export const ADMIN_PROCEDURES: AdminProcedure[] = [
       '2024年10月から拡充（所得制限なし・高校生年代まで・第3子以降は増額）。',
     ],
     source: '出典: こども家庭庁／市区町村',
+    done: true,
   },
   {
     id: 'health-insurance',
@@ -648,6 +656,7 @@ export const ADMIN_PROCEDURES: AdminProcedure[] = [
     where: '勤務先（社会保険）またはお住まいの市区町村（国民健康保険）',
     body: ['加入後、乳幼児医療費助成の申請に進む。'],
     source: '出典: 各保険者',
+    done: true,
   },
   {
     id: 'infant-medical-subsidy',
@@ -660,6 +669,7 @@ export const ADMIN_PROCEDURES: AdminProcedure[] = [
     where: 'お住まいの自治体',
     body: ['健康保険証ができてから申請するのが一般的。'],
     source: '出典: 各自治体',
+    done: true,
   },
   {
     id: 'birth-lump-sum',
@@ -672,6 +682,7 @@ export const ADMIN_PROCEDURES: AdminProcedure[] = [
     where: '加入する保険者（協会けんぽ・健保組合・国保 等）／分娩機関',
     body: ['直接支払制度を使う場合は分娩機関での事前手続きを確認。'],
     source: '出典: 厚生労働省／各保険者',
+    done: true,
   },
   {
     id: 'maternity-leave-benefits',
@@ -683,6 +694,7 @@ export const ADMIN_PROCEDURES: AdminProcedure[] = [
     where: '勤務先／協会けんぽ・健保組合／ハローワーク',
     body: ['育児休業の取得予定に合わせて勤務先と調整。'],
     source: '出典: 各保険者／ハローワーク',
+    done: true,
   },
 ];
 

@@ -333,14 +333,18 @@ function DueCard({
   now: Date;
 }) {
   const urgency = urgencyOf(item.dueIso, now);
-  const top = item.kind === 'admin' && item.topPriority;
-  const ring = top
-    ? 'border-accent/60'
-    : urgency === 'overdue'
-      ? 'border-blocked/50'
-      : urgency === 'soon'
-        ? 'border-review/50'
-        : 'border-border';
+  // 完了済み（2026-07-20 Keita: 出生届・一時金など手続きは全て完了）。緊急度表示より優先。
+  const done = item.kind === 'admin' && item.done === true;
+  const top = !done && item.kind === 'admin' && item.topPriority;
+  const ring = done
+    ? 'border-border opacity-80'
+    : top
+      ? 'border-accent/60'
+      : urgency === 'overdue'
+        ? 'border-blocked/50'
+        : urgency === 'soon'
+          ? 'border-review/50'
+          : 'border-border';
   return (
     <li className={`rounded-md border ${ring} bg-bg px-3 py-3`}>
       <div className="flex items-start justify-between gap-3">
@@ -353,7 +357,13 @@ function DueCard({
             目安日: {formatJpDate(item.dueIso)}
           </p>
         </div>
-        <UrgencyBadge urgency={urgency} dueIso={item.dueIso} now={now} />
+        {done ? (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-done/15 px-2 py-0.5 text-[11px] font-bold text-done">
+            ✓ 完了
+          </span>
+        ) : (
+          <UrgencyBadge urgency={urgency} dueIso={item.dueIso} now={now} />
+        )}
       </div>
       <p className="mt-2 text-xs leading-relaxed text-text-muted">{item.dueNote}</p>
       {'where' in item && (
@@ -899,6 +909,11 @@ function ConsultationNotesSection() {
 }
 
 // ─── 育児ガイド本体（従来の /childcare の中身。タブシェル配下に描画）──
+// 非表示フラグ（2026-07-20 Keita・MC-318:「お世話の基本」「手続き・サービス」は一旦不要）。
+// true に戻せばそのまま再表示できる。
+const SHOW_CARE_BASICS = false;
+const SHOW_BUNKYO_SERVICES = false;
+
 function ChildcareGuide() {
   // クライアントの現在日を基準に算出（マウント時に固定）。
   const now = new Date();
@@ -915,7 +930,9 @@ function ChildcareGuide() {
           各ラッパに break-inside-avoid を当て、カードが列をまたいで割れないようにする。 */}
       <div className="columns-1 gap-4 lg:columns-2">
         {[
-          <CareBasicsSection key="care" />,
+          // 「お世話の基本」「文京区独自の手続き・サービス」は一旦非表示
+          //（2026-07-20 Keita・MC-318。コンポーネント・データは残置、フラグで再表示可）。
+          ...(SHOW_CARE_BASICS ? [<CareBasicsSection key="care" />] : []),
           <DailyRhythmSection key="rhythm" />,
           <NightCryingSection key="night" />,
           <FatherMindsetSection key="mindset" />,
@@ -923,7 +940,7 @@ function ChildcareGuide() {
           <WhenToSeeDoctorSection key="doctor" />,
           <SidsSection key="sids" />,
           <AdminSection key="admin" now={now} />,
-          <BunkyoSection key="bunkyo" />,
+          ...(SHOW_BUNKYO_SERVICES ? [<BunkyoSection key="bunkyo" />] : []),
           <PerksSection key="perks" />,
           <CheckupSection key="checkup" now={now} />,
         ].map((node) => (

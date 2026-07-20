@@ -21,10 +21,11 @@ function resolveInitial(initial?: DocTab): DocTab {
   return 'docs';
 }
 
+// RAG は未使用のためタブ非表示（2026-07-20 Keita・MC-317）。中身・コード・/notebooks 直リンクは
+// 削除せず残す（下の resolveInitial / 描画分岐は 'rag' を引き続き受け付ける＝直URLでのみ到達可）。
 const TABS: [DocTab, string][] = [
   ['docs', 'ドキュメント'],
   ['vault', 'Vault'],
-  ['rag', 'RAG'],
 ];
 
 export default function DocumentsTabs({ initialTab }: { initialTab?: DocTab } = {}) {

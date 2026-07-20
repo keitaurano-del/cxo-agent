@@ -2,9 +2,10 @@
 // タブバー（Claude / 使用量 / ニュース / ブリーフィング）+ <Outlet/> で
 // 各ビュー本体を差し込む。子ビューの URL は deep link・SSE・横断検索からの遷移に影響しない。
 // PC は横並び tablist、モバイルは横スクロール（Tasks のステータスタブと同じパターン）。
+// 既定表示は「カウントダウン」（/ クリック時の着地は App.tsx の dashboardLanding で固定）。
 import { NavLink, Outlet } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { ActivityIcon, GaugeIcon, NewsIcon, UsersIcon } from './icons';
+import { ClockIcon, GaugeIcon, LoopIcon, NewsIcon, UsageIcon } from './icons';
 import { SortableNav, DragHandle } from './SortableNav';
 import { useNavOrder } from '../lib/useNavOrder';
 
@@ -14,11 +15,21 @@ interface DashTab {
   icon: ReactNode;
 }
 
+// カウントダウンは常に「一番左」に固定（並べ替え対象外）。タップ時の既定着地でもある。
+const PINNED_TAB: DashTab = {
+  to: '/countdown',
+  label: 'カウントダウン',
+  icon: <ClockIcon width={16} height={16} />,
+};
+
 const DASH_TABS: DashTab[] = [
-  { to: '/agents-live', label: 'エージェント', icon: <UsersIcon width={16} height={16} /> },
+  // エージェントはタスクボードの「エージェント」タブへ統合（2026-07-20 Keita・MC-317）。/agents-live は後方互換。
+  // 使用量（/activity）はあまり見ないため非表示（2026-07-20 Keita・MC-317）。ルートは後方互換で残置。
   { to: '/plan-usage', label: 'Claude', icon: <GaugeIcon width={16} height={16} /> },
-  { to: '/activity', label: '使用量', icon: <ActivityIcon width={16} height={16} /> },
   { to: '/news', label: 'ニュース', icon: <NewsIcon width={16} height={16} /> },
+  // 収益コックピットは独立ナビからダッシュボードのタブへ統合（2026-07-20 Keita・MC-317）。
+  { to: '/revenue', label: '収益', icon: <UsageIcon width={16} height={16} /> },
+  { to: '/pdca', label: 'PDCA', icon: <LoopIcon width={16} height={16} /> },
 ];
 
 export default function DashboardLayout() {
@@ -35,6 +46,21 @@ export default function DashboardLayout() {
           className="no-scrollbar -mx-1 flex items-center gap-1 overflow-x-auto px-1"
           role="tablist"
         >
+          {/* 固定タブ（カウントダウン）: 並べ替え不可・常に先頭 */}
+          <NavLink
+            to={PINNED_TAB.to}
+            role="tab"
+            className={({ isActive }) =>
+              `inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 text-xs transition-colors md:py-1.5 ${
+                isActive
+                  ? 'bg-surface-3 font-semibold text-text'
+                  : 'text-text-muted hover:bg-surface-2 hover:text-text'
+              }`
+            }
+          >
+            <span aria-hidden>{PINNED_TAB.icon}</span>
+            {PINNED_TAB.label}
+          </NavLink>
           <SortableNav items={tabs} onReorder={reorder} direction="horizontal">
             {(tab, handle) => (
               // group: hover でハンドルを表示（デスクトップ）。モバイルは下の md:hidden で常時表示。

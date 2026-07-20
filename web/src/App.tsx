@@ -22,7 +22,8 @@ import {
   RestoreIcon,
   SettingsIcon,
   SearchIcon,
-  UsageIcon,
+  ExpandIcon,
+  ShrinkIcon,
 } from './components/icons';
 import { GlobalSearch } from './components/GlobalSearch';
 import DashboardLayout from './components/DashboardLayout';
@@ -30,7 +31,7 @@ import { isDashboardPath } from './lib/nav';
 // 着地ビュー（/ の最初に出る画面）は eager のまま first paint を遅らせない。
 // 既定着地はカウントダウン（ダッシュボードの固定先頭タブ）。
 import Countdown from './views/Countdown';
-import AgentsLive from './views/AgentsLive';
+// AgentsLive はタスクボード（TasksTabs）内のタブへ移動（MC-317）。
 // それ以外の二次的なビューは route 単位で遅延ロードし、初回エントリJSから切り離す（MC-194）。
 const Agents = lazy(() => import('./views/Agents'));
 const Activity = lazy(() => import('./views/Activity'));
@@ -46,7 +47,7 @@ const ClaudeChat = lazy(() => import('./views/ClaudeChat'));
 const Schedule = lazy(() => import('./views/Schedule'));
 const Development = lazy(() => import('./views/Development'));
 const Terminal = lazy(() => import('./views/Terminal'));
-const BuildProgress = lazy(() => import('./views/BuildProgress'));
+// BuildProgress はタスクボード（TasksTabs）内のタブへ移動（MC-317）。
 const Pdca = lazy(() => import('./views/Pdca'));
 // 収益コックピット（ClipItNow の収益・トラフィック統合・2026-07-19）。
 const Revenue = lazy(() => import('./views/Revenue'));
@@ -167,7 +168,7 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { to: '/progress', label: '実装進捗', shortLabel: '進捗', icon: <RestoreIcon /> },
+  // 実装進捗はタスクボードの「実装進捗」タブへ統合（2026-07-20 Keita・MC-317）。/progress は後方互換。
   { to: '/', label: 'ダッシュボード', shortLabel: 'ダッシュ', icon: <GridIcon /> },
   { to: '/tasks', label: 'タスクボード', shortLabel: 'ボード', icon: <BoardIcon /> },
   // 承認フローは独立ナビから外し、タスクボードページ内の「承認フロー」タブに統合した（/approvals は後方互換で残す）。
@@ -177,8 +178,7 @@ const NAV: NavItem[] = [
   // PDF.ai（公開PDFエディタ）は廃止し関連画面/ルートを撤去した（2026-07-19 Keita）。
   // 動画DL（ClipItNow）はサイドメニューから外し、仕事ページの「動画DL」タブに集約した（2026-07-16 Keita）。
   // ライブサイトは https://clipitnow.net/（旧 videodl.apollomansion.com は301転送）。
-  // 収益コックピット: ClipItNow の広告収益・トラフィックを 1 画面で見る（2026-07-19）。
-  { to: '/revenue', label: '収益', shortLabel: '収益', icon: <UsageIcon /> },
+  // 収益コックピットはダッシュボードの「収益」タブへ統合（2026-07-20 Keita・MC-317）。/revenue は後方互換。
   { to: '/childcare', label: '育児', shortLabel: '育児', icon: <BabyIcon /> },
   { to: '/chaji', label: '茶事', shortLabel: '茶事', icon: <ChajiIcon /> },
   { to: '/work', label: '仕事', shortLabel: '仕事', icon: <WorkIcon /> },
@@ -202,6 +202,54 @@ function NavBadge({ count }: { count: number }) {
     >
       {count > 99 ? '99+' : count}
     </span>
+  );
+}
+
+// ─── 全画面トグル（MC-321）───────────────────────────────────────────
+// ブラウザのタブ・URL バーごと隠す Fullscreen API のトグル。Esc（またはもう一度クリック）で
+// 元に戻る。ブラウザ仕様上、全画面への移行はユーザー操作（クリック）起点でのみ許可される。
+function useFullscreen(): [boolean, () => void] {
+  const [active, setActive] = useState<boolean>(
+    () => typeof document !== 'undefined' && !!document.fullscreenElement,
+  );
+  useEffect(() => {
+    const onChange = () => setActive(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+  const toggle = useCallback(() => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    } else {
+      void document.documentElement.requestFullscreen().catch(() => undefined);
+    }
+  }, []);
+  return [active, toggle];
+}
+
+function FullscreenButton({ compact }: { compact?: boolean }) {
+  const [active, toggle] = useFullscreen();
+  const label = active ? '全画面を解除（Esc）' : '全画面表示';
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      aria-label={label}
+      className={
+        compact
+          ? 'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-text-muted hover:bg-surface-2 hover:text-text'
+          : 'flex items-center gap-2 text-[11px] text-text-muted hover:text-text rounded px-1 -ml-1 py-0.5 transition-colors'
+      }
+    >
+      <span aria-hidden>
+        {active ? (
+          <ShrinkIcon width={13} height={13} />
+        ) : (
+          <ExpandIcon width={13} height={13} />
+        )}
+      </span>
+      <span>{label}</span>
+    </button>
   );
 }
 
@@ -338,6 +386,8 @@ function Sidebar({
           </span>
           <span>設定</span>
         </button>
+        {/* 全画面トグル（MC-321）。ブラウザのタブ・URLバーごと隠す。Esc で復帰。 */}
+        <FullscreenButton />
         {/* 接続状態表示（ライブ接続中）は不要のため撤去（2026-06-27 Keita）。 */}
         {/* 再読み込み（リロード）ボタン。サイドメニュー最下部・ページ全体を再読み込みする。 */}
         <button
@@ -455,8 +505,7 @@ export default function App() {
                 />
                 {/* カウントダウン（ダッシュボードの固定先頭タブ／/ の既定着地先） */}
                 <Route path="/countdown" element={<Countdown />} />
-                {/* MC-165: エージェント擬人化ライブ */}
-                <Route path="/agents-live" element={<AgentsLive />} />
+                {/* MC-317: エージェントはタスクボードの「エージェント」タブへ統合。後方互換でタブ着地。 */}
                 <Route path="/feed" element={<Feed />} />
                 <Route path="/news" element={<News />} />
                 <Route path="/activity" element={<Activity />} />
@@ -469,7 +518,11 @@ export default function App() {
                 <Route path="/plan-usage" element={<PlanUsage />} />
                 {/* ClipItNow PDCA 可視化 */}
                 <Route path="/pdca" element={<Pdca />} />
+                {/* MC-317: 収益コックピットは独立ナビからダッシュボードのタブへ統合 */}
+                <Route path="/revenue" element={<Revenue />} />
               </Route>
+              {/* MC-317: 旧 /agents-live（ダッシュのエージェントタブ）はタスクボードのエージェントタブへ */}
+              <Route path="/agents-live" element={<TasksTabs initialTab="agents" />} />
               <Route path="/tasks" element={<TasksTabs />} />
               {/* 承認フローは「タスクボード」ページの承認フロータブへ統合（旧 /approvals は後方互換でタブ着地）。 */}
               <Route path="/approvals" element={<TasksTabs initialTab="approvals" />} />
@@ -486,9 +539,8 @@ export default function App() {
               <Route path="/baby-diary" element={<Childcare initialTab="diary" />} />
               <Route path="/schedule" element={<Schedule />} />
               <Route path="/dev" element={<Development />} />
-              <Route path="/progress" element={<BuildProgress />} />
-              {/* 収益コックピット（ClipItNow） */}
-              <Route path="/revenue" element={<Revenue />} />
+              {/* MC-317: 実装進捗はタスクボードの「実装進捗」タブへ統合（旧 /progress は後方互換でタブ着地）。 */}
+              <Route path="/progress" element={<TasksTabs initialTab="progress" />} />
               <Route path="/terminal-view" element={<div className="flex h-full flex-col overflow-hidden"><Terminal /></div>} />
               <Route path="/terminal-view/:id" element={<div className="flex h-full flex-col overflow-hidden"><Terminal /></div>} />
               <Route path="/terminal-standalone" element={<Terminal />} />
@@ -527,6 +579,8 @@ export default function App() {
                   </span>
                   <span>設定</span>
                 </button>
+                {/* 全画面トグル（MC-321）。Esc で復帰。 */}
+                <FullscreenButton compact />
                 {/* 再読み込み（リロード）。モバイルのメニューからページ全体を再読み込みする。 */}
                 <button
                   type="button"
