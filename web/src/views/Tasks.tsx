@@ -13,7 +13,7 @@ import {
   projectLabel,
   taskStatusMeta,
 } from '../lib/meta';
-import { PageHeader } from '../components/PageHeader';
+import { relativeTime } from '../lib/time';
 import { ResourceState, StalledBadge, Badge } from '../components/ui';
 import { TaskDetail } from '../components/TaskDetail';
 import { TaskAgentStatus } from '../components/TaskAgentStatus';
@@ -82,6 +82,82 @@ function TaskCard({ t, onOpen }: { t: Task; onOpen: (t: Task) => void }) {
         <ChevronRightIcon width={16} height={16} />
       </span>
     </button>
+  );
+}
+
+// ── いま何をやっているか（MC-317）──────────────────────────────
+// ボード最上部のサマリ・ストリップ。ToDo/進行中/ブロック等の件数をカラーピルで示し、
+// 「進行中」タスクを担当者別のチップでひと目で見せる。チップタップで詳細が開く。
+// ブロックが 1 件以上あるときはピルを強調して見落としを防ぐ。
+const NOW_STATUSES: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'BLOCKED', 'REVIEW'];
+
+function NowOverview({
+  byColumn,
+  onOpen,
+}: {
+  byColumn: Record<TaskStatus, Task[]>;
+  onOpen: (t: Task) => void;
+}) {
+  // 進行中を担当者別にグループ化（担当未設定は「担当未定」に寄せる）。
+  const byOwner = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    for (const t of byColumn.IN_PROGRESS) {
+      const key = t.owner?.trim() || '担当未定';
+      const arr = map.get(key) ?? [];
+      arr.push(t);
+      map.set(key, arr);
+    }
+    return [...map.entries()];
+  }, [byColumn]);
+
+  return (
+    <div className="mx-4 mb-1 mt-1 rounded-lg border border-border bg-surface px-3 py-2 md:mx-6">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 text-[11px] font-semibold text-text-muted">いま</span>
+        {NOW_STATUSES.map((status) => {
+          const meta = taskStatusMeta(status);
+          const n = byColumn[status].length;
+          const alert = status === 'BLOCKED' && n > 0;
+          return (
+            <span
+              key={status}
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] tabular-nums ${
+                alert ? 'font-bold text-white' : 'text-text-muted'
+              }`}
+              style={{ background: alert ? meta.color : 'var(--mc-surface-2)' }}
+            >
+              <span
+                className="inline-block h-2 w-2 rounded-full"
+                style={{ background: alert ? '#fff' : meta.color }}
+                aria-hidden
+              />
+              {meta.label} {n}
+            </span>
+          );
+        })}
+      </div>
+      {byOwner.length > 0 && (
+        <div className="mt-1.5 flex flex-col gap-1">
+          {byOwner.map(([owner, ts]) => (
+            <div key={owner} className="flex flex-wrap items-center gap-1.5">
+              <span className="shrink-0 text-[11px] font-medium text-text">{owner}</span>
+              {ts.map((t) => (
+                <button
+                  key={`${t.source}-${t.id}`}
+                  type="button"
+                  onClick={() => onOpen(t)}
+                  className="inline-flex max-w-[16rem] items-center gap-1 truncate rounded-md border border-border bg-surface-2 px-2 py-0.5 text-[11px] text-text-muted transition-colors hover:border-accent/60 hover:text-text"
+                  title={`${t.id} ${t.title}`}
+                  style={{ borderLeft: `3px solid ${projectColor(t.project)}` }}
+                >
+                  <span className="truncate">{t.title}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -197,6 +273,8 @@ export default function Tasks() {
   }, []);
 
   const [project, setProject] = useState<ProjectName | 'all'>('all');
+  // メニュー内検索（このボードに限定した絞り込み）。ID・タイトル・担当・詳細本文を対象。
+  const [query, setQuery] = useState('');
   // モバイルでは横スクロールカンバンの代わりに、選択した 1 列のみ全幅縦積みで表示する。
   const [activeColumn, setActiveColumn] = useState<TaskStatus>('IN_PROGRESS');
   // カードクリックで開くタスク詳細（MC-61）。null は閉じている状態。
@@ -234,10 +312,16 @@ export default function Tasks() {
     return PROJECT_ORDER.filter((p) => set.has(p));
   }, [tasks]);
 
-  const filtered = useMemo(
-    () => (project === 'all' ? tasks : tasks.filter((t) => t.project === project)),
-    [tasks, project],
-  );
+  const filtered = useMemo(() => {
+    const byProject = project === 'all' ? tasks : tasks.filter((t) => t.project === project);
+    const q = query.trim().toLowerCase();
+    if (!q) return byProject;
+    return byProject.filter((t) =>
+      [t.id, t.title, t.owner, t.detail]
+        .filter(Boolean)
+        .some((field) => String(field).toLowerCase().includes(q)),
+    );
+  }, [tasks, project, query]);
 
   // 列ごとに振り分け。UNKNOWN は TODO 列に寄せる（落とさない）。
   const byColumn = useMemo(() => {
@@ -272,49 +356,68 @@ export default function Tasks() {
 
   return (
     <div className="flex h-full flex-col">
-        <PageHeader
-          title="タスクボード"
-          subtitle={`稼働中 ${filtered.filter((t) => !CLOSED_COLUMNS.has(t.status)).length} 件 / 滞留 ${filtered.filter((t) => t.stalled).length} 件${
-            closedTasks === null ? '（完了・キャンセルは未読込）' : ` / 完了・キャンセル ${filtered.filter((t) => CLOSED_COLUMNS.has(t.status)).length} 件`
-          }`}
-          fetchedAt={fetchedAt}
-          right={
-            <div
-              className="no-scrollbar -mx-1 flex min-w-0 max-w-full items-center gap-1 overflow-x-auto px-1"
-              role="group"
-              aria-label="プロジェクトで絞り込み"
+        {/* フィルタ（全て/プロジェクト）＋最終更新。2026-06-27 Keita「上のスペースを1行に」。
+            デスクトップではタブ行(TasksTabs)の高さ分だけ上に引き上げ、タブの右側の空きに重ねて
+            1行に統合する（透明バーなのでタブ名は透ける）。モバイルはタブ下に通常配置。 */}
+        <div className="pointer-events-none flex items-center justify-end gap-2 px-4 py-1 md:-mt-[41px] md:h-[41px] md:px-6 md:py-0">
+          <div
+            className="no-scrollbar pointer-events-auto -mx-1 flex min-w-0 items-center gap-1 overflow-x-auto px-1"
+            role="group"
+            aria-label="プロジェクトで絞り込み"
+          >
+            <button
+              type="button"
+              onClick={() => setProject('all')}
+              className={`shrink-0 rounded-md px-2.5 py-1 text-xs ${
+                project === 'all' ? 'bg-surface-3 font-semibold text-text' : 'text-text-muted hover:bg-surface-2'
+              }`}
+              aria-pressed={project === 'all'}
             >
+              全て
+            </button>
+            {presentProjects.map((p) => (
               <button
+                key={p}
                 type="button"
-                onClick={() => setProject('all')}
-                className={`shrink-0 rounded-md px-2.5 py-2 text-xs md:py-1 ${
-                  project === 'all' ? 'bg-surface-3 font-semibold text-text' : 'text-text-muted hover:bg-surface-2'
+                onClick={() => setProject(p)}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-xs ${
+                  project === p ? 'bg-surface-3 font-semibold text-text' : 'text-text-muted hover:bg-surface-2'
                 }`}
-                aria-pressed={project === 'all'}
+                aria-pressed={project === p}
               >
-                全て
+                <span
+                  className="inline-block h-2 w-2 rounded-sm"
+                  style={{ background: projectColor(p) }}
+                  aria-hidden
+                />
+                {projectLabel(p)}
               </button>
-              {presentProjects.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setProject(p)}
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-2 text-xs md:py-1 ${
-                    project === p ? 'bg-surface-3 font-semibold text-text' : 'text-text-muted hover:bg-surface-2'
-                  }`}
-                  aria-pressed={project === p}
-                >
-                  <span
-                    className="inline-block h-2 w-2 rounded-sm"
-                    style={{ background: projectColor(p) }}
-                    aria-hidden
-                  />
-                  {projectLabel(p)}
-                </button>
-              ))}
-            </div>
-          }
-        />
+            ))}
+          </div>
+          {/* ボード内検索。最上段に小さく置き、フォーカス（タップ）で横に広がる（2026-06-27 Keita）。 */}
+          <label className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-md border border-border bg-surface-2 px-2 py-1 text-text-faint focus-within:text-text">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden className="shrink-0">
+              <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="検索"
+              aria-label="タスクボード内を検索（ID・タイトル・担当・詳細）"
+              className="w-14 bg-transparent text-xs text-text outline-none transition-[width] duration-200 placeholder:text-text-faint focus:w-56"
+            />
+          </label>
+          {fetchedAt !== undefined && (
+            <span className="shrink-0 text-[11px] text-text-faint">
+              最終更新: {relativeTime(fetchedAt)}
+            </span>
+          )}
+        </div>
+        {/* いま何をやっているか（MC-317）: ステータス件数＋進行中を担当者別にひと目で。 */}
+        <NowOverview byColumn={byColumn} onOpen={setSelected} />
+        {/* ボード内検索は最上段（フィルタ行）へ統合した（2026-06-27 Keita）。 */}
         {/* モバイル: ステータスタブ（件数バッジ付き）で 1 列を選んで縦積み表示 */}
         <div className="border-b border-border px-4 py-2 md:hidden">
           <div
