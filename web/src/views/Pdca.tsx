@@ -424,9 +424,19 @@ function MiniStat({ label, value, warn }: { label: string; value: string; warn?:
   );
 }
 
+/** USD 実額を円換算表示する（2026-07-20 Keita「収益は日本円で」/ MC-329）。 */
+function jpyAmount(vUsd: number, rate: number): string {
+  const yen = vUsd * rate;
+  if (yen >= 1000) return `¥${Math.round(yen).toLocaleString()}`;
+  if (yen >= 10) return `¥${yen.toFixed(1)}`;
+  return `¥${yen.toFixed(2)}`;
+}
+
 export default function Pdca() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [exo, setExo] = useState<Exo | null>(null);
+  // 収益の円換算レート（サーバ側 12h キャッシュ・失敗時は概算 150 固定 / MC-329）
+  const [fxRate, setFxRate] = useState(150);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -454,14 +464,19 @@ export default function Pdca() {
     setLoading(true);
     setError(false);
     try {
-      const [s, e] = await Promise.allSettled([
+      const [s, e, fx] = await Promise.allSettled([
         fetch(STATS_URL, { headers: { Accept: 'application/json' } }),
         fetch(EXOSTATS_URL, { headers: { Accept: 'application/json' } }),
+        fetch('/api/revenue/usdjpy', { headers: { Accept: 'application/json' } }),
       ]);
       if (s.status === 'fulfilled' && s.value.ok) setStats(normStats((await s.value.json()) as unknown));
       else throw new Error('stats failed');
       if (e.status === 'fulfilled' && e.value.ok) setExo(normExo((await e.value.json()) as unknown));
       else setExo(null);
+      if (fx.status === 'fulfilled' && fx.value.ok) {
+        const r = ((await fx.value.json()) as { rate?: number }).rate;
+        if (typeof r === 'number' && r > 0) setFxRate(r);
+      }
     } catch {
       setError(true);
     } finally {
@@ -529,8 +544,8 @@ export default function Pdca() {
               <KpiCard label="ダウンロード" main={stats.downloads['7d'].toLocaleString()} sub={`24h ${stats.downloads['24h'].toLocaleString()}`} warn={stats.downloads['7d'] < 10} />
               <KpiCard
                 label="ExoClick収益"
-                main={exo?.available ? `$${exo.revenue_7d.toFixed(4)}` : '—'}
-                sub={exo?.available ? `本日 $${exo.today_revenue.toFixed(4)} / 動画視聴 ${exo.video_views_7d.toLocaleString()}` : '未取得'}
+                main={exo?.available ? jpyAmount(exo.revenue_7d, fxRate) : '—'}
+                sub={exo?.available ? `本日 ${jpyAmount(exo.today_revenue, fxRate)} / 動画視聴 ${exo.video_views_7d.toLocaleString()}` : '未取得'}
               />
             </div>
             {/* ファネル（24h） */}

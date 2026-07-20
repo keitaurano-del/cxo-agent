@@ -61,8 +61,18 @@ interface AdNetworkStats {
   daily: Array<{ date: string; revenue: number }>;
 }
 
+/** USD/JPY 換算レート（円換算表示用 MC-329）。 */
+interface FxRate {
+  rate: number;
+  /** レートの基準日（上流の更新日時 or 'fallback'）。 */
+  asOf: string;
+  source: string;
+}
+
 interface RevenueSummary {
   generatedAt: string;
+  /** 収益の円換算表示用 USD/JPY レート。 */
+  usdJpy: FxRate;
   revenue: {
     /** ExoClick + Adsterra の合算（取得できたソースのみ）。 */
     todayTotal: number;
@@ -195,16 +205,55 @@ function collectPdca(): RevenueSummary['pdca'] {
   }
 }
 
+// ─── USD/JPY 為替レート（円換算表示 MC-329 / 2026-07-20 Keita「収益は日本円で」）───
+// open.er-api.com（無料・キー不要・日次更新）から取得し 12 時間メモリキャッシュ。
+// 取得失敗時は旧キャッシュを延命、初回から失敗なら固定フォールバック（表示は成立させる）。
+
+const FX_TTL_MS = 12 * 3_600_000;
+const FX_FALLBACK_RATE = 150;
+let fxCache: { at: number; body: FxRate } | null = null;
+
+async function getUsdJpy(): Promise<FxRate> {
+  if (fxCache && Date.now() - fxCache.at < FX_TTL_MS) return fxCache.body;
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/USD', {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (res.ok) {
+      const o = rec(await res.json());
+      const rate = numOr0(rec(o.rates).JPY);
+      if (rate > 0) {
+        const body: FxRate = {
+          rate,
+          asOf: strOr(o.time_last_update_utc, new Date().toISOString().slice(0, 10)),
+          source: 'open.er-api.com',
+        };
+        fxCache = { at: Date.now(), body };
+        return body;
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+  if (fxCache) {
+    fxCache.at = Date.now(); // 旧レートを延命（次の TTL でまた取得を試みる）
+    return fxCache.body;
+  }
+  return { rate: FX_FALLBACK_RATE, asOf: 'fallback', source: 'fixed' };
+}
+
 // ─── 集約本体（60 秒キャッシュ）───────────────────────────────
 
 let cache: { at: number; body: RevenueSummary } | null = null;
 
 async function buildSummary(): Promise<RevenueSummary> {
   // 上流 3 本は並列取得。1 本失敗しても他は活かす（allSettled + fetchJson の null 化）。
-  const [statsRaw, exoRaw, adsRaw] = await Promise.all([
+  const [statsRaw, exoRaw, adsRaw, usdJpy] = await Promise.all([
     fetchJson('/api/stats'),
     fetchJson('/api/exostats'),
     fetchJson('/api/adstats'),
+    getUsdJpy(),
   ]);
 
   const exoclick = exoRaw == null ? emptyAdStats() : normAdStats(exoRaw);
@@ -212,6 +261,7 @@ async function buildSummary(): Promise<RevenueSummary> {
 
   return {
     generatedAt: new Date().toISOString(),
+    usdJpy,
     revenue: {
       todayTotal: exoclick.todayRevenue + adsterra.todayRevenue,
       total7d: exoclick.revenue7d + adsterra.revenue7d,
@@ -241,6 +291,13 @@ export function revenueRouter(): Router {
         // buildSummary 自体は各ソースで fail-soft 済み。ここに来るのは想定外の内部エラーのみ。
         res.status(500).json({ error: err instanceof Error ? err.message : 'internal error' });
       }
+    })();
+  });
+
+  // USD/JPY レート単体（PDCA タブ等、summary を使わない画面の円換算表示用）。
+  router.get('/usdjpy', (_req: Request, res: Response) => {
+    void (async () => {
+      res.json(await getUsdJpy());
     })();
   });
 

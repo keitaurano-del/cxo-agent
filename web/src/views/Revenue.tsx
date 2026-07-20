@@ -20,8 +20,16 @@ interface AdNetworkStats {
   daily: Array<{ date: string; revenue: number }>;
 }
 
+interface FxRate {
+  rate: number;
+  asOf: string;
+  source: string;
+}
+
 interface RevenueSummary {
   generatedAt: string;
+  /** 収益の円換算表示用 USD/JPY レート（サーバ側で取得・12h キャッシュ）。 */
+  usdJpy: FxRate;
   revenue: {
     todayTotal: number;
     total7d: number;
@@ -45,9 +53,17 @@ interface RevenueSummary {
   };
 }
 
-/** 収益額の表示（極小額のため小数 4 桁固定）。 */
+/** 収益額の USD 表示（極小額のため小数 4 桁固定）。 */
 function usd(v: number): string {
   return `$${v.toFixed(4)}`;
+}
+
+/** 収益額の円換算表示（2026-07-20 Keita「収益は日本円で」）。少額のうちは小数も見せる。 */
+function jpy(vUsd: number, rate: number): string {
+  const yen = vUsd * rate;
+  if (yen >= 1000) return `¥${Math.round(yen).toLocaleString()}`;
+  if (yen >= 10) return `¥${yen.toFixed(1)}`;
+  return `¥${yen.toFixed(2)}`;
 }
 
 /** "YYYY-MM-DD" → "M/D"。 */
@@ -71,7 +87,7 @@ function StatCard({ label, main, sub, accent }: { label: string; main: string; s
  * 日別収益スパークライン（インライン SVG・依存追加なし）。
  * 面＋折れ線で合算収益を描き、各点の <title> で日付と内訳を表示する。
  */
-function RevenueSparkline({ daily }: { daily: RevenueSummary['revenue']['daily'] }) {
+function RevenueSparkline({ daily, rate }: { daily: RevenueSummary['revenue']['daily']; rate: number }) {
   const W = 720;
   const H = 120;
   const PAD = 10;
@@ -90,7 +106,7 @@ function RevenueSparkline({ daily }: { daily: RevenueSummary['revenue']['daily']
       <polyline points={line} fill="none" stroke="var(--mc-accent)" strokeWidth={2} />
       {daily.map((d, i) => (
         <circle key={d.date} cx={x(i)} cy={y(d.total)} r={3} fill="var(--mc-accent)">
-          <title>{`${d.date}: 合計 ${usd(d.total)}（ExoClick ${usd(d.exoclick)} / Adsterra ${usd(d.adsterra)}）`}</title>
+          <title>{`${d.date}: 合計 ${jpy(d.total, rate)}（ExoClick ${jpy(d.exoclick, rate)} / Adsterra ${jpy(d.adsterra, rate)} / ${usd(d.total)}）`}</title>
         </circle>
       ))}
       {daily.map((d, i) =>
@@ -155,6 +171,7 @@ export default function Revenue() {
   );
 
   const rev = data?.revenue;
+  const fxRate = data?.usdJpy?.rate ?? 150;
   const clip = data?.clipitnow;
   const pdca = data?.pdca;
 
@@ -173,30 +190,30 @@ export default function Revenue() {
             <section className="flex flex-col gap-2">
               <h2 className="text-xs font-semibold text-text-muted">広告収益（ExoClick + Adsterra）</h2>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <StatCard label="本日の収益（合算）" main={usd(rev?.todayTotal ?? 0)} accent />
-                <StatCard label="直近7日の収益（合算）" main={usd(rev?.total7d ?? 0)} accent />
+                <StatCard label="本日の収益（合算）" main={jpy(rev?.todayTotal ?? 0, fxRate)} sub={usd(rev?.todayTotal ?? 0)} accent />
+                <StatCard label="直近7日の収益（合算）" main={jpy(rev?.total7d ?? 0, fxRate)} sub={usd(rev?.total7d ?? 0)} accent />
                 <StatCard
                   label="ExoClick"
-                  main={rev?.exoclick.available ? usd(rev.exoclick.revenue7d) : '—'}
+                  main={rev?.exoclick.available ? jpy(rev.exoclick.revenue7d, fxRate) : '—'}
                   sub={
                     rev?.exoclick.available
-                      ? `本日 ${usd(rev.exoclick.todayRevenue)} / imp ${rev.exoclick.impressions7d.toLocaleString()}`
+                      ? `本日 ${jpy(rev.exoclick.todayRevenue, fxRate)} / imp ${rev.exoclick.impressions7d.toLocaleString()}`
                       : '未取得'
                   }
                 />
                 <StatCard
                   label="Adsterra"
-                  main={rev?.adsterra.available ? usd(rev.adsterra.revenue7d) : '—'}
+                  main={rev?.adsterra.available ? jpy(rev.adsterra.revenue7d, fxRate) : '—'}
                   sub={
                     rev?.adsterra.available
-                      ? `本日 ${usd(rev.adsterra.todayRevenue)} / imp ${rev.adsterra.impressions7d.toLocaleString()}`
+                      ? `本日 ${jpy(rev.adsterra.todayRevenue, fxRate)} / imp ${rev.adsterra.impressions7d.toLocaleString()}`
                       : '未取得'
                   }
                 />
               </div>
               <div className="rounded-lg border border-border bg-surface-2/40 p-3">
                 <span className="mb-1 block text-[11px] font-semibold text-text-muted">日別収益（合算）</span>
-                <RevenueSparkline daily={rev?.daily ?? []} />
+                <RevenueSparkline daily={rev?.daily ?? []} rate={fxRate} />
               </div>
             </section>
 
@@ -247,7 +264,8 @@ export default function Revenue() {
             </section>
 
             <p className="text-[10px] leading-relaxed text-text-faint">
-              収益は各広告ネットワークの API 実績値（USD）です。上流 API は約 5 分キャッシュ、本画面は 60
+              収益は各広告ネットワークの API 実績値（USD）を日本円に換算して表示しています（レート:
+              $1 = ¥{fxRate.toFixed(2)}・日次更新）。上流 API は約 5 分キャッシュ、本画面は 60
               秒キャッシュのため、反映に最大数分の遅延があります。一部ソースが取得できない場合も、取得できた分のみ表示します。
             </p>
           </>
