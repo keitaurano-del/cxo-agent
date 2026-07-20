@@ -60,6 +60,7 @@ import { UploadProvider } from './lib/UploadContext';
 import { UploadToast } from './components/UploadToast';
 import Settings from './components/Settings';
 import { useFontSize } from './lib/useFontSize';
+import { useSidebarWidth } from './lib/useSidebarWidth';
 
 // 遅延ロード中の軽量フォールバック（チャンク取得待ちの一瞬だけ表示）。
 function ViewFallback() {
@@ -292,7 +293,11 @@ function Sidebar({
   }
 
   return (
-    <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-surface md:flex">
+    <aside
+      className="hidden shrink-0 flex-col border-r border-border bg-surface md:flex"
+      // 幅は設定モーダルで選択可変（MC-322）。--sidebar-width は useSidebarWidth が適用する。
+      style={{ width: 'var(--sidebar-width, 224px)' }}
+    >
       <div className="flex items-center justify-between px-5 py-4">
         <div className="flex items-center gap-2">
           <span className="text-accent" aria-hidden>
@@ -414,6 +419,8 @@ export default function App() {
 
   // フォントサイズ設定（MC-178）
   const { fontPx } = useFontSize();
+  // サイドメニュー幅設定（MC-322）。起動時に保存値を CSS 変数へ適用する。
+  useSidebarWidth();
   const [showSettings, setShowSettings] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
 
