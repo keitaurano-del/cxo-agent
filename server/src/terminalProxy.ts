@@ -414,6 +414,110 @@ export const TAP_FIX_BODY = `(function(){
 })();`;
 const TAP_FIX_SCRIPT = `<script>${TAP_FIX_BODY}</script>`;
 
+// ─── ターミナル直コピー対応（MC-328 / 2026-07-20 Keita「コピーできない」）────────────
+// 根因: tmux が mouse on（スクロール対応 ~/.tmux.conf）のため、ブラウザでのドラッグ選択は
+//   xterm のローカル選択にならず tmux copy-mode の選択になる。tmux はコピーを自分のバッファに
+//   入れるだけで、ブラウザのクリップボードには何も入らない＝「選択したのにコピーできない」。
+// 修正（2経路、どちらも window.term 公開と同一の注入基盤を利用）:
+//   1) tmux 選択 → OSC 52 → ブラウザ clipboard:
+//      ~/.tmux.conf に set-clipboard on ＋ Ms capability override を設定済み。tmux は
+//      copy-mode のマウス選択解放時に \x1b]52;c;<base64>\x07 を外側端末（ttyd/xterm）へ送る。
+//      xterm 4.x（ttyd 1.7.4 同梱）は OSC 52 を標準処理しないため、公開 API
+//      term.parser.registerOscHandler(52, ...) でハンドラを登録し、base64 を UTF-8 decode して
+//      navigator.clipboard.writeText（不可なら execCommand fallback）で書く。
+//      マウス解放直後＝transient user activation 内なので clipboard 書込みは許可される。
+//   2) xterm ローカル選択（Shift+ドラッグ / mouse mode off 時の通常ドラッグ）→ copy-on-select:
+//      term.onSelectionChange を debounce（400ms）して getSelection() を clipboard へ書く。
+//   成功時は小さなトースト「コピーしました」を出してフィードバックする。
+// COPY_FIX_BODY はテストから eval 可能な素の JS。本番注入は COPY_FIX_SCRIPT。
+export const COPY_FIX_BODY = `(function(){
+  var toastEl=null,toastTimer=null;
+  function toast(msg){
+    try{
+      if(!toastEl){
+        toastEl=document.createElement('div');
+        toastEl.style.cssText='position:fixed;top:10px;left:50%;transform:translateX(-50%);'+
+          'background:rgba(30,42,58,.92);color:#e6edf7;padding:6px 14px;border-radius:14px;'+
+          'font:12px sans-serif;z-index:9999;pointer-events:none;transition:opacity .3s;';
+        document.body.appendChild(toastEl);
+      }
+      toastEl.textContent=msg;toastEl.style.opacity='1';
+      if(toastTimer){clearTimeout(toastTimer);}
+      toastTimer=setTimeout(function(){toastEl.style.opacity='0';},1400);
+    }catch(_e){}
+  }
+  function fallbackCopy(text){
+    try{
+      var ta=document.createElement('textarea');
+      ta.value=text;ta.style.cssText='position:fixed;top:0;left:0;opacity:0;';
+      document.body.appendChild(ta);ta.focus();ta.select();
+      var ok=document.execCommand('copy');
+      document.body.removeChild(ta);
+      try{window.term&&window.term.focus&&window.term.focus();}catch(_e){}
+      return ok;
+    }catch(_e){return false;}
+  }
+  function writeClipboard(text){
+    if(!text){return;}
+    var done=function(){toast('コピーしました');};
+    try{
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(done,function(){if(fallbackCopy(text)){done();}});
+        return;
+      }
+    }catch(_e){}
+    if(fallbackCopy(text)){done();}
+  }
+  function install(){
+    var t=window.term;
+    if(!t){return false;}
+    if(t.__apolloCopyFix){return true;}
+    var wired=false;
+    // 経路1: tmux copy-mode の選択コピー → OSC 52（set-clipboard on ＋ Ms override が送出）。
+    try{
+      if(t.parser&&typeof t.parser.registerOscHandler==='function'){
+        t.parser.registerOscHandler(52,function(data){
+          try{
+            var idx=String(data).indexOf(';');
+            var b64=idx>=0?String(data).slice(idx+1):String(data);
+            if(b64&&b64!=='?'){ // '?' はクリップボード照会（応答しない）
+              var bin=atob(b64);
+              var bytes=new Uint8Array(bin.length);
+              for(var i=0;i<bin.length;i++){bytes[i]=bin.charCodeAt(i);}
+              writeClipboard(new TextDecoder('utf-8').decode(bytes));
+            }
+          }catch(_e){}
+          return true; // 処理済み（他ハンドラへ回さない）
+        });
+        wired=true;
+      }
+    }catch(_e){}
+    // 経路2: xterm ローカル選択（Shift+ドラッグ等）→ copy-on-select（400ms debounce）。
+    try{
+      if(typeof t.onSelectionChange==='function'){
+        var timer=null;
+        t.onSelectionChange(function(){
+          if(timer){clearTimeout(timer);}
+          timer=setTimeout(function(){
+            try{
+              var s=t.getSelection&&t.getSelection();
+              if(s&&s.trim()){writeClipboard(s);}
+            }catch(_e){}
+          },400);
+        });
+        wired=true;
+      }
+    }catch(_e){}
+    if(!wired){return false;}
+    t.__apolloCopyFix=true;
+    return true;
+  }
+  if(!install()){
+    var n=0,iv=setInterval(function(){if(install()||++n>100){clearInterval(iv);}},100);
+  }
+})();`;
+const COPY_FIX_SCRIPT = `<script>${COPY_FIX_BODY}</script>`;
+
 // proxy 失敗時に Apollo 全体を落とさない。ttyd 停止中（林セッション無し等）でも 502 を返すだけ。
 proxy.on('error', (err, _req, resOrSocket) => {
   console.error('[terminal proxy error]', err?.message ?? err);
@@ -469,7 +573,7 @@ proxy.on('proxyRes', (proxyRes, _req, res) => {
   proxyRes.on('end', () => {
     let body = Buffer.concat(chunks).toString('utf8');
     if (body.includes('</body>') && !body.includes('__apolloPasteFix')) {
-      body = body.replace('</body>', `${PASTE_FIX_SCRIPT}${TAP_FIX_SCRIPT}${TERM_THEME_SCRIPT}</body>`);
+      body = body.replace('</body>', `${PASTE_FIX_SCRIPT}${TAP_FIX_SCRIPT}${TERM_THEME_SCRIPT}${COPY_FIX_SCRIPT}</body>`);
     }
     const buf = Buffer.from(body, 'utf8');
     headers['content-length'] = String(buf.byteLength);
