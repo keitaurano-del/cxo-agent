@@ -79,9 +79,9 @@ const PLAN: string[] = [
   '仮説：律速はオーガニック（検索）流入。現状は PV の大半がボット/直接流入で実 UU がほぼ 0。',
 ];
 const DO: string[] = [
-  '【今巡のDo・実行中】VD-09: 高需要未カバークエリの新規ガイドLP追加（6本目標・IndexNow送信まで）。',
-  '【今巡のDo・実行中】VD-10: ガイド間の内部リンク強化（関連ガイド相互リンクで孤立LPを無くす）。',
-  '【今巡のDo・実行中】VD-11: 主要ガイド10本のFAQ拡充（ロングテール獲得・FAQPage schema更新）。',
+  '【今巡のDo・完了 2026-07-20】VD-09: 新規ガイドLP6本追加（douyin/weibo/kuaishou/threads/kick/iwara）・sitemap52URL・IndexNow送信済。',
+  '【今巡のDo・完了 2026-07-20】VD-10: ハブ8本に関連ガイド節＋新LPへの逆リンクで内部リンク強化。',
+  '【今巡のDo・完了 2026-07-20】VD-11: 主要ガイド10本にQ&A各3問追加（FAQPage schema整合）。',
   '済: 動画広告5面＋保存2タップ広告ゲート／多言語SEO・DL別LP・sitemap/IndexNow／自己アクセス計測除外。',
 ];
 const CHECK_READ: string[] = [
