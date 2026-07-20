@@ -9,10 +9,15 @@ import { useState, useCallback } from 'react';
 
 const SIDEBAR_WIDTH_KEY = 'apollo_sidebar_width';
 
-/** 幅の許容範囲（px）。default=224px は従来の固定幅 w-56 と同じ。 */
-export const SIDEBAR_PX_MIN = 160;
+/** 幅の許容範囲（px）。default=224px は従来の固定幅 w-56 と同じ。
+ * min はアイコンだけのレール表示（コンパクトモード）が成立する幅まで許容する。 */
+export const SIDEBAR_PX_MIN = 64;
 export const SIDEBAR_PX_MAX = 440;
 export const SIDEBAR_PX_DEFAULT = 224;
+
+/** これ未満に狭めたら文字を消してアイコンだけのコンパクト表示にする閾値（px）。
+ * 2026-07-20 Keita「ある程度狭くなったら、文字はいらない。アイコンだけでいい」。 */
+export const SIDEBAR_COMPACT_PX = 180;
 
 /** px を許容範囲にクランプし整数化する。 */
 export function clampSidebarPx(px: number): number {

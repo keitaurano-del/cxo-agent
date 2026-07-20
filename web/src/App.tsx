@@ -62,6 +62,7 @@ import Settings from './components/Settings';
 import { useFontSize } from './lib/useFontSize';
 import {
   applySidebarWidth,
+  SIDEBAR_COMPACT_PX,
   SIDEBAR_PX_DEFAULT,
   useSidebarWidth,
 } from './lib/useSidebarWidth';
@@ -232,9 +233,25 @@ function useFullscreen(): [boolean, () => void] {
   return [active, toggle];
 }
 
-function FullscreenButton({ compact }: { compact?: boolean }) {
+function FullscreenButton({ compact, iconOnly }: { compact?: boolean; iconOnly?: boolean }) {
   const [active, toggle] = useFullscreen();
   const label = active ? '全画面を解除（Esc）' : '全画面表示';
+  // iconOnly: サイドバーのコンパクト（アイコンだけ）モード用。
+  if (iconOnly) {
+    return (
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={label}
+        title={label}
+        className="flex items-center justify-center rounded-lg p-2 text-text-muted hover:bg-surface-2 hover:text-text transition-colors"
+      >
+        <span aria-hidden>
+          {active ? <ShrinkIcon width={15} height={15} /> : <ExpandIcon width={15} height={15} />}
+        </span>
+      </button>
+    );
+  }
   return (
     <button
       type="button"
@@ -386,6 +403,21 @@ function Sidebar({
   const { pathname } = useLocation();
   const dashActive = isDashboardPath(pathname);
 
+  // コンパクト（アイコンだけ）モード（MC-323 追補）: 幅が閾値未満なら文字を消す。
+  // ResizeObserver で aside の実幅を監視するので、ドラッグ中もリアルタイムで切り替わる。
+  const asideRef = useRef<HTMLElement | null>(null);
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const el = asideRef.current;
+    if (!el || !open) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? el.offsetWidth;
+      setCompact(w < SIDEBAR_COMPACT_PX);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [open]);
+
   // 折りたたみ時: サイドバーをレイアウトから完全に外す（細い縦ラインも消す）。
   // 本文を全幅で使えるよう、開くための小さなトグルだけを左上に fixed で浮かせる（2026-06-27 Keita）。
   if (!open) {
@@ -406,18 +438,21 @@ function Sidebar({
 
   return (
     <aside
+      ref={asideRef}
       className="relative hidden shrink-0 flex-col border-r border-border bg-surface md:flex"
       // 幅は右端ハンドルのドラッグで可変（MC-323）。--sidebar-width は useSidebarWidth が適用する。
       style={{ width: 'var(--sidebar-width, 224px)' }}
     >
-      <div className="flex items-center justify-between px-5 py-4">
+      <div className={`flex items-center py-4 ${compact ? 'flex-col gap-2 px-2' : 'justify-between px-5'}`}>
         <div className="flex items-center gap-2">
           <span className="text-accent" aria-hidden>
             <ApolloMark width={22} height={22} />
           </span>
-          <div>
-            <div className="text-sm font-bold leading-tight text-text">Apollo</div>
-          </div>
+          {!compact && (
+            <div>
+              <div className="text-sm font-bold leading-tight text-text">Apollo</div>
+            </div>
+          )}
         </div>
         <button
           type="button"
@@ -434,7 +469,7 @@ function Sidebar({
       {/* 検索は下部フッター（左下）へ移動した（2026-06-27 Keita）。 */}
       {/* ナビ一覧は min-h-0 + overflow-y-auto でスクロール可能にし、低いウィンドウでも
           下のフッター（検索・設定・再読み込み）が画面外に押し出されないようにする。 */}
-      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
+      <nav className={`flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto py-2 ${compact ? 'px-2' : 'px-3'}`}>
         <SortableNav items={navItems} onReorder={onReorder} direction="vertical">
           {(item: NavItem, handle: DragHandleProps) => {
             const forceActive = item.to === '/' && dashActive;
@@ -447,11 +482,16 @@ function Sidebar({
                   href={item.to}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors text-text-muted hover:bg-surface-2 hover:text-text"
+                  title={compact ? item.label : undefined}
+                  className={`flex items-center rounded-lg py-2 text-sm transition-colors text-text-muted hover:bg-surface-2 hover:text-text ${
+                    compact ? 'justify-center px-0' : 'gap-3 px-3'
+                  }`}
                 >
                   <span aria-hidden>{item.icon}</span>
-                  {item.label}
-                  <DragHandle handleProps={handle.handleProps} className="ml-auto opacity-0 group-hover:opacity-100" />
+                  {!compact && item.label}
+                  {!compact && (
+                    <DragHandle handleProps={handle.handleProps} className="ml-auto opacity-0 group-hover:opacity-100" />
+                  )}
                 </a>
               );
             }
@@ -460,63 +500,92 @@ function Sidebar({
                 key={item.to}
                 to={item.to}
                 end={item.to === '/'}
+                title={compact ? item.label : undefined}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                  `flex items-center rounded-lg py-2 text-sm transition-colors ${
+                    compact ? 'justify-center px-0' : 'gap-3 px-3'
+                  } ${
                     isActive || forceActive
                       ? 'bg-surface-3 font-semibold text-text'
                       : 'text-text-muted hover:bg-surface-2 hover:text-text'
                   }`
                 }
               >
-                <span aria-hidden>{item.icon}</span>
-                {item.label}
-                <NavBadge count={badge} />
-                <DragHandle handleProps={handle.handleProps} className="ml-auto opacity-0 group-hover:opacity-100" />
+                {/* コンパクト時はアイコンだけ。バッジは件数の小さな点で右肩に重ねる。 */}
+                <span aria-hidden className="relative">
+                  {item.icon}
+                  {compact && badge > 0 && (
+                    <span
+                      className="absolute -right-1.5 -top-1.5 inline-flex min-w-[14px] items-center justify-center rounded-full px-1 text-[9px] font-bold leading-[14px]"
+                      style={{ color: 'var(--mc-bg)', background: 'var(--mc-blocked)' }}
+                    >
+                      {badge > 9 ? '9+' : badge}
+                    </span>
+                  )}
+                </span>
+                {!compact && item.label}
+                {!compact && <NavBadge count={badge} />}
+                {!compact && (
+                  <DragHandle handleProps={handle.handleProps} className="ml-auto opacity-0 group-hover:opacity-100" />
+                )}
               </NavLink>
             );
           }}
         </SortableNav>
       </nav>
-      <div className="shrink-0 border-t border-border px-5 py-3 flex flex-col gap-2">
+      <div
+        className={`shrink-0 border-t border-border py-3 flex flex-col gap-2 ${
+          compact ? 'items-stretch px-2' : 'px-5'
+        }`}
+      >
         {/* 横断検索（MC-73）。表示整理のため左下フッターへ集約。Cmd/Ctrl+K でも開く。 */}
         <button
           type="button"
           onClick={onSearchClick}
           aria-label="横断検索を開く"
-          className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-2 py-1.5 text-xs text-text-faint hover:bg-surface-3 hover:text-text transition-colors"
+          title={compact ? '横断検索を開く（⌘K）' : undefined}
+          className={`flex items-center rounded-lg border border-border bg-surface-2 text-xs text-text-faint hover:bg-surface-3 hover:text-text transition-colors ${
+            compact ? 'justify-center p-2' : 'gap-2 px-2 py-1.5'
+          }`}
         >
           <span aria-hidden>
             <SearchIcon width={14} height={14} />
           </span>
-          <span className="flex-1 text-left">検索</span>
-          <kbd className="rounded border border-border px-1 text-[10px] text-text-muted">⌘K</kbd>
+          {!compact && <span className="flex-1 text-left">検索</span>}
+          {!compact && <kbd className="rounded border border-border px-1 text-[10px] text-text-muted">⌘K</kbd>}
         </button>
         {/* 設定ボタン（MC-178） */}
         <button
           type="button"
           onClick={onSettingsClick}
           aria-label="設定を開く"
-          className="flex items-center gap-2 text-[11px] text-text-muted hover:text-text rounded px-1 -ml-1 py-0.5 transition-colors"
+          title={compact ? '設定' : undefined}
+          className={`flex items-center text-[11px] text-text-muted hover:text-text rounded transition-colors ${
+            compact ? 'justify-center p-2 hover:bg-surface-2' : 'gap-2 px-1 -ml-1 py-0.5'
+          }`}
         >
           <span aria-hidden>
             <SettingsIcon width={13} height={13} />
           </span>
-          <span>設定</span>
+          {!compact && <span>設定</span>}
         </button>
         {/* 全画面トグル（MC-321）。ブラウザのタブ・URLバーごと隠す。Esc で復帰。 */}
-        <FullscreenButton />
+        <FullscreenButton iconOnly={compact} />
         {/* 接続状態表示（ライブ接続中）は不要のため撤去（2026-06-27 Keita）。 */}
         {/* 再読み込み（リロード）ボタン。サイドメニュー最下部・ページ全体を再読み込みする。 */}
         <button
           type="button"
           onClick={() => window.location.reload()}
           aria-label="ページを再読み込み"
-          className="flex items-center gap-2 text-[11px] text-text-muted hover:text-text rounded px-1 -ml-1 py-0.5 transition-colors"
+          title={compact ? 'ページを再読み込み' : undefined}
+          className={`flex items-center text-[11px] text-text-muted hover:text-text rounded transition-colors ${
+            compact ? 'justify-center p-2 hover:bg-surface-2' : 'gap-2 px-1 -ml-1 py-0.5'
+          }`}
         >
           <span aria-hidden>
             <RestoreIcon width={13} height={13} />
           </span>
-          <span>再読み込み</span>
+          {!compact && <span>再読み込み</span>}
         </button>
       </div>
       {/* 右端の境目: ドラッグで幅調整（MC-323） */}
