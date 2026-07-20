@@ -4,8 +4,8 @@
 //   - ClipItNow: PV / UU / DL / 検索流入（PDCA state 由来）
 //   - PDCA: 現在のサイクル番号とフェーズ
 // スパークラインはインライン SVG 自作（外部ライブラリなし）。
-import { useCallback, useEffect, useState } from 'react';
-import { PageHeader } from '../components/PageHeader';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useDashActions } from '../components/DashboardLayout';
 import { LoopIcon } from '../components/icons';
 
 // ─── サーバ（revenueRouter.ts RevenueSummary）と一致する応答型 ───
@@ -117,7 +117,6 @@ export default function Revenue() {
   const [data, setData] = useState<RevenueSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -126,7 +125,6 @@ export default function Revenue() {
       const res = await fetch('/api/revenue/summary', { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setData((await res.json()) as RevenueSummary);
-      setFetchedAt(new Date().toISOString());
     } catch {
       setError(true);
     } finally {
@@ -138,27 +136,30 @@ export default function Revenue() {
     void load();
   }, [load]);
 
+  // 再読込ボタンは専用帯を作らず、ダッシュタブ行の右端へ差し込む（2026-07-20 Keita）。
+  useDashActions(
+    useMemo(
+      () => (
+        <button
+          type="button"
+          onClick={() => void load()}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:opacity-40"
+        >
+          <LoopIcon width={13} height={13} />
+          再読込
+        </button>
+      ),
+      [loading, load],
+    ),
+  );
+
   const rev = data?.revenue;
   const clip = data?.clipitnow;
   const pdca = data?.pdca;
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
-      <PageHeader
-        title="収益"
-        fetchedAt={fetchedAt}
-        right={
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-[11px] text-text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:opacity-40"
-          >
-            <LoopIcon width={13} height={13} />
-            再読込
-          </button>
-        }
-      />
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 p-4 md:p-5">
         {loading && !data ? (
           <p className="py-8 text-center text-sm text-text-muted">読み込み中…</p>

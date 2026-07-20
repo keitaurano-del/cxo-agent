@@ -3,11 +3,26 @@
 // 各ビュー本体を差し込む。子ビューの URL は deep link・SSE・横断検索からの遷移に影響しない。
 // PC は横並び tablist、モバイルは横スクロール（Tasks のステータスタブと同じパターン）。
 // 既定表示は「カウントダウン」（/ クリック時の着地は App.tsx の dashboardLanding で固定）。
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useOutletContext } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ClockIcon, GaugeIcon, LoopIcon, NewsIcon, UsageIcon } from './icons';
 import { SortableNav, DragHandle } from './SortableNav';
 import { useNavOrder } from '../lib/useNavOrder';
+
+// 子ビューがタブ行の右端へ操作ボタン（再読込など）を差し込むための slot。
+// 専用のヘッダ帯（1行）を消費せず、既存のダッシュタブ行に同居させる（2026-07-20 Keita「読み込みで1行使うな」）。
+type DashOutletContext = { setActions: (node: ReactNode) => void };
+
+/** 子ビューから呼ぶ: node をダッシュタブ行の右端に表示。node は useMemo で安定させること（毎レンダ更新でループ回避）。 */
+export function useDashActions(node: ReactNode): void {
+  const ctx = useOutletContext<DashOutletContext | null>();
+  useEffect(() => {
+    if (!ctx) return;
+    ctx.setActions(node);
+    return () => ctx.setActions(null);
+  }, [ctx, node]);
+}
 
 interface DashTab {
   to: string;
@@ -35,15 +50,18 @@ const DASH_TABS: DashTab[] = [
 export default function DashboardLayout() {
   // タブの並び順をサーバ保存して端末横断同期（MC-158）。
   const { items: tabs, reorder } = useNavOrder('dashboard', DASH_TABS);
+  // 子ビューがタブ行右端へ差し込む操作ボタン（再読込など）。
+  const [actions, setActions] = useState<ReactNode>(null);
+  const setDashActions = useCallback((node: ReactNode) => setActions(node), []);
 
   return (
     <div className="flex h-full flex-col">
       <nav
-        className="border-b border-border bg-bg/95 px-4 py-2 backdrop-blur md:px-6"
+        className="flex items-center gap-2 border-b border-border bg-bg/95 px-4 py-2 backdrop-blur md:px-6"
         aria-label="ダッシュボードのタブ"
       >
         <div
-          className="no-scrollbar -mx-1 flex items-center gap-1 overflow-x-auto px-1"
+          className="no-scrollbar -mx-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1"
           role="tablist"
         >
           {/* 固定タブ（カウントダウン）: 並べ替え不可・常に先頭 */}
@@ -88,10 +106,11 @@ export default function DashboardLayout() {
             )}
           </SortableNav>
         </div>
+        {actions && <div className="shrink-0">{actions}</div>}
       </nav>
       {/* 子ビュー本体。Tasks 等の flex-1 レイアウトを壊さないよう min-h-0 で内側スクロールを許可。 */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <Outlet />
+        <Outlet context={{ setActions: setDashActions } satisfies DashOutletContext} />
       </div>
     </div>
   );
