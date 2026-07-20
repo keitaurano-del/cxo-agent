@@ -13,7 +13,6 @@ import {
   projectLabel,
   taskStatusMeta,
 } from '../lib/meta';
-import { relativeTime } from '../lib/time';
 import { ResourceState, StalledBadge, Badge } from '../components/ui';
 import { TaskDetail } from '../components/TaskDetail';
 import { TaskAgentStatus } from '../components/TaskAgentStatus';
@@ -249,7 +248,7 @@ export default function Tasks() {
   const tick = useLiveTick('tasks');
   // 既定の読込は稼働中（open）のみ＝軽い。ライブ tick で再取得されるのもこの open だけ。
   // DONE/CANCELLED（全体の 99%・689KB の主因）は遅延読込（下記 closed* state）に分離する。
-  const { data, error, loading, fetchedAt, refetch } = useLiveResource<{ tasks: Task[] }>(
+  const { data, error, loading, refetch } = useLiveResource<{ tasks: Task[] }>(
     '/api/tasks?scope=open',
     tick,
   );
@@ -356,9 +355,10 @@ export default function Tasks() {
 
   return (
     <div className="flex h-full flex-col">
-        {/* フィルタ（全て/プロジェクト）＋最終更新。2026-06-27 Keita「上のスペースを1行に」。
+        {/* フィルタ（全て/プロジェクト）行。2026-06-27 Keita「上のスペースを1行に」。
             デスクトップではタブ行(TasksTabs)の高さ分だけ上に引き上げ、タブの右側の空きに重ねて
-            1行に統合する（透明バーなのでタブ名は透ける）。モバイルはタブ下に通常配置。 */}
+            1行に統合する（透明バーなのでタブ名は透ける）。モバイルはタブ下に通常配置。
+            透明バーは pointer-events-none でタブのタップを奪わない（操作子だけ auto）。 */}
         <div className="pointer-events-none flex items-center justify-end gap-2 px-4 py-1 md:-mt-[41px] md:h-[41px] md:px-6 md:py-0">
           <div
             className="no-scrollbar pointer-events-auto -mx-1 flex min-w-0 items-center gap-1 overflow-x-auto px-1"
@@ -409,11 +409,6 @@ export default function Tasks() {
               className="w-14 bg-transparent text-xs text-text outline-none transition-[width] duration-200 placeholder:text-text-faint focus:w-56"
             />
           </label>
-          {fetchedAt !== undefined && (
-            <span className="shrink-0 text-[11px] text-text-faint">
-              最終更新: {relativeTime(fetchedAt)}
-            </span>
-          )}
         </div>
         {/* いま何をやっているか（MC-317）: ステータス件数＋進行中を担当者別にひと目で。 */}
         <NowOverview byColumn={byColumn} onOpen={setSelected} />

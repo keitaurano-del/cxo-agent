@@ -807,21 +807,8 @@ interface GuideNotesResponse {
   generating: boolean;
 }
 
-function formatUpdatedAt(iso: string | null): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleString('ja-JP', {
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 function ConsultationNotesSection() {
   const [topics, setTopics] = useState<GuideNoteTopic[]>([]);
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   // 初回ロード中（まだ一度もデータを受け取っていない）。
   const [loading, setLoading] = useState(true);
   // 取得失敗（致命ではなく、本文は隠してリトライ案内のみ出す）。
@@ -840,7 +827,6 @@ function ConsultationNotesSection() {
         const data = (await res.json()) as GuideNotesResponse;
         if (cancelled) return;
         setTopics(Array.isArray(data.topics) ? data.topics : []);
-        setUpdatedAt(typeof data.updatedAt === 'string' ? data.updatedAt : null);
         setFailed(false);
         setLoading(false);
         // 裏で差分更新中（別リクエストが統合中）なら、少し待ってもう一度取りに行く。
@@ -860,8 +846,6 @@ function ConsultationNotesSection() {
       if (retryTimer) clearTimeout(retryTimer);
     };
   }, []);
-
-  const updatedLabel = formatUpdatedAt(updatedAt);
 
   return (
     <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
@@ -896,9 +880,6 @@ function ConsultationNotesSection() {
               </li>
             ))}
           </ul>
-          {updatedLabel && (
-            <p className="mt-2 text-[11px] text-text-faint">最終更新: {updatedLabel}</p>
-          )}
         </>
       )}
       <Note>
