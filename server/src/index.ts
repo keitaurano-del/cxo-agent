@@ -583,6 +583,43 @@ app.get('/api/clipitnow/pdca', (_req, res) => {
   });
 });
 
+// ─── ClipItNow PDCA レポート一覧・本文（MC-327 2026-07-20 Keita「レポートをPDCAタブから見たい」）───
+// cron（report/do）と Son が Vault の reports/ に書く markdown を read-only で配信する。
+// config.ts は共有WIP中のため定数はここに置く（env CLIPITNOW_PDCA_REPORTS_DIR で差し替え可）。
+const CLIPITNOW_PDCA_REPORTS_DIR = process.env.CLIPITNOW_PDCA_REPORTS_DIR
+  ?? join(process.env.DATA_HOME ?? '/home/dev', 'projects', 'obsidian-vault', '30-Projects', 'videodl', 'reports');
+app.get('/api/clipitnow/pdca/reports', (_req, res) => {
+  safeJson(res, () => {
+    if (!existsSync(CLIPITNOW_PDCA_REPORTS_DIR)) return { reports: [] };
+    const reports = readdirSync(CLIPITNOW_PDCA_REPORTS_DIR)
+      .filter((f) => f.endsWith('.md') && !f.startsWith('.'))
+      .map((f) => {
+        const st = statSync(join(CLIPITNOW_PDCA_REPORTS_DIR, f));
+        return {
+          name: f,
+          // pdca-do-*=Do実行結果 / それ以外（pdca-report-*）=夜のCheckレポート
+          kind: f.startsWith('pdca-do') ? 'do' : 'report',
+          mtime: st.mtime.toISOString(),
+          size: st.size,
+        };
+      })
+      .sort((a, b) => (a.mtime < b.mtime ? 1 : -1));
+    return { reports };
+  });
+});
+app.get('/api/clipitnow/pdca/reports/:name', (req, res) => {
+  safeJson(res, () => {
+    const name = String(req.params.name ?? '');
+    // パストラバーサル拒否: basename一致・.mdのみ
+    if (!name.endsWith('.md') || name !== basename(name) || name.startsWith('.')) {
+      return { name, content: '', error: 'not found' };
+    }
+    const fp = join(CLIPITNOW_PDCA_REPORTS_DIR, name);
+    if (!existsSync(fp)) return { name, content: '', error: 'not found' };
+    return { name, content: readFileSync(fp, 'utf-8') };
+  });
+});
+
 // ─── 横断検索（MC-73）──────────────────────────────────────
 // GET /api/search?q=... で タスク / エージェント / 会話 / workflow / Vault を横断検索する。
 // 認証ミドルウェア（makeAuthMiddleware）配下。既存 collector を流用し二重定義しない。

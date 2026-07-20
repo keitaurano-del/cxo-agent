@@ -3,6 +3,7 @@
 // Plan/Do/Act は「現サイクルの内容」をここで管理する（PDCA を回すたびに更新する）。
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LoopIcon } from '../components/icons';
+import ChatMarkdown from '../components/ChatMarkdown';
 import { useLiveResource } from '../lib/useLiveData';
 
 const STATS_URL = 'https://clipitnow.net/api/stats';
@@ -78,9 +79,10 @@ const PLAN: string[] = [
   '仮説：律速はオーガニック（検索）流入。現状は PV の大半がボット/直接流入で実 UU がほぼ 0。',
 ];
 const DO: string[] = [
-  '収益：動画広告5面（トップ/結果/PC浮遊/変換待ち/保存後クローズ）を、安定フィルの VAST 動画で配置（バナーは低フィルのため動画化）。ExoClick 収益を API 連携。',
-  '集客：多言語SEO（11言語）・DL別LP・sitemap/IndexNow 送信。',
-  'UX：アドブロック解除依頼の常時化・保存後の白箱バグ修正。自己アクセスは計測除外。',
+  '【今巡のDo・実行中】VD-09: 高需要未カバークエリの新規ガイドLP追加（6本目標・IndexNow送信まで）。',
+  '【今巡のDo・実行中】VD-10: ガイド間の内部リンク強化（関連ガイド相互リンクで孤立LPを無くす）。',
+  '【今巡のDo・実行中】VD-11: 主要ガイド10本のFAQ拡充（ロングテール獲得・FAQPage schema更新）。',
+  '済: 動画広告5面＋保存2タップ広告ゲート／多言語SEO・DL別LP・sitemap/IndexNow／自己アクセス計測除外。',
 ];
 const CHECK_READ: string[] = [
   '実 UU・DL が低く、実エンゲージメントが不足。PV は大半がボット/直接流入（下の数値参照）。',
@@ -324,6 +326,95 @@ function PdcaAgentHero({ status }: { status: AgentStatus }) {
   );
 }
 
+// ── PDCA レポート一覧（MC-327 2026-07-20 Keita「レポートをこのタブから見たい」）──
+// GET /api/clipitnow/pdca/reports の一覧を表示し、クリックで本文（markdown）を展開する。
+interface ReportMeta {
+  name: string;
+  kind: 'report' | 'do';
+  mtime: string;
+  size: number;
+}
+const REPORT_KIND_LABEL: Record<ReportMeta['kind'], { text: string; color: string; bg: string }> = {
+  report: { text: 'Check レポート', color: '#b45309', bg: 'rgba(217,119,6,0.12)' },
+  do: { text: 'Do 実行結果', color: '#15803d', bg: 'rgba(22,163,74,0.12)' },
+};
+
+function PdcaReports() {
+  const { data } = useLiveResource<{ reports: ReportMeta[] }>('/api/clipitnow/pdca/reports');
+  const reports = data?.reports ?? [];
+  const [openName, setOpenName] = useState<string | null>(null);
+  const [content, setContent] = useState<Record<string, string>>({});
+
+  const toggle = useCallback(
+    async (name: string) => {
+      if (openName === name) {
+        setOpenName(null);
+        return;
+      }
+      setOpenName(name);
+      if (!(name in content)) {
+        try {
+          const res = await fetch(`/api/clipitnow/pdca/reports/${encodeURIComponent(name)}`);
+          const j = (await res.json()) as { content?: string };
+          setContent((c) => ({ ...c, [name]: j.content || '(本文を取得できませんでした)' }));
+        } catch {
+          setContent((c) => ({ ...c, [name]: '(本文を取得できませんでした)' }));
+        }
+      }
+    },
+    [openName, content],
+  );
+
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="text-xs font-semibold text-text-muted">レポート（夜のCheckレポート／Do実行結果・新しい順）</h2>
+      {reports.length === 0 ? (
+        <p className="rounded-lg border border-border bg-surface px-3 py-2 text-[12px] text-text-muted">
+          まだレポートがありません。毎晩 20:00 の Check レポートと Do 実行結果がここに並びます。
+        </p>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-border bg-surface">
+          {reports.map((r) => {
+            const k = REPORT_KIND_LABEL[r.kind] ?? REPORT_KIND_LABEL.report;
+            const open = openName === r.name;
+            return (
+              <div key={r.name} className="border-b border-border last:border-b-0">
+                <button
+                  type="button"
+                  onClick={() => void toggle(r.name)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-surface-2"
+                  aria-expanded={open}
+                >
+                  <span
+                    className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold"
+                    style={{ color: k.color, background: k.bg }}
+                  >
+                    {k.text}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-text">{r.name}</span>
+                  <span className="shrink-0 text-[10px] tabular-nums text-text-faint">
+                    {r.mtime.slice(0, 10)}
+                  </span>
+                  <span className="shrink-0 text-[10px] text-text-faint" aria-hidden>
+                    {open ? '▲' : '▼'}
+                  </span>
+                </button>
+                {open && (
+                  <div className="max-h-[28rem] overflow-y-auto border-t border-border/60 bg-surface-2/40 px-4 py-3 text-[12.5px]">
+                    {r.name in content ? <ChatMarkdown body={content[r.name]} /> : (
+                      <p className="text-text-muted">読み込み中…</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function MiniStat({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
     <div className="flex flex-col rounded-lg border border-border bg-surface/70 px-2.5 py-1.5">
@@ -402,6 +493,10 @@ export default function Pdca() {
           >
             clipitnow.net ↗
           </a>
+          {/* Do の実行セッションは subagent として走るため、生の作業ログは実装進捗タブに出る（MC-327） */}
+          <a href="/progress" className="text-[11px] text-accent hover:underline">
+            実行のようす（実装進捗）→
+          </a>
         </div>
         <button
           type="button"
@@ -463,6 +558,9 @@ export default function Pdca() {
         <PdcaCard badge="C" title="Check（評価・数値の読み）" hint="上の数値を解釈" color="#d97706" items={CHECK_READ} />
         <PdcaCard badge="A" title="Act（次の改善アクション）" hint="次サイクルへ" color="#7c3aed" items={ACT} />
       </section>
+
+      {/* レポート一覧（Check レポート / Do 実行結果） */}
+      <PdcaReports />
 
       <p className="text-[10px] leading-relaxed text-text-faint">
         Check の数値は clipitnow.net の公開API（第一者計測・自己アクセス除外）からライブ取得。Plan/Do/Act は現サイクルの内容で、PDCA を回すたびに更新します。
