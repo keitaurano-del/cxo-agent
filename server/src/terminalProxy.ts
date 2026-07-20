@@ -293,7 +293,10 @@ export const TAP_FIX_BODY = `(function(){
       }
     }catch(_e){}
     var rectEl=screen||view||t.element;        // 座標換算の基準（screen 優先）
-    var listenEl=view||screen||t.element;      // リスナを張る対象（スクロール要素 viewport 優先）
+    // リスナは共通祖先 t.element で受ける（2026-07-20 実測 MC-330）: タッチの実ターゲットは
+    // .xterm-link-layer 等の screen 側レイヤで .xterm-viewport の子ではないため、viewport に
+    // 張るとイベントが一切届かないケースがある。祖先で受ければどちらの場合もバブリングで拾える。
+    var listenEl=t.element||view||screen;
     if(!rectEl||!listenEl){return false;}
     t.__apolloTapFix=true;
     // ネイティブのスクロール（縦横 pan）を常に許可する。clean tap だけ JS 側で横取りする。
@@ -342,18 +345,59 @@ export const TAP_FIX_BODY = `(function(){
     }
     var MOVE_THRESHOLD=10; // px。これ未満はタップ、超えたらスワイプ。
     var TAP_MAX_MS=700;    // ms。これ超は長押し扱いでタップにしない。
+    var LONGPRESS_MS=450;  // ms。動かず長押し → 選択モード（MC-330 モバイルコピー）。
     var sx=0,sy=0,lastY=0,st=0,moved=false,scrolled=false,tracking=false;
+    // ── 長押し選択（MC-330 / 2026-07-20 Keita「スマホから履歴コピーできない」）──
+    // 長押し(450ms・不動) → tmux へ press(SGR <0..M) を送って copy-mode 選択を開始し、
+    // 指の移動を drag(SGR <32..M)、指離しを release(SGR <0..m) として送る。
+    // tmux が選択をコピーして OSC 52 を返し、COPY_FIX がブラウザ clipboard へ書く
+    // ＝PC のドラッグコピーと完全に同じ経路。バイブ(30ms)で選択開始を伝える。
+    var selecting=false,pressTimer=null,selCell=null;
+    function sendSel(cell,action){
+      try{
+        t._core.coreMouseService.triggerMouseEvent({col:cell.col,row:cell.row,x:cell.col+1,y:cell.row+1,button:0,action:action,ctrl:false,alt:false,shift:false});
+        return true;
+      }catch(_e){return false;}
+    }
+    listenEl.addEventListener('contextmenu',function(e){
+      // 長押し選択中はブラウザのコンテキストメニューを出さない（選択操作を奪われないように）。
+      if(selecting&&typeof e.preventDefault==='function'){e.preventDefault();}
+    });
     listenEl.addEventListener('touchstart',function(e){
+      if(pressTimer){clearTimeout(pressTimer);pressTimer=null;}
+      selecting=false;selCell=null;
       if(!mouseActive()){tracking=false;return;} // 通常 shell では一切介入しない（ネイティブスクロール温存）
       if(e.touches.length!==1){tracking=false;return;} // マルチタッチ（ズーム等）は無視
       tracking=true;moved=false;scrolled=false;
       var tt=e.touches[0];sx=tt.clientX;sy=tt.clientY;lastY=tt.clientY;st=Date.now();
+      pressTimer=setTimeout(function(){
+        pressTimer=null;
+        if(!tracking||moved||scrolled){return;}
+        var cell=toCell(sx,sy);
+        if(!cell){return;}
+        if(sendSel(cell,1)){ // press ＝ tmux copy-mode 選択開始
+          selecting=true;selCell=cell;
+          try{if(navigator.vibrate){navigator.vibrate(30);}}catch(_e){}
+        }
+      },LONGPRESS_MS);
     },{passive:true});
     listenEl.addEventListener('touchmove',function(e){
       if(!tracking){return;}
       var tt=e.touches[0];
       if(!tt){return;}
-      if(Math.abs(tt.clientX-sx)>MOVE_THRESHOLD||Math.abs(tt.clientY-sy)>MOVE_THRESHOLD){moved=true;}
+      if(selecting){
+        // 選択モード中: 指の移動を drag として送る（セルが変わったときだけ）。
+        var c2=toCell(tt.clientX,tt.clientY);
+        if(c2&&(!selCell||c2.col!==selCell.col||c2.row!==selCell.row)){
+          sendSel(c2,32);selCell=c2;
+        }
+        if(typeof e.preventDefault==='function'&&e.cancelable!==false){e.preventDefault();}
+        return;
+      }
+      if(Math.abs(tt.clientX-sx)>MOVE_THRESHOLD||Math.abs(tt.clientY-sy)>MOVE_THRESHOLD){
+        moved=true;
+        if(pressTimer){clearTimeout(pressTimer);pressTimer=null;} // 動いたら長押し選択は不成立
+      }
       if(!moved){return;}
       // mouse mode 中のスワイプ＝TUI へ wheel を送って漸進スクロール。1 行分動くごとに wheel 1 発。
       // （mouse mode 中は xterm ネイティブの touch スクロールがガードで不発なので、ここで送らないと
@@ -375,8 +419,19 @@ export const TAP_FIX_BODY = `(function(){
       if(typeof e.preventDefault==='function'&&e.cancelable!==false){e.preventDefault();}
     },{passive:false});
     listenEl.addEventListener('touchend',function(e){
+      if(pressTimer){clearTimeout(pressTimer);pressTimer=null;}
       if(!tracking){return;}
       tracking=false;
+      if(selecting){
+        // 選択モード終了: release を送る → tmux が選択をコピー → OSC52 → clipboard（COPY_FIX）。
+        selecting=false;
+        var te=(e.changedTouches&&e.changedTouches[0])||null;
+        var endCell=(te&&toCell(te.clientX,te.clientY))||selCell;
+        if(endCell){sendSel(endCell,0);}
+        selCell=null;
+        if(typeof e.preventDefault==='function'){e.preventDefault();}
+        return;
+      }
       if(!mouseActive()){return;}
       // スワイプ（スクロール済 or 移動量超）・長押しはタップ扱いしない。
       if(moved||scrolled||(Date.now()-st)>TAP_MAX_MS){
