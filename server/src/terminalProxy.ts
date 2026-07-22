@@ -573,6 +573,189 @@ export const COPY_FIX_BODY = `(function(){
 })();`;
 const COPY_FIX_SCRIPT = `<script>${COPY_FIX_BODY}</script>`;
 
+// ─── ターミナル内 URL を開けるようにする（MC-333）────────────────────────────
+// 根因: tmux mouse mode 下ではクリック/タップが SGR mouse として PTY へ送られ（TAP_FIX も
+//   モバイルタップを mouse イベント化する）、xterm の link 層に到達しない＝ターミナルに
+//   表示された URL をブラウザで開く手段が無い。
+// 修正（LINK_FIX、既存 FIX 群と同じ注入基盤）:
+//   - click / touchend に「追加リスナー」で相乗りする（イベントは奪わない＝KEY/TAP/COPY_FIX
+//     と共存。TAP_FIX の tap→SGR 送出はそのまま生きる）。
+//   - タップ座標 → セル(col,row)換算は term._core._renderService.dimensions の
+//     actualCellWidth/Height を優先し、無ければ .xterm-screen の rect と cols/rows から計算。
+//     スクロールバック位置は buffer.active.viewportY（無ければ _core.buffer.ydisp）を加味して
+//     buffer 絶対行を求める。
+//   - その行の論理行テキストを isWrapped を前後最大5行まで辿って連結（巨大行の暴走防止）し、
+//     タップ位置に重なる URL（https?://\S+、行末の閉じ括弧・全角句読点類はトリム）を検出。
+//   - 検出したら **即開かず** 画面下部にトースト「🔗 <URL先頭50文字>… [開く] [×]」を表示
+//     （6秒で自動消滅・高さ44pxでタップしやすく・COPY_FIX と同トーンのダーク配色）。
+//     [開く] で window.open(url,'_blank','noopener')。誤タップで勝手に画面遷移しない。
+//   - 誤爆防止: ドラッグ（選択）後の click は移動量閾値(5px)と getSelection() で抑止。
+//     タッチは移動(>10px)・長押し(>700ms、TAP_FIX の長押し選択 450ms とも干渉しない)を除外し、
+//     touchend 直後 600ms は合成 click を無視（二重発火防止）。
+// LINK_FIX_BODY はテストから eval 可能な素の JS。URL 抽出は window.__linkFixExtract、
+// 折返し連結は window.__linkFixLineAt として公開しテスト対象にする。本番注入は LINK_FIX_SCRIPT。
+export const LINK_FIX_BODY = `(function(){
+  // text 内で文字位置 idx に重なる URL を返す（無ければ null）。
+  // 行末に混入しがちな閉じ括弧・引用符・句読点（半角/全角）はトリムする。
+  function extract(text,idx){
+    var re=/https?:\\/\\/\\S+/g,m;
+    while((m=re.exec(text))){
+      var url=m[0].replace(/[)\\]}>"',.;:!?\\u3001\\u3002\\uFF01\\uFF1F\\uFF08\\uFF09\\uFF3D\\uFF5D\\uFF1C\\uFF1E\\u300C\\u300D\\u300E\\u300F\\u3010\\u3011\\u3008\\u3009\\u300A\\u300B\\uFF0C\\uFF0E\\u30FB\\u2026\\u201C\\u201D\\u2018\\u2019]+$/,'');
+      var s=m.index,e=s+url.length;
+      if(idx>=s&&idx<e){return url;}
+    }
+    return null;
+  }
+  window.__linkFixExtract=extract;
+  // absRow（buffer 絶対行）を含む論理行テキストを、isWrapped を前後それぞれ最大5行まで辿って
+  // 連結して返す。idx0 は absRow 行頭が text 内で始まる文字オフセット（タップ列を足して使う）。
+  function lineAt(buf,absRow,cols){
+    var start=absRow,end=absRow,i;
+    for(i=0;i<5;i++){
+      var l=buf.getLine(start);
+      if(!l||!l.isWrapped){break;}
+      start--;
+    }
+    for(i=0;i<5;i++){
+      var n=buf.getLine(end+1);
+      if(!n||!n.isWrapped){break;}
+      end++;
+    }
+    var text='',idx0=0;
+    for(var y=start;y<=end;y++){
+      var line=buf.getLine(y);
+      if(!line){break;}
+      if(y===absRow){idx0=text.length;}
+      // 継続行（後ろに折返しが続く行）は右トリムせず cols 幅で連結し、文字位置を保つ。
+      var seg=line.translateToString(y===end);
+      if(y<end){while(seg.length<cols){seg+=' ';}}
+      text+=seg;
+    }
+    return {text:text,idx0:idx0};
+  }
+  window.__linkFixLineAt=lineAt;
+  var toastEl=null,toastTimer=null;
+  function hideToast(){
+    if(toastTimer){clearTimeout(toastTimer);toastTimer=null;}
+    if(toastEl){try{toastEl.parentNode&&toastEl.parentNode.removeChild(toastEl);}catch(_e){}toastEl=null;}
+  }
+  function showToast(url){
+    try{
+      hideToast();
+      var box=document.createElement('div');
+      box.style.cssText='position:fixed;left:50%;bottom:14px;transform:translateX(-50%);'+
+        'display:flex;align-items:center;gap:10px;height:44px;max-width:92vw;padding:0 8px 0 14px;'+
+        'background:rgba(24,34,52,.96);color:#e6edf7;border:1px solid rgba(120,150,200,.35);'+
+        'border-radius:12px;font:13px sans-serif;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,.45);';
+      var label=document.createElement('span');
+      label.textContent='\\uD83D\\uDD17 '+(url.length>50?url.slice(0,50)+'\\u2026':url);
+      label.style.cssText='overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60vw;';
+      var open=document.createElement('button');
+      open.textContent='\\u958B\\u304F';
+      open.style.cssText='background:#3b6ea5;color:#fff;border:0;border-radius:8px;'+
+        'padding:8px 14px;font:13px sans-serif;cursor:pointer;flex:none;';
+      open.addEventListener('click',function(ev){
+        ev.stopPropagation();
+        try{window.open(url,'_blank','noopener');}catch(_e){}
+        hideToast();
+      });
+      var close=document.createElement('button');
+      close.textContent='\\u00D7';
+      close.style.cssText='background:transparent;color:#9fb0c8;border:0;font:18px sans-serif;'+
+        'padding:8px 10px;cursor:pointer;flex:none;';
+      close.addEventListener('click',function(ev){ev.stopPropagation();hideToast();});
+      box.appendChild(label);box.appendChild(open);box.appendChild(close);
+      document.body.appendChild(box);
+      toastEl=box;
+      toastTimer=setTimeout(hideToast,6000);
+    }catch(_e){}
+  }
+  function install(){
+    var t=window.term;
+    if(!t||typeof t.cols!=='number'){return false;}
+    if(t.__apolloLinkFix){return true;}
+    var rectEl=null;
+    try{
+      if(t.element&&t.element.querySelector){rectEl=t.element.querySelector('.xterm-screen');}
+    }catch(_e){}
+    rectEl=rectEl||t.element;
+    var listenEl=t.element;
+    if(!rectEl||!listenEl||typeof listenEl.addEventListener!=='function'){return false;}
+    t.__apolloLinkFix=true;
+    // 座標→セル換算: renderService の実セル寸法を優先、無ければ rect と cols/rows から。
+    function toCell(x,y){
+      var r=rectEl.getBoundingClientRect();
+      var cw=0,ch=0;
+      try{
+        var d=t._core&&t._core._renderService&&t._core._renderService.dimensions;
+        if(d&&d.actualCellWidth>0&&d.actualCellHeight>0){cw=d.actualCellWidth;ch=d.actualCellHeight;}
+      }catch(_e){}
+      if(!(cw>0&&ch>0)){
+        if(!t.cols||!t.rows||r.width<=0||r.height<=0){return null;}
+        cw=r.width/t.cols;ch=r.height/t.rows;
+      }
+      var col=Math.floor((x-r.left)/cw),row=Math.floor((y-r.top)/ch);
+      if(col<0){col=0;} if(col>=t.cols){col=t.cols-1;}
+      if(row<0){row=0;} if(row>=t.rows){row=t.rows-1;}
+      return {col:col,row:row};
+    }
+    function viewportY(buf){
+      if(buf&&typeof buf.viewportY==='number'){return buf.viewportY;}
+      try{
+        var b=t._core&&t._core.buffer;
+        if(b&&typeof b.ydisp==='number'){return b.ydisp;}
+      }catch(_e){}
+      return 0;
+    }
+    function handleAt(x,y){
+      try{
+        var cell=toCell(x,y);
+        if(!cell){return;}
+        var buf=t.buffer&&t.buffer.active;
+        if(!buf||typeof buf.getLine!=='function'){return;}
+        var absRow=viewportY(buf)+cell.row;
+        var la=lineAt(buf,absRow,t.cols);
+        var url=extract(la.text,la.idx0+cell.col);
+        if(url){showToast(url);}
+      }catch(_e){}
+    }
+    // デスクトップ: click に相乗り。ドラッグ選択後の click は移動量と選択有無で除外する。
+    var downX=0,downY=0,lastTouch=0;
+    listenEl.addEventListener('mousedown',function(e){downX=e.clientX;downY=e.clientY;});
+    listenEl.addEventListener('click',function(e){
+      if(Date.now()-lastTouch<600){return;} // touchend 由来の合成 click は二重処理しない
+      if(Math.abs(e.clientX-downX)>5||Math.abs(e.clientY-downY)>5){return;} // ドラッグ後は出さない
+      try{if(t.getSelection&&t.getSelection()){return;}}catch(_e){} // 選択中も出さない
+      handleAt(e.clientX,e.clientY);
+    });
+    // モバイル: touchend に相乗り（TAP_FIX の tap→SGR 送出とは独立、イベントは奪わない）。
+    // 移動(>10px)は スワイプ、>700ms は 長押し（TAP_FIX の 450ms 選択フロー含む）なので出さない。
+    var tsX=0,tsY=0,tsAt=0,tMoved=false,tMulti=false;
+    listenEl.addEventListener('touchstart',function(e){
+      tMulti=(e.touches&&e.touches.length!==1);
+      tMoved=false;tsAt=Date.now();
+      var tt=e.touches&&e.touches[0];
+      if(tt){tsX=tt.clientX;tsY=tt.clientY;}
+    },{passive:true});
+    listenEl.addEventListener('touchmove',function(e){
+      var tt=e.touches&&e.touches[0];
+      if(tt&&(Math.abs(tt.clientX-tsX)>10||Math.abs(tt.clientY-tsY)>10)){tMoved=true;}
+    },{passive:true});
+    listenEl.addEventListener('touchend',function(e){
+      lastTouch=Date.now();
+      if(tMulti||tMoved||(Date.now()-tsAt)>700){return;}
+      var tt=e.changedTouches&&e.changedTouches[0];
+      if(!tt){return;}
+      handleAt(tt.clientX,tt.clientY);
+    },{passive:true});
+    return true;
+  }
+  if(!install()){
+    var n=0,iv=setInterval(function(){if(install()||++n>100){clearInterval(iv);}},100);
+  }
+})();`;
+const LINK_FIX_SCRIPT = `<script>${LINK_FIX_BODY}</script>`;
+
 // proxy 失敗時に Apollo 全体を落とさない。ttyd 停止中（林セッション無し等）でも 502 を返すだけ。
 proxy.on('error', (err, _req, resOrSocket) => {
   console.error('[terminal proxy error]', err?.message ?? err);
@@ -628,7 +811,7 @@ proxy.on('proxyRes', (proxyRes, _req, res) => {
   proxyRes.on('end', () => {
     let body = Buffer.concat(chunks).toString('utf8');
     if (body.includes('</body>') && !body.includes('__apolloPasteFix')) {
-      body = body.replace('</body>', `${PASTE_FIX_SCRIPT}${TAP_FIX_SCRIPT}${TERM_THEME_SCRIPT}${COPY_FIX_SCRIPT}</body>`);
+      body = body.replace('</body>', `${PASTE_FIX_SCRIPT}${TAP_FIX_SCRIPT}${TERM_THEME_SCRIPT}${COPY_FIX_SCRIPT}${LINK_FIX_SCRIPT}</body>`);
     }
     const buf = Buffer.from(body, 'utf8');
     headers['content-length'] = String(buf.byteLength);
