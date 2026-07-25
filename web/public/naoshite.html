@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ナオシテ — 壊れた、を撮るだけ。</title>
+<style>
+  :root{
+    --bg:#faf7f2; --card:#ffffff; --ink:#2b2620; --sub:#8a8073;
+    --accent:#c96f3b; --accent-dark:#a85a2c; --green:#4a7c59; --line:#ece5da;
+    --shadow:0 2px 12px rgba(43,38,32,.08);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{font-family:"Hiragino Sans","Noto Sans JP",sans-serif;background:#e8e2d8;color:var(--ink)}
+  #app{max-width:430px;margin:0 auto;min-height:100dvh;background:var(--bg);position:relative;overflow:hidden;display:flex;flex-direction:column}
+  .screen{display:none;flex:1;flex-direction:column;overflow-y:auto;padding-bottom:90px}
+  .screen.active{display:flex}
+  .demo-badge{position:fixed;top:10px;right:10px;z-index:99;background:#2b2620;color:#fff;font-size:10px;padding:4px 10px;border-radius:99px;opacity:.75}
+
+  /* header */
+  .hd{padding:22px 20px 10px}
+  .logo{font-size:22px;font-weight:800;letter-spacing:.02em}
+  .logo span{color:var(--accent)}
+  .tagline{font-size:12px;color:var(--sub);margin-top:2px}
+
+  /* hero */
+  .hero{margin:14px 16px;background:linear-gradient(135deg,#c96f3b,#a85a2c);border-radius:20px;padding:24px 20px;color:#fff;box-shadow:var(--shadow)}
+  .hero h1{font-size:20px;line-height:1.4;font-weight:800}
+  .hero p{font-size:12px;opacity:.9;margin-top:8px;line-height:1.6}
+  .hero button{margin-top:16px;width:100%;padding:14px;border:none;border-radius:12px;background:#fff;color:var(--accent-dark);font-size:15px;font-weight:800;cursor:pointer}
+
+  .sec-t{font-size:13px;font-weight:700;color:var(--sub);padding:18px 20px 10px}
+  .cats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 16px}
+  .cat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 6px;text-align:center;cursor:pointer}
+  .cat .ic{font-size:26px}
+  .cat .nm{font-size:11px;margin-top:6px;color:var(--ink);font-weight:600}
+
+  .feed{padding:0 16px;display:flex;flex-direction:column;gap:10px}
+  .fcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;gap:12px;align-items:center;box-shadow:var(--shadow)}
+  .fimg{width:56px;height:56px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0}
+  .fbody{flex:1;min-width:0}
+  .ftitle{font-size:13px;font-weight:700}
+  .fmeta{font-size:11px;color:var(--sub);margin-top:3px}
+  .fprice{font-size:13px;font-weight:800;color:var(--green);white-space:nowrap}
+
+  /* bottom nav */
+  .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:#fff;border-top:1px solid var(--line);display:flex;z-index:50}
+  .nav button{flex:1;border:none;background:none;padding:10px 0 14px;font-size:10px;color:var(--sub);cursor:pointer}
+  .nav button .i{display:block;font-size:20px;margin-bottom:2px}
+  .nav button.on{color:var(--accent);font-weight:700}
+  .nav .fab{flex:0 0 76px;position:relative}
+  .nav .fab .btn{position:absolute;top:-24px;left:50%;transform:translateX(-50%);width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;font-size:24px;border:4px solid var(--bg);box-shadow:var(--shadow)}
+  .nav .fab .lbl{position:absolute;bottom:8px;left:0;right:0;font-size:10px;color:var(--accent);font-weight:700}
+
+  /* request flow */
+  .flow-hd{display:flex;align-items:center;gap:10px;padding:18px 16px 8px}
+  .back{border:none;background:none;font-size:20px;cursor:pointer;color:var(--sub)}
+  .flow-hd h2{font-size:16px;font-weight:800}
+  .step-note{font-size:12px;color:var(--sub);padding:0 20px;line-height:1.6}
+
+  .shot-zone{margin:16px;border:2px dashed #d8cfc2;border-radius:18px;background:#fff;padding:30px 16px;text-align:center;cursor:pointer}
+  .shot-zone .big{font-size:44px}
+  .shot-zone p{font-size:13px;color:var(--sub);margin-top:8px}
+  .samples{padding:0 16px}
+  .samples .lbl{font-size:11px;color:var(--sub);margin:6px 0 8px}
+  .srow{display:flex;gap:10px}
+  .sitem{flex:1;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 4px;text-align:center;cursor:pointer}
+  .sitem .ic{font-size:30px}
+  .sitem .nm{font-size:10px;color:var(--sub);margin-top:4px}
+  .sitem.sel{border-color:var(--accent);background:#fdf3ec}
+
+  .photo-view{margin:16px;border-radius:18px;overflow:hidden;background:#f1ece4;text-align:center;padding:26px 10px}
+  .photo-view .em{font-size:72px;display:block}
+  .photo-view img{max-width:100%;max-height:240px;border-radius:12px}
+  .photo-view .cap{font-size:12px;color:var(--sub);margin-top:8px}
+
+  /* AI diagnosis */
+  .ai-box{margin:0 16px;background:#2b2620;color:#f5efe6;border-radius:18px;padding:18px}
+  .ai-box .hdi{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700}
+  .dot{width:8px;height:8px;border-radius:50%;background:#7fd18f;animation:blink 1s infinite}
+  @keyframes blink{50%{opacity:.3}}
+  .ai-lines{margin-top:12px;font-size:12px;line-height:2;font-family:ui-monospace,monospace;min-height:72px}
+  .ai-lines div{opacity:0;animation:fadein .4s forwards}
+  @keyframes fadein{to{opacity:1}}
+  .diag{margin:14px 16px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:var(--shadow)}
+  .diag h3{font-size:14px;font-weight:800;display:flex;align-items:center;gap:6px}
+  .diag .row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .diag .row:last-child{border:none}
+  .diag .k{color:var(--sub)}
+  .diag .v{font-weight:700;text-align:right}
+  .range{font-size:20px;font-weight:800;color:var(--accent-dark)}
+  .cta{margin:6px 16px 20px;padding:16px;width:calc(100% - 32px);border:none;border-radius:14px;background:var(--accent);color:#fff;font-size:15px;font-weight:800;cursor:pointer}
+  .cta:disabled{opacity:.4}
+  .cta.ghost{background:#fff;color:var(--accent-dark);border:1.5px solid var(--accent)}
+
+  /* bids */
+  .waiting{ text-align:center;padding:26px 20px 6px}
+  .waiting .pulse{font-size:40px;animation:pop 1.2s infinite}
+  @keyframes pop{50%{transform:scale(1.15)}}
+  .waiting p{font-size:13px;color:var(--sub);margin-top:6px}
+  .bids{padding:0 16px;display:flex;flex-direction:column;gap:12px;margin-top:10px}
+  .bid{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:var(--shadow);opacity:0;transform:translateY(14px);transition:.45s}
+  .bid.in{opacity:1;transform:none}
+  .bid .top{display:flex;gap:10px;align-items:center}
+  .avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;background:#f1e8dc;flex-shrink:0}
+  .bname{font-size:13px;font-weight:800}
+  .bmeta{font-size:11px;color:var(--sub);margin-top:2px}
+  .stars{color:#e2a53c}
+  .bprice{margin-left:auto;text-align:right}
+  .bprice .p{font-size:17px;font-weight:800;color:var(--accent-dark)}
+  .bprice .d{font-size:10px;color:var(--sub)}
+  .bmsg{font-size:12px;line-height:1.7;color:#5c544a;background:#faf6f0;border-radius:10px;padding:10px;margin-top:10px}
+  .bsel{width:100%;margin-top:10px;padding:11px;border-radius:10px;border:1.5px solid var(--accent);background:#fff;color:var(--accent-dark);font-weight:800;font-size:13px;cursor:pointer}
+  .bsel:active{background:#fdf3ec}
+
+  /* done */
+  .done-wrap{text-align:center;padding:46px 24px 10px}
+  .done-wrap .big{font-size:56px}
+  .done-wrap h2{font-size:19px;font-weight:800;margin-top:12px}
+  .done-wrap p{font-size:13px;color:var(--sub);margin-top:8px;line-height:1.8}
+  .timeline{margin:20px 24px;text-align:left}
+  .tl{display:flex;gap:12px;padding:10px 0;font-size:13px;align-items:center}
+  .tl .b{width:26px;height:26px;border-radius:50%;background:#e8e0d4;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+  .tl.on .b{background:var(--green);color:#fff}
+  .tl.on{font-weight:700}
+  .tl .t{color:var(--sub)} .tl.on .t{color:var(--ink)}
+  .fineprint{font-size:10px;color:#b5ab9d;text-align:center;padding:14px 20px 24px;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="demo-badge">PROTOTYPE — MC-345</div>
+
+  <!-- HOME -->
+  <div class="screen active" id="sc-home">
+    <div class="hd">
+      <div class="logo">ナオシ<span>テ</span> 🔨</div>
+      <div class="tagline">修理のマーケットプレイス — 捨てる前に、直そう。</div>
+    </div>
+    <div class="hero">
+      <h1>壊れた、を撮るだけ。<br>全国の職人が見積もり。</h1>
+      <p>AIが写真から故障を診断して相場を提示。あとは職人の入札を待つだけ。持ち込み不要、送るだけで直って返ってきます。</p>
+      <button onclick="go('sc-shoot')">📷 撮って見積もりをもらう</button>
+    </div>
+    <div class="sec-t">カテゴリから相場を見る</div>
+    <div class="cats">
+      <div class="cat" onclick="go('sc-shoot')"><div class="ic">👞</div><div class="nm">靴</div></div>
+      <div class="cat" onclick="go('sc-shoot')"><div class="ic">👜</div><div class="nm">鞄・革小物</div></div>
+      <div class="cat" onclick="go('sc-shoot')"><div class="ic">🧥</div><div class="nm">衣類</div></div>
+      <div class="cat" onclick="go('sc-shoot')"><div class="ic">🪑</div><div class="nm">家具</div></div>
+      <div class="cat" onclick="go('sc-shoot')"><div class="ic">⌚</div><div class="nm">時計</div></div>
+      <div class="cat" onclick="go('sc-shoot')"><div class="ic">🚲</div><div class="nm">自転車</div></div>
+    </div>
+    <div class="sec-t">最近直ったモノ</div>
+    <div class="feed">
+      <div class="fcard"><div class="fimg" style="background:#f3e5d8">👞</div><div class="fbody"><div class="ftitle">リーガルのかかと交換</div><div class="fmeta">神戸の靴職人・タカダ ★4.9 ／ 中2日</div></div><div class="fprice">¥3,800</div></div>
+      <div class="fcard"><div class="fimg" style="background:#e5ecdf">👜</div><div class="fbody"><div class="ftitle">トートの持ち手 付け根ほつれ</div><div class="fmeta">浅草の革工房・ミナミ ★5.0 ／ 中4日</div></div><div class="fprice">¥5,500</div></div>
+      <div class="fcard"><div class="fimg" style="background:#e8e3f0">🪑</div><div class="fbody"><div class="ftitle">ダイニングチェアのぐらつき</div><div class="fmeta">旭川の家具職人・サトウ ★4.8 ／ 中5日</div></div><div class="fprice">¥7,200</div></div>
+      <div class="fcard"><div class="fimg" style="background:#f0e5e3">🧥</div><div class="fbody"><div class="ftitle">ダウンの袖口 破れ補修</div><div class="fmeta">お直し処・ハルカ ★4.9 ／ 中3日</div></div><div class="fprice">¥4,200</div></div>
+    </div>
+    <div class="fineprint">プロトタイプです。取引・決済は動作しません。<br>コンセプト: メルカリが「売る」を解いたように、ナオシテは「直す」の摩擦を解く。</div>
+  </div>
+
+  <!-- SHOOT -->
+  <div class="screen" id="sc-shoot">
+    <div class="flow-hd"><button class="back" onclick="go('sc-home')">←</button><h2>① 壊れたところを撮る</h2></div>
+    <p class="step-note">壊れた部分がわかるように撮ってください。AIが写真だけで故障内容と修理相場を診断します。</p>
+    <div class="shot-zone" onclick="document.getElementById('file').click()">
+      <div class="big">📷</div>
+      <p>タップして撮影 / 写真を選ぶ</p>
+      <input type="file" id="file" accept="image/*" hidden onchange="pickFile(this)">
+    </div>
+    <div class="samples">
+      <div class="lbl">またはサンプルで試す:</div>
+      <div class="srow">
+        <div class="sitem" onclick="pickSample(0,this)"><div class="ic">👞</div><div class="nm">かかとが減った革靴</div></div>
+        <div class="sitem" onclick="pickSample(1,this)"><div class="ic">👜</div><div class="nm">持ち手が切れた鞄</div></div>
+        <div class="sitem" onclick="pickSample(2,this)"><div class="ic">🪑</div><div class="nm">脚がぐらつく椅子</div></div>
+      </div>
+    </div>
+    <button class="cta" id="btn-diag" disabled onclick="startDiag()">AI診断をはじめる</button>
+  </div>
+
+  <!-- DIAGNOSIS -->
+  <div class="screen" id="sc-diag">
+    <div class="flow-hd"><button class="back" onclick="go('sc-shoot')">←</button><h2>② AI診断</h2></div>
+    <div class="photo-view" id="pv"></div>
+    <div class="ai-box">
+      <div class="hdi"><span class="dot"></span> ナオシテAI が解析中…</div>
+      <div class="ai-lines" id="ai-lines"></div>
+    </div>
+    <div id="diag-result" style="display:none">
+      <div class="diag">
+        <h3>🔍 診断結果</h3>
+        <div class="row"><span class="k">品目</span><span class="v" id="d-item"></span></div>
+        <div class="row"><span class="k">故障内容</span><span class="v" id="d-issue"></span></div>
+        <div class="row"><span class="k">推奨修理</span><span class="v" id="d-fix"></span></div>
+        <div class="row"><span class="k">修理相場</span><span class="v range" id="d-price"></span></div>
+        <div class="row"><span class="k">新品買い替え比</span><span class="v" style="color:var(--green)" id="d-save"></span></div>
+      </div>
+      <button class="cta" onclick="publish()">この内容で職人に見積もりを募集する</button>
+      <button class="cta ghost" onclick="go('sc-shoot')">撮り直す</button>
+    </div>
+  </div>
+
+  <!-- BIDS -->
+  <div class="screen" id="sc-bids">
+    <div class="flow-hd"><button class="back" onclick="go('sc-diag')">←</button><h2>③ 職人の見積もり</h2></div>
+    <div class="waiting" id="wait">
+      <div class="pulse">🔨</div>
+      <p>全国の職人に依頼を公開しました。<br>見積もりが届くとここに表示されます…</p>
+    </div>
+    <div class="bids" id="bids"></div>
+    <div class="fineprint" id="bids-note" style="display:none">気に入った見積もりを選ぶと、集荷キットが届きます。<br>代金は修理完了までナオシテが預かります（エスクロー）。</div>
+  </div>
+
+  <!-- DONE -->
+  <div class="screen" id="sc-done">
+    <div class="done-wrap">
+      <div class="big">🎉</div>
+      <h2 id="done-title">依頼が確定しました</h2>
+      <p id="done-sub"></p>
+    </div>
+    <div class="timeline">
+      <div class="tl on"><div class="b">✓</div><div class="t">依頼確定・代金お預かり（エスクロー）</div></div>
+      <div class="tl on"><div class="b">✓</div><div class="t">集荷キット発送（明日到着予定）</div></div>
+      <div class="tl"><div class="b">3</div><div class="t">職人へ到着 → 修理開始</div></div>
+      <div class="tl"><div class="b">4</div><div class="t">修理完了 → 返送</div></div>
+      <div class="tl"><div class="b">5</div><div class="t">受け取り確認 → 職人へ支払い</div></div>
+    </div>
+    <button class="cta" onclick="reset()">ホームに戻る</button>
+    <div class="fineprint">手数料モデル: 修理代の18%をナオシテが受け取り（プロトタイプ想定）</div>
+  </div>
+
+  <!-- NAV -->
+  <div class="nav">
+    <button class="on" onclick="go('sc-home')"><span class="i">🏠</span>ホーム</button>
+    <button><span class="i">🔍</span>さがす</button>
+    <div class="fab"><button class="btn" onclick="go('sc-shoot')">📷</button><div class="lbl">なおす</div></div>
+    <button><span class="i">💬</span>やりとり</button>
+    <button><span class="i">👤</span>マイページ</button>
+  </div>
+</div>
+
+<script>
+const SAMPLES=[
+  {em:"👞",cap:"かかとが減った革靴",item:"革靴（ビジネスシューズ）",issue:"かかとゴムの摩耗（残り約1mm）",fix:"ヒールトップリフト交換（両足）",price:"¥3,000〜4,500",save:"買い替え比 約85%お得",lines:["物体検出 … 革靴 / 紳士用 (98.2%)","損傷解析 … かかと接地面の偏摩耗を検出","素材推定 … 本革アッパー / 合成ゴムヒール","過去の類似修理 1,204件 から相場を算出"],
+   bids:[{av:"👴",n:"神戸の靴職人 タカダ",star:"★4.9",jobs:"修理実績 812件",p:"¥3,800",d:"納期 中2日",msg:"写真拝見しました。トップリフト交換で問題なく直ります。ビブラム製の耐摩耗ゴムを使用します。ついでに軽い磨きもサービスします。"},
+         {av:"👨",n:"リペア工房 SOLE.",star:"★4.7",jobs:"修理実績 445件",p:"¥3,200",d:"納期 中4日",msg:"両足トップリフト交換、標準ゴムでのお見積りです。かかと本体の削れが進む前のご依頼で正解です。"},
+         {av:"🧑",n:"靴修理ドクターの店",star:"★4.8",jobs:"修理実績 1,530件",p:"¥4,400",d:"納期 中1日",msg:"最短で直します。明日集荷なら週内にお返し可能。防水スプレー仕上げ込みの価格です。"}]},
+  {em:"👜",cap:"持ち手が切れた鞄",item:"レザートートバッグ",issue:"持ち手付け根の縫製ほつれ・革の亀裂",fix:"持ち手付け根の縫い直し＋革当て補強",price:"¥4,500〜7,000",save:"買い替え比 約80%お得",lines:["物体検出 … トートバッグ / 本革 (96.8%)","損傷解析 … 持ち手付け根に応力集中による亀裂","縫製状態 … ステッチ切れ 4cm を検出","過去の類似修理 689件 から相場を算出"],
+   bids:[{av:"👩",n:"浅草の革工房 ミナミ",star:"★5.0",jobs:"修理実績 977件",p:"¥5,500",d:"納期 中4日",msg:"付け根の裏に同色の革を当てて補強し、元のステッチ穴を活かして縫い直します。仕上がりはほぼ分かりません。"},
+         {av:"👨‍🦳",n:"バッグ修理アトリエ K",star:"★4.6",jobs:"修理実績 312件",p:"¥4,800",d:"納期 中6日",msg:"両側の持ち手とも根元を点検し、反対側も予防補強するプランです。長く使うならおすすめです。"},
+         {av:"🧔",n:"LEATHER LABO 大阪",star:"★4.8",jobs:"修理実績 1,102件",p:"¥6,500",d:"納期 中3日",msg:"補強＋全体のコバ再仕上げ込み。新品同様の見た目に戻します。"}]},
+  {em:"🪑",cap:"脚がぐらつく椅子",item:"木製ダイニングチェア",issue:"後脚ほぞの接着剥離によるぐらつき",fix:"ほぞ再接着・締め直し（分解修理）",price:"¥6,000〜9,000",save:"買い替え比 約70%お得",lines:["物体検出 … ダイニングチェア / 木製 (97.5%)","構造解析 … 後脚とざぐり部の隙間 1.8mm を検出","接合推定 … ほぞ組み / ニカワ接着の経年劣化","過去の類似修理 358件 から相場を算出"],
+   bids:[{av:"👨‍🔧",n:"旭川の家具職人 サトウ",star:"★4.8",jobs:"修理実績 521件",p:"¥7,200",d:"納期 中5日",msg:"一度ほぞを外して古い接着剤を除去し、再接着・圧締します。他の脚も点検して緩みがあれば無償で締め直します。"},
+         {av:"👩‍🔧",n:"木工リペア ito",star:"★4.9",jobs:"修理実績 289件",p:"¥8,000",d:"納期 中7日",msg:"再接着に加え、座面裏に補強コマを追加する長持ちプランです。10年使えるように直します。"},
+         {av:"🧓",n:"街の家具病院",star:"★4.5",jobs:"修理実績 764件",p:"¥6,300",d:"納期 中6日",msg:"標準的な再接着修理のお見積りです。写真の状態なら十分に締まります。"}]}
+];
+let sel=null, userPhoto=null, chosen=null;
+
+function go(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.getElementById(id).scrollTop=0;
+}
+function pickSample(i,el){
+  sel=SAMPLES[i]; userPhoto=null;
+  document.querySelectorAll('.sitem').forEach(s=>s.classList.remove('sel'));
+  el.classList.add('sel');
+  document.getElementById('btn-diag').disabled=false;
+}
+function pickFile(inp){
+  if(!inp.files||!inp.files[0])return;
+  userPhoto=URL.createObjectURL(inp.files[0]); // createObjectURL: FileReaderはAndroidでOOMするため使わない
+  sel=SAMPLES[0]; // デモ: 実写真でも診断はサンプル系で進める
+  document.querySelectorAll('.sitem').forEach(s=>s.classList.remove('sel'));
+  document.getElementById('btn-diag').disabled=false;
+  startDiag();
+}
+function startDiag(){
+  if(!sel)return;
+  go('sc-diag');
+  const pv=document.getElementById('pv');
+  pv.innerHTML=userPhoto
+    ? `<img src="${userPhoto}" alt=""><div class="cap">アップロードした写真（デモのため診断はサンプルで進みます）</div>`
+    : `<span class="em">${sel.em}</span><div class="cap">${sel.cap}</div>`;
+  const box=document.getElementById('ai-lines');
+  box.innerHTML=''; document.getElementById('diag-result').style.display='none';
+  sel.lines.forEach((t,i)=>{
+    setTimeout(()=>{const d=document.createElement('div');d.textContent='▸ '+t;box.appendChild(d);},600+i*700);
+  });
+  setTimeout(()=>{
+    document.getElementById('d-item').textContent=sel.item;
+    document.getElementById('d-issue').textContent=sel.issue;
+    document.getElementById('d-fix').textContent=sel.fix;
+    document.getElementById('d-price').textContent=sel.price;
+    document.getElementById('d-save').textContent=sel.save;
+    document.getElementById('diag-result').style.display='block';
+  },600+sel.lines.length*700+400);
+}
+function publish(){
+  go('sc-bids');
+  const wrap=document.getElementById('bids');
+  wrap.innerHTML=''; document.getElementById('bids-note').style.display='none';
+  document.getElementById('wait').style.display='block';
+  sel.bids.forEach((b,i)=>{
+    setTimeout(()=>{
+      if(i===0)document.getElementById('wait').style.display='none';
+      const el=document.createElement('div');
+      el.className='bid';
+      el.innerHTML=`<div class="top"><div class="avatar">${b.av}</div><div><div class="bname">${b.n}</div><div class="bmeta"><span class="stars">${b.star}</span> ・ ${b.jobs}</div></div><div class="bprice"><div class="p">${b.p}</div><div class="d">${b.d}</div></div></div><div class="bmsg">${b.msg}</div><button class="bsel">この職人に依頼する</button>`;
+      el.querySelector('.bsel').onclick=()=>{chosen=b;finish();};
+      wrap.appendChild(el);
+      requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add('in')));
+      if(i===sel.bids.length-1)document.getElementById('bids-note').style.display='block';
+    },1200+i*1600);
+  });
+}
+function finish(){
+  document.getElementById('done-sub').textContent=`${chosen.n} さんに ${chosen.p} で依頼しました。集荷キットの発送準備をしています。`;
+  go('sc-done');
+}
+function reset(){
+  sel=null;chosen=null;userPhoto=null;
+  document.querySelectorAll('.sitem').forEach(s=>s.classList.remove('sel'));
+  document.getElementById('btn-diag').disabled=true;
+  document.getElementById('file').value='';
+  go('sc-home');
+}
+</script>
+</body>
+</html>
