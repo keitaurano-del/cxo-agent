@@ -103,6 +103,7 @@ import { workKnowledgeRouter } from './workKnowledgeRouter.js';
 import { googleRouter } from './googleRouter.js';
 import { plannerRouter } from './plannerRouter.js';
 import { devMockupRouter } from './devMockupRouter.js';
+import { naoshiteRouter } from './naoshiteRouter.js';
 import { revenueRouter } from './revenueRouter.js';
 
 const HEALTHZ_PATH = '/api/healthz';
@@ -1487,6 +1488,10 @@ app.use('/api/planner', plannerRouter());
 // POST mockups=upsert / DELETE mockups/:id=論理削除。保存先は data/ 配下（.gitignore 済み）。
 // auth ミドルウェア配下＝Cookie/Bearer 必須。
 app.use('/api/dev', devMockupRouter());
+
+// 「ナオシテ」プロトタイプの実AI診断（MC-346）。写真1枚 → Gemini vision → 故障診断JSON。
+// auth ミドルウェア配下。失敗時は 200 {error} でクライアントがサンプル診断へフォールバック。
+app.use('/api/naoshite', naoshiteRouter());
 
 // ─── SSE（chokidar watch → broadcast に接続）──────────────────────
 

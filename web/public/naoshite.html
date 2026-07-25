@@ -272,32 +272,75 @@ function pickSample(i,el){
 }
 function pickFile(inp){
   if(!inp.files||!inp.files[0])return;
-  userPhoto=URL.createObjectURL(inp.files[0]); // createObjectURL: FileReaderはAndroidでOOMするため使わない
-  sel=SAMPLES[0]; // デモ: 実写真でも診断はサンプル系で進める
+  const f=inp.files[0];
+  userPhoto=URL.createObjectURL(f); // createObjectURL: FileReaderはAndroidでOOMするため使わない
   document.querySelectorAll('.sitem').forEach(s=>s.classList.remove('sel'));
   document.getElementById('btn-diag').disabled=false;
-  startDiag();
+  startRealDiag(f);
+}
+// 実写真 → canvasで長辺900pxに縮小(サーバのbody 1MB制限対策) → /api/naoshite/diagnose で本物のAI診断。
+// 失敗時はサンプル診断へフォールバック。
+async function startRealDiag(file){
+  go('sc-diag');
+  const pv=document.getElementById('pv');
+  pv.innerHTML=`<img src="${userPhoto}" alt=""><div class="cap">アップロードした写真</div>`;
+  const box=document.getElementById('ai-lines');
+  box.innerHTML=''; document.getElementById('diag-result').style.display='none';
+  const put=t=>{const d=document.createElement('div');d.textContent='▸ '+t;box.appendChild(d);};
+  put('画像を最適化しています…');
+  try{
+    const b64=await shrinkToBase64(file);
+    put('ナオシテAIへ送信 — 損傷を解析中…');
+    const res=await fetch('/api/naoshite/diagnose',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({imageBase64:b64,mimeType:'image/jpeg'})});
+    const json=await res.json();
+    if(!json.diagnosis) throw new Error(json.error||'diagnosis failed');
+    const d=json.diagnosis;
+    (d.lines||[]).forEach((t,i)=>setTimeout(()=>put(t),300+i*500));
+    sel={em:'📷',cap:'アップロードした写真',item:d.item,issue:d.issue,fix:d.fix,price:d.price,save:d.save,
+         lines:d.lines||[],bids:pickBidsFor(d.item)};
+    setTimeout(()=>showDiagResult(),300+((d.lines||[]).length)*500+400);
+  }catch(e){
+    put('AI診断に接続できませんでした — サンプル診断で続行します');
+    sel=Object.assign({},SAMPLES[0]);
+    setTimeout(()=>showDiagResult(),1200);
+  }
+}
+// 品目名からそれっぽい職人リストを選ぶ(プロトタイプ演出)
+function pickBidsFor(item){
+  const s=String(item||'');
+  if(/鞄|バッグ|財布|革小物|ベルト/.test(s))return SAMPLES[1].bids;
+  if(/椅子|チェア|机|テーブル|家具|棚/.test(s))return SAMPLES[2].bids;
+  return SAMPLES[0].bids;
+}
+async function shrinkToBase64(file){
+  const img=await new Promise((ok,ng)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=ng;i.src=userPhoto;});
+  const MAX=900, sc=Math.min(1,MAX/Math.max(img.naturalWidth,img.naturalHeight));
+  const c=document.createElement('canvas');
+  c.width=Math.round(img.naturalWidth*sc); c.height=Math.round(img.naturalHeight*sc);
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+  return c.toDataURL('image/jpeg',0.75).split(',')[1];
+}
+function showDiagResult(){
+  document.getElementById('d-item').textContent=sel.item;
+  document.getElementById('d-issue').textContent=sel.issue;
+  document.getElementById('d-fix').textContent=sel.fix;
+  document.getElementById('d-price').textContent=sel.price;
+  document.getElementById('d-save').textContent=sel.save;
+  document.getElementById('diag-result').style.display='block';
 }
 function startDiag(){
   if(!sel)return;
+  if(userPhoto){return;} // 実写真は startRealDiag 経由で処理済み
   go('sc-diag');
   const pv=document.getElementById('pv');
-  pv.innerHTML=userPhoto
-    ? `<img src="${userPhoto}" alt=""><div class="cap">アップロードした写真（デモのため診断はサンプルで進みます）</div>`
-    : `<span class="em">${sel.em}</span><div class="cap">${sel.cap}</div>`;
+  pv.innerHTML=`<span class="em">${sel.em}</span><div class="cap">${sel.cap}</div>`;
   const box=document.getElementById('ai-lines');
   box.innerHTML=''; document.getElementById('diag-result').style.display='none';
   sel.lines.forEach((t,i)=>{
     setTimeout(()=>{const d=document.createElement('div');d.textContent='▸ '+t;box.appendChild(d);},600+i*700);
   });
-  setTimeout(()=>{
-    document.getElementById('d-item').textContent=sel.item;
-    document.getElementById('d-issue').textContent=sel.issue;
-    document.getElementById('d-fix').textContent=sel.fix;
-    document.getElementById('d-price').textContent=sel.price;
-    document.getElementById('d-save').textContent=sel.save;
-    document.getElementById('diag-result').style.display='block';
-  },600+sel.lines.length*700+400);
+  setTimeout(()=>showDiagResult(),600+sel.lines.length*700+400);
 }
 function publish(){
   go('sc-bids');
