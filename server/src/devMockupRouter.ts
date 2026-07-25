@@ -736,6 +736,8 @@ interface Job {
   spec?: string;
   /** コード学習（Markdown）。codeLesson 生成ジョブが書き込む（MC-256）。生成中はライブに伸びる。 */
   codeLesson?: string;
+  /** アイデア（1〜2文の説明文）。idea 生成ジョブが書き込む（MC-288）。done になったら確定。 */
+  idea?: string;
   error?: string;
   /** 保存先 id（クライアントが currentId に反映できる）。 */
   mockupId?: string;
@@ -1817,41 +1819,53 @@ function handleCodeLesson(req: Request, res: Response): void {
 // ─── アイデアを生成（開発ページの「💡 アイデアを生成」ボタン）─────────────
 //
 // 「何を作るか」が思いつかないときに、Claude にその場で 1 つだけ具体的なアプリ/画面の
-// アイデアを出させ、生成プロンプト欄に流し込む。出力はそのまま POST /mockup/generate に
-// 渡せる短い説明文（1〜2文）。毎回違うアイデアになるよう、ランダムな切り口を種に混ぜる。
+// アイデアを出させ、生成プロンプト欄に流し込む。ニッチだが確実に需要があるのに既存サービスが
+// 高額な領域を、AI で軽く解決する試作品案を狙う（既存が高額で手が届いていない隙間を突く）。
+// 出力はそのまま POST /mockup/generate に渡せる短い説明文（1〜2文）。毎回違うアイデアに
+// なるよう、ランダムな切り口を種に混ぜる。
 
 const IDEA_TIMEOUT_MS = 90_000;
 
-/** アイデアに多様性を持たせるための切り口（毎回ランダムに 1 つ選んで種にする）。 */
+/** アイデアに多様性を持たせるための切り口（毎回ランダムに 1 つ選んで種にする）。
+ * 2026-07-25 Keita 指示（MC-341）:「もっと実用的なアイデアにして」——
+ * MC-320 の遊び心・意外性重視から、日常や仕事の実際の困りごとを解決する実用重視の切り口へ再刷新。 */
 const IDEA_SEEDS = [
-  '日々のちょっとした記録・習慣づくり',
-  '仕事・業務の効率化や見える化',
-  '学習・スキルアップを助ける',
-  'お金・家計・節約の管理',
-  '健康・運動・睡眠のサポート',
-  '家族・育児・暮らしの便利ツール',
-  '趣味・創作・エンタメ',
-  '計算・変換・診断などの実用ツール',
-  'タスク・予定・段取りの管理',
-  'チーム・コミュニティでの共有',
+  '面倒な文章作成の代行（メール返信の下書き、謝罪文・催促文・お礼状、議事録の要約）',
+  '意思決定を助ける比較・判断ツール（買うか迷う物の損得整理、選択肢のメリデメ表、優先順位付け）',
+  'お金まわりの実務（割り勘・立替の精算、サブスクの棚卸し、ざっくり見積もり・予算配分）',
+  '予定・時間の段取り支援（逆算スケジュール、所要時間の見積もり、リマインド文の生成）',
+  '仕事の下ごしらえ（会議アジェンダ生成、タスクの分解、報告書のたたき台、引き継ぎメモ）',
+  '暮らしの困りごと解決（冷蔵庫の残り物から献立、掃除・片付けの手順化、持ち物チェックリスト）',
+  '学び・スキルの補助（分からない用語のかみ砕き説明、暗記カード生成、練習問題の自動作成）',
+  '文章・情報の変換（長文の要約、専門文書のやさしい言い換え、箇条書き⇔文章の相互変換）',
+  '健康・生活習慣の記録と気づき（食事や睡眠のメモから傾向指摘、ストレッチメニュー提案）',
+  'コミュニケーションの潤滑油（言いにくいことの伝え方提案、断り文句の生成、雑談ネタ出し）',
+  '書類・手続きの補助（申請書の書き方ガイド、必要書類チェックリスト、期限の整理）',
+  '小さな自動化・テンプレ化（毎回書く定型文の生成器、命名規則チェック、フォーマット整形）',
 ];
 
-/** アイデア生成プロンプトを組む（ランダムな切り口を種に、具体的で作れる試作品案を 1 つ）。 */
+/** アイデア生成プロンプトを組む（ランダムな切り口を種に、実用的な試作品案を 1 つ）。 */
 function buildIdeaPrompt(): string {
   const seed = IDEA_SEEDS[Math.floor(Math.random() * IDEA_SEEDS.length)];
   const salt = Math.random().toString(36).slice(2, 8); // 同種でも被らせないための種（出力には出さない）。
   return [
-    'あなたは、動く HTML 試作品（モックアップ）を作るためのアイデア出しを手伝うプロダクト企画者です。',
-    'これから「ボタンが実際に動く小さな試作品を 1 つ作る」ための、具体的で面白いアプリ/画面のアイデアを 1 つだけ提案してください。',
+    'あなたは、動く HTML 試作品（モックアップ）を作るためのアイデア出しを手伝う、実務経験豊富なプロダクト企画者です。',
+    'テーマは「日常や仕事の実際の困りごとを、その場で少し楽にしてくれる、今日から使いたくなる実用的な試作品」です。',
+    '奇抜さや話題性より「本当に使うか」「時間・手間・迷いをどれだけ減らせるか」がすべてです。',
+    'これから「ボタンが実際に動く小さな試作品を 1 つ作る」ための、具体的なアプリ/画面のアイデアを 1 つだけ提案してください。',
     '',
-    `今回の切り口（ヒント。これに沿いつつ自由に発想してよい）: ${seed}`,
+    `今回の切り口（ヒント。これに沿いつつ、より具体的な場面に絞ってよい）: ${seed}`,
     '',
-    '条件:',
+    'アイデアが満たすべき条件:',
+    '- 「誰が・どんな場面で・何に困っているか」が明確で、それが確かに楽になること（面白いだけのネタは禁止）。',
+    '- ありふれた題材でも、対象場面を絞り込むことで既製アプリより「刺さる」こと（例:「ToDo」→「引っ越し2週間前の手続き逆算リスト」）。',
+    '- AI の生成力（要約・言い換え・分解・提案・下書き）が価値の中心として働く題材であること。',
     '- 1 つの画面＋数個の操作で完結する、こぢんまりした試作品向けの題材にすること（壮大すぎない）。',
-    '- 「何を入力して、何のボタンを押すと、何が起きるか」が具体的に分かること（動きが想像できる）。',
-    '- ありきたりすぎない、つい作ってみたくなる切り口にすること。',
+    '- 「何を入力して、何のボタンを押すと、何が得られるか」が具体的に分かること（使ったときの助かり方が想像できる）。',
+    '- 単なる電卓・素のToDo・素のメモ・汎用チャットのような、AI の付加価値がない丸腰ツールは避けること。',
+    '- 医療・法律・税務の断定的助言や、不安を煽る題材は避けること（あくまで実務の補助として安全に）。',
     '- 日本語で、1〜2 文（最大でも 120 文字程度）。前置き・箇条書き・見出し・引用符は付けず、説明文だけを出力すること。',
-    '- 例の形式: 「サムネイル作成ツール。タイトルを入力して『サムネ生成』を押すと、サンプルのサムネが実際に表示される」',
+    '- 例の形式: 「断りたい誘いの内容と相手との関係を入れて『生成』を押すと、角が立たない断り文を丁寧・カジュアル・理由ぼかしの3パターンで提案してくれる」',
     '',
     `（内部識別子: ${salt} — 出力には含めないこと）`,
   ].join('\n');
@@ -1868,35 +1882,82 @@ function cleanIdea(text: string): string {
   return (firstPara || s).slice(0, 200);
 }
 
-/** POST /idea — その場でアプリ/画面のアイデアを 1 つ生成して返す（{ idea }）。 */
-async function handleIdea(_req: Request, res: Response): Promise<void> {
-  try {
-    const idea = await serializeDevGen(async () => {
-      let model = NOTEBOOK_CLAUDE_MODEL;
-      for (let attempt = 1; attempt <= 2; attempt += 1) {
-        const raw = await runClaudeRaw(buildIdeaPrompt(), model, undefined, IDEA_TIMEOUT_MS);
-        if (!raw.error) {
-          const cleaned = cleanIdea(raw.stdout);
-          if (cleaned) return cleaned;
-        } else if (isLimitFailure(raw) && attempt === 1) {
-          model = DEV_MOCKUP_FALLBACK_MODEL;
-          console.warn(`[dev-idea] sonnet limit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`);
-          continue;
-        }
-        console.warn(`[dev-idea] attempt ${attempt} failed: ${raw.error ?? 'empty'}`);
-        if (attempt < 2) await sleep(GENERATE_RETRY_BACKOFF_MS);
+/**
+ * バックグラウンドで claude CLI を呼んでアイデアを 1 つ生成し、結果をジョブに格納する（MC-288）。
+ * await しない前提。例外でサーバを落とさない。生成本体は旧・同期版 handleIdea の中身と同じ
+ * （Sonnet 既定、利用上限で fallback、最大 2 回試行）。完了で job.idea を確定し status='done'、
+ * 失敗で status='error'。
+ *
+ * ジョブ化した理由（Keita 依頼 MC-288）: 従来は POST /idea を await して返していたため、
+ * 生成中にページを離れると fetch が中断され結果が返らず「通知なく空」になっていた。
+ * ジョブ化してクライアントがポーリングで取りに来られるようにすると、離脱・リロードをまたいでも
+ * 生成が継続し完了結果を取り直せる。
+ */
+async function runIdeaJob(jobId: string): Promise<void> {
+  const idea = await serializeDevGen(async () => {
+    const job = jobs.get(jobId);
+    if (job) job.status = 'generating';
+    let model = NOTEBOOK_CLAUDE_MODEL;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      if (isCanceled(jobId)) return '';
+      const raw = await runClaudeRaw(buildIdeaPrompt(), model, undefined, IDEA_TIMEOUT_MS, jobId);
+      if (!raw.error) {
+        const cleaned = cleanIdea(raw.stdout);
+        if (cleaned) return cleaned;
+      } else if (isLimitFailure(raw) && attempt === 1) {
+        model = DEV_MOCKUP_FALLBACK_MODEL;
+        console.warn(`[dev-idea] sonnet limit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`);
+        continue;
       }
-      return '';
-    });
-    if (!idea) {
-      res.status(503).json({ error: 'アイデアの生成に失敗しました。少し待ってもう一度お試しください。' });
-      return;
+      console.warn(`[dev-idea] attempt ${attempt} failed: ${raw.error ?? 'empty'}`);
+      if (attempt < 2) await sleep(GENERATE_RETRY_BACKOFF_MS);
     }
-    res.status(200).json({ idea });
-  } catch (e) {
-    console.error('[dev-idea] failed:', e);
-    res.status(500).json({ error: 'アイデアの生成に失敗しました。' });
+    return '';
+  });
+
+  const job = jobs.get(jobId);
+  if (!job || job.status === 'canceled') return;
+  if (idea) {
+    job.idea = idea;
+    job.status = 'done';
+  } else {
+    job.status = 'error';
+    job.error = 'アイデアの生成に失敗しました。少し待ってもう一度お試しください。';
   }
+}
+
+/**
+ * POST /idea — アイデア生成ジョブを起票し 202 { jobId } を即返す（MC-288）。
+ * 生成本体は runIdeaJob をバックグラウンドで走らせ、結果は GET /idea/job/:jobId でポーリングする。
+ * ジョブはインメモリ（[[jobs]] を再利用。mockup/spec/codeLesson と同じ機構）。プロセス再起動で消えるが、
+ * アイデア生成は数秒〜90 秒程度で終わるため再起動窓に当たる確率は低い。永続化はしない
+ * （最小 DoD「離脱で消えない」はメモリジョブ化＋クライアント復元で満たせるため。判断は報告に明記）。
+ */
+function handleIdea(_req: Request, res: Response): void {
+  sweepExpiredJobs();
+  const jobId = randomUUID();
+  jobs.set(jobId, { status: 'pending', createdAt: Date.now() });
+  void runIdeaJob(jobId).catch((e) => {
+    console.error('[dev-idea] failed:', e);
+    const job = jobs.get(jobId);
+    if (job && job.status !== 'canceled') {
+      job.status = 'error';
+      job.error = 'アイデアの生成に失敗しました。';
+    }
+  });
+  res.status(202).json({ jobId });
+}
+
+/** GET /idea/job/:jobId — アイデア生成ジョブの状態を返す。未知/期限切れは 404。 */
+function handleIdeaJob(req: Request, res: Response): void {
+  sweepExpiredJobs();
+  const jobId = String(req.params.jobId);
+  const job = jobs.get(jobId);
+  if (!job) {
+    res.status(404).json({ error: 'job not found' });
+    return;
+  }
+  res.json({ status: job.status, idea: job.idea, error: job.error });
 }
 
 // ─── Router 組み立て ─────────────────────────────────────
@@ -1904,7 +1965,8 @@ async function handleIdea(_req: Request, res: Response): Promise<void> {
 /** /api/dev 配下のルータを返す。index.ts で auth ミドルウェア配下に mount する。 */
 export function devMockupRouter(): Router {
   const router = Router();
-  router.post('/idea', (req, res) => void handleIdea(req, res));
+  router.post('/idea', handleIdea);
+  router.get('/idea/job/:jobId', handleIdeaJob);
   router.post('/mockup/generate', handleGenerate);
   router.get('/mockup/job/:jobId', handleJob);
   router.post('/mockup/job/:jobId/cancel', handleCancelJob);
