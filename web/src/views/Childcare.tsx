@@ -13,8 +13,10 @@ import {
   ChildcareChatIcon,
   CloseIcon,
   DiaryIcon,
+  ExpandIcon,
   ImageFileIcon,
   SendIcon,
+  ShrinkIcon,
 } from '../components/icons';
 import BabyDiary from './BabyDiary';
 import {
@@ -1480,6 +1482,17 @@ function SukuThinking() {
 function ChildcareChatTab() {
   const chat = useSukuChat();
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // 全画面表示（ヘッダ・タブバーごと覆う overlay）。Esc で解除。
+  const [fullscreen, setFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fullscreen]);
 
   // マウント時にサーバ履歴を取り込む（リロード・別端末・再オープンで過去の質問が並ぶ）。
   useEffect(() => {
@@ -1495,7 +1508,13 @@ function ChildcareChatTab() {
   }, [chat.messages, chat.streaming]);
 
   return (
-    <div className="mx-auto flex h-full max-w-3xl flex-col">
+    <div
+      className={
+        fullscreen
+          ? 'fixed inset-0 z-50 flex flex-col bg-bg p-3 sm:p-4'
+          : 'mx-auto flex h-full max-w-3xl flex-col'
+      }
+    >
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <span
@@ -1509,15 +1528,27 @@ function ChildcareChatTab() {
             <p className="truncate text-[11px] text-text-muted">育児専門アドバイザー・過去の相談も残ります</p>
           </div>
         </div>
-        {chat.messages.length > 0 && (
+        <div className="flex shrink-0 items-center gap-1">
+          {chat.messages.length > 0 && (
+            <button
+              type="button"
+              onClick={chat.clearHistory}
+              className="rounded-md px-2 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+            >
+              履歴を消去
+            </button>
+          )}
           <button
             type="button"
-            onClick={chat.clearHistory}
-            className="shrink-0 rounded-md px-2 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+            onClick={() => setFullscreen((v) => !v)}
+            aria-label={fullscreen ? '全画面を終了' : '全画面で表示'}
+            title={fullscreen ? '全画面を終了（Esc）' : '全画面で表示'}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
           >
-            履歴を消去
+            {fullscreen ? <ShrinkIcon width={14} height={14} /> : <ExpandIcon width={14} height={14} />}
+            {fullscreen ? '全画面を終了' : '全画面'}
           </button>
-        )}
+        </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-bg">
         <SukuMessageList chat={chat} scrollRef={(el) => (scrollRef.current = el)} />
