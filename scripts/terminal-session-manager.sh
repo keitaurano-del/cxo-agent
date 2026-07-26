@@ -29,7 +29,15 @@ PROJECTS_DIR="${PROJECTS_DIR:-$HOME/.claude/projects}"
 LOG="${LOG:-$HOME/logs/terminal-session-manager.log}"
 HANDOFF_FILE="${HANDOFF_FILE:-$HOME/.terminal-handoff.md}"
 KILLSWITCH="${KILLSWITCH:-$HOME/.terminal-refresh.disabled}"
-SUMMARY_MODEL="${SUMMARY_MODEL:-claude-sonnet-4-5}"
+SUMMARY_MODEL="${SUMMARY_MODEL:-claude-haiku-4-5-20251001}"
+# 空メモガード（2026-07-25）: haiku が一行相槌を返すと実質空メモになる事故対策。
+# 生成結果がこの閾値未満なら失敗扱い（再試行→全滅なら旧メモ温存）。
+HANDOFF_MIN_LINES="${HANDOFF_MIN_LINES:-5}"    # 内容のある行数の下限
+HANDOFF_MIN_CHARS="${HANDOFF_MIN_CHARS:-200}"  # バイト数の下限（日本語30〜60行のメモなら余裕で超える）
+HANDOFF_RETRIES="${HANDOFF_RETRIES:-2}"        # 要約生成の最大試行回数
+# 対話 claude（このAux=main端末）が使うモデル。Fable 5 固定。
+# 元に戻す: RIN_MODEL="" にするか、この行を消せば settings.json の既定(opus-4-8)に従う。
+RIN_MODEL="${RIN_MODEL:-claude-fable-5}"
 
 mkdir -p "$(dirname "$LOG")"
 
@@ -106,7 +114,7 @@ for l in sys.stdin:
                 txt+=b.get("text","")
     txt=txt.strip()
     if txt:
-        lines.append(("Keita" if t=="user" else "林")+": "+txt)
+        lines.append(("Keita" if t=="user" else "fable5")+": "+txt)
 # 直近 60 発話程度に絞る
 lines=lines[-60:]
 print("\n\n".join(lines))
@@ -117,8 +125,8 @@ print("\n\n".join(lines))
     return 1
   fi
 
-  prompt="あなたは tmux 上で動く対話アシスタント「林」です。これからセッションが新しいプロセスに入れ替わります。
-以下は直前セッションの会話ログ（古い→新しい順）です。これを読んで「次の自分（新セッションの林）への引き継ぎメモ」を日本語で 30〜60 行程度で書いてください。
+  prompt="あなたは tmux 上で動く対話アシスタント fable5 です。ペルソナや役割演技はせず、素の口調で書いてください。これからセッションが新しいプロセスに入れ替わります。
+以下は直前セッションの会話ログ（古い→新しい順）です。これを読んで「次の自分（新セッションの fable5）への引き継ぎメモ」を日本語で 30〜60 行程度で書いてください。
 含めること:
 - 直前まで何をしていたか（作業の主題・進行中タスクの ID/名前）
 - 未完了タスク・次の一手（具体的に）
@@ -130,9 +138,22 @@ print("\n\n".join(lines))
 ${plain}
 === 会話ログ ここまで ==="
 
-  out="$(printf '%s' "$prompt" | timeout 180 "$CLAUDE_BIN" --print --dangerously-skip-permissions --model "$SUMMARY_MODEL" 2>>"$LOG")"
+  # 空メモガード: 空だけでなく「一行相槌」など実質空の出力も失敗扱いにする。
+  # 失敗時は再試行し、全滅なら HANDOFF_FILE に書かず旧メモを温存して return 1。
+  local attempt out_lines out_chars
+  out=""
+  for attempt in $(seq 1 "$HANDOFF_RETRIES"); do
+    out="$(printf '%s' "$prompt" | timeout 180 "$CLAUDE_BIN" --print --dangerously-skip-permissions --model "$SUMMARY_MODEL" 2>>"$LOG")"
+    out_lines="$(printf '%s' "$out" | grep -c '[^[:space:]]')"
+    out_chars="$(printf '%s' "$out" | wc -c)"
+    if [ "$out_chars" -ge "$HANDOFF_MIN_CHARS" ] && [ "$out_lines" -ge "$HANDOFF_MIN_LINES" ]; then
+      break
+    fi
+    log "handoff: attempt ${attempt}/${HANDOFF_RETRIES} empty or too short (lines=${out_lines} chars=${out_chars}, need >=${HANDOFF_MIN_LINES}/${HANDOFF_MIN_CHARS})"
+    out=""
+  done
   if [ -z "$out" ]; then
-    log "handoff: claude --print returned empty, skip"
+    log "handoff: all ${HANDOFF_RETRIES} attempts failed guard, keep previous memo, skip"
     return 1
   fi
 
@@ -148,8 +169,13 @@ ${plain}
 
 # HANDOFF_ONLY=1 のときは handoff 生成だけして終了（単体検証用、claude を1回だけ実走）
 if [ "${HANDOFF_ONLY:-0}" = "1" ]; then
-  generate_handoff && echo "OK: $HANDOFF_FILE" || echo "FAIL: handoff not generated"
-  exit $?
+  if generate_handoff; then
+    echo "OK: $HANDOFF_FILE"
+    exit 0
+  else
+    echo "FAIL: handoff not generated"
+    exit 1
+  fi
 fi
 
 log "=== terminal-session-manager start (idle=${IDLE_MIN}m age=${MAX_AGE_HOURS}h poll=${POLL_SEC}s) ==="
@@ -160,7 +186,12 @@ while true; do
 
   # claude をバックグラウンド起動し、この pane の前面に置く。
   # exec せず & で起動 → PID を掴んで監視できるようにする。
-  "$CLAUDE_BIN" &
+  # RIN_MODEL が空でなければ --model を渡す（Aux=main を Fable 5 に固定）。
+  if [ -n "${RIN_MODEL:-}" ]; then
+    "$CLAUDE_BIN" --model "$RIN_MODEL" &
+  else
+    "$CLAUDE_BIN" &
+  fi
   CLAUDE_PID=$!
   log "started claude pid=$CLAUDE_PID start=$SESSION_START"
 
