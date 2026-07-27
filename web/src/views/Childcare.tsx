@@ -63,6 +63,12 @@ import {
   VACCINE_SCHEDULE_URL,
 } from './childcareData';
 import type { AdminProcedure, CareBasic, CheckupItem } from './childcareData';
+import {
+  MONTHLY_GUIDE_STAGES,
+  MONTHLY_GUIDE_CAPTION,
+  MONTHLY_GUIDE_SOURCE,
+} from './childcareMonthlyGuide';
+import type { MonthlyGuideStage } from './childcareMonthlyGuide';
 
 // ─── 締切の緊急度 → 表示色／ラベル ───────────────────────────
 // 超過: blocked（オレンジ・警告）。本日〜7日内: review（強調）。それ以降: 通常。
@@ -274,6 +280,145 @@ function GrowthSection({ now }: { now: Date }) {
         })}
       </ol>
       <Note>{GROWTH_DISCLAIMER}</Note>
+    </section>
+  );
+}
+
+// ─── セクション（新・MC-348）: 月齢別 詳細ガイド（0か月〜1歳） ──
+// 授乳・ミルク量／注意点とリスク／親の行動・練習・準備グッズ／手続きを
+// 月齢の時系列でアコーディオン表示する。現在の月齢の帯は自動で開く。
+
+// 詳細ガイド内の小ブロック（見出し＋箇条書き）。items が空なら描画しない。
+function GuideBlock({ icon, title, items }: { icon: string; title: string; items: string[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <p className="text-xs font-bold text-text">
+        <span aria-hidden className="mr-1">{icon}</span>
+        {title}
+      </p>
+      <ul className="mt-1 list-disc pl-5 text-xs leading-relaxed text-text-muted">
+        {items.map((p, i) => (
+          <li key={i}>{p}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function MonthlyGuideStageCard({
+  stage,
+  active,
+  past,
+  open,
+  onToggle,
+}: {
+  stage: MonthlyGuideStage;
+  active: boolean;
+  past: boolean;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const ring = active ? 'border-accent/60' : 'border-border';
+  return (
+    <li className={`rounded-md border ${ring} bg-bg`}>
+      {/* ヘッダ（タップで開閉） */}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
+      >
+        <span className={`text-sm font-semibold ${active ? 'text-accent' : past ? 'text-text-muted' : 'text-text'}`}>
+          {stage.label}
+          {active && <span className="ml-2 text-[11px] font-bold text-accent">いまここ</span>}
+        </span>
+        <span aria-hidden className="shrink-0 text-xs text-text-faint">
+          {open ? '▲' : '▼'}
+        </span>
+      </button>
+      {open && (
+        <div className="flex flex-col gap-3 border-t border-border px-3 py-3">
+          <GuideBlock icon="👶" title="この時期の赤ちゃん" items={stage.babyState} />
+          {/* 授乳・ミルク: 母乳／ミルクを並置。 */}
+          <div>
+            <p className="text-xs font-bold text-text">
+              <span aria-hidden className="mr-1">🍼</span>
+              授乳・ミルクの目安
+            </p>
+            <div className="mt-1.5 grid grid-cols-1 gap-2 md:grid-cols-2">
+              <div className="rounded-md border border-border bg-surface px-2.5 py-2">
+                <p className="text-[11px] font-bold text-text-muted">母乳の場合</p>
+                <ul className="mt-1 list-disc pl-4 text-xs leading-relaxed text-text-muted">
+                  {stage.feedingBreast.map((p, i) => (
+                    <li key={i}>{p}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-md border border-border bg-surface px-2.5 py-2">
+                <p className="text-[11px] font-bold text-text-muted">ミルクの場合</p>
+                <ul className="mt-1 list-disc pl-4 text-xs leading-relaxed text-text-muted">
+                  {stage.feedingFormula.map((p, i) => (
+                    <li key={i}>{p}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+          <GuideBlock icon="⚠️" title="気をつけること" items={stage.cautions} />
+          <GuideBlock icon="🚨" title="起こりうるリスク" items={stage.risks} />
+          <GuideBlock icon="👨‍👩‍👦" title="親としてすること" items={stage.parentActions} />
+          <GuideBlock icon="🏃" title="した方がよい練習" items={stage.practice} />
+          <GuideBlock icon="🧸" title="準備しておくグッズ" items={stage.goods} />
+          <GuideBlock icon="🏛️" title="手続き・行政" items={stage.admin} />
+        </div>
+      )}
+    </li>
+  );
+}
+
+function MonthlyGuideSection({ now }: { now: Date }) {
+  const months = ageInMonths(now);
+  // 現在の月齢に該当する帯は初期表示で開く。他はユーザー操作で開閉。
+  const activeIdx = MONTHLY_GUIDE_STAGES.findIndex(
+    (s) => months >= s.fromMonth && (s.toMonth === null || months < s.toMonth),
+  );
+  const [openSet, setOpenSet] = useState<Set<number>>(
+    () => new Set(activeIdx >= 0 ? [activeIdx] : []),
+  );
+  const toggle = (idx: number) => {
+    setOpenSet((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
+  return (
+    <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+      <SectionTitle hint="0か月〜1歳を月齢ごとに: 赤ちゃんの状態・授乳/ミルク量・注意点とリスク・親の行動/練習/準備グッズ・手続きの詳細版です。現在の月齢は自動で開きます。">
+        📚 月齢別 詳細ガイド（0か月〜1歳）
+      </SectionTitle>
+      <ul className="flex flex-col gap-2">
+        {MONTHLY_GUIDE_STAGES.map((stage, idx) => {
+          const active =
+            months >= stage.fromMonth && (stage.toMonth === null || months < stage.toMonth);
+          const past = stage.toMonth !== null && months >= stage.toMonth;
+          return (
+            <MonthlyGuideStageCard
+              key={stage.label}
+              stage={stage}
+              active={active}
+              past={past}
+              open={openSet.has(idx)}
+              onToggle={() => toggle(idx)}
+            />
+          );
+        })}
+      </ul>
+      <Note>
+        {MONTHLY_GUIDE_CAPTION} {MONTHLY_GUIDE_SOURCE}
+      </Note>
     </section>
   );
 }
@@ -906,6 +1051,8 @@ function ChildcareGuide() {
       <BabyHeader now={now} />
       <NextMilestoneSection now={now} />
       <GrowthSection now={now} />
+      {/* 月齢別 詳細ガイド（MC-348）。全幅・現在の月齢を自動展開。 */}
+      <MonthlyGuideSection now={now} />
       <UpcomingSection now={now} />
       {/* 相談メモ（育児チャットの Q&A をトピック別に整理）。本体の静的コンテンツの上に置く。 */}
       <ConsultationNotesSection />
