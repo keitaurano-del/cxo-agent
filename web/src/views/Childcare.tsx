@@ -340,6 +340,8 @@ function MonthlyGuideStageCard({
       {open && (
         <div className="flex flex-col gap-3 border-t border-border px-3 py-3">
           <GuideBlock icon="👶" title="この時期の赤ちゃん" items={stage.babyState} />
+          <GuideBlock icon="😴" title="睡眠の目安" items={stage.sleep} />
+          <GuideBlock icon="🕐" title="1日の生活リズム例" items={stage.schedule} />
           {/* 授乳・ミルク: 母乳／ミルクを並置。 */}
           <div>
             <p className="text-xs font-bold text-text">
@@ -367,6 +369,7 @@ function MonthlyGuideStageCard({
           </div>
           <GuideBlock icon="⚠️" title="気をつけること" items={stage.cautions} />
           <GuideBlock icon="🚨" title="起こりうるリスク" items={stage.risks} />
+          <GuideBlock icon="🏥" title="受診・相談の目安" items={stage.redFlags} />
           <GuideBlock icon="👨‍👩‍👦" title="親としてすること" items={stage.parentActions} />
           <GuideBlock icon="🏃" title="した方がよい練習" items={stage.practice} />
           <GuideBlock icon="🧸" title="準備しておくグッズ" items={stage.goods} />
