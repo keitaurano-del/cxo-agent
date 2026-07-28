@@ -24,6 +24,7 @@ import {
   SearchIcon,
   ExpandIcon,
   ShrinkIcon,
+  SparkIcon,
 } from './components/icons';
 import { GlobalSearch } from './components/GlobalSearch';
 import DashboardLayout from './components/DashboardLayout';
@@ -44,6 +45,7 @@ const Childcare = lazy(() => import('./views/Childcare'));
 const Chaji = lazy(() => import('./views/Chaji'));
 const Work = lazy(() => import('./views/Work'));
 const ClaudeChat = lazy(() => import('./views/ClaudeChat'));
+const ClaudeBrowser = lazy(() => import('./views/ClaudeBrowser'));
 const Schedule = lazy(() => import('./views/Schedule'));
 const Development = lazy(() => import('./views/Development'));
 const Terminal = lazy(() => import('./views/Terminal'));
@@ -195,6 +197,9 @@ const NAV: NavItem[] = [
   // ターミナル: iframe ホスト用 React ルートは /terminal-view。
   // サーバ proxy ルート /terminal（→ ttyd）と衝突させないため別パスにする。
   { to: '/terminal-view', label: 'ターミナル', shortLabel: '端末', icon: <TerminalIcon /> },
+  // Cowork（MC-350）: claude.ai を noVNC ストリーミングで埋め込み表示（旧MC-314 の復活）。
+  // サーバ proxy ルート /claude-browser と衝突させないため React ルートは /claude-browser-view。
+  { to: '/claude-browser-view', label: 'Cowork', shortLabel: 'Cowork', icon: <SparkIcon /> },
 ];
 
 /** ナビ項目の件数バッジ（0 なら非表示）。要承認件数をタスクボード（/tasks）に出す。 */
@@ -725,6 +730,8 @@ export default function App() {
               <Route path="/chaji" element={<Chaji />} />
               <Route path="/work" element={<Work />} />
               <Route path="/claude" element={<ClaudeChat />} />
+              {/* MC-350: Cowork 埋め込みブラウザ（noVNC）。proxy の /claude-browser とは別パス。 */}
+              <Route path="/claude-browser-view" element={<ClaudeBrowser />} />
               {/* 旧 /baby-diary は育児ページの「成長日記」タブに着地（古いリンク/ブックマーク互換）。 */}
               <Route path="/baby-diary" element={<Childcare initialTab="diary" />} />
               <Route path="/schedule" element={<Schedule />} />

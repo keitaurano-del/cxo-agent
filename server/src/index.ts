@@ -91,6 +91,11 @@ import { decisionRouter } from './decisionRouter.js';
 import { decisionRequestHandler } from './decisionRequestHandler.js';
 import { spawnRouter } from './spawnRouter.js';
 import { terminalHttpHandler, attachUpgrade } from './terminalProxy.js';
+import {
+  claudeBrowserHttpHandler,
+  attachClaudeBrowserUpgrade,
+  claudeBrowserConfigHandler,
+} from './claudeBrowserProxy.js';
 import { startWatch } from './watch.js';
 import { chatRouter, agentMessageHandler, autonomousTickHandler } from './chatRouter.js';
 import { navOrderRouter } from './navOrderRouter.js';
@@ -206,6 +211,11 @@ app.use(makeAuthMiddleware(HEALTHZ_PATH));
 // WS upgrade は別経路（server.on('upgrade') → attachUpgrade）で同強度の認証を行う。
 // ttyd の Basic 認証 credential は proxy が内部付与（TTYD_USER/TTYD_PASS env）。
 app.use('/terminal', terminalHttpHandler);
+
+// ─── 埋め込みブラウザ（MC-350 / 旧MC-314 復活: Cowork用）── 認証の「後ろ」──
+// localhost の noVNC(websockify:6081) へ reverse proxy。WS は attachClaudeBrowserUpgrade。
+app.use('/claude-browser', claudeBrowserHttpHandler);
+app.get('/api/claude-browser/config', claudeBrowserConfigHandler);
 
 // ─── REST ─────────────────────────────────────────────
 
@@ -1649,7 +1659,7 @@ const server = app.listen(PORT, () => {
 // /terminal 配下のみ attachUpgrade が処理（内部で認証チェック）。それ以外の
 // upgrade は Apollo に WS 利用者がいないので 400 で閉じる（ぶら下がり socket 防止）。
 server.on('upgrade', (req, socket, head) => {
-  const handled = attachUpgrade(req, socket, head);
+  const handled = attachUpgrade(req, socket, head) || attachClaudeBrowserUpgrade(req, socket, head);
   if (!handled) {
     socket.write('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
     socket.destroy();
