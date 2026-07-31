@@ -15,7 +15,8 @@
 //      呼ばれ、その touchend だけ preventDefault される（合成 click 二重送出の抑止、MC-104 機能維持）。
 //   3) mouseActive=false（通常 shell）では touchstart 以降一切介入しない（tap でも swipe でも
 //      triggerMouseEvent を呼ばず preventDefault もしない）＝xterm ネイティブのタッチスクロールを温存。
-//   4) リスナはスクロール要素 .xterm-viewport に張られ、監視要素に touch-action:pan-x pan-y が付く。
+//   4) リスナは共通祖先 t.element に張られ（MC-330: 実ターゲットが viewport の子でない
+//      レイヤのケースをバブリングで拾う）、監視要素に touch-action:pan-x pan-y が付く。
 
 import assert from 'node:assert/strict';
 import { TAP_FIX_BODY } from './terminalProxy.js';
@@ -79,25 +80,36 @@ interface MockMouseService {
   events: Array<{ action: number; col: number; row: number; button: number }>;
 }
 
+// t.element（共通祖先 .xterm）のモック。MC-330 でリスナ登録先が t.element になったため、
+// addEventListener/style を持つ MockElement を継承し querySelector で子レイヤを返す。
+class MockRootElement extends MockElement {
+  private children: Record<string, MockElement>;
+  constructor(rect: { left: number; top: number; width: number; height: number }, children: Record<string, MockElement>) {
+    super('xterm', rect);
+    this.children = children;
+  }
+  querySelector(sel: string): MockElement | null {
+    return this.children[sel] ?? null;
+  }
+}
+
 // xterm.js 相当の最小 term モック + .xterm 要素ツリー。
 function makeTerm(mouseActive: boolean): {
   term: Record<string, unknown>;
+  root: MockRootElement;
   viewport: MockElement;
   screen: MockElement;
   mouse: MockMouseService;
 } {
-  // viewport と screen は同じ矩形（viewport は screen を覆う）。80列×24行・各セル 10x18px。
+  // root/viewport/screen は同じ矩形（viewport は screen を覆う）。80列×24行・各セル 10x18px。
   const rect = { left: 0, top: 0, width: 800, height: 432 };
   const viewport = new MockElement('xterm-viewport', rect);
   const screen = new MockElement('xterm-screen', rect);
   const mouse: MockMouseService = { areMouseEventsActive: mouseActive, events: [] };
-  const element = {
-    querySelector(sel: string): MockElement | null {
-      if (sel === '.xterm-viewport') return viewport;
-      if (sel === '.xterm-screen') return screen;
-      return null;
-    },
-  };
+  const element = new MockRootElement(rect, {
+    '.xterm-viewport': viewport,
+    '.xterm-screen': screen,
+  });
   const term: Record<string, unknown> = {
     cols: 80,
     rows: 24,
@@ -113,7 +125,7 @@ function makeTerm(mouseActive: boolean): {
       },
     },
   };
-  return { term, viewport, screen, mouse };
+  return { term, root: element, viewport, screen, mouse };
 }
 
 // TAP_FIX_BODY を window.term 付きのスコープで eval してインストールする。
@@ -142,23 +154,24 @@ function touchEnd(el: MockElement, x: number, y: number): TouchLikeEvent {
   return el.fire({ type: 'touchend', touches: [], changedTouches: [{ clientX: x, clientY: y }] });
 }
 
-// ── 1) リスナはスクロール要素 viewport に張られ、touch-action が付く ──────────────
-check('リスナは .xterm-viewport に張られ touch-action:pan-x pan-y が付く（スクロール温存）', () => {
-  const { term, viewport, screen } = makeTerm(true);
+// ── 1) リスナは共通祖先 t.element に張られ、touch-action が付く（MC-330） ──────────────
+check('リスナは t.element（共通祖先）に張られ touch-action:pan-x pan-y が付く（スクロール温存）', () => {
+  const { term, root, viewport, screen } = makeTerm(true);
   install(term);
-  assert.ok((viewport.listeners['touchstart']?.length ?? 0) >= 1, 'viewport に touchstart が張られる');
-  assert.ok((viewport.listeners['touchend']?.length ?? 0) >= 1, 'viewport に touchend が張られる');
-  assert.equal(screen.listeners['touchstart']?.length ?? 0, 0, 'screen には張らない（viewport 優先）');
-  assert.equal(viewport.style.touchAction, 'pan-x pan-y', 'ネイティブ pan を温存する touch-action');
+  assert.ok((root.listeners['touchstart']?.length ?? 0) >= 1, 't.element に touchstart が張られる');
+  assert.ok((root.listeners['touchend']?.length ?? 0) >= 1, 't.element に touchend が張られる');
+  assert.equal(viewport.listeners['touchstart']?.length ?? 0, 0, 'viewport には張らない（祖先で受ける）');
+  assert.equal(screen.listeners['touchstart']?.length ?? 0, 0, 'screen には張らない（祖先で受ける）');
+  assert.equal(root.style.touchAction, 'pan-x pan-y', 'ネイティブ pan を温存する touch-action');
 });
 
 // ── 2) mouseActive=true の clean tap: sendTap が呼ばれ preventDefault される ─────────
 check('mouse mode の clean tap: triggerMouseEvent press→release が呼ばれ touchend が preventDefault される', () => {
-  const { term, viewport, mouse } = makeTerm(true);
+  const { term, root, mouse } = makeTerm(true);
   install(term);
   // セル(列=15,行=5) 付近を素早くタップ。cw=10,ch=18 なので clientX=155,clientY=99 → col=15,row=5。
-  touchStart(viewport, 155, 99);
-  const e = touchEnd(viewport, 155, 99);
+  touchStart(root, 155, 99);
+  const e = touchEnd(root, 155, 99);
   assert.equal(mouse.events.length, 2, 'press と release の 2 イベント');
   assert.deepEqual(
     mouse.events.map((m) => m.action),
@@ -172,12 +185,12 @@ check('mouse mode の clean tap: triggerMouseEvent press→release が呼ばれ 
 
 // ── 3) mouseActive=true のスワイプ: wheel イベント（button:4）を撃つ＝TUI へホイールが届く ──
 check('mouse mode の下方向スワイプ（>10px 移動）: wheel up（button:4 action:0）を撃ち TUI をスクロールさせる', () => {
-  const { term, viewport, mouse } = makeTerm(true);
+  const { term, root, mouse } = makeTerm(true);
   install(term);
   // セル高 ch=18px。指を下へ 72px（=4 行分）動かす＝過去を見る＝wheel up を 4 発。
-  touchStart(viewport, 155, 99);
-  touchMove(viewport, 155, 171); // 下へ 72px 移動
-  touchEnd(viewport, 155, 171);
+  touchStart(root, 155, 99);
+  touchMove(root, 155, 171); // 下へ 72px 移動
+  touchEnd(root, 155, 171);
   assert.ok(mouse.events.length >= 1, 'スワイプで wheel イベントが撃たれる');
   assert.ok(
     mouse.events.every((m) => m.button === 4),
@@ -191,11 +204,11 @@ check('mouse mode の下方向スワイプ（>10px 移動）: wheel up（button:
 });
 
 check('mouse mode の上方向スワイプ: wheel down（button:4 action:1）を撃つ', () => {
-  const { term, viewport, mouse } = makeTerm(true);
+  const { term, root, mouse } = makeTerm(true);
   install(term);
-  touchStart(viewport, 155, 200);
-  touchMove(viewport, 155, 128); // 上へ 72px 移動
-  touchEnd(viewport, 155, 128);
+  touchStart(root, 155, 200);
+  touchMove(root, 155, 128); // 上へ 72px 移動
+  touchEnd(root, 155, 128);
   assert.ok(mouse.events.length >= 1, 'スワイプで wheel イベントが撃たれる');
   assert.ok(
     mouse.events.every((m) => m.button === 4 && m.action === 1),
@@ -204,11 +217,11 @@ check('mouse mode の上方向スワイプ: wheel down（button:4 action:1）を
 });
 
 check('mouse mode のスワイプ touchend は tap（press/release）を撃たない', () => {
-  const { term, viewport, mouse } = makeTerm(true);
+  const { term, root, mouse } = makeTerm(true);
   install(term);
-  touchStart(viewport, 155, 99);
-  touchMove(viewport, 155, 171);
-  touchEnd(viewport, 155, 171);
+  touchStart(root, 155, 99);
+  touchMove(root, 155, 171);
+  touchEnd(root, 155, 171);
   // wheel(button:4) はあっても、press/release(button:0) は無いこと。
   assert.ok(
     mouse.events.every((m) => m.button === 4),
@@ -218,16 +231,16 @@ check('mouse mode のスワイプ touchend は tap（press/release）を撃た�
 
 // ── 3b) 長押し（>700ms）はタップ扱いしない ───────────────────────────────
 check('mouse mode の長押し（>700ms）: タップ扱いせず preventDefault しない', () => {
-  const { term, viewport, mouse } = makeTerm(true);
+  const { term, root, mouse } = makeTerm(true);
   install(term);
   // Date.now を一時的に進めて長押しを再現する。
   const realNow = Date.now;
   let base = realNow();
   Date.now = () => base;
   try {
-    touchStart(viewport, 155, 99);
+    touchStart(root, 155, 99);
     base += 800; // 800ms 経過
-    const e = touchEnd(viewport, 155, 99);
+    const e = touchEnd(root, 155, 99);
     assert.equal(mouse.events.length, 0, '長押しでは mouse event を撃たない');
     assert.equal(e.defaultPrevented, false, '長押しの touchend は preventDefault しない');
   } finally {
@@ -237,20 +250,20 @@ check('mouse mode の長押し（>700ms）: タップ扱いせず preventDefault
 
 // ── 4) mouseActive=false（通常 shell）: tap でも swipe でも一切介入しない ──────────────
 check('通常 shell（mouseActive=false）: clean tap でも triggerMouseEvent を呼ばず preventDefault もしない', () => {
-  const { term, viewport, mouse } = makeTerm(false);
+  const { term, root, mouse } = makeTerm(false);
   install(term);
-  touchStart(viewport, 155, 99);
-  const e = touchEnd(viewport, 155, 99);
+  touchStart(root, 155, 99);
+  const e = touchEnd(root, 155, 99);
   assert.equal(mouse.events.length, 0, '通常 shell では mouse event を撃たない（非介入）');
   assert.equal(e.defaultPrevented, false, '通常 shell では preventDefault しない＝スクロール/選択を温存');
 });
 
 check('通常 shell（mouseActive=false）: スワイプでも wheel を撃たず preventDefault もしない（ネイティブスクロール温存）', () => {
-  const { term, viewport, mouse } = makeTerm(false);
+  const { term, root, mouse } = makeTerm(false);
   install(term);
-  touchStart(viewport, 155, 99);
-  const em = viewport.fire({ type: 'touchmove', touches: [{ clientX: 155, clientY: 171 }], changedTouches: [] });
-  const ee = touchEnd(viewport, 155, 171);
+  touchStart(root, 155, 99);
+  const em = root.fire({ type: 'touchmove', touches: [{ clientX: 155, clientY: 171 }], changedTouches: [] });
+  const ee = touchEnd(root, 155, 171);
   assert.equal(mouse.events.length, 0, '通常 shell ではスワイプで wheel を撃たない（非介入）');
   assert.equal(em.defaultPrevented, false, '通常 shell の touchmove は preventDefault しない＝ネイティブ pan が流れる');
   assert.equal(ee.defaultPrevented, false, '通常 shell の touchend も preventDefault しない');
@@ -258,11 +271,11 @@ check('通常 shell（mouseActive=false）: スワイプでも wheel を撃た�
 
 // ── 5) 二重インストール防止 ────────────────────────────────────────────
 check('二重インストールしない（__apolloTapFix ガード）', () => {
-  const { term, viewport } = makeTerm(true);
+  const { term, root } = makeTerm(true);
   install(term);
-  const before = viewport.listeners['touchend']?.length ?? 0;
+  const before = root.listeners['touchend']?.length ?? 0;
   install(term); // 2 回目
-  const after = viewport.listeners['touchend']?.length ?? 0;
+  const after = root.listeners['touchend']?.length ?? 0;
   assert.equal(after, before, '2 回目はリスナを重複登録しない');
 });
 
