@@ -109,6 +109,7 @@ import { googleRouter } from './googleRouter.js';
 import { plannerRouter } from './plannerRouter.js';
 import { devMockupRouter } from './devMockupRouter.js';
 import { naoshiteRouter } from './naoshiteRouter.js';
+import { newsRouter } from './newsRouter.js';
 import { revenueRouter } from './revenueRouter.js';
 
 const HEALTHZ_PATH = '/api/healthz';
@@ -1502,6 +1503,10 @@ app.use('/api/dev', devMockupRouter());
 // 「ナオシテ」プロトタイプの実AI診断（MC-346）。写真1枚 → Gemini vision → 故障診断JSON。
 // auth ミドルウェア配下。失敗時は 200 {error} でクライアントがサンプル診断へフォールバック。
 app.use('/api/naoshite', naoshiteRouter());
+
+// ニュース「深掘り」API（MC-355）。選択テキスト → Gemini + Google Search グラウンディング →
+// 平易な日本語解説と関連リンク。auth ミドルウェア配下。失敗は 502 { error }（日本語）。
+app.use('/api/news', newsRouter());
 
 // ─── SSE（chokidar watch → broadcast に接続）──────────────────────
 
