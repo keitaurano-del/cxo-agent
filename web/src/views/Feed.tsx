@@ -75,6 +75,8 @@ export default function Feed() {
 
   const [project, setProject] = useState<ProjectName | 'all'>('all');
   const [status, setStatus] = useState<AgentStatus | 'all'>('all');
+  // メニュー内検索（この会話一覧に限定した絞り込み）。
+  const [query, setQuery] = useState('');
 
   const agents = data?.agents ?? [];
 
@@ -84,15 +86,18 @@ export default function Feed() {
     return PROJECT_ORDER.filter((p) => set.has(p));
   }, [agents]);
 
-  const filtered = useMemo(
-    () =>
-      agents.filter(
-        (a) =>
-          (project === 'all' || a.project === project) &&
-          (status === 'all' || a.status === status),
-      ),
-    [agents, project, status],
-  );
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return agents.filter(
+      (a) =>
+        (project === 'all' || a.project === project) &&
+        (status === 'all' || a.status === status) &&
+        (q === '' ||
+          [a.subagentType, a.description, a.projectLabel, a.lastAction, a.currentTaskId]
+            .filter(Boolean)
+            .some((field) => String(field).toLowerCase().includes(q))),
+    );
+  }, [agents, project, status, query]);
 
   return (
     <div>
@@ -102,6 +107,34 @@ export default function Feed() {
         fetchedAt={fetchedAt}
       />
       <div className="p-4 md:p-6">
+        <label className="mb-3 flex items-center gap-2 rounded-md border border-border bg-surface-2 px-2.5 py-1.5">
+          <span className="text-text-faint" aria-hidden>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </span>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="この一覧を検索（エージェント名・内容・タスクID）"
+            aria-label="会話一覧を検索"
+            className="min-w-0 flex-1 bg-transparent text-[13px] text-text outline-none placeholder:text-text-faint"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="検索をクリア"
+              className="shrink-0 rounded p-0.5 text-text-muted hover:bg-surface-3 hover:text-text"
+            >
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
+        </label>
         <div className="mb-4 flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-3">
           <div
             className="no-scrollbar -mx-1 flex items-center gap-1 overflow-x-auto px-1 md:flex-wrap"
