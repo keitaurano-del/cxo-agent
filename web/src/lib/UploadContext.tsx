@@ -1,19 +1,53 @@
 // アップロード状態をグローバルに管理する Context。
 // コンポーネントのアンマウントと無関係に XHR が継続するため、
 // ページ遷移中でもアップロードが続いて完了を検知できる。
-// 100MB 超のフォルダはファイル単位で 95MB 以下のバッチに分割して順次送信する。
-// 50MB 超のファイルは /api/deliverables/upload-chunk で 20MB チャンクに分割して送信する。
+// 大きめのファイルはファイル単位で小さなバッチに分割して順次送信する。
+// 4MB 超のファイルは /api/deliverables/upload-chunk で 4MB チャンクに分割して送信する。
 import { createContext, useContext, useRef, useState, useCallback, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
-// cloudflared 無料トンネルのリクエストボディ上限が約 100MB のため、安全側で 50MB に設定。
-// サーバ側の multer ファイル数上限（DELIVERABLE_UPLOAD_MAX_FILES=500）に対してもマージンを持たせる。
-const BATCH_LIMIT_BYTES = 50 * 1024 * 1024;
+// 1リクエストが遅い回線でも数十秒以内に完了するようにサイズを絞る。
+// 前段の Cloudflare トンネルは「遅い転送のリクエスト」を応答前に切断する（実測 ~35秒窓）。
+// 1リクエストを小さくすることで、低速回線でも切断窓に収まるようにする。
+const BATCH_LIMIT_BYTES = 8 * 1024 * 1024; // 小物の束も1リクエストが重くならないよう 8MB に抑える。
 const BATCH_LIMIT_COUNT = 100; // 1バッチ最大ファイル数
 
-// 50MB 超のファイルはチャンク送信する（cloudflared 制限対策）。
-const CHUNK_THRESHOLD = 50 * 1024 * 1024; // 50MB
-const CHUNK_SIZE = 20 * 1024 * 1024;      // 20MB（cloudflared 限界の 1/5）
+// 4MB 超のファイルはチャンク送信する（遅い転送タイムアウト対策）。
+// 250KB/s でも 1チャンク約16秒で完了し、~35秒の切断窓に余裕で収まる。
+const CHUNK_THRESHOLD = 4 * 1024 * 1024; // 4MB
+const CHUNK_SIZE = 4 * 1024 * 1024;      // 4MB
+
+// onerror / 失敗時の自動リトライ設定（モバイルの瞬断耐性）。
+// 指数バックオフ（1s, 2s, 4s）で最大 3 回まで再試行する。
+const MAX_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 1000;
+
+/** 指数バックオフ待機。試行回数 attempt（0 始まり）に応じて 1s, 2s, 4s 待つ。 */
+function backoffDelay(attempt: number): Promise<void> {
+  const ms = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 1回分の送信関数を指数バックオフで最大 MAX_RETRIES 回リトライする。
+ * send() は Promise を返す関数で、各試行ごとに新しい XHR を張る前提。
+ * リトライが枯渇したら最後のエラーを throw する。
+ */
+async function withRetry<T>(send: () => Promise<T>): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      return await send();
+    } catch (err) {
+      lastErr = err;
+      // 最終試行でなければバックオフして再送。
+      if (attempt < MAX_RETRIES - 1) {
+        await backoffDelay(attempt);
+      }
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
 
 type Entry = { file: File; relpath: string };
 
@@ -96,7 +130,8 @@ function sendOneChunk(
 }
 
 /**
- * 50MB 超のファイルを CHUNK_SIZE ごとに分割してチャンク送信する。
+ * CHUNK_THRESHOLD 超のファイルを CHUNK_SIZE ごとに分割してチャンク送信する。
+ * 各チャンクは指数バックオフで最大 MAX_RETRIES 回リトライする。
  * 完了したら 1 を返す（ファイル 1 件分）。
  */
 async function sendChunked(
@@ -112,14 +147,17 @@ async function sendChunked(
     const end = Math.min(start + CHUNK_SIZE, entry.file.size);
     const chunk = entry.file.slice(start, end);
 
-    const fd = new FormData();
-    fd.append('chunk', chunk, 'chunk');
-    fd.append('sessionId', sessionId);
-    fd.append('relpath', entry.relpath);
-    fd.append('chunkIndex', String(i));
-    fd.append('totalChunks', String(totalChunks));
-
-    await sendOneChunk(fd, i, totalChunks, entry.file.size, start, onProgress, xhrRef);
+    // 同一 sessionId + chunkIndex の再送はサーバ側で同じ一時パスに上書き保存されるため冪等。
+    // FormData は send 済みの XHR で消費されるので、試行ごとに新規生成する。
+    await withRetry(() => {
+      const fd = new FormData();
+      fd.append('chunk', chunk, 'chunk');
+      fd.append('sessionId', sessionId);
+      fd.append('relpath', entry.relpath);
+      fd.append('chunkIndex', String(i));
+      fd.append('totalChunks', String(totalChunks));
+      return sendOneChunk(fd, i, totalChunks, entry.file.size, start, onProgress, xhrRef);
+    });
   }
   return 1; // ファイル 1 件完了
 }
@@ -201,7 +239,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       const label = hasFolder ? `${topFolder} (${entries.length}件)` : `${entries.length}件`;
       const totalBytes = entries.reduce((s, e) => s + e.file.size, 0);
 
-      // 50MB 超はチャンク送信、それ以下は従来バッチ送信。
+      // CHUNK_THRESHOLD 超はチャンク送信、それ以下は従来バッチ送信。
       const normalEntries = entries.filter((e) => e.file.size <= CHUNK_THRESHOLD);
       const largeEntries = entries.filter((e) => e.file.size > CHUNK_THRESHOLD);
       const batches = splitBatches(normalEntries);
@@ -227,7 +265,9 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           }
 
           try {
-            const count = await sendBatch(
+            // 一括バッチも指数バックオフで最大3回リトライ。
+            // sendBatch は試行ごとに FormData と XHR を新規生成するので再送安全。
+            const count = await withRetry(() => sendBatch(
               batch,
               (loaded) => {
                 const overall = totalBytes > 0
@@ -236,7 +276,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
                 setState((s) => ({ ...s, progress: overall }));
               },
               xhrRef,
-            );
+            ));
             sentBytes += batchBytes;
             totalCount += count;
             window.dispatchEvent(new CustomEvent('deliverables:uploaded'));

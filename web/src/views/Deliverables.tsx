@@ -531,7 +531,7 @@ function UploadDropZone({ children }: { children: ReactNode }) {
 
   return (
     <div
-      className="relative h-full"
+      className="relative flex h-full min-h-0 flex-col"
       onDragEnter={(e) => {
         if (!isFileDrag(e) || uploading) return;
         depthRef.current += 1;
@@ -1489,7 +1489,7 @@ function TrashView({ onChanged, onClose }: { onChanged: () => void; onClose: () 
         subtitle="削除したドキュメントの復元・完全削除"
         fetchedAt={fetchedAt}
       />
-      <div className="flex-1 overflow-y-auto p-4 md:p-6">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -3357,7 +3357,7 @@ export default function Deliverables() {
         fetchedAt={fetchedAt}
       />
       <UploadDropZone>
-      <div className="flex-1 overflow-y-auto p-4 md:p-6">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
         <ResourceState loading={loading} error={error} hasData={!!data}>
           {data && (
             <div className="flex gap-4">
