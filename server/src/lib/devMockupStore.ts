@@ -13,7 +13,26 @@ import { dirname } from 'node:path';
 
 import { DEV_MOCKUPS_FILE } from '../config.js';
 
+/** 1 モックアップが保持する修正履歴（バージョン）の最大件数（超えたら古いものから切り詰める）。 */
+const MOCKUP_VERSIONS_MAX = 30;
+
 // ─── 型 ─────────────────────────────────────────────────
+
+/** 修正履歴の 1 版（バージョン）。生成・修正・レビュー・復元のたびに現行 html を 1 版として積む。 */
+export interface MockupVersion {
+  /** 版の一意 ID。 */
+  id: string;
+  /** その時点の完全な HTML5 ドキュメント本文。 */
+  html: string;
+  /** 版のラベル（一覧に出す短い説明。「初回生成」「修正: 配色を青に」等）。 */
+  label: string;
+  /** この版がどの操作で生まれたか。generate=新規生成 / revise=修正 / review=デザイン昇格 / restore=復元。 */
+  kind: 'generate' | 'revise' | 'review' | 'restore';
+  /** その版時点の設計書（あれば）。 */
+  designDoc?: string;
+  /** 作成日時（ISO8601）。 */
+  createdAt: string;
+}
 
 /** モックアップ 1 件。 */
 export interface Mockup {
@@ -23,6 +42,12 @@ export interface Mockup {
   title: string;
   /** 完全な HTML5 ドキュメント本文。 */
   html: string;
+  /**
+   * 修正履歴（バージョン。新しい順で末尾が最新。MC-260）。
+   * 生成・修正・レビュー・復元のたびに現行 html を 1 版として push する。
+   * 肥大防止に MOCKUP_VERSIONS_MAX 件で古いものから切り詰める。既存（versions 無し）でも壊れない任意項目。
+   */
+  versions?: MockupVersion[];
   /** 生成に使ったプロンプト（任意）。 */
   prompt?: string;
   /** 設計書（作り方）。4段フローの設計ステージが生成（任意）。Backlog で「何を作ったか」を示す。 */
@@ -125,16 +150,41 @@ export function upsertMockup(input: {
   figmaFileUrl?: string;
   wireframeDir?: string;
   wireframeScreens?: { name: string; image?: string }[];
+  /**
+   * 修正履歴（バージョン）を積むか（MC-260）。生成完了・修正完了はここに指定して 1 版として記録する。
+   * kind=版の種類、label=一覧に出す短い説明。手動の再保存（plain POST /mockups）では未指定＝積まない
+   *（意図しない大量の版でノイズを作らない）。designDoc は指定が無ければ今回の input.designDoc を使う。
+   */
+  recordVersion?: { kind: MockupVersion['kind']; label: string; designDoc?: string };
 }): Mockup {
   const now = new Date().toISOString();
   const map = readAll(DEV_MOCKUPS_FILE);
   const existing = input.id ? map.get(input.id) : undefined;
   const id = input.id && existing ? input.id : input.id ?? randomUUID();
   const createdAt = existing?.createdAt ?? now;
+  // 修正履歴: 既存の版に、今回の html を 1 版として追記する（recordVersion 指定時のみ）。
+  // 末尾が最新。MOCKUP_VERSIONS_MAX を超えたら古い先頭から切り詰める。
+  const versions: MockupVersion[] = existing?.versions ? [...existing.versions] : [];
+  if (input.recordVersion) {
+    versions.push({
+      id: randomUUID(),
+      html: input.html,
+      label: input.recordVersion.label,
+      kind: input.recordVersion.kind,
+      ...(input.recordVersion.designDoc !== undefined
+        ? { designDoc: input.recordVersion.designDoc }
+        : input.designDoc !== undefined
+          ? { designDoc: input.designDoc }
+          : {}),
+      createdAt: now,
+    });
+    if (versions.length > MOCKUP_VERSIONS_MAX) versions.splice(0, versions.length - MOCKUP_VERSIONS_MAX);
+  }
   const rec: Mockup = {
     id,
     title: input.title,
     html: input.html,
+    ...(versions.length > 0 ? { versions } : {}),
     ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
     // 設計・ワイヤーフレーム系は与えられた時だけ載せる。修正(revise)時は引き継ぎたいので
     // 入力が無ければ既存値を温存する（上書きで消さない）。
@@ -222,6 +272,50 @@ export function setCodeLesson(id: string, codeLesson: string): Mockup | undefine
   const rec: Mockup = { ...existing, codeLesson, updatedAt: new Date().toISOString() };
   appendRecord(DEV_MOCKUPS_FILE, rec);
   return strip(rec);
+}
+
+// ─── 修正履歴（バージョン）API（MC-260）───────────────────────
+
+/** 版のサマリ（html を含めない・一覧表示用）。 */
+export type MockupVersionSummary = Omit<MockupVersion, 'html'>;
+
+/**
+ * 指定 id の修正履歴（バージョン）を新しい順（末尾＝最新を先頭に）でサマリ（html 除く）で返す。
+ * 存在しない/削除済み/versions 無しは空配列（後方互換：古いモックでも壊れない）。
+ */
+export function listVersions(id: string): MockupVersionSummary[] {
+  const rec = readAll(DEV_MOCKUPS_FILE).get(id);
+  if (!rec || rec.deleted || !rec.versions) return [];
+  return rec.versions
+    .map(({ html: _html, ...summary }) => summary)
+    .reverse();
+}
+
+/** 指定 id・版 versionId の HTML（本文込み）を返す。無ければ undefined。 */
+export function getVersion(id: string, versionId: string): MockupVersion | undefined {
+  const rec = readAll(DEV_MOCKUPS_FILE).get(id);
+  if (!rec || rec.deleted || !rec.versions) return undefined;
+  return rec.versions.find((v) => v.id === versionId);
+}
+
+/**
+ * 指定 id を版 versionId の HTML に復元する（restore）。復元自体も 1 版（kind='restore'）として記録する。
+ * 存在しない id / 無い版は undefined。成功時は復元後の公開形（html 含む）を返す。
+ */
+export function restoreVersion(id: string, versionId: string): Mockup | undefined {
+  const map = readAll(DEV_MOCKUPS_FILE);
+  const existing = map.get(id);
+  if (!existing || existing.deleted || !existing.versions) return undefined;
+  const target = existing.versions.find((v) => v.id === versionId);
+  if (!target) return undefined;
+  // 復元先の HTML を現行 html にしつつ、その復元操作を新しい 1 版として積む（履歴を辿れるように）。
+  return upsertMockup({
+    id,
+    title: existing.title,
+    html: target.html,
+    ...(target.designDoc !== undefined ? { designDoc: target.designDoc } : {}),
+    recordVersion: { kind: 'restore', label: `復元: ${target.label}`, designDoc: target.designDoc },
+  });
 }
 
 /** 指定 id のモックアップを論理削除する（deleted:true を追記）。存在しなくても冪等に成功扱い。 */

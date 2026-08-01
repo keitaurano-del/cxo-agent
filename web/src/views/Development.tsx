@@ -64,6 +64,10 @@ const POLL_INTERVAL_MS = 2_000;
 // ここで打ち切っても生成はサーバで継続し完了後に自動保存されるが、最後まで画面で見届けられるよう広く取る。
 const POLL_MAX_WAIT_MS = 30 * 60_000;
 
+// アイデア生成ジョブの待ち上限（MC-288）。サーバは 1 本ずつ直列化するため順番待ちを見込んで広めに取る。
+// サーバのアイデア生成タイムアウト(90秒)×最大2試行＋順番待ちに余裕を持たせて 10 分。
+const IDEA_POLL_MAX_WAIT_MS = 10 * 60_000;
+
 // ─── 作業状態の永続化（localStorage）──────────────────────────────
 //
 // ページを離れる/リロードすると React 状態は消えるが、入力中・生成結果・生成中ジョブを
@@ -76,6 +80,11 @@ const POLL_MAX_WAIT_MS = 30 * 60_000;
 const DRAFT_KEY = 'dev-mockup-draft-v1';
 /** 生成中ジョブの保存キー。 */
 const JOB_KEY = 'dev-mockup-job-v1';
+/**
+ * 生成中の「💡 アイデアを生成」ジョブの保存キー（MC-288）。
+ * ページを離れる/リロードしても jobId を退避し、戻ってきたらポーリングを再開して結果を反映する。
+ */
+const IDEA_JOB_KEY = 'dev-idea-job-v1';
 
 /** 編集中ドラフト（入力・生成結果・選択中 id）。 */
 interface DraftState {
@@ -152,6 +161,34 @@ function saveJobs(jobs: JobState[]): void {
   try {
     if (jobs.length === 0) localStorage.removeItem(JOB_KEY);
     else localStorage.setItem(JOB_KEY, JSON.stringify(jobs));
+  } catch {
+    /* noop */
+  }
+}
+
+/** 進行中アイデアジョブ（jobId＋起票時刻）。離脱/リロードで復元してポーリング再開する（MC-288）。 */
+interface IdeaJobState {
+  jobId: string;
+  /** 起票時刻（ms）。IDEA_POLL_MAX_WAIT_MS を超えた古いジョブは復元対象外。 */
+  startedAt: number;
+}
+/** 進行中アイデアジョブを読む（期限切れは除外）。 */
+function loadIdeaJob(): IdeaJobState | null {
+  try {
+    const raw = localStorage.getItem(IDEA_JOB_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as IdeaJobState;
+    if (!parsed || typeof parsed.jobId !== 'string') return null;
+    if (Date.now() - parsed.startedAt > IDEA_POLL_MAX_WAIT_MS) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+function saveIdeaJob(job: IdeaJobState | null): void {
+  try {
+    if (!job) localStorage.removeItem(IDEA_JOB_KEY);
+    else localStorage.setItem(IDEA_JOB_KEY, JSON.stringify(job));
   } catch {
     /* noop */
   }
@@ -329,6 +366,50 @@ async function pollMockupJob(
   return { status: 'timeout' };
 }
 
+/** アイデア生成ジョブのポーリング結果（MC-288）。 */
+type IdeaJobResult =
+  | { status: 'done'; idea: string }
+  | { status: 'error'; message: string }
+  | { status: 'notfound' }
+  | { status: 'timeout' };
+
+/**
+ * 既存 jobId のアイデア生成完了までポーリングする（起票と分離＝離脱/リロード後の再開でも使える）。
+ * mockup の pollMockupJob と同じ流儀（同間隔・一過性 fetch 失敗は次周回で再試行、404/error で確定）。
+ * @param sinceMs 経過起点（再開時は元の startedAt）。残り時間 = IDEA_POLL_MAX_WAIT_MS - 経過。
+ */
+async function pollIdeaJob(
+  jobId: string,
+  sinceMs: number = Date.now(),
+): Promise<IdeaJobResult> {
+  const deadline = sinceMs + IDEA_POLL_MAX_WAIT_MS;
+  while (Date.now() < deadline) {
+    await sleep(POLL_INTERVAL_MS);
+    let res: Response;
+    try {
+      res = await fetch(`/api/dev/idea/job/${encodeURIComponent(jobId)}`);
+    } catch {
+      continue; // 電波揺らぎ等の一過性失敗は次周回で再試行。
+    }
+    if (res.status === 404) return { status: 'notfound' };
+    if (!res.ok) continue;
+    let data: { status?: string; idea?: string; error?: string };
+    try {
+      data = (await res.json()) as typeof data;
+    } catch {
+      continue;
+    }
+    if (data.status === 'done') {
+      return { status: 'done', idea: (data.idea ?? '').trim() };
+    }
+    if (data.status === 'error') {
+      return { status: 'error', message: data.error || 'アイデアの生成に失敗しました。' };
+    }
+    // pending / generating は継続。
+  }
+  return { status: 'timeout' };
+}
+
 // 生成中のライブ表示で「いま何をしているか」を、プログラミング未経験者にも分かる平易な日本語で示す。
 // 流れてきた HTML のどのセクションを書いているか（最後に登場したタグ）で大まかな段階を判定する。
 const STREAM_PHASES: { key: string; label: string }[] = [
@@ -391,8 +472,10 @@ export default function Development() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  // 「💡 アイデアを生成」実行中フラグ。
-  const [ideaBusy, setIdeaBusy] = useState(false);
+  // 「💡 アイデアを生成」実行中フラグ（ジョブ起票〜完了まで true）。離脱/リロード復元時も立てる。
+  const [ideaBusy, setIdeaBusy] = useState(() => loadIdeaJob() !== null);
+  // 進行中アイデアジョブ（起動時に復元してポーリング再開）。多重ポーリング防止に ref で追跡する。
+  const ideaPollingRef = useRef<string | null>(null);
 
   // 進行中ジョブ（「作成中」として一覧に表示・離脱/リロードでも保持）。起動時に復元する。
   const [activeJobs, setActiveJobs] = useState<JobState[]>(loadJobs);
@@ -653,31 +736,74 @@ export default function Development() {
   }, [streamCode, streamPlan, streamThinking]);
 
   // 新規生成。起票だけして「進行中ジョブ」に積む（完了はバックグラウンドのポーリングが捌く）。
-  // 「💡 アイデアを生成」: サーバ(/api/dev/idea)で Claude にアイデアを 1 つ出させ、入力欄へ流し込む。
+  // アイデア生成ジョブを完了までポーリングし、結果を要望欄へ反映する（MC-288）。
+  // ボタン押下時（新規起票）と起動時復元（前回の進行中ジョブ）の両方から呼ぶ。
+  // ジョブはサーバ側でバックグラウンド実行されるので、ページを離れて戻ってもここで結果を取り直せる。
+  const driveIdeaJob = useCallback(async (jobId: string, startedAt: number) => {
+    if (ideaPollingRef.current === jobId) return; // 多重ポーリング防止。
+    ideaPollingRef.current = jobId;
+    setIdeaBusy(true);
+    try {
+      const r = await pollIdeaJob(jobId, startedAt);
+      if (r.status === 'done' && r.idea) {
+        setPrompt(r.idea);
+        setNotice('アイデアを入れました。必要なら直してから「生成」を押してください。');
+      } else if (r.status === 'done') {
+        setError('アイデアの生成に失敗しました。少し待ってもう一度お試しください。');
+      } else if (r.status === 'error') {
+        setError(r.message);
+      } else if (r.status === 'notfound') {
+        // 期限切れ/サーバ再起動でジョブ消失。赤エラーにはせず静かに片付ける。
+        setNotice('前回のアイデア生成は見つかりませんでした。もう一度お試しください。');
+      } else {
+        // タイムアウト（サーバ側は継続している可能性があるが、ここでは打ち切る）。
+        setError('アイデアの生成に時間がかかっています。少し待ってもう一度お試しください。');
+      }
+    } finally {
+      ideaPollingRef.current = null;
+      saveIdeaJob(null);
+      setIdeaBusy(false);
+    }
+  }, []);
+
+  // 「💡 アイデアを生成」: サーバ(/api/dev/idea)でジョブを起票→ jobId を localStorage に退避し、
+  // 完了までポーリングして結果を要望欄へ流し込む。離脱/リロードしても起動時に復元して継続する。
   const handleGenerateIdea = useCallback(async () => {
     if (ideaBusy || generating) return;
     setError(null);
     setNotice(null);
     setIdeaBusy(true);
+    let jobId: string;
     try {
       const res = await fetch('/api/dev/idea', { method: 'POST' });
       if (!res.ok) {
         setError(await readError(res, 'アイデアの生成に失敗しました。'));
+        setIdeaBusy(false);
         return;
       }
-      const data = (await res.json()) as { idea?: string };
-      if (data.idea && data.idea.trim()) {
-        setPrompt(data.idea.trim());
-        setNotice('アイデアを入れました。必要なら直してから「生成」を押してください。');
-      } else {
+      const data = (await res.json()) as { jobId?: string };
+      if (!data.jobId) {
         setError('アイデアの生成に失敗しました。少し待ってもう一度お試しください。');
+        setIdeaBusy(false);
+        return;
       }
+      jobId = data.jobId;
     } catch {
       setError('アイデアの生成に失敗しました。通信状態をご確認ください。');
-    } finally {
       setIdeaBusy(false);
+      return;
     }
-  }, [ideaBusy, generating]);
+    const startedAt = Date.now();
+    saveIdeaJob({ jobId, startedAt });
+    setNotice('アイデアを考えています。ページを離れても大丈夫です（戻ると結果を反映します）。');
+    void driveIdeaJob(jobId, startedAt);
+  }, [ideaBusy, generating, driveIdeaJob]);
+
+  // 起動時: 前回の進行中アイデアジョブがあればポーリングを再開する（離脱/リロード復元）。
+  useEffect(() => {
+    const saved = loadIdeaJob();
+    if (saved) void driveIdeaJob(saved.jobId, saved.startedAt);
+  }, [driveIdeaJob]);
 
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim() || generating) return;
