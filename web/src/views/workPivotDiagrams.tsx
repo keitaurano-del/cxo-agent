@@ -728,3 +728,565 @@ export function PivotBoxRolesDiagram() {
     </DiagramFrame>
   );
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// 応用・実務（コンサル水準）の図。step バッジ無し・title のみ。
+// ════════════════════════════════════════════════════════════════════════════
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pro図1: ETL フロー。複数ソース → クレンジング → アンピボット → 1テーブル → ピボット。
+// ────────────────────────────────────────────────────────────────────────────
+export function PivotProPowerQueryDiagram() {
+  const sources = ['支店A.xlsx', '支店B.xlsx', '勘定系.csv'];
+  return (
+    <DiagramFrame
+      title="データ準備（ETL）：複数ソース → 1 テーブル → ピボット"
+      ariaLabel="ETL フローの図。左に3つの元ソース（支店A・支店B・勘定系）が並び、結合（append）でひとつに積まれ、クレンジングと列のアンピボット（横持ちを縦持ちに変換）を経て、整然とした1つのテーブルになり、最後にピボットへ流れます。各工程は右向きの矢印でつながっています。"
+    >
+      <svg {...svgProps(600, 230)}>
+        <ArrowDefs id="arrow-pq" />
+
+        {/* 左: 複数ソース */}
+        <text x="10" y="16" fill={C.textMuted} fontSize="11" fontWeight="bold">
+          複数ソース
+        </text>
+        {sources.map((s, i) => (
+          <g key={s}>
+            <rect x="10" y={26 + i * 46} width="116" height="38" rx="5" fill={C.surface2} stroke={C.border} />
+            <rect x="10" y={26 + i * 46} width="116" height="14" rx="5" fill={C.surface3} />
+            <text x="18" y={37 + i * 46} fill={C.textMuted} fontSize="9">
+              {s}
+            </text>
+            <line x1="18" y1={50 + i * 46} x2="118" y2={50 + i * 46} stroke={C.border} strokeWidth="0.5" />
+            <line x1="18" y1={57 + i * 46} x2="100" y2={57 + i * 46} stroke={C.border} strokeWidth="0.5" />
+          </g>
+        ))}
+
+        {/* 矢印: ソース → 結合 */}
+        <line x1="130" y1="91" x2="166" y2="91" stroke={C.accent} strokeWidth="2.5" markerEnd="url(#arrow-pq)" />
+        <text x="148" y="80" fill={C.accent} fontSize="9" fontWeight="bold" textAnchor="middle">
+          結合
+        </text>
+
+        {/* 中: クレンジング＋アンピボット */}
+        <rect x="170" y="42" width="150" height="98" rx="6" fill={C.surface} stroke={C.accent} strokeWidth="1.3" />
+        <text x="245" y="60" fill={C.accent} fontSize="10.5" fontWeight="bold" textAnchor="middle">
+          Power Query
+        </text>
+        <text x="182" y="80" fill={C.text} fontSize="9.5">
+          ・結合 / マージ
+        </text>
+        <text x="182" y="96" fill={C.text} fontSize="9.5">
+          ・クレンジング
+        </text>
+        <text x="182" y="112" fill={C.text} fontSize="9.5">
+          ・列のアンピボット
+        </text>
+        <text x="182" y="128" fill={C.textMuted} fontSize="8.5">
+          （横持ち→縦持ち）
+        </text>
+
+        {/* 矢印: → 1テーブル */}
+        <line x1="324" y1="91" x2="360" y2="91" stroke={C.accent} strokeWidth="2.5" markerEnd="url(#arrow-pq)" />
+
+        {/* 右: 1つの整然テーブル */}
+        <rect x="364" y="34" width="140" height="114" rx="6" fill={C.surface2} stroke={C.ok} strokeWidth="1.3" />
+        <rect x="364" y="34" width="140" height="16" rx="6" fill={C.okBg} />
+        <text x="372" y="46" fill={C.ok} fontSize="9.5" fontWeight="bold">
+          1 つのテーブル（整然）
+        </text>
+        {Array.from({ length: 5 }).map((_, r) => (
+          <g key={r}>
+            <line x1="372" y1={60 + r * 16} x2="496" y2={60 + r * 16} stroke={C.border} strokeWidth="0.5" />
+            <rect x="372" y={64 + r * 16} width="34" height="6" rx="2" fill={C.borderStrong} opacity="0.5" />
+            <rect x="412" y={64 + r * 16} width="34" height="6" rx="2" fill={C.borderStrong} opacity="0.5" />
+            <rect x="452" y={64 + r * 16} width="40" height="6" rx="2" fill={C.ok} opacity="0.35" />
+          </g>
+        ))}
+
+        {/* 矢印: → ピボット */}
+        <line x1="434" y1="156" x2="434" y2="186" stroke={C.accent} strokeWidth="2.5" markerEnd="url(#arrow-pq)" />
+        <text x="500" y="176" fill={C.accent} fontSize="10" fontWeight="bold" textAnchor="end">
+          → ピボットへ
+        </text>
+        <text x="364" y="176" fill={C.textFaint} fontSize="9">
+          更新ボタン 1 つで再現できる前処理。
+        </text>
+        <text x="364" y="190" fill={C.textFaint} fontSize="9">
+          元データの追加にも自動で追従します。
+        </text>
+      </svg>
+    </DiagramFrame>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pro図2: データモデル（リレーション）＋メジャー（加重平均・YoY）の概念図。
+// ────────────────────────────────────────────────────────────────────────────
+export function PivotProDataModelDaxDiagram() {
+  return (
+    <DiagramFrame
+      title="データモデル＆DAX メジャー：リレーションと加重平均"
+      ariaLabel="データモデルの概念図。明細テーブル（取引）が、支店マスタと債務者マスタにそれぞれ共通キーのリレーションで結ばれています。右側に2つのメジャー、加重平均 LGD は EAD で加重した平均（シグマ LGD かける EAD 割るシグマ EAD）、YoY は当期割る前年同期マイナス1、として明示計算する旨が示されています。"
+    >
+      <svg {...svgProps(600, 250)}>
+        <ArrowDefs id="arrow-dax" />
+
+        {/* マスタ: 支店 */}
+        <rect x="14" y="20" width="120" height="56" rx="6" fill={C.surface2} stroke={C.border} />
+        <rect x="14" y="20" width="120" height="16" rx="6" fill={C.surface3} />
+        <text x="22" y="32" fill={C.textMuted} fontSize="9.5" fontWeight="bold">
+          支店マスタ
+        </text>
+        <text x="22" y="52" fill={C.text} fontSize="9">
+          支店コード（キー）
+        </text>
+        <text x="22" y="66" fill={C.textFaint} fontSize="9">
+          支店名 / 地域
+        </text>
+
+        {/* マスタ: 債務者 */}
+        <rect x="14" y="170" width="120" height="56" rx="6" fill={C.surface2} stroke={C.border} />
+        <rect x="14" y="170" width="120" height="16" rx="6" fill={C.surface3} />
+        <text x="22" y="182" fill={C.textMuted} fontSize="9.5" fontWeight="bold">
+          債務者マスタ
+        </text>
+        <text x="22" y="202" fill={C.text} fontSize="9">
+          債務者 ID（キー）
+        </text>
+        <text x="22" y="216" fill={C.textFaint} fontSize="9">
+          区分 / 業種
+        </text>
+
+        {/* 明細（中央） */}
+        <rect x="210" y="84" width="140" height="80" rx="6" fill={C.surface} stroke={C.accent} strokeWidth="1.4" />
+        <rect x="210" y="84" width="140" height="18" rx="6" fill={C.accent} opacity="0.14" />
+        <text x="220" y="97" fill={C.accent} fontSize="10" fontWeight="bold">
+          明細（取引）
+        </text>
+        <text x="220" y="118" fill={C.text} fontSize="9">
+          支店コード / 債務者 ID
+        </text>
+        <text x="220" y="133" fill={C.text} fontSize="9">
+          ステージ / 計上月
+        </text>
+        <text x="220" y="148" fill={C.text} fontSize="9">
+          EAD / PD / LGD / ECL
+        </text>
+
+        {/* リレーション線 */}
+        <line x1="134" y1="48" x2="210" y2="104" stroke={C.accent} strokeWidth="1.6" strokeDasharray="4 3" markerEnd="url(#arrow-dax)" />
+        <line x1="134" y1="198" x2="210" y2="144" stroke={C.accent} strokeWidth="1.6" strokeDasharray="4 3" markerEnd="url(#arrow-dax)" />
+        <text x="150" y="78" fill={C.textMuted} fontSize="8.5">
+          支店コードで結合
+        </text>
+        <text x="150" y="180" fill={C.textMuted} fontSize="8.5">
+          債務者 ID で結合
+        </text>
+
+        {/* メジャー */}
+        <rect x="372" y="34" width="214" height="80" rx="6" fill={C.surface} stroke={C.ok} strokeWidth="1.2" />
+        <text x="382" y="52" fill={C.ok} fontSize="10" fontWeight="bold">
+          メジャー：加重平均 LGD
+        </text>
+        <text x="382" y="72" fill={C.text} fontSize="9.5">
+          ＝ Σ(LGD×EAD) ÷ Σ EAD
+        </text>
+        <text x="382" y="90" fill={C.textMuted} fontSize="9">
+          単純平均（平均の平均）の
+        </text>
+        <text x="382" y="103" fill={C.textMuted} fontSize="9">
+          誤りを避けて正しく集計。
+        </text>
+
+        <rect x="372" y="134" width="214" height="80" rx="6" fill={C.surface} stroke={C.accent} strokeWidth="1.2" />
+        <text x="382" y="152" fill={C.accent} fontSize="10" fontWeight="bold">
+          メジャー：YoY（前年比）
+        </text>
+        <text x="382" y="172" fill={C.text} fontSize="9.5">
+          ＝ 当期 ÷ 前年同期 − 1
+        </text>
+        <text x="382" y="190" fill={C.textMuted} fontSize="9">
+          タイムインテリジェンス：
+        </text>
+        <text x="382" y="203" fill={C.textMuted} fontSize="9">
+          YoY / MoM / 累計 YTD / CAGR。
+        </text>
+      </svg>
+    </DiagramFrame>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pro図3: 「値の表示形式」スモールマルチプル（金額/構成比/順位/累計）。
+// ────────────────────────────────────────────────────────────────────────────
+export function PivotProShowValuesDiagram() {
+  // 共通の元データ（区分別 ECL 合計）。
+  const rows = [
+    { label: '正常先', amt: '12', pct: '2%', rank: '3', cum: '12' },
+    { label: '要注意先', amt: '85', pct: '12%', rank: '2', cum: '97' },
+    { label: '破綻懸念先', amt: '640', pct: '87%', rank: '1', cum: '737' },
+  ];
+  const panels: { title: string; key: 'amt' | 'pct' | 'rank' | 'cum'; hot?: boolean }[] = [
+    { title: '金額（合計）', key: 'amt' },
+    { title: '構成比（総計比）', key: 'pct', hot: true },
+    { title: '順位', key: 'rank' },
+    { title: '累計', key: 'cum' },
+  ];
+  return (
+    <DiagramFrame
+      title="「値の表示形式」：同じ集計を 4 つの見せ方で"
+      ariaLabel="同一のクロス集計（債務者区分別の ECL 合計）を、4 つの値の表示形式で並べたスモールマルチプル。1つ目は金額、2つ目は総計に対する構成比、3つ目は順位、4つ目は累計です。同じ数値が、見せ方を変えるだけで構成比や順位として表せることを示しています。"
+    >
+      <svg {...svgProps(600, 200)}>
+        {panels.map((p, pi) => {
+          const px = 8 + pi * 148;
+          return (
+            <g key={p.title}>
+              <rect x={px} y="14" width="138" height="172" rx="6" fill={C.surface} stroke={p.hot ? C.accent : C.border} strokeWidth={p.hot ? 1.4 : 1} />
+              <rect x={px} y="14" width="138" height="22" rx="6" fill={p.hot ? C.accent : C.surface3} opacity={p.hot ? 0.16 : 1} />
+              <text x={px + 69} y="29" fill={p.hot ? C.accent : C.text} fontSize="10" fontWeight="bold" textAnchor="middle">
+                {p.title}
+              </text>
+              {rows.map((r, ri) => (
+                <g key={r.label}>
+                  <rect x={px + 6} y={44 + ri * 44} width="126" height="38" rx="4" fill={C.surface2} stroke={C.border} strokeWidth="0.5" />
+                  <text x={px + 14} y={59 + ri * 44} fill={C.textMuted} fontSize="9">
+                    {r.label}
+                  </text>
+                  <text x={px + 124} y={76 + ri * 44} fill={C.text} fontSize="13" fontWeight="bold" textAnchor="end">
+                    {r[p.key]}
+                  </text>
+                </g>
+              ))}
+            </g>
+          );
+        })}
+      </svg>
+    </DiagramFrame>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pro図4: ウォーターフォール（予算 → 各要因の増減 → 実績）。
+// ────────────────────────────────────────────────────────────────────────────
+export function PivotProBridgeDiagram() {
+  // 予算 600 → 実績 737。価格(PD/LGD)+90、数量(残高)+60、ミックス(構成)-13。
+  const baseY = 170; // 0 の基準線（描画上の底）
+  const scale = 0.18; // 1 百万円あたりの高さ
+  const start = 600;
+  const steps = [
+    { label: '予算', kind: 'total' as const, from: 0, to: start },
+    { label: '価格', kind: 'up' as const, delta: 90 },
+    { label: '数量', kind: 'up' as const, delta: 60 },
+    { label: 'ミックス', kind: 'down' as const, delta: -13 },
+    { label: '実績', kind: 'total' as const, from: 0, to: 737 },
+  ];
+  let running = 0;
+  const colW = 84;
+  const gap = 28;
+  const bars = steps.map((s, i) => {
+    const x = 30 + i * (colW + gap);
+    let top: number;
+    let h: number;
+    let prevRunning = running;
+    if (s.kind === 'total') {
+      running = s.to;
+      h = s.to * scale;
+      top = baseY - h;
+    } else {
+      const next = running + s.delta;
+      const hi = Math.max(running, next);
+      const lo = Math.min(running, next);
+      h = (hi - lo) * scale;
+      top = baseY - hi * scale;
+      running = next;
+    }
+    return { ...s, x, top, h, prevRunning, running };
+  });
+  return (
+    <DiagramFrame
+      title="差異の要因分解：ブリッジ（予算 → 実績）"
+      ariaLabel="ウォーターフォール（ブリッジ）チャートの図。左の予算 600 百万円を起点に、価格要因でプラス 90、数量要因でプラス 60、ミックス要因でマイナス 13 と増減バーが積み上がり、右の実績 737 百万円につながります。予算と実績の差の中身が、価格・数量・ミックスに分解されて見える形です。"
+    >
+      <svg {...svgProps(600, 210)}>
+        {/* 基準線 */}
+        <line x1="20" y1={baseY} x2="580" y2={baseY} stroke={C.border} strokeWidth="1" />
+        {bars.map((b, i) => {
+          const isTotal = b.kind === 'total';
+          const isUp = b.kind === 'up';
+          const fill = isTotal ? C.accent : isUp ? C.okBg : C.warnBg;
+          const stroke = isTotal ? C.accent : isUp ? C.ok : C.warn;
+          const valText =
+            b.kind === 'total' ? String(b.to) : `${(b.delta ?? 0) > 0 ? '+' : ''}${b.delta}`;
+          return (
+            <g key={b.label}>
+              {/* つなぎの点線（前バーの天端から次バーへ） */}
+              {i > 0 && (
+                <line
+                  x1={bars[i - 1].x + colW}
+                  y1={isTotal ? b.top : baseY - b.prevRunning * scale}
+                  x2={b.x}
+                  y2={isTotal ? b.top : baseY - b.prevRunning * scale}
+                  stroke={C.borderStrong}
+                  strokeWidth="0.8"
+                  strokeDasharray="3 2"
+                />
+              )}
+              <rect
+                x={b.x}
+                y={b.top}
+                width={colW}
+                height={Math.max(b.h, 2)}
+                rx="2"
+                fill={fill}
+                stroke={stroke}
+                strokeWidth="1.2"
+                opacity={isTotal ? 0.85 : 1}
+              />
+              <text
+                x={b.x + colW / 2}
+                y={b.top - 6}
+                fill={isTotal ? C.text : stroke}
+                fontSize="11"
+                fontWeight="bold"
+                textAnchor="middle"
+              >
+                {valText}
+              </text>
+              <text x={b.x + colW / 2} y={baseY + 16} fill={C.textMuted} fontSize="10" textAnchor="middle">
+                {b.label}
+              </text>
+            </g>
+          );
+        })}
+        <text x="20" y="196" fill={C.textFaint} fontSize="9">
+          金額は百万円。差（+137）の中身を 価格 × 数量 × ミックス に分解しています。
+        </text>
+      </svg>
+    </DiagramFrame>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pro図5: Top-N バー＋「その他」バケット＋寄与度。
+// ────────────────────────────────────────────────────────────────────────────
+export function PivotProTopNDiagram() {
+  // 支店別 ECL（上位3＋その他）。
+  const items = [
+    { label: '大手町', val: 320, w: 320, other: false },
+    { label: '丸の内', val: 180, w: 180, other: false },
+    { label: '日本橋', val: 110, w: 110, other: false },
+    { label: 'その他（5 支店）', val: 127, w: 127, other: true },
+  ];
+  const maxW = 320;
+  const barMax = 250;
+  return (
+    <DiagramFrame
+      title="Top-N＋「その他」集約と寄与度"
+      ariaLabel="支店別 ECL の図。上位3支店（大手町・丸の内・日本橋）を長さの異なる横棒で表示し、残りの5支店を「その他」バケットにまとめています。右側には前年差への寄与度として、大手町がプラス方向に最も大きく効いている旨を示しています。"
+    >
+      <svg {...svgProps(600, 210)}>
+        <text x="14" y="18" fill={C.textMuted} fontSize="11" fontWeight="bold">
+          支店別 ECL：上位 3 ＋「その他」
+        </text>
+        {items.map((it, i) => {
+          const y = 30 + i * 38;
+          const w = (it.w / maxW) * barMax;
+          return (
+            <g key={it.label}>
+              <text x="14" y={y + 16} fill={C.text} fontSize="10" fontWeight={it.other ? 'normal' : 'bold'}>
+                {it.label}
+              </text>
+              <rect
+                x="130"
+                y={y + 4}
+                width={Math.max(w, 4)}
+                height="18"
+                rx="3"
+                fill={it.other ? C.surface3 : C.accent}
+                stroke={it.other ? C.borderStrong : C.accent}
+                opacity={it.other ? 1 : 0.85}
+              />
+              <text x={130 + Math.max(w, 4) + 8} y={y + 17} fill={C.text} fontSize="10" fontWeight="bold">
+                {it.val}
+              </text>
+            </g>
+          );
+        })}
+        {/* 寄与度の注記パネル */}
+        <rect x="400" y="30" width="186" height="150" rx="6" fill={C.surface2} stroke={C.border} />
+        <text x="412" y="48" fill={C.textMuted} fontSize="10" fontWeight="bold">
+          前年差への寄与度
+        </text>
+        {[
+          { l: '大手町', v: '+38', up: true },
+          { l: '丸の内', v: '+12', up: true },
+          { l: '日本橋', v: '−5', up: false },
+          { l: 'その他', v: '+9', up: true },
+        ].map((c, i) => (
+          <g key={c.l}>
+            <text x="412" y={70 + i * 22} fill={C.text} fontSize="9.5">
+              {c.l}
+            </text>
+            <text x="574" y={70 + i * 22} fill={c.up ? C.ok : C.warn} fontSize="10" fontWeight="bold" textAnchor="end">
+              {c.v}
+            </text>
+          </g>
+        ))}
+        <text x="412" y="170" fill={C.textFaint} fontSize="8.5">
+          増加の主因は大手町と読み取れます。
+        </text>
+        <text x="14" y="200" fill={C.textFaint} fontSize="9">
+          金額は百万円。［値フィルター］→［上位 N］＋残りを「その他」に畳んで集約。
+        </text>
+      </svg>
+    </DiagramFrame>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pro図6: レポート接続（1スライサー→複数ピボット/グラフ）＋GETPIVOTDATA。
+// ────────────────────────────────────────────────────────────────────────────
+export function PivotProDeckLinkDiagram() {
+  return (
+    <DiagramFrame
+      title="成果物連携：レポート接続と GETPIVOTDATA"
+      ariaLabel="成果物連携の図。中央上の1つのスライサーが、レポート接続で下の3つの成果物（ピボット表・ピボットグラフ・サマリ表）を同時に絞り込みます。サマリ表は GETPIVOTDATA でピボットの特定セルを安定参照していることを示しています。"
+    >
+      <svg {...svgProps(600, 240)}>
+        <ArrowDefs id="arrow-deck" />
+
+        {/* スライサー（親） */}
+        <rect x="234" y="14" width="132" height="48" rx="6" fill={C.surface} stroke={C.accent} strokeWidth="1.4" />
+        <text x="300" y="32" fill={C.accent} fontSize="10.5" fontWeight="bold" textAnchor="middle">
+          スライサー：支店
+        </text>
+        <rect x="246" y="40" width="50" height="14" rx="3" fill={C.accent} opacity="0.85" />
+        <text x="271" y="51" fill={C.bg} fontSize="9" fontWeight="bold" textAnchor="middle">
+          大手町
+        </text>
+        <rect x="304" y="40" width="50" height="14" rx="3" fill={C.surface2} stroke={C.border} />
+        <text x="329" y="51" fill={C.textMuted} fontSize="9" textAnchor="middle">
+          丸の内
+        </text>
+
+        {/* 接続線 → 3 つの成果物 */}
+        <line x1="300" y1="62" x2="90" y2="100" stroke={C.accent} strokeWidth="1.6" strokeDasharray="4 3" markerEnd="url(#arrow-deck)" />
+        <line x1="300" y1="62" x2="300" y2="100" stroke={C.accent} strokeWidth="1.6" strokeDasharray="4 3" markerEnd="url(#arrow-deck)" />
+        <line x1="300" y1="62" x2="510" y2="100" stroke={C.accent} strokeWidth="1.6" strokeDasharray="4 3" markerEnd="url(#arrow-deck)" />
+        <text x="300" y="84" fill={C.textMuted} fontSize="8.5" textAnchor="middle">
+          レポート接続で同時に絞り込み
+        </text>
+
+        {/* 成果物1: ピボット表 */}
+        <rect x="20" y="106" width="150" height="110" rx="6" fill={C.surface2} stroke={C.border} />
+        <text x="95" y="124" fill={C.text} fontSize="10" fontWeight="bold" textAnchor="middle">
+          ピボット表
+        </text>
+        {Array.from({ length: 4 }).map((_, r) => (
+          <g key={r}>
+            <line x1="32" y1={138 + r * 16} x2="158" y2={138 + r * 16} stroke={C.border} strokeWidth="0.5" />
+            <rect x="32" y={142 + r * 16} width="50" height="6" rx="2" fill={C.borderStrong} opacity="0.5" />
+            <rect x="118" y={142 + r * 16} width="38" height="6" rx="2" fill={C.accent} opacity="0.35" />
+          </g>
+        ))}
+
+        {/* 成果物2: ピボットグラフ */}
+        <rect x="225" y="106" width="150" height="110" rx="6" fill={C.surface2} stroke={C.border} />
+        <text x="300" y="124" fill={C.text} fontSize="10" fontWeight="bold" textAnchor="middle">
+          ピボットグラフ
+        </text>
+        {[40, 70, 30, 58].map((h, i) => (
+          <rect key={i} x={245 + i * 30} y={200 - h} width="20" height={h} rx="2" fill={C.accent} opacity="0.7" />
+        ))}
+        <line x1="237" y1="200" x2="363" y2="200" stroke={C.border} strokeWidth="0.8" />
+
+        {/* 成果物3: サマリ表（GETPIVOTDATA） */}
+        <rect x="430" y="106" width="150" height="110" rx="6" fill={C.surface} stroke={C.ok} strokeWidth="1.2" />
+        <text x="505" y="124" fill={C.ok} fontSize="10" fontWeight="bold" textAnchor="middle">
+          サマリ表（デック用）
+        </text>
+        <text x="442" y="146" fill={C.text} fontSize="9">
+          ＝GETPIVOTDATA(…)
+        </text>
+        <text x="442" y="164" fill={C.textMuted} fontSize="8.5">
+          ピボットの特定セルを
+        </text>
+        <text x="442" y="177" fill={C.textMuted} fontSize="8.5">
+          項目名で安定参照。
+        </text>
+        <text x="442" y="197" fill={C.textFaint} fontSize="8.5">
+          動的タイトル＋
+        </text>
+        <text x="442" y="209" fill={C.textFaint} fontSize="8.5">
+          PowerPoint へリンク貼り。
+        </text>
+      </svg>
+    </DiagramFrame>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pro図7: QA チェックリスト＋「平均の平均」の誤り例（正誤対比）。
+// ────────────────────────────────────────────────────────────────────────────
+export function PivotProQADiagram() {
+  const checks = [
+    '総計が元データ合計と一致するか突合',
+    'マージのキー重複による二重計上はないか',
+    'フィルタの掛け忘れ・古いキャッシュはないか',
+    'ピボット結果を手修正で上書きしていないか',
+    '開く時に更新／更新ボタンの規律',
+  ];
+  return (
+    <DiagramFrame
+      title="監査・QA：チェックリストと「平均の平均」の誤り"
+      ariaLabel="QA の図。左に5項目のチェックリスト（総計の突合、二重計上の確認、フィルタ漏れと古いキャッシュ、手修正の上書き、更新規律）。右に「平均の平均」の誤り例を正誤で対比し、LGD を単純平均すると誤り、EAD で加重した平均が正しい、と示しています。"
+    >
+      <svg {...svgProps(600, 220)}>
+        {/* 左: チェックリスト */}
+        <text x="14" y="18" fill={C.textMuted} fontSize="11" fontWeight="bold">
+          QA チェックリスト
+        </text>
+        {checks.map((c, i) => (
+          <g key={i}>
+            <rect x="16" y={28 + i * 34} width="18" height="18" rx="4" fill={C.okBg} stroke={C.ok} strokeWidth="1.2" />
+            <path d={`M20,${37 + i * 34} l3,4 l6,-7`} fill="none" stroke={C.ok} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            <text x="42" y={41 + i * 34} fill={C.text} fontSize="10">
+              {c}
+            </text>
+          </g>
+        ))}
+
+        {/* 右: 平均の平均 正誤対比 */}
+        <rect x="360" y="22" width="226" height="84" rx="6" fill={C.surface} stroke={C.warn} strokeWidth="1.2" />
+        <text x="372" y="40" fill={C.warn} fontSize="10" fontWeight="bold">
+          × 誤り：LGD を単純平均
+        </text>
+        <text x="372" y="60" fill={C.text} fontSize="9.5">
+          (40% + 60%) ÷ 2 ＝ 50%
+        </text>
+        <text x="372" y="78" fill={C.textMuted} fontSize="8.5">
+          残高の大小を無視＝「平均の平均」。
+        </text>
+        <text x="372" y="93" fill={C.textMuted} fontSize="8.5">
+          ポートフォリオの実態とずれます。
+        </text>
+
+        <rect x="360" y="118" width="226" height="86" rx="6" fill={C.surface} stroke={C.ok} strokeWidth="1.2" />
+        <text x="372" y="136" fill={C.ok} fontSize="10" fontWeight="bold">
+          ○ 正：EAD で加重平均
+        </text>
+        <text x="372" y="156" fill={C.text} fontSize="9.5">
+          Σ(LGD×EAD) ÷ Σ EAD
+        </text>
+        <text x="372" y="174" fill={C.text} fontSize="9.5">
+          ＝（40%×100 ＋ 60%×900）÷ 1000
+        </text>
+        <text x="372" y="190" fill={C.ok} fontSize="9.5" fontWeight="bold">
+          ＝ 58%（実態に整合）
+        </text>
+      </svg>
+    </DiagramFrame>
+  );
+}
