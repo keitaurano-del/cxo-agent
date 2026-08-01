@@ -58,6 +58,7 @@ function scopeToProject(scope: string): ProjectName {
   if (s.includes('logic') || s === 'rin') return 'logic';
   if (s.includes('en-chakai') || s.includes('chakai')) return 'en-chakai';
   if (s.includes('nishimaru')) return 'nishimaru';
+  if (s.includes('video-dl') || s.includes('videodl') || s.includes('clipitnow')) return 'videodl';
   if (s.includes('cxo') || s.includes('apollo')) return 'cxo';
   return 'other';
 }

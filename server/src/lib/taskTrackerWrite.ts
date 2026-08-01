@@ -89,6 +89,8 @@ function resolveSource(source: string): SourceInfo {
       return { path: TASK_SOURCES.logicTracker, project: 'logic' };
     case 'nishimaru/TASK_TRACKER':
       return { path: TASK_SOURCES.nishimaruTracker, project: 'nishimaru' };
+    case 'videodl/TASK_TRACKER':
+      return { path: TASK_SOURCES.videodlTracker, project: 'videodl' };
     case 'cxo/TASK_TRACKER':
       return { path: TASK_SOURCES.cxoTracker, project: 'cxo' };
     default:

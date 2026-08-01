@@ -7,6 +7,7 @@ export type ProjectName =
   | 'en-chakai'
   | 'nishimaru'
   | 'ai-pmo'
+  | 'videodl'
   | 'cxo'
   | 'private'
   | 'other';

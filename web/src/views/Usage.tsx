@@ -194,6 +194,7 @@ const PROJECT_ACCENTS: Record<string, string> = {
   'en-chakai': 'var(--mc-proj-en-chakai)',
   nishimaru: 'var(--mc-proj-nishimaru)',
   'ai-pmo': 'var(--mc-proj-ai-pmo)',
+  videodl: 'var(--mc-proj-videodl)',
   cxo: 'var(--mc-proj-cxo)',
   private: 'var(--mc-proj-private)',
   other: 'var(--mc-proj-other)',

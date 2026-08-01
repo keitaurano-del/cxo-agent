@@ -648,6 +648,7 @@ function findExecutor(taskId: string, agents: AgentSummary[]): TaskExecutor | un
 const TASK_PARSE_PATHS = [
   TASK_SOURCES.logicTracker,
   TASK_SOURCES.nishimaruTracker,
+  TASK_SOURCES.videodlTracker,
   TASK_SOURCES.cxoTracker,
   TASK_SOURCES.kanban,
   TASK_SOURCES.today,
@@ -678,6 +679,9 @@ function parseAllTasks(): Task[] {
   tasks.push(...parseTrackerTable(TASK_SOURCES.logicTracker, 'logic', 'logic/TASK_TRACKER'));
   tasks.push(
     ...parseTrackerTable(TASK_SOURCES.nishimaruTracker, 'nishimaru', 'nishimaru/TASK_TRACKER'),
+  );
+  tasks.push(
+    ...parseTrackerTable(TASK_SOURCES.videodlTracker, 'videodl', 'videodl/TASK_TRACKER'),
   );
   // cxo 自身の台帳もパース対象（ドッグフーディング: 自分の MC-xx を Kanban に出す）。
   tasks.push(...parseTrackerTable(TASK_SOURCES.cxoTracker, 'cxo', 'cxo/TASK_TRACKER'));

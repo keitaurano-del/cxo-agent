@@ -475,6 +475,7 @@ export const TASK_SOURCES = {
   kanban: join(VAULT_DIR, '10-Tasks', 'kanban.md'),
   today: join(VAULT_DIR, '10-Tasks', 'today.md'),
   nishimaruTracker: join(VAULT_DIR, '20-Projects', 'nishimarucho-flyer', 'TASK_TRACKER.md'),
+  videodlTracker: join(PROJECTS_DIR, 'video-dl', 'docs', 'TASK_TRACKER.md'),
   cxoTracker: CXO_TRACKER,
 } as const;
 

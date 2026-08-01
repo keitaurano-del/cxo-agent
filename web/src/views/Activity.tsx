@@ -111,6 +111,7 @@ const PROJECT_ACCENTS: Record<string, string> = {
   'en-chakai': 'var(--mc-proj-en-chakai)',
   nishimaru:   'var(--mc-proj-nishimaru)',
   'ai-pmo':    'var(--mc-proj-ai-pmo)',
+  videodl:     'var(--mc-proj-videodl)',
   cxo:         'var(--mc-proj-cxo)',
   private:     'var(--mc-proj-private)',
   other:       'var(--mc-proj-other)',
@@ -123,6 +124,7 @@ function scopeToProject(scope: string): ProjectName {
   if (s.includes('logic') || s === 'rin') return 'logic';
   if (s.includes('en-chakai') || s.includes('chakai')) return 'en-chakai';
   if (s.includes('nishimaru')) return 'nishimaru';
+  if (s.includes('video-dl') || s.includes('videodl') || s.includes('clipitnow')) return 'videodl';
   if (s.includes('cxo') || s.includes('apollo')) return 'cxo';
   return 'other';
 }
@@ -329,6 +331,11 @@ function BreakdownRow({ name, accent, b, onOpen }: { name: string; accent?: stri
 
 // ─── メインビュー ─────────────────────────────────────────────────────────────
 
+// 自律ループのティックは 2026-06-09 に停止済みで、ログは 6/8〜6/9 のまま凍結している。
+// 古いデータを出し続けて紛らわしいため、ティックのレーン表示とポーリングを無効化する
+// （2026-07-03 Keita 指示）。復活させるときは true に戻すだけでよい（fetch・描画とも復活する）。
+const SHOW_TICKS = false;
+
 export default function Activity() {
   // --- Ticks state ---
   const [ticksData, setTicksData] = useState<TicksData | null>(null);
@@ -369,6 +376,7 @@ export default function Activity() {
   }, []);
 
   useEffect(() => {
+    if (!SHOW_TICKS) return; // ティック停止中はポーリングしない（死んだエンドポイントを叩かない）。
     void loadTicks();
     const id = window.setInterval(() => void loadTicks(), TICKS_REFRESH_MS);
     return () => { window.clearInterval(id); ticksAbortRef.current?.abort(); };
@@ -418,8 +426,8 @@ export default function Activity() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="活動"
-        subtitle="自律ループのティックとトークン消費量"
-        fetchedAt={ticksFetchedAt ?? usageFetchedAt}
+        subtitle={SHOW_TICKS ? '自律ループのティックとトークン消費量' : 'トークン消費量'}
+        fetchedAt={SHOW_TICKS ? (ticksFetchedAt ?? usageFetchedAt) : usageFetchedAt}
         right={
           <span className="text-accent" aria-hidden>
             <ActivityIcon width={18} height={18} />
@@ -428,7 +436,8 @@ export default function Activity() {
       />
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
-        {/* ── ティックセクション ─────────────────────────────── */}
+        {/* ── ティックセクション（自律ループ停止に伴い非表示。SHOW_TICKS で復活可）─── */}
+        {SHOW_TICKS && (
         <section className="mb-8">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-muted">
             <LoopIcon width={14} height={14} />
@@ -459,6 +468,7 @@ export default function Activity() {
               ))}
           </ResourceState>
         </section>
+        )}
 
         {/* ── 消費量セクション ───────────────────────────────── */}
         <section>

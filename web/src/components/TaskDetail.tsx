@@ -62,7 +62,7 @@ function SectionHeading({ children }: { children: string }) {
 // ── 編集（MC-71 edit スライス）─────────────────────────────
 // source が logic/ ・ nishimaru/ ・ cxo/ で始まる台帳のみ Apollo から編集できる。
 // kanban/today/private 等は .md 直接編集を促す（編集ボタンを出さない）。
-const EDITABLE_SOURCE_PREFIXES = ['logic/', 'nishimaru/', 'cxo/'];
+const EDITABLE_SOURCE_PREFIXES = ['logic/', 'nishimaru/', 'cxo/', 'videodl/'];
 
 function isEditableSource(source: string): boolean {
   return EDITABLE_SOURCE_PREFIXES.some((p) => source.startsWith(p));

@@ -7,6 +7,7 @@ export type ProjectName =
   | 'en-chakai'
   | 'nishimaru'
   | 'ai-pmo'
+  | 'videodl'
   | 'cxo'
   | 'private'
   | 'other';
@@ -21,6 +22,7 @@ const PROJECT_LABELS: Record<ProjectName, string> = {
   'en-chakai': 'en-chakai',
   nishimaru: '西丸町(nishimaru)',
   'ai-pmo': 'ai-pmo',
+  videodl: 'ClipItNow',
   cxo: 'cxo',
   private: 'private',
   other: 'other',
@@ -38,6 +40,7 @@ export function projectFromPath(input?: string | null): ProjectName {
   if (!input) return 'other';
   const p = input.toLowerCase();
 
+  if (p.includes('video-dl') || p.includes('videodl')) return 'videodl';
   if (p.includes('en-chakai') || p.includes('sengoku-chakai')) return 'en-chakai';
   if (p.includes('nishimaru')) return 'nishimaru';
   if (p.includes('ai-pmo')) return 'ai-pmo';
@@ -71,6 +74,7 @@ export const ALL_PROJECTS: ProjectName[] = [
   'en-chakai',
   'nishimaru',
   'ai-pmo',
+  'videodl',
   'cxo',
   'private',
   'other',
