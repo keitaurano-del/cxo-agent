@@ -224,7 +224,9 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
           );
           break;
         case 'agent':
-          go('/agents');
+          // /agents は「/」へ後方互換リダイレクトされ検索意図が失われるため、
+          // エージェント一覧の現行面（タスクボードのエージェントタブ）へ寄せる（MC-317 統合後の正）。
+          go('/agents-live');
           break;
         case 'conversation':
           go(`/agents/${encodeURIComponent(r.agentId)}`);
