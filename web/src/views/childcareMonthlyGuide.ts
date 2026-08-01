@@ -5,6 +5,24 @@
 // すべて一般的な目安。医療・制度情報は「目安／要確認」を徹底し、断定しない。
 // 表示は Childcare.tsx の MonthlyGuideSection（現在の月齢を自動で開く）。
 
+/** 各月齢の参考メディア（YouTube 動画・イラスト図解・解説リンク）。実在確認済みの外部リソースのみ。 */
+export interface StageMedia {
+  /** 表示種別。'youtube'=埋め込み再生 / 'illustration'=インライン画像 / 'link'=外部解説リンク。 */
+  kind: 'youtube' | 'illustration' | 'link';
+  /** 見出し（動画/図解/ページのタイトル）。 */
+  title: string;
+  /** YouTube 11文字ID（kind==='youtube'）。youtube-nocookie で埋め込む。 */
+  videoId?: string;
+  /** 画像URL（kind==='illustration'）。ホットリンク可・自由利用可の素材のみ（いらすとや/Wikimedia Commons 等）。 */
+  imageUrl?: string;
+  /** 外部URL（watch/出典/解説ページ）。kind==='link' では必須。 */
+  url?: string;
+  /** 発信元（チャンネル名・機関名・素材元）。 */
+  source?: string;
+  /** 発信元の種別（例: 公的機関 / 病院 / 小児科医監修 / メーカー公式 / フリー素材）。 */
+  sourceType?: string;
+}
+
 export interface MonthlyGuideStage {
   /** 帯ラベル（例: '生後2か月'）。 */
   label: string;
@@ -36,6 +54,8 @@ export interface MonthlyGuideStage {
   goods: string[];
   /** 4 この時期の手続き・行政関連。 */
   admin: string[];
+  /** この時期の参考動画・図解・解説リンク（任意）。実在確認済みのみ。 */
+  media?: StageMedia[];
 }
 
 export const MONTHLY_GUIDE_CAPTION =
@@ -1291,3 +1311,70 @@ export const MONTHLY_GUIDE_STAGES: MonthlyGuideStage[] = [
     ],
   },
 ];
+
+// 月齢別 参考メディア（YouTube 動画・図解・解説リンク）。
+// すべて実在確認済み: 動画IDは YouTube oembed で発信元一致を確認、画像URLは HTTP 200 image/png を確認（2026-07-27）。
+// 発信元は公的機関（厚労省・消費者庁・こども家庭庁）・小児科医監修（日本小児科医会）・メーカー公式・フリー素材（いらすとや）に限定。
+const STAGE_MEDIA: Record<string, StageMedia[]> = {
+  '生後0か月（新生児期）': [
+    { kind: 'youtube', title: '赤ちゃんが泣きやまない〜泣きへの対処と理解のために〜', videoId: 'T09gzgGUOnY', url: 'https://www.youtube.com/watch?v=T09gzgGUOnY', source: '厚生労働省', sourceType: '公的機関' },
+    { kind: 'youtube', title: 'おむつ替えの手順「テープタイプ：基礎編」', videoId: 'hY0QmLqGzBE', url: 'https://www.youtube.com/watch?v=hY0QmLqGzBE', source: 'パンパース（PampersJapan）', sourceType: 'メーカー公式' },
+    { kind: 'youtube', title: '明治ほほえみ らくらくキューブのミルクづくり', videoId: 'Obygygj7pMI', url: 'https://www.youtube.com/watch?v=Obygygj7pMI', source: '株式会社 明治', sourceType: 'メーカー公式' },
+    { kind: 'illustration', title: '赤ちゃんの沐浴', imageUrl: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEivbdAg5a45_kwkb2DbPv1jLGdPWr25b-B2E74BD5sWu9iwZWJPcgpEKK6-jISFxUaclNtqY4XLbiM3eV_4K6T7OQpu7-z5iv68PpHrPyQYFd4YkdUdpeWoyqQ2sk7wip43BAzS7MkAJoQ/s800/akachan_mokuyoku.png', url: 'https://www.irasutoya.com/2014/06/blog-post_4360.html', source: 'いらすとや', sourceType: 'フリー素材' },
+  ],
+  '生後1か月': [
+    { kind: 'youtube', title: 'おむつ替えの手順「パンツタイプ：基礎編」', videoId: '0zhTWJpNFEg', url: 'https://www.youtube.com/watch?v=0zhTWJpNFEg', source: 'パンパース（PampersJapan）', sourceType: 'メーカー公式' },
+    { kind: 'illustration', title: 'おむつ替え', imageUrl: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgGZr2e6wrgqyaPvL7s8VPqvNxRZQoXrQFxu3YVdt4iHaBMP0Oyb4B0oH5_ucQiNz8xQyoSKySrAPRcGcFT0ZV9SPxF3kks0-kWfBI7vlz8omic2I4D1p3NdWiqVae3ifw_hPwIcbDnnC3j/s800/baby_omutsu_haha.png', url: 'https://www.irasutoya.com/2016/08/blog-post_73.html', source: 'いらすとや', sourceType: 'フリー素材' },
+    { kind: 'link', title: '授乳・離乳の支援ガイド（授乳や離乳について）', url: 'https://www.cfa.go.jp/policies/boshihoken/junyuu', source: 'こども家庭庁', sourceType: '公的機関' },
+  ],
+  '生後2か月': [
+    { kind: 'youtube', title: '育ナビ：予防接種をはじめよう', videoId: '4q_z2ZCTZoE', url: 'https://www.youtube.com/watch?v=4q_z2ZCTZoE', source: '日本小児科医会（子育て情報ナビ）', sourceType: '小児科医監修' },
+    { kind: 'illustration', title: '予防接種を受ける赤ちゃん', imageUrl: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjfudxd0PN7iUhn0EusgQbmrlE-DDyUUsB_9lkG-KD8IkgKJnL0rTjggqxIyTCKckxO0c56w5mX3YMq3pig_n4yKWTt534BmzlDXPBKBOLhvTyx4mfbeOC23b_TzV59Dd7uswxbYsVIjIBp/s800/medical_yobou_chuusya_baby.png', url: 'https://www.irasutoya.com/2016/02/blog-post_381.html', source: 'いらすとや', sourceType: 'フリー素材' },
+    { kind: 'link', title: '予防接種スケジュール（0歳）', url: 'https://www.know-vpd.jp/children/', source: 'Know VPD!', sourceType: '小児科医監修' },
+  ],
+  '生後3か月': [
+    { kind: 'youtube', title: '赤ちゃんが泣きやまない〜泣きへの対処と理解のために〜', videoId: 'T09gzgGUOnY', url: 'https://www.youtube.com/watch?v=T09gzgGUOnY', source: '厚生労働省', sourceType: '公的機関' },
+    { kind: 'link', title: 'うつぶせ時間（tummy time）はどう過ごす？', url: 'https://journal.syounika.jp/2020/10/26/tummy_time/', source: '小児科オンラインジャーナル', sourceType: '小児科医監修' },
+  ],
+  '生後4か月': [
+    { kind: 'illustration', title: '寝返りをうつ赤ちゃん', imageUrl: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjs_njaw0WUVQM3u9HleCdNRAO-yAS72sWgNEHWkeaPQu4XmrJqwyHsImfmjF6uXZa2aaveW0HH9I0t1KEahe189EzIjjNzGu6fxRHKysHwti8rmHVCYAoVkc6EnQ6H3V1ghGhAdRhenuTD/s800/baby_negaeri.png', url: 'https://www.irasutoya.com/2016/03/blog-post_289.html', source: 'いらすとや', sourceType: 'フリー素材' },
+    { kind: 'link', title: 'うつぶせ時間（tummy time）はどう過ごす？', url: 'https://journal.syounika.jp/2020/10/26/tummy_time/', source: '小児科オンラインジャーナル', sourceType: '小児科医監修' },
+  ],
+  '生後5か月': [
+    { kind: 'youtube', title: '動画でわかる離乳食のきほん「裏ごしする」', videoId: 'RI6BixA4MHA', url: 'https://www.youtube.com/watch?v=RI6BixA4MHA', source: 'アサヒグループ食品（和光堂）', sourceType: 'メーカー公式' },
+    { kind: 'illustration', title: '離乳食を食べさせる', imageUrl: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEi4QAJdRE-9GOP1_Y_zHL3iDrTn2Cv5NY4Ncz_e2OznFSO-I-jBd6mTZ7kbGyJpb1McZqTi6vgJTRqSYKCj1HtCot0pj-4LXA5jLwGTQkwjuhsuWMCgz1h3-tuXIK8ZF0Ht57oTO5SS52hU/s800/baby_syokujikaijo.png', url: 'https://www.irasutoya.com/2013/08/blog-post_77.html', source: 'いらすとや', sourceType: 'フリー素材' },
+    { kind: 'link', title: '離乳食のすすめ方（ゴックン期ほか）', url: 'https://www.meiji.co.jp/baby/club/category/eat/point/index.html', source: '明治 ほほえみクラブ', sourceType: 'メーカー公式' },
+  ],
+  '生後6か月': [
+    { kind: 'youtube', title: '育ナビ：６カ月から１歳の予防接種', videoId: 'R1DkrfU7hVA', url: 'https://www.youtube.com/watch?v=R1DkrfU7hVA', source: '日本小児科医会（子育て情報ナビ）', sourceType: '小児科医監修' },
+    { kind: 'link', title: '離乳食のすすめ方', url: 'https://www.meiji.co.jp/baby/club/category/eat/point/index.html', source: '明治 ほほえみクラブ', sourceType: 'メーカー公式' },
+  ],
+  '生後7か月': [
+    { kind: 'youtube', title: '動画でわかる離乳食のきほん「裏ごしする」', videoId: 'RI6BixA4MHA', url: 'https://www.youtube.com/watch?v=RI6BixA4MHA', source: 'アサヒグループ食品（和光堂）', sourceType: 'メーカー公式' },
+    { kind: 'link', title: '離乳食のすすめ方（モグモグ期ほか）', url: 'https://www.meiji.co.jp/baby/club/category/eat/point/index.html', source: '明治 ほほえみクラブ', sourceType: 'メーカー公式' },
+  ],
+  '生後8か月': [
+    { kind: 'illustration', title: 'ハイハイ', imageUrl: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjYeYrHOVqXEQOjZbBaptkzdJv-G0rQCflOpsiXmxAmVK9ENRQSwXwnH9fyBGmfgkZtSlOJgkMShyphenhyphene3dNKDtFG-Pz3CGYE4UCMRtDk_IYFRy-hBjc01AicFuDRpJKBEeFR7UI-_j6pzoKo/s800/akachan_haihai.png', url: 'https://www.irasutoya.com/2012/12/blog-post_9815.html', source: 'いらすとや', sourceType: 'フリー素材' },
+    { kind: 'link', title: '離乳食のすすめ方（モグモグ期ほか）', url: 'https://www.meiji.co.jp/baby/club/category/eat/point/index.html', source: '明治 ほほえみクラブ', sourceType: 'メーカー公式' },
+  ],
+  '生後9〜10か月': [
+    { kind: 'youtube', title: '窒息事故から子どもを守る！', videoId: 'PaT8fjCNzQI', url: 'https://www.youtube.com/watch?v=PaT8fjCNzQI', source: '消費者庁', sourceType: '公的機関' },
+    { kind: 'illustration', title: 'つかまり立ち', imageUrl: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjwjwqKzT5g8KhZXuxbaDaHSXs-jzgg2ebtseAG_-J-4Qnwh4MICAb-js7oVSMgowH3lvNuB7ecPKBWuWhNSsnyt9VwnPP44wAhsGuAPZFMUJEVR_stbDmLjZirYMmQxLLLasYdkqOTAahC/s800/babay_tukamaridachi.png', url: 'https://www.irasutoya.com/2014/01/blog-post_7212.html', source: 'いらすとや', sourceType: 'フリー素材' },
+    { kind: 'link', title: '窒息・誤飲事故（こどもの事故防止ハンドブック）', url: 'https://www.cfa.go.jp/policies/child-safety-actions/handbook/content-1', source: 'こども家庭庁', sourceType: '公的機関' },
+  ],
+  '生後11か月': [
+    { kind: 'youtube', title: '育ナビ：赤ちゃんのスキンケア・保湿について', videoId: 'KKKqZInd0w8', url: 'https://www.youtube.com/watch?v=KKKqZInd0w8', source: '日本小児科医会（子育て情報ナビ）', sourceType: '小児科医監修' },
+    { kind: 'youtube', title: '窒息事故から子どもを守る！', videoId: 'PaT8fjCNzQI', url: 'https://www.youtube.com/watch?v=PaT8fjCNzQI', source: '消費者庁', sourceType: '公的機関' },
+  ],
+  '1歳〜（12か月以降）': [
+    { kind: 'youtube', title: '育ナビ：６カ月から１歳の予防接種', videoId: 'R1DkrfU7hVA', url: 'https://www.youtube.com/watch?v=R1DkrfU7hVA', source: '日本小児科医会（子育て情報ナビ）', sourceType: '小児科医監修' },
+    { kind: 'youtube', title: '育ナビ：スマホ・テレビとの付き合い方', videoId: 'qKGpeQmmioA', url: 'https://www.youtube.com/watch?v=qKGpeQmmioA', source: '日本小児科医会（子育て情報ナビ）', sourceType: '小児科医監修' },
+    { kind: 'illustration', title: '歩き始めた赤ちゃん', imageUrl: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEj5Z_kKKgkrnOMCuIs6BEHG-JaEJ97GqxcPZyjsrC0Ieiw_Kfx8Ws_DR2j6PGg-4Yvh7-l43S-djZP-AHuSmMdJGUqjWmt0IXVdxg2X7I8IAVH2gSL99Mo2CqTBuFB6iz8vlRJXx3gbC5U/s800/baby_aruku.png', url: 'https://www.irasutoya.com/2015/10/blog-post_66.html', source: 'いらすとや', sourceType: 'フリー素材' },
+  ],
+};
+
+// 定義済みステージに参考メディアを結び付ける（本体の巨大配列は無改変のまま拡張）。
+for (const stage of MONTHLY_GUIDE_STAGES) {
+  const m = STAGE_MEDIA[stage.label];
+  if (m) stage.media = m;
+}

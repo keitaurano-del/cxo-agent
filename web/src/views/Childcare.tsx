@@ -68,7 +68,7 @@ import {
   MONTHLY_GUIDE_CAPTION,
   MONTHLY_GUIDE_SOURCE,
 } from './childcareMonthlyGuide';
-import type { MonthlyGuideStage } from './childcareMonthlyGuide';
+import type { MonthlyGuideStage, StageMedia } from './childcareMonthlyGuide';
 
 // ─── 締切の緊急度 → 表示色／ラベル ───────────────────────────
 // 超過: blocked（オレンジ・警告）。本日〜7日内: review（強調）。それ以降: 通常。
@@ -306,6 +306,72 @@ function GuideBlock({ icon, title, items }: { icon: string; title: string; items
   );
 }
 
+// 月齢ステージの参考メディア（YouTube 埋め込み・イラスト図解・外部解説リンク）。
+// 動画は youtube-nocookie 埋め込み。画像は自由利用素材のみ。すべて実在確認済みデータ（childcareMonthlyGuide.ts）。
+function StageMediaBlock({ media }: { media: StageMedia[] }) {
+  return (
+    <div>
+      <p className="text-xs font-bold text-text">
+        <span aria-hidden className="mr-1">🎬</span>
+        この時期の参考動画・図解
+      </p>
+      <div className="mt-1.5 flex flex-col gap-2.5">
+        {media.map((m, i) => (
+          <div key={i} className="rounded-md border border-border bg-bg px-2.5 py-2">
+            {m.kind === 'youtube' && m.videoId ? (
+              <div className="overflow-hidden rounded border border-border bg-surface-2">
+                <iframe
+                  className="aspect-video w-full"
+                  src={`https://www.youtube-nocookie.com/embed/${m.videoId}`}
+                  title={m.title}
+                  loading="lazy"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              </div>
+            ) : m.kind === 'illustration' && m.imageUrl ? (
+              <a href={m.url ?? m.imageUrl} target="_blank" rel="noopener noreferrer" className="block">
+                <img
+                  src={m.imageUrl}
+                  alt={m.title}
+                  loading="lazy"
+                  className="mx-auto max-h-40 w-auto object-contain"
+                />
+              </a>
+            ) : (
+              m.url && (
+                <a
+                  href={m.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-full items-center justify-between gap-1.5 text-xs font-bold text-accent hover:underline"
+                >
+                  <span>{m.title}</span>
+                  <span aria-hidden className="shrink-0">↗</span>
+                </a>
+              )
+            )}
+            {/* 動画・図解にはタイトルと出典のキャプションを添える。 */}
+            {m.kind !== 'link' && (
+              <p className="mt-1.5 text-[11px] leading-snug text-text-muted">
+                {m.title}
+                {m.source && <span className="text-text-faint">（{m.source}）</span>}
+              </p>
+            )}
+            {m.kind === 'link' && m.source && (
+              <p className="mt-0.5 text-[11px] text-text-faint">{m.source}</p>
+            )}
+          </div>
+        ))}
+      </div>
+      <p className="mt-1.5 text-[10px] leading-snug text-text-faint">
+        外部サイトの動画・図解へのリンクです。内容は各発信元に帰属します。
+      </p>
+    </div>
+  );
+}
+
 function MonthlyGuideStageCard({
   stage,
   active,
@@ -374,6 +440,7 @@ function MonthlyGuideStageCard({
           <GuideBlock icon="🏃" title="した方がよい練習" items={stage.practice} />
           <GuideBlock icon="🧸" title="準備しておくグッズ" items={stage.goods} />
           <GuideBlock icon="🏛️" title="手続き・行政" items={stage.admin} />
+          {stage.media && stage.media.length > 0 && <StageMediaBlock media={stage.media} />}
         </div>
       )}
     </li>
