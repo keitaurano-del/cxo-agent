@@ -99,6 +99,7 @@ import {
 import { startWatch } from './watch.js';
 import { chatRouter, agentMessageHandler, autonomousTickHandler } from './chatRouter.js';
 import { navOrderRouter } from './navOrderRouter.js';
+import { blockersRouter } from './blockersRouter.js';
 import { babyDiaryRouter } from './babyDiaryRouter.js';
 import { childcareChatRouter } from './childcareChatRouter.js';
 import { chajiChatRouter } from './chajiChatRouter.js';
@@ -1433,6 +1434,11 @@ app.use('/api/chat', chatRouter(broadcast));
 // 保存先 data/nav-order.json（.gitignore 済み）。auth ミドルウェア配下＝Cookie 必須。
 // default 項目集合とのマージ（新項目末尾追加・削除項目ドロップ）はフロント側で行う。
 app.use('/api/nav-order', navOrderRouter());
+
+// ─── ブロッカーレジストリ（MC-353 P2）─────────────────────────────
+// board-audit（日次21:30）が生成する data/blockers.json を読み取り専用で配信。
+// タスクボードの停滞バッジと「今日の2分」カードのデータ源。書込APIなし（正本は日次再生成）。
+app.use('/api/blockers', blockersRouter());
 
 // ─── 成長日記（MC-233 Phase1）──────────────────────────────────
 // 子の成長記録を日付単位（1日1エントリ）で残し、写真/動画を添付するビュー。

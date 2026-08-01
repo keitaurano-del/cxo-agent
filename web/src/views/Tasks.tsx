@@ -21,7 +21,101 @@ import { ChevronRightIcon, NoteIcon, EyeIcon, LoopIcon } from '../components/ico
 // 完了/キャンセル列（遅延読込対象）。これらは既定では読み込まない。
 const CLOSED_COLUMNS: ReadonlySet<TaskStatus> = new Set<TaskStatus>(['DONE', 'CANCELLED']);
 
-function TaskCard({ t, onOpen }: { t: Task; onOpen: (t: Task) => void }) {
+// ── ブロッカーレジストリ（MC-353）───────────────────────────────
+// board-audit（日次）が生成する /api/blockers を購読し、
+//   1. 各カードに「⛔ n日停滞・待ち先」バッジ
+//   2. Keita にしかできない操作だけを集めた「今日の2分」カード
+// を出す。レジストリ未生成時は blockers が空になりどちらも出ない（安全側）。
+type Blocker = {
+  taskId: string;
+  type: 'A' | 'B' | 'C' | 'D' | 'E';
+  since: string;
+  days: number;
+  next_action: string;
+  next_actor: 'keita' | 'son' | 'external';
+  note?: string;
+};
+type BlockersResponse = { updatedAt: string | null; blockers: Blocker[] };
+
+const ACTOR_LABEL: Record<Blocker['next_actor'], string> = {
+  keita: 'Keita待ち',
+  son: 'Son対応中',
+  external: '外部待ち',
+};
+
+/** 停滞バッジ。待ち先が Keita のものは赤系で強調（見落とし防止）、それ以外は控えめに。 */
+function BlockerBadge({ b }: { b: Blocker }) {
+  const alert = b.next_actor === 'keita';
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-medium tabular-nums ${
+        alert ? 'bg-blocked/15 text-blocked' : 'bg-surface-3 text-text-muted'
+      }`}
+      title={`次の一手: ${b.next_action}`}
+    >
+      ⛔ {b.days}日停滞・{ACTOR_LABEL[b.next_actor]}
+    </span>
+  );
+}
+
+/** 「今日の2分」カード（MC-353 層2）: Keitaにしかできない操作だけを1画面に集約。
+    各行タップでタスク詳細（次の一手の全文）が開く。決裁が絡むものは承認タブへの導線も出す。 */
+function TodayTwoMinutes({
+  blockers,
+  tasks,
+  onOpen,
+}: {
+  blockers: Blocker[];
+  tasks: Task[];
+  onOpen: (t: Task) => void;
+}) {
+  const items = blockers.filter((b) => b.next_actor === 'keita');
+  if (items.length === 0) return null;
+  return (
+    <div className="mx-4 mb-1 mt-2 rounded-lg border border-blocked/40 bg-surface px-3 py-2 md:mx-6">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[12px] font-bold text-text">
+          ⏱ 今日の2分 <span className="font-normal text-text-muted">— Keitaにしかできない操作 {items.length}件</span>
+        </span>
+        <a
+          href="/approvals"
+          className="shrink-0 rounded-md border border-border bg-surface-2 px-2 py-0.5 text-[11px] text-text-muted transition-colors hover:border-accent/60 hover:text-text"
+        >
+          承認・決裁へ
+        </a>
+      </div>
+      <div className="mt-1.5 flex flex-col gap-1">
+        {items.map((b) => {
+          const task = tasks.find((t) => t.id === b.taskId);
+          return (
+            <button
+              key={b.taskId}
+              type="button"
+              onClick={() => task && onOpen(task)}
+              disabled={!task}
+              className="flex w-full items-baseline gap-2 rounded-md border border-border bg-surface-2 px-2 py-1.5 text-left transition-colors hover:border-accent/60 disabled:cursor-default"
+              title={b.next_action}
+            >
+              <span className="shrink-0 font-mono text-[10px] text-text-faint">{b.taskId}</span>
+              <span className="min-w-0 flex-1 truncate text-[12px] text-text">{b.next_action}</span>
+              <span className="shrink-0 text-[10px] tabular-nums text-blocked">{b.days}日</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TaskCard({
+  t,
+  onOpen,
+  blocker,
+}: {
+  t: Task;
+  onOpen: (t: Task) => void;
+  blocker?: Blocker;
+}) {
   // 台帳に詳細本文（受け入れ条件・サブタスク等）がある場合は、カード上で「詳細あり」を明示する。
   // これで「どのカードを開くと中身が読めるか」が一覧の段階で分かる（MC-83 アフォーダンス強化）。
   const hasDetail = !!(t.detail && t.detail.trim());
@@ -38,7 +132,10 @@ function TaskCard({ t, onOpen }: { t: Task; onOpen: (t: Task) => void }) {
     >
       <div className="flex items-start justify-between gap-2 pr-1">
         <span className="font-mono text-[10px] text-text-faint">{t.id}</span>
-        {t.stalled && <StalledBadge />}
+        <span className="flex items-center gap-1">
+          {blocker && <BlockerBadge b={blocker} />}
+          {t.stalled && !blocker && <StalledBadge />}
+        </span>
       </div>
       <p className="mt-1 text-[13px] leading-snug text-text">{t.title}</p>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -169,6 +266,7 @@ function Column({
   loaded = true,
   loading = false,
   onLoad,
+  blockersByTask,
 }: {
   status: TaskStatus;
   tasks: Task[];
@@ -177,6 +275,7 @@ function Column({
   loaded?: boolean;
   loading?: boolean;
   onLoad?: () => void;
+  blockersByTask?: Map<string, Blocker>;
 }) {
   const meta = taskStatusMeta(status);
   // 未読込の遅延列は件数を確定できないため「—」を表示する（実数は読込後に出す）。
@@ -232,7 +331,12 @@ function Column({
         ) : (
           <>
             {tasks.map((t) => (
-              <TaskCard key={`${t.source}:${t.id}`} t={t} onOpen={onOpen} />
+              <TaskCard
+                key={`${t.source}:${t.id}`}
+                t={t}
+                onOpen={onOpen}
+                blocker={blockersByTask?.get(t.id)}
+              />
             ))}
             {tasks.length === 0 && (
               <p className="px-2 py-4 text-center text-[11px] text-text-faint">なし</p>
@@ -252,6 +356,13 @@ export default function Tasks() {
     '/api/tasks?scope=open',
     tick,
   );
+  // ブロッカーレジストリ（MC-353）。board-audit 日次生成のため tick 追随で十分軽い。
+  const { data: blockersData } = useLiveResource<BlockersResponse>('/api/blockers', tick);
+  const blockersByTask = useMemo(() => {
+    const map = new Map<string, Blocker>();
+    for (const b of blockersData?.blockers ?? []) map.set(b.taskId, b);
+    return map;
+  }, [blockersData]);
   // 完了/キャンセルの遅延読込。ボタン押下で一度だけ /api/tasks?scope=closed を fetch する
   // （ライブ tick での自動再取得はしない＝重さ回避）。
   const [closedTasks, setClosedTasks] = useState<Task[] | null>(null);
@@ -410,6 +521,12 @@ export default function Tasks() {
             />
           </label>
         </div>
+        {/* 今日の2分（MC-353）: Keitaにしかできない操作だけを集約。無い日は出ない。 */}
+        <TodayTwoMinutes
+          blockers={blockersData?.blockers ?? []}
+          tasks={tasks}
+          onOpen={setSelected}
+        />
         {/* いま何をやっているか（MC-317）: ステータス件数＋進行中を担当者別にひと目で。 */}
         <NowOverview byColumn={byColumn} onOpen={setSelected} />
         {/* ボード内検索は最上段（フィルタ行）へ統合した（2026-06-27 Keita）。 */}
@@ -463,6 +580,7 @@ export default function Tasks() {
                 loaded={closedTasks !== null}
                 loading={closedLoading}
                 onLoad={() => void loadClosed()}
+                blockersByTask={blockersByTask}
               />
             </div>
             {/* md 以上: 横並びカンバン */}
@@ -477,6 +595,7 @@ export default function Tasks() {
                   loaded={closedTasks !== null}
                   loading={closedLoading}
                   onLoad={() => void loadClosed()}
+                  blockersByTask={blockersByTask}
                 />
               ))}
             </div>
