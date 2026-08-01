@@ -123,9 +123,45 @@ function RevenueSparkline({ daily, rate }: { daily: RevenueSummary['revenue']['d
 /** 上流未取得セクションの注記。 */
 function Unavailable({ label }: { label: string }) {
   return (
-    <p className="rounded-md border border-border bg-surface-2/40 px-3 py-2 text-[12px] text-text-muted">
-      {label}のデータを取得できませんでした。時間をおいて再読込してください。
+    <p className="rounded-md border border-blocked/30 bg-blocked/5 px-3 py-2 text-[12px] text-blocked">
+      {label}のデータを取得できませんでした（取得失敗）。時間をおいて再読込してください。
     </p>
+  );
+}
+
+/**
+ * データソース状態バッジ行（2026-08-01 Keita「データ取得できてないけど」への対応）。
+ * 「取得OK だが実績ゼロ」と「取得失敗」を見分けられるよう、ソースごとの取得可否と
+ * サマリ生成時刻を明示する。取得OKで数値が 0 の場合、それは API が返した実績ゼロ。
+ */
+function SourceStatusRow({ data }: { data: RevenueSummary }) {
+  const sources: Array<{ name: string; ok: boolean }> = [
+    { name: 'ExoClick', ok: data.revenue.exoclick.available },
+    { name: 'Adsterra', ok: data.revenue.adsterra.available },
+    { name: 'ClipItNow', ok: data.clipitnow.available },
+    { name: 'PDCA', ok: data.pdca.available },
+  ];
+  const fetchedAt = new Date(data.generatedAt);
+  const hhmm = Number.isNaN(fetchedAt.getTime())
+    ? '—'
+    : `${fetchedAt.getHours()}:${String(fetchedAt.getMinutes()).padStart(2, '0')}`;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+      <span className="font-semibold text-text-muted">データソース:</span>
+      {sources.map((s) => (
+        <span
+          key={s.name}
+          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-semibold ${
+            s.ok ? 'border-border bg-surface-2/60 text-text-muted' : 'border-blocked/40 bg-blocked/10 text-blocked'
+          }`}
+          title={s.ok ? `${s.name}: API から正常に取得できています` : `${s.name}: 取得に失敗しています`}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${s.ok ? 'bg-done' : 'bg-blocked'}`} />
+          {s.name} {s.ok ? '取得OK' : '取得失敗'}
+        </span>
+      ))}
+      <span className="text-text-faint">取得 {hhmm}</span>
+    </div>
   );
 }
 
@@ -186,6 +222,8 @@ export default function Revenue() {
           </p>
         ) : data ? (
           <>
+            <SourceStatusRow data={data} />
+
             {/* 広告収益（ExoClick + Adsterra） */}
             <section className="flex flex-col gap-2">
               <h2 className="text-xs font-semibold text-text-muted">広告収益（ExoClick + Adsterra）</h2>
@@ -197,8 +235,10 @@ export default function Revenue() {
                   main={rev?.exoclick.available ? jpy(rev.exoclick.revenue7d, fxRate) : '—'}
                   sub={
                     rev?.exoclick.available
-                      ? `本日 ${jpy(rev.exoclick.todayRevenue, fxRate)} / imp ${rev.exoclick.impressions7d.toLocaleString()}`
-                      : '未取得'
+                      ? rev.exoclick.revenue7d === 0 && rev.exoclick.impressions7d === 0
+                        ? '取得OK・実績ゼロ（imp 0）'
+                        : `本日 ${jpy(rev.exoclick.todayRevenue, fxRate)} / imp ${rev.exoclick.impressions7d.toLocaleString()}`
+                      : '取得失敗'
                   }
                 />
                 <StatCard
@@ -206,8 +246,10 @@ export default function Revenue() {
                   main={rev?.adsterra.available ? jpy(rev.adsterra.revenue7d, fxRate) : '—'}
                   sub={
                     rev?.adsterra.available
-                      ? `本日 ${jpy(rev.adsterra.todayRevenue, fxRate)} / imp ${rev.adsterra.impressions7d.toLocaleString()}`
-                      : '未取得'
+                      ? rev.adsterra.revenue7d === 0 && rev.adsterra.impressions7d === 0
+                        ? '取得OK・実績ゼロ（imp 0）'
+                        : `本日 ${jpy(rev.adsterra.todayRevenue, fxRate)} / imp ${rev.adsterra.impressions7d.toLocaleString()}`
+                      : '取得失敗'
                   }
                 />
               </div>
@@ -266,7 +308,8 @@ export default function Revenue() {
             <p className="text-[10px] leading-relaxed text-text-faint">
               収益は各広告ネットワークの API 実績値（USD）を日本円に換算して表示しています（レート:
               $1 = ¥{fxRate.toFixed(2)}・日次更新）。上流 API は約 5 分キャッシュ、本画面は 60
-              秒キャッシュのため、反映に最大数分の遅延があります。一部ソースが取得できない場合も、取得できた分のみ表示します。
+              秒キャッシュのため、反映に最大数分の遅延があります。取得に失敗したソースは上部バッジと各カードに「取得失敗」と表示します。
+              「取得OK」で数値が 0 の場合は API が返した実績ゼロ（取得失敗ではありません）。
             </p>
           </>
         ) : null}
