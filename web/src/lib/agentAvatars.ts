@@ -31,65 +31,71 @@ export interface AgentAvatar {
  *
  * （masayoshi / task-manager / test-functional は V2 アバター未生成のため未登録）
  */
+// V3（2026-07-19・Keita指示「人ベースのキャラに全部作り直し」）: 人ベースの3Dちびキャラ静止PNGへ総入れ替え。
+// ファイル命名は avatar-<key>-{idle,working}-v3.png（web/public/avatars）。Gemini生成→マゼンタchromaで透過切抜き。
+// robot(汎用サブエージェント)のみ従来のv2 gifを踏襲（無名サブエージェント用の共通ロボ）。
 export const AGENT_AVATARS: Record<string, AgentAvatar> = {
   'dev-logic': {
     name: 'レン',
-    working: '/avatars/avatar-ren-working-v2.gif',
-    idle: '/avatars/avatar-ren-idle-v2.gif',
+    working: '/avatars/avatar-dev-logic-working-v4.png',
+    idle: '/avatars/avatar-dev-logic-idle-v4.png',
   },
   apollo: {
     name: 'アポロ',
-    working: '/avatars/avatar-apollo-working-v2.gif',
-    idle: '/avatars/avatar-apollo-idle-v2.gif',
+    working: '/avatars/avatar-apollo-working-v4.png',
+    idle: '/avatars/avatar-apollo-idle-v4.png',
   },
   // 実際の subagentType は 'dev-apollo'（ソラ🛰）。apollo アバターを割り当てる。
   'dev-apollo': {
     name: 'ソラ',
-    working: '/avatars/avatar-apollo-working-v2.gif',
-    idle: '/avatars/avatar-apollo-idle-v2.gif',
+    working: '/avatars/avatar-apollo-working-v4.png',
+    idle: '/avatars/avatar-apollo-idle-v4.png',
   },
   'content-creator': {
     name: 'ナオ',
-    working: '/avatars/avatar-content-creator-working-v2.gif',
-    idle: '/avatars/avatar-content-creator-idle-v2.gif',
+    working: '/avatars/avatar-content-creator-working-v4.png',
+    idle: '/avatars/avatar-content-creator-idle-v4.png',
   },
   designer: {
     name: 'アオイ',
-    working: '/avatars/avatar-designer-working-v2.gif',
-    idle: '/avatars/avatar-designer-idle-v2.gif',
+    working: '/avatars/avatar-designer-working-v4.png',
+    idle: '/avatars/avatar-designer-idle-v4.png',
   },
   haru: {
     name: 'ハル',
-    working: '/avatars/avatar-haru-working-v2.gif',
-    idle: '/avatars/avatar-haru-idle-v2.gif',
+    working: '/avatars/avatar-haru-working-v4.png',
+    idle: '/avatars/avatar-haru-idle-v4.png',
   },
   'hayashi-rin': {
     name: '林',
-    working: '/avatars/avatar-hayashi-rin-working-v2.gif',
-    idle: '/avatars/avatar-hayashi-rin-idle-v2.gif',
+    working: '/avatars/avatar-hayashi-rin-working-v4.png',
+    idle: '/avatars/avatar-hayashi-rin-idle-v4.png',
   },
-  // 秘書レイヤー（MC-165 拡張）。OpenClaw 秘書 Masayoshi(📋)/Son(🤝) の V2 アバターは
-  // 別担当が生成中。ファイル不在の間は UI 側で絵文字フォールバックする（getAvatarSrc が
-  // <img> の onError で絵文字へ落とす）。命名は v2 系の規約に合わせて固定。
   masayoshi: {
     name: 'Masayoshi',
-    working: '/avatars/avatar-masayoshi-working-v2.gif',
-    idle: '/avatars/avatar-masayoshi-idle-v2.gif',
+    working: '/avatars/avatar-masayoshi-working-v4.png',
+    idle: '/avatars/avatar-masayoshi-idle-v4.png',
   },
   son: {
     name: 'Son',
-    working: '/avatars/avatar-son-working-v2.gif',
-    idle: '/avatars/avatar-son-idle-v2.gif',
+    working: '/avatars/avatar-son-working-v4.png',
+    idle: '/avatars/avatar-son-idle-v4.png',
   },
   'task-manager': {
     name: 'ユイ',
-    working: '/avatars/avatar-task-manager-working-v2.gif',
-    idle: '/avatars/avatar-task-manager-idle-v2.gif',
+    working: '/avatars/avatar-task-manager-working-v4.png',
+    idle: '/avatars/avatar-task-manager-idle-v4.png',
   },
   'test-functional': {
     name: 'ケン',
-    working: '/avatars/avatar-test-functional-working-v2.gif',
-    idle: '/avatars/avatar-test-functional-idle-v2.gif',
+    working: '/avatars/avatar-test-functional-working-v4.png',
+    idle: '/avatars/avatar-test-functional-idle-v4.png',
+  },
+  // PDCA 専任エージェント PD-CA（MC-312）。
+  pdca: {
+    name: 'PD-CA',
+    working: '/avatars/avatar-pdca-working-v4.png',
+    idle: '/avatars/avatar-pdca-idle-v4.png',
   },
   // 汎用サブエージェント（general-purpose / workflow:* / Explore / unmatched:* 等）共通の
   // ロボット型アバター。getAgentAvatar が個別人格に一致しない type をここへ寄せる。
