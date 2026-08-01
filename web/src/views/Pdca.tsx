@@ -311,8 +311,9 @@ function PdcaAgentHero({ status }: { status: AgentStatus }) {
           )}
 
           {!status.live && (
-            <p className="text-[10px] text-text-faint">
-              ※ まだ PDCA ループの状態ファイルが生成されていません。初回サイクル開始後、ここが実データに切り替わります。
+            <p className="rounded-md border border-border bg-surface-2/60 px-2.5 py-1.5 text-[11px] leading-relaxed text-text-muted">
+              まだ PDCA ループの状態ファイルが生成されていません（初回サイクル前のため上の値は既定表示です）。
+              毎晩 20:00 のサイクル開始後、このパネルが実データに切り替わります。
             </p>
           )}
         </div>
@@ -551,7 +552,7 @@ export default function Pdca() {
               <KpiCard
                 label="ExoClick収益"
                 main={exo?.available ? jpyAmount(exo.revenue_7d, fxRate) : '—'}
-                sub={exo?.available ? `本日 ${jpyAmount(exo.today_revenue, fxRate)} / 動画視聴 ${exo.video_views_7d.toLocaleString()}` : '未取得'}
+                sub={exo?.available ? `本日 ${jpyAmount(exo.today_revenue, fxRate)} / 動画視聴 ${exo.video_views_7d.toLocaleString()}` : '未取得（ExoClick未接続か一時エラー・再読込で再試行）'}
               />
             </div>
             {/* ファネル（24h） */}
