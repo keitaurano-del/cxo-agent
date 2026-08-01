@@ -158,11 +158,11 @@ export const AGENT_MOOD_MODEL = env('AGENT_MOOD_MODEL', 'claude-haiku-4-5-202510
 export const AGENT_MOOD_TIMEOUT_MS = envNum('AGENT_MOOD_TIMEOUT_MS', 60_000);
 
 /**
- * mood バッチ生成の最短スロットル（ミリ秒、既定 5 分）。
+ * mood バッチ生成の最短スロットル（ミリ秒、既定 10 分）。
  * 直前の生成からこの時間が経つまでは、活動に変化があっても再生成しない（コスト厳守）。
- * 範囲は memory「mood はバッチ＋キャッシュ＋3〜5分スロットル」に準拠。
+ * 2026-08-01 MC-313: 5分→10分に延長（Haiku 呼び出し半減・気分表示の鮮度は10分で十分）。
  */
-export const AGENT_MOOD_THROTTLE_MS = envNum('AGENT_MOOD_THROTTLE_MS', 5 * 60 * 1000);
+export const AGENT_MOOD_THROTTLE_MS = envNum('AGENT_MOOD_THROTTLE_MS', 10 * 60 * 1000);
 
 /** chat.jsonl に保持する最大メッセージ数（超えたら古いものから削除）。 */
 export const NOTEBOOK_CHAT_MAX_MESSAGES = envNum('NOTEBOOK_CHAT_MAX_MESSAGES', 500);
