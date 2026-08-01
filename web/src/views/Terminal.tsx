@@ -26,6 +26,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   ImageFileIcon,
   CloseIcon,
@@ -177,7 +178,8 @@ interface StagedImage {
 
 type UploadState =
   | { kind: 'idle' }
-  | { kind: 'uploading' }
+  // percent: 0〜100 の進捗（チャンク送信時のみ。一括 multipart は undefined＝不定）。
+  | { kind: 'uploading'; percent?: number }
   | { kind: 'done'; count: number; injected: boolean; paths: string[]; distribution?: Array<{ terminal: number; count: number; paths: string[] }> }
   | { kind: 'error'; message: string };
 
@@ -213,20 +215,143 @@ interface TerminalStatusAllItem {
   agentEmoji: string | null;
 }
 
-/** 出力表示モーダル: 現在タブのターミナルの最近の出力を通常テキストで表示→選択・コピー可（MC-123）。 */
-function OutputModal({ terminal, onClose }: { terminal: number; onClose: () => void }) {
+// ─── 出力モーダル用 ANSI パーサ（ユーザー発言ハイライト）────────────
+//
+// サーバの capture-pane -e で ANSI エスケープ（色）付きの content が返る。
+// OpenClaw TUI はユーザー発言テキストを 256色 foreground「38;5;230」（クリーム色）で
+// 描画するため、この色区間を「ユーザー発言」とみなして白背景でも見やすい色でハイライトする。
+// それ以外の SGR は装飾せず strip し、地の濃色テキスト（#1e2a3a）で表示する。
+// 他ターミナル（Claude Code 等）ではこの色が付かない＝ハイライト無しの通常表示（回帰なし）。
+const USER_FG_256 = 230; // OpenClaw TUI のユーザー発言 foreground（38;5;230）
+
+interface OutputSeg {
+  text: string;
+  user: boolean; // 38;5;230 区間か
+}
+
+/**
+ * ANSI（SGR）付き文字列を、ユーザー発言色区間かどうかで分割する。
+ * - `\x1b[...m` の SGR エスケープのみ解釈。それ以外の文字はそのまま文字として通す。
+ * - foreground が 38;5;230 の間は user=true。
+ * - reset（0 / 空）、default fg（39）、別の 38;5;N 指定、30-37/90-97 の基本色指定で解除。
+ * - 未知コード・不完全なエスケープでも例外を出さず素通しする。
+ */
+/**
+ * SGR 以外のエスケープシーケンスを除去する（2026-07-20 Keita「コピーできない」対応）。
+ * OpenClaw TUI はチャット内 URL を OSC 8 ハイパーリンク（\x1b]8;;URL\x07テキスト\x1b]8;;\x07）で
+ * 描画するため、tmux capture の生出力をそのまま <pre> に流すと ESC が不可視化して
+ * 「]8;;https://...」というゴミ文字列が表示・コピーに混入していた。
+ * - OSC（\x1b]...BEL/ST）: ハイパーリンク・タイトル等を丸ごと除去（リンクの表示テキストは残る）
+ * - SGR 以外の CSI（カーソル移動・消去等）・単独 ESC・迷子の BEL も除去
+ * - SGR（\x1b[...m）だけは残し、後段の parseUserHighlight が色判定に使う
+ */
+function stripNonSgrEscapes(input: string): string {
+  return input
+    .replace(/\x1b\][\s\S]*?(?:\x07|\x1b\\)/g, '') // OSC（BEL/ST 終端）
+    .replace(/\x1b\][^\x07\x1b]*$/, '') // 終端が欠けた OSC（capture 境界切れ）
+    .replace(/\x1b\[[0-9;:?]*[ -/]*[@-ln-~]/g, '') // CSI で final byte が m 以外
+    .replace(/\x1b[()][0-9A-Za-z]/g, '') // 文字集合指定（ESC ( B 等）
+    .replace(/\x1b[^[\]]/g, '') // その他の単独 ESC シーケンス（ESC 7 / ESC = 等）
+    .replace(/\x07/g, ''); // 迷子の BEL
+}
+
+function parseUserHighlight(rawInput: string): OutputSeg[] {
+  const input = stripNonSgrEscapes(rawInput);
+  const segs: OutputSeg[] = [];
+  const re = /\x1b\[([0-9;]*)m/g;
+  let userActive = false;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  const push = (text: string, user: boolean) => {
+    if (!text) return;
+    const prev = segs[segs.length - 1];
+    if (prev && prev.user === user) prev.text += text;
+    else segs.push({ text, user });
+  };
+  while ((m = re.exec(input)) !== null) {
+    // エスケープ手前の素テキストを現在の状態で確定。
+    push(input.slice(last, m.index), userActive);
+    last = re.lastIndex;
+    // SGR パラメータを走査してユーザー色の on/off を判定。
+    const params = m[1].split(';');
+    for (let i = 0; i < params.length; i++) {
+      const code = params[i] === '' ? 0 : parseInt(params[i], 10);
+      if (Number.isNaN(code)) continue;
+      if (code === 0 || code === 39) {
+        userActive = false; // reset / default fg
+      } else if (code === 38) {
+        // 拡張色指定: 38;5;N（256色）or 38;2;R;G;B（truecolor）
+        if (params[i + 1] === '5') {
+          const n = parseInt(params[i + 2], 10);
+          userActive = n === USER_FG_256;
+          i += 2;
+        } else if (params[i + 1] === '2') {
+          userActive = false;
+          i += 4;
+        } else {
+          userActive = false;
+        }
+      } else if ((code >= 30 && code <= 37) || (code >= 90 && code <= 97)) {
+        userActive = false; // 基本 foreground 色で解除
+      }
+      // それ以外（背景色・太字等）はユーザー色状態に影響しない。
+    }
+  }
+  push(input.slice(last), userActive);
+  return segs;
+}
+
+/** 出力表示モーダル: 選択したターミナルの最近の出力を表示→選択・コピー可（MC-123）。
+ *  取り違え防止（2026-07-14）: どのターミナルの出力かをヘッダに明示し、
+ *  モーダル内でターミナル（Main/Aux/Ops/Sub）を切替えて再取得できる。
+ *  初期選択＝呼び出し側から渡された terminal（＝アクティブタブ）。
+ *  ユーザー発言（38;5;230）だけハイライトし、他の ANSI は strip する。 */
+function OutputModal({
+  terminal,
+  labels,
+  onClose,
+}: {
+  terminal: number;
+  labels: Record<number, string>;
+  onClose: () => void;
+}) {
+  // 選択中ターミナル id を state で保持（初期＝渡された terminal＝アクティブタブ）。
+  const [selectedId, setSelectedId] = useState<number>(terminal);
   const [content, setContent] = useState<string>('読み込み中...');
   const preRef = useRef<HTMLPreElement | null>(null);
+  const segments = useMemo(() => parseUserHighlight(content), [content]);
+  const labelFor = useCallback(
+    (id: number) => labels[id] ?? String(id),
+    [labels],
+  );
   useEffect(() => {
-    fetch(`/api/terminal/output?lines=2000&terminal=${terminal}`)
+    // 選択中 id が変わるたびに再取得（取り違え防止のため fetch は selectedId を使う）。
+    setContent('読み込み中...');
+    fetch(`/api/terminal/output?lines=2000&terminal=${selectedId}`)
       .then((r) => r.json())
       .then((b: { ok: boolean; content?: string }) => setContent(b.content ?? '（取得できませんでした）'))
       .catch(() => setContent('（エラー）'));
-  }, [terminal]);
+  }, [selectedId]);
   // 開いたら最新（末尾）が見えるよう、内容ロード後に一番下へスクロールする。
   useEffect(() => {
     if (preRef.current) preRef.current.scrollTop = preRef.current.scrollHeight;
   }, [content]);
+  // 全文コピー（MC-330: モバイルでも履歴を確実にコピーできる経路）。
+  // コピー対象はエスケープ除去後のテキスト（segments）＝画面表示と同一。
+  const [copied, setCopied] = useState(false);
+  const copyAll = useCallback(() => {
+    const text = segments.map((s) => s.text).join('');
+    if (!text) return;
+    void navigator.clipboard?.writeText(text).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      },
+      () => {
+        /* 失敗時は選択コピーで代替（pre は選択可能） */
+      },
+    );
+  }, [segments]);
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col"
@@ -236,25 +361,82 @@ function OutputModal({ terminal, onClose }: { terminal: number; onClose: () => v
         className="flex items-center justify-between border-b px-4 py-3"
         style={{ borderColor: '#d0d8e4', background: '#f4f6f9' }}
       >
-        <span className="text-sm font-semibold" style={{ color: '#1e2a3a' }}>出力（選択してコピー）</span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="閉じる"
-          style={{ touchAction: 'manipulation', color: '#1e2a3a', background: '#edf0f5', border: '1px solid #b0bcce' }}
-          className="flex h-11 min-w-11 items-center gap-1.5 rounded-md px-3 text-sm font-medium"
-        >
-          <CloseIcon width={22} height={22} className="pointer-events-none" />
-          閉じる
-        </button>
+        <span className="text-sm font-semibold" style={{ color: '#1e2a3a' }}>
+          出力（{labelFor(selectedId)}）
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={copyAll}
+            style={{ touchAction: 'manipulation', color: copied ? '#0b7a3e' : '#1e2a3a', background: '#edf0f5', border: '1px solid #b0bcce' }}
+            className="flex h-11 items-center rounded-md px-3 text-sm font-medium"
+          >
+            {copied ? 'コピーしました' : '全文コピー'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="閉じる"
+            style={{ touchAction: 'manipulation', color: '#1e2a3a', background: '#edf0f5', border: '1px solid #b0bcce' }}
+            className="flex h-11 min-w-11 items-center gap-1.5 rounded-md px-3 text-sm font-medium"
+          >
+            <CloseIcon width={22} height={22} className="pointer-events-none" />
+            閉じる
+          </button>
+        </div>
       </div>
-      {/* 白背景＋濃いダーク文字で常に読みやすく（ライト/ダークモード問わず固定） */}
+      {/* ターミナル選択（取り違え防止）: 押した id の出力を再取得。横スクロール可で小画面でも崩れない。 */}
+      <div
+        className="flex items-center gap-1.5 overflow-x-auto border-b px-4 py-2"
+        style={{ borderColor: '#d0d8e4', background: '#eef1f6' }}
+      >
+        {TERMINAL_TABS.map((t) => {
+          const active = t.id === selectedId;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setSelectedId(t.id)}
+              aria-pressed={active}
+              style={{
+                touchAction: 'manipulation',
+                whiteSpace: 'nowrap',
+                color: active ? '#ffffff' : '#1e2a3a',
+                background: active ? '#0b4ea2' : '#ffffff',
+                border: `1px solid ${active ? '#0b4ea2' : '#b0bcce'}`,
+              }}
+              className="flex h-9 shrink-0 items-center rounded-md px-3 text-xs font-medium"
+            >
+              {labelFor(t.id)}
+            </button>
+          );
+        })}
+      </div>
+      {/* 白背景＋濃いダーク文字で常に読みやすく（ライト/ダークモード問わず固定）。
+          ユーザー発言（38;5;230 区間）だけ青系でハイライト。span なので選択で素テキストがコピーされる。 */}
       <pre
         ref={preRef}
         className="flex-1 overflow-auto whitespace-pre-wrap break-all p-4 text-xs leading-relaxed select-text font-mono"
         style={{ background: '#ffffff', color: '#1e2a3a' }}
       >
-        {content}
+        {segments.map((seg, i) =>
+          seg.user ? (
+            <span
+              key={i}
+              style={{
+                color: '#0b4ea2',
+                background: '#e8f1ff',
+                fontWeight: 600,
+                borderLeft: '3px solid #0b4ea2',
+                paddingLeft: '3px',
+              }}
+            >
+              {seg.text}
+            </span>
+          ) : (
+            <span key={i}>{seg.text}</span>
+          ),
+        )}
       </pre>
       <div className="border-t px-4 py-3" style={{ borderColor: '#d0d8e4', background: '#f4f6f9' }}>
         <button
@@ -342,8 +524,21 @@ export default function Terminal() {
   }, [state.kind]);
 
   // ── アクティブタブ（MC-119）─────────────────────────────────
-  // 表示中のターミナル番号。localStorage に保持して再訪時に復元する。
-  const [activeId, setActiveId] = useState<number>(() => {
+  // 送信先ターミナルの唯一の正（source of truth）は URL の :id にする。
+  //   モバイルで「表示中の端末と別の端末へ誤送信」する不具合の根治。
+  //   activeId は localStorage 由来のデバイス別 state だと表示中 iframe とズレうるため、
+  //   URL パラメータ（/terminal-view/:id）を正として一本化する。
+  //   localStorage は「素の /terminal-view / /terminal-standalone に来た時の復元用」として残す。
+  const navigate = useNavigate();
+  const { id: urlIdParam } = useParams<{ id: string }>();
+  // URL の :id が有効な（実在する）ターミナル id なら数値化して返す。無ければ null。
+  const urlId = useMemo(() => {
+    const n = urlIdParam ? parseInt(urlIdParam, 10) : NaN;
+    return TERMINAL_TABS.some((t) => t.id === n) ? n : null;
+  }, [urlIdParam]);
+
+  // localStorage → 既定 1 で解決したフォールバック id。URL に :id が無い時に使う。
+  const fallbackId = useMemo(() => {
     try {
       const raw = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
       const n = raw ? parseInt(raw, 10) : NaN;
@@ -352,15 +547,48 @@ export default function Terminal() {
       // localStorage 不可（プライベートモード等）でも既定は 1。
     }
     return 1;
-  });
-  const switchTab = useCallback((id: number) => {
-    setActiveId(id);
-    try {
-      localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, String(id));
-    } catch {
-      // 保持できなくても切替自体は機能させる。
-    }
   }, []);
+
+  // 表示中のターミナル番号。初期値は URL 優先、無ければフォールバック。
+  const [activeId, setActiveId] = useState<number>(() => urlId ?? fallbackId);
+
+  const switchTab = useCallback(
+    (id: number) => {
+      setActiveId(id);
+      try {
+        localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, String(id));
+      } catch {
+        // 保持できなくても切替自体は機能させる。
+      }
+      // URL を送信先に追従させる（戻る/進むで辿れるよう push）。
+      // /terminal-view 系のときだけ URL を書き換える（standalone 等は現状パス維持）。
+      if (window.location.pathname.startsWith('/terminal-view')) {
+        navigate('/terminal-view/' + id);
+      }
+    },
+    [navigate],
+  );
+
+  // URL の :id を activeId のソース・オブ・トゥルースにする。
+  //   - 有効な :id があれば activeId をそれに追従（戻る/進む含む）。
+  //   - /terminal-view 配下で :id が無ければ localStorage→既定で解決し URL を正規化（replace）。
+  //   - /terminal-standalone 等 :id を持たないルートでは URL 書き換えをせず従来動作。
+  useEffect(() => {
+    if (urlId !== null) {
+      setActiveId((prev) => (prev === urlId ? prev : urlId));
+      try {
+        localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, String(urlId));
+      } catch {
+        // 保持失敗は無視。
+      }
+      return;
+    }
+    // :id 無し。/terminal-view（末尾 id 無し）に来た時だけ URL を正規化する。
+    if (window.location.pathname === '/terminal-view' || window.location.pathname === '/terminal-view/') {
+      navigate('/terminal-view/' + fallbackId, { replace: true });
+    }
+  }, [urlId, fallbackId, navigate]);
+
   const activeTab = TERMINAL_TABS.find((t) => t.id === activeId) ?? TERMINAL_TABS[0];
 
   // ── デスクトップ幅判定（MC-156）─────────────────────────────
@@ -419,7 +647,20 @@ export default function Terminal() {
         const arr = JSON.parse(raw) as unknown;
         if (Array.isArray(arr)) {
           // 各要素が実在 id ならそれを、そうでなければ既定で埋める。
-          return def.map((d, i) => (TERMINAL_TABS.some((t) => t.id === arr[i]) ? (arr[i] as number) : d));
+          const mapped = def.map((d, i) => (TERMINAL_TABS.some((t) => t.id === arr[i]) ? (arr[i] as number) : d));
+          // 重複を修復（2026-07-20）: 同じ端末が複数スロットに入っていると、描画側は
+          // 最初の一致スロットにしか映さず残りが「消えたペイン」になる。後勝ちの重複を
+          // 未使用の既定 id で置き換えて、常に全スロットが埋まる状態へ正規化する。
+          const seen = new Set<number>();
+          return mapped.map((id, i) => {
+            if (!seen.has(id)) {
+              seen.add(id);
+              return id;
+            }
+            const fallback = def.find((d) => !seen.has(d)) ?? def[i];
+            seen.add(fallback);
+            return fallback;
+          });
         }
       }
     } catch {
@@ -452,6 +693,17 @@ export default function Terminal() {
     [paneAssign],
   );
 
+  // 何かの端末が実際に映るスロット集合（描画は「端末→最初の一致スロット」方式）。
+  // ここに入らないスロットは空白になるため、後段でプレースホルダを出す（2026-07-20）。
+  const occupiedSlots = useMemo(() => {
+    const set = new Set<number>();
+    for (const t of TERMINAL_TABS) {
+      const i = rects.findIndex((r) => slotTerminal(r.slot) === t.id);
+      if (i >= 0) set.add(rects[i].slot);
+    }
+    return set;
+  }, [rects, slotTerminal]);
+
   // レイアウトを切り替える。
   const changeLayout = useCallback((id: LayoutId) => {
     setLayoutId(id);
@@ -480,9 +732,14 @@ export default function Terminal() {
   );
 
   // 指定スロットの割当ターミナルを変更する。
+  // 選んだ端末が既に別スロットに映っている場合はスワップ（2026-07-20）:
+  // 重複割当を許すと描画側（各端末は最初の一致スロットのみに mount）で
+  // 相手側ペインが空白になり「分割したのに枚数が足りない」見え方になるため。
   const changePaneAssign = useCallback((slot: number, terminalId: number) => {
     setPaneAssign((prev) => {
       const next = [...prev];
+      const other = next.findIndex((id, i) => i !== slot && id === terminalId);
+      if (other >= 0) next[other] = next[slot];
       next[slot] = terminalId;
       try {
         localStorage.setItem(PANE_ASSIGN_STORAGE_KEY, JSON.stringify(next));
@@ -495,12 +752,19 @@ export default function Terminal() {
   // MC-123: 補助機能（画像添付・出力・キーバー）は全ターミナルで有効。各操作は activeId を対象にする。
   // MC-156: 分割表示中はフォーカス中スロットの割当ターミナルを activeId に同期する。
   //   送信系ロジックは従来どおり activeIdRef を参照するので、ここで同期すれば壊れない。
+  //   URL=送信先の不変条件を保つため、/terminal-view 配下では URL も追従させる。
   useEffect(() => {
     if (isSplit) {
       const target = slotTerminal(Math.min(focusedPane, paneCount - 1));
       setActiveId((prev) => (prev === target ? prev : target));
+      if (
+        urlId !== target &&
+        window.location.pathname.startsWith('/terminal-view')
+      ) {
+        navigate('/terminal-view/' + target, { replace: true });
+      }
     }
-  }, [isSplit, focusedPane, paneCount, slotTerminal]);
+  }, [isSplit, focusedPane, paneCount, slotTerminal, urlId, navigate]);
 
   // 最新の activeId をコールバック内で参照するための ref（オートリピート等のクロージャ向け）。
   const activeIdRef = useRef(activeId);
@@ -834,13 +1098,141 @@ export default function Terminal() {
     });
   }, []);
 
-  // ステージング中の全画像を /api/terminal/upload へ一括送信する（tmux main = ターミナル1 に注入）。
+  // 1ファイルを 20MB チャンクに分割して /api/terminal/upload-chunk へ順次送信する。
+  // cloudflared 無料トンネルの ~100MB/req・タイムアウト制限を回避し、大容量でも通す。
+  // 最終チャンクの 201 レスポンス（結合＋tmux注入の結果）を返す。
+  const uploadOneFileChunked = useCallback(
+    async (
+      file: File,
+      terminalId: number,
+      sendEnter: boolean,
+      // 送信済みチャンク数 / 全チャンク数を 0〜1 で通知する（進捗バー用、任意）。
+      onProgress?: (done: number, total: number) => void,
+    ): Promise<{ paths?: string[]; injected?: boolean }> => {
+      const CHUNK = 12 * 1024 * 1024; // 12MB（モバイル/エッジで確実に通るサイズ）
+      const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const total = Math.max(1, Math.ceil(file.size / CHUNK));
+      let lastJson: { paths?: string[]; injected?: boolean } = {};
+      for (let i = 0; i < total; i++) {
+        const start = i * CHUNK;
+        const blob = file.slice(start, Math.min(start + CHUNK, file.size));
+        const isLast = i === total - 1;
+        // 各チャンクはモバイル回線の瞬断に備えて最大3回までリトライする。
+        let attempt = 0;
+        for (;;) {
+          attempt += 1;
+          const fd = new FormData();
+          fd.append('chunk', blob, `chunk-${i}`);
+          fd.append('sessionId', sessionId);
+          fd.append('filename', file.name);
+          fd.append('mimetype', file.type || '');
+          fd.append('chunkIndex', String(i));
+          fd.append('totalChunks', String(total));
+          fd.append('terminal', String(terminalId));
+          if (sendEnter && isLast) fd.append('sendEnter', '1');
+          try {
+            const res = await fetch('/api/terminal/upload-chunk', { method: 'POST', body: fd });
+            if ((isLast && res.status !== 201) || (!isLast && res.status !== 200)) {
+              // 4xx（型不正・サイズ等）はリトライ不可なので即中断。5xx/その他はリトライ。
+              let reason = `送信に失敗しました（HTTP ${res.status}、チャンク ${i + 1}/${total}）。`;
+              try {
+                const b = (await res.json()) as { error?: string };
+                if (b?.error) reason = b.error;
+              } catch {
+                /* JSON でなければ既定メッセージ */
+              }
+              if (res.status >= 400 && res.status < 500) throw new Error(reason);
+              if (attempt >= 3) throw new Error(reason);
+              await new Promise((r) => setTimeout(r, 800 * attempt));
+              continue;
+            }
+            if (isLast) {
+              lastJson = (await res.json().catch(() => ({}))) as { paths?: string[]; injected?: boolean };
+            }
+            onProgress?.(i + 1, total); // このチャンク成功 → 進捗通知
+            break; // このチャンク成功
+          } catch (err) {
+            // ネットワーク断（Failed to fetch 等）。3回まで再試行。
+            if (attempt >= 3) {
+              throw err instanceof Error ? err : new Error(`チャンク ${i + 1}/${total} の送信に失敗しました。`);
+            }
+            await new Promise((r) => setTimeout(r, 800 * attempt));
+          }
+        }
+      }
+      return lastJson;
+    },
+    [],
+  );
+
+  // ステージング中の全ファイルを送信し、対象ターミナルの入力欄へ絶対パスを注入する。
+  // 通常は /api/terminal/upload へ一括 POST。ただし大容量（合計 or 単体が安全圏超）は
+  // ファイルごとにチャンク送信へ切り替え、cloudflared の ~100MB/req 制限を回避する。
   // sendEnterAfter=true のとき: Enter をブロックした後に呼ぶ。サーバーがパス注入直後に Enter を送る。
   const sendStaged = useCallback(async (sendEnterAfter = false) => {
     const items = stagedRef.current;
     if (items.length === 0) return;
+
+    // 事前読み取りチェック: Android の「最近のファイル」/Google ドライブ等のクラウド
+    // ピッカーから選んだファイルは content:// URI 経由で実体が読めず、fetch の body 化で
+    // ネットワーク層 TypeError（"Failed to fetch"）になることがある。先頭1バイトだけ読んで
+    // 読めなければ、原因のわからない送信失敗ではなく具体的な対処を提示する。
+    for (const s of items) {
+      try {
+        await s.file.slice(0, 1).arrayBuffer();
+      } catch {
+        setState({
+          kind: 'error',
+          message:
+            `「${s.file.name}」を読み取れませんでした。Google ドライブや「最近のファイル」から直接選ぶと` +
+            `送信できないことがあります。一度この端末にダウンロード（保存）してから、` +
+            `「ファイル」アプリの本体ストレージ／ダウンロード内のファイルを選び直してください。`,
+        });
+        return;
+      }
+    }
+
     setState({ kind: 'uploading' });
+
+    // しきい値は低めに。Cloudflare エッジの上限・モバイル回線の瞬断に当たりやすいので、
+    // 少しでも大きい（合計 or 単体が 15MB 超）ものは分割＋リトライ送信に回す。
+    const SAFE = 15 * 1024 * 1024;
+    const totalBytes = items.reduce((a, s) => a + s.file.size, 0);
+    const needChunk = items.some((s) => s.file.size > SAFE) || totalBytes > SAFE;
+
     try {
+      if (needChunk) {
+        // 大容量: ファイルごとにチャンク送信（順次）。最後のファイルの最終チャンクのみ Enter を送る。
+        const allPaths: string[] = [];
+        let allInjected = true;
+        // 全ファイル合計の進捗を出すため、12MB チャンク換算で総チャンク数を先に見積もる。
+        const CHUNK = 12 * 1024 * 1024;
+        const grandTotal = items.reduce((a, s) => a + Math.max(1, Math.ceil(s.file.size / CHUNK)), 0);
+        let doneBefore = 0; // 既に完了したファイル分のチャンク累計。
+        setState({ kind: 'uploading', percent: 0 });
+        for (let fi = 0; fi < items.length; fi++) {
+          const isLastFile = fi === items.length - 1;
+          const r = await uploadOneFileChunked(
+            items[fi].file,
+            activeIdRef.current,
+            sendEnterAfter && isLastFile,
+            (done, total) => {
+              const pct = Math.min(100, Math.round(((doneBefore + done) / grandTotal) * 100));
+              setState({ kind: 'uploading', percent: pct });
+              if (done === total) doneBefore += total;
+            },
+          );
+          if (Array.isArray(r.paths)) allPaths.push(...r.paths);
+          if (r.injected === false) allInjected = false;
+        }
+        setState({ kind: 'done', count: items.length, injected: allInjected, paths: allPaths });
+        setStaged((prev) => {
+          for (const s of prev) if (s.url) URL.revokeObjectURL(s.url);
+          return [];
+        });
+        return;
+      }
+
       const fd = new FormData();
       items.forEach((s) => fd.append('images', s.file, s.file.name));
       // 注入先は現在タブのターミナル（MC-123）。multipart のフィールドで番号を渡す。
@@ -879,12 +1271,20 @@ export default function Terminal() {
         return [];
       });
     } catch (e) {
+      // "Failed to fetch"（ネットワーク層 TypeError）はサーバ到達前に失敗している。
+      // 通信・クラウド由来ファイル・拡張機能ブロック等が原因なので、実用的なヒントを添える。
+      const raw = e instanceof Error ? e.message : String(e);
+      const isNetwork = /failed to fetch|load failed|networkerror/i.test(raw);
       setState({
         kind: 'error',
-        message: e instanceof Error ? `送信に失敗しました。${e.message}` : '送信に失敗しました。',
+        message: isNetwork
+          ? `送信に失敗しました（サーバに届く前にブラウザ側で失敗）。次をお試しください: ` +
+            `①ファイルを一度端末にダウンロードしてから選び直す ②Wi-Fi⇄モバイル回線を切替/省データ・VPNをオフ ` +
+            `③別ブラウザかシークレットタブで開く。詳細: ${raw}`
+          : `送信に失敗しました。${raw}`,
       });
     }
-  }, []);
+  }, [uploadOneFileChunked]);
 
   const handleFiles = (fileList: FileList | null) => {
     if (fileList && fileList.length > 0) addToStaging(Array.from(fileList));
@@ -1142,7 +1542,7 @@ export default function Terminal() {
               {state.kind === 'uploading' ? (
                 <>
                   <Spinner />
-                  送信中…
+                  {typeof state.percent === 'number' ? `送信中… ${state.percent}%` : '送信中…'}
                 </>
               ) : (
                 <>
@@ -1365,6 +1765,48 @@ export default function Terminal() {
           );
         })}
 
+        {/* 空きスロットの保険表示（2026-07-20）: 割当の重複などでどの端末も映らない
+            スロットができた場合、真っ黒な「消えたペイン」にせず、端末セレクタ付きの
+            プレースホルダを出して自力で復旧できるようにする。通常運用（スワップ＋
+            読み込み時の重複修復）では出ない。 */}
+        {isSplit &&
+          rects
+            .filter((r) => !occupiedSlots.has(r.slot))
+            .map((r) => (
+              <div
+                key={`empty-${r.slot}`}
+                className="absolute flex flex-col items-center justify-center gap-2 border border-dashed border-border bg-surface"
+                style={{
+                  left: `${r.left}%`,
+                  top: `${r.top}%`,
+                  width: `${r.width}%`,
+                  height: `${r.height}%`,
+                }}
+              >
+                <span className="px-3 text-center text-xs text-text-muted">
+                  このペインに映すターミナルを選んでください
+                </span>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (!Number.isNaN(v)) changePaneAssign(r.slot, v);
+                  }}
+                  aria-label={`ペイン${r.slot + 1} のターミナル`}
+                  className="h-7 rounded border border-border bg-surface-2 px-2 text-xs text-text"
+                >
+                  <option value="" disabled>
+                    選択…
+                  </option>
+                  {TERMINAL_TABS.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {terminalLabels[opt.id] ?? opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+
         {/* ディバイダ（境界ハンドル）: 分割時のみ。掴みやすい太さの当たり判定を持ち、
             ドラッグで隣り合うペインの幅/高さ比を変える。ダブルクリックで均等化。 */}
         {isSplit &&
@@ -1522,7 +1964,9 @@ export default function Terminal() {
           </button>
         </div>
       )}
-      {showOutput && <OutputModal terminal={activeId} onClose={() => setShowOutput(false)} />}
+      {showOutput && (
+        <OutputModal terminal={activeId} labels={terminalLabels} onClose={() => setShowOutput(false)} />
+      )}
     </div>
   );
 }

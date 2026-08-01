@@ -27,8 +27,18 @@
 //  - 認証は index.ts 側の makeAuthMiddleware 配下に mount することで担保（Cookie 必須）。
 
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, unlinkSync } from 'node:fs';
+import {
+  mkdirSync,
+  unlinkSync,
+  existsSync,
+  rmSync,
+  writeFileSync,
+  statSync,
+  createReadStream,
+  createWriteStream,
+} from 'node:fs';
 import { join, extname } from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import { execFileSync } from 'node:child_process';
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
@@ -264,7 +274,10 @@ function shquote(s: string): string {
  */
 function sendPathsToTmux(t: TerminalDef, paths: string[], sendEnter = false): void {
   const literal = ' ' + paths.join(' ') + ' ';
-  const tmuxArgs = ['send-keys', '-t', t.tmuxSession, '-l', literal];
+  // 完全一致 pane ターゲット。bare 'openclaw' は tmux 前方一致で 'openclaw-son'(Son) に化けるため
+  // ファイルパス注入が別端末へ飛ばないよう `=name:` で固定する（MC-310 と同根）。
+  const paneT = `=${t.tmuxSession}:`;
+  const tmuxArgs = ['send-keys', '-t', paneT, '-l', literal];
   const execOpts = {
     encoding: 'utf-8' as const,
     timeout: TERMINAL_TMUX_TIMEOUT_MS,
@@ -274,7 +287,7 @@ function sendPathsToTmux(t: TerminalDef, paths: string[], sendEnter = false): vo
   if (!t.remote) {
     execFileSync('tmux', tmuxArgs, execOpts);
     if (sendEnter) {
-      execFileSync('tmux', ['send-keys', '-t', t.tmuxSession, 'Enter'], execOpts);
+      execFileSync('tmux', ['send-keys', '-t', paneT, 'Enter'], execOpts);
     }
     return;
   }
@@ -284,7 +297,7 @@ function sendPathsToTmux(t: TerminalDef, paths: string[], sendEnter = false): vo
   const remoteCmd = ['tmux', ...tmuxArgs.map(shquote)].join(' ');
   execFileSync('ssh', [...sshOpts, sshTarget, remoteCmd], execOpts);
   if (sendEnter) {
-    const enterCmd = `tmux send-keys -t ${shquote(t.tmuxSession)} Enter`;
+    const enterCmd = `tmux send-keys -t ${shquote(paneT)} Enter`;
     execFileSync('ssh', [...sshOpts, sshTarget, enterCmd], execOpts);
   }
 }
@@ -447,11 +460,207 @@ async function handleUpload(req: Request, res: Response): Promise<void> {
   });
 }
 
+// ─── チャンクアップロード（大容量対応・cloudflared ~100MB/req 制限の回避）──────
+// 1ファイルを 20MB 程度のチャンクに分割してクライアントから順次 POST し、サーバで結合する。
+// 各リクエストが小さいのでトンネル上限・タイムアウトに当たらず、1GB 級でもアップロードできる。
+// 結合後は単発 upload と同じく対象ターミナルへ絶対パスを send-keys 注入する。
+// deliverableChunkRouter と同じ作法（temp に chunk-N 保存 → 最終チャンクで結合）。
+
+/** チャンク一時保存の親（data/terminal-uploads/.chunks/<sessionId>/chunk-<N>）。 */
+const CHUNK_TEMP_BASE = join(TERMINAL_UPLOADS_DIR, '.chunks');
+const SESSION_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
+function chunkSessionDir(sessionId: string): string {
+  return join(CHUNK_TEMP_BASE, sessionId);
+}
+function chunkPartPath(sessionId: string, index: number): string {
+  return join(chunkSessionDir(sessionId), `chunk-${index}`);
+}
+function cleanupChunkSession(sessionId: string): void {
+  try {
+    const dir = chunkSessionDir(sessionId);
+    if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+  } catch (e) {
+    console.warn('[terminal-upload] chunk cleanup failed for session', sessionId, e);
+  }
+}
+
+/** 全チャンクを順番に結合して最終ファイルへ書き出す。 */
+async function assembleChunks(sessionId: string, totalChunks: number, finalAbsPath: string): Promise<void> {
+  const ws = createWriteStream(finalAbsPath, { flags: 'w' });
+  try {
+    for (let i = 0; i < totalChunks; i++) {
+      const cp = chunkPartPath(sessionId, i);
+      if (!existsSync(cp)) throw new Error(`チャンク ${i} が見つかりません（session: ${sessionId}）`);
+      await pipeline(createReadStream(cp), ws, { end: false });
+    }
+  } finally {
+    ws.end();
+    await new Promise<void>((resolve, reject) => {
+      ws.on('finish', resolve);
+      ws.on('error', reject);
+    });
+  }
+}
+
+/** 対象ターミナルへローカルパス群を注入する（remote は scp 経由）。例外は畳んで injected:false。 */
+function injectToTerminal(
+  t: TerminalDef,
+  localPaths: string[],
+  sendEnter: boolean,
+): { paths: string[]; injected: boolean; error?: string } {
+  let injectPaths = localPaths;
+  try {
+    if (t.remote) injectPaths = scpToRemote(t.remote, localPaths);
+    sendPathsToTmux(t, injectPaths, sendEnter);
+    return { paths: injectPaths, injected: true };
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    console.error(`[terminal-upload] inject to terminal ${t.id} failed:`, error);
+    return { paths: injectPaths, injected: false, error };
+  }
+}
+
+// チャンクは memoryStorage（各 ≤ 25MB なのでメモリ可）。フィールド名は 'chunk'。
+const chunkUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024, files: 1 },
+});
+function runChunkMulter(req: Request, res: Response): Promise<boolean> {
+  return new Promise((resolve) => {
+    chunkUpload.single('chunk')(req, res, (err: unknown) => {
+      if (err) {
+        const msg = err instanceof multer.MulterError
+          ? `チャンクが大きすぎます（最大 25MB）: ${err.message}`
+          : err instanceof Error ? err.message : String(err);
+        res.status(400).json({ error: msg });
+        resolve(false);
+        return;
+      }
+      resolve(true);
+    });
+  });
+}
+
+/**
+ * POST /api/terminal/upload-chunk — 1ファイルを分割アップロード。
+ * フィールド: chunk(Blob) / sessionId / filename / mimetype / chunkIndex / totalChunks / terminal / sendEnter
+ * 中間チャンクは 200、最終チャンクで結合 → MIME 検証 → tmux 注入 → 201。
+ */
+async function handleUploadChunk(req: Request, res: Response): Promise<void> {
+  const ok = await runChunkMulter(req, res);
+  if (!ok) return;
+
+  // 診断ログ（一時）: req.body が空になる事象の切り分け用。
+  console.error(
+    '[terminal-upload-chunk] ct=%s hasBody=%s bodyKeys=%j hasFile=%s fileField=%s',
+    req.headers['content-type'],
+    !!req.body,
+    req.body && typeof req.body === 'object' ? Object.keys(req.body as object) : null,
+    !!req.file,
+    req.file?.fieldname,
+  );
+
+  // req.body が未定義でもクラッシュさせない（空オブジェクトに畳む）。
+  const body = (req.body ?? {}) as {
+    sessionId?: string;
+    filename?: string;
+    mimetype?: string;
+    chunkIndex?: string;
+    totalChunks?: string;
+    terminal?: string;
+    sendEnter?: string;
+  };
+  const sessionId = body.sessionId ?? '';
+  const filename = (body.filename ?? '').trim();
+  const mime = (body.mimetype ?? '').trim();
+
+  if (!SESSION_ID_RE.test(sessionId)) {
+    res.status(400).json({ error: 'sessionId が不正です（英数字・_- のみ、64文字以内）。' });
+    return;
+  }
+  if (!filename) {
+    res.status(400).json({ error: 'filename が必要です。' });
+    return;
+  }
+  const idx = parseInt(body.chunkIndex ?? '', 10);
+  const total = parseInt(body.totalChunks ?? '', 10);
+  if (!Number.isFinite(idx) || idx < 0 || idx > 999) {
+    res.status(400).json({ error: 'chunkIndex が不正です（0〜999）。' });
+    return;
+  }
+  if (!Number.isFinite(total) || total < 1 || total > 1000 || idx >= total) {
+    res.status(400).json({ error: 'totalChunks が不正です。' });
+    return;
+  }
+  // 最初のチャンクで MIME/拡張子を検証し、ダメなら早期に弾く（無駄なアップロードを防ぐ）。
+  if (idx === 0 && !isAllowedMime(mime, filename)) {
+    cleanupChunkSession(sessionId);
+    res.status(400).json({ error: 'unsupported file type: images / text / documents / video / audio are allowed' });
+    return;
+  }
+  const chunkData = req.file;
+  if (!chunkData || !chunkData.buffer || chunkData.buffer.byteLength === 0) {
+    res.status(400).json({ error: 'チャンクデータがありません（フィールド名は "chunk"）。' });
+    return;
+  }
+
+  mkdirSync(chunkSessionDir(sessionId), { recursive: true });
+  try {
+    writeFileSync(chunkPartPath(sessionId, idx), chunkData.buffer);
+  } catch (e) {
+    cleanupChunkSession(sessionId);
+    res.status(500).json({ error: `チャンク保存に失敗しました: ${e instanceof Error ? e.message : String(e)}` });
+    return;
+  }
+
+  // 中間チャンク。
+  if (idx < total - 1) {
+    res.status(200).json({ ok: true, received: idx });
+    return;
+  }
+
+  // 最終チャンク: 結合 → 注入。
+  if (!isAllowedMime(mime, filename)) {
+    cleanupChunkSession(sessionId);
+    res.status(400).json({ error: `unsupported file type: ${mime}` });
+    return;
+  }
+  mkdirSync(TERMINAL_UPLOADS_DIR, { recursive: true });
+  const finalAbs = join(TERMINAL_UPLOADS_DIR, buildFilename(new Date(), filename, mime));
+  try {
+    await assembleChunks(sessionId, total, finalAbs);
+  } catch (e) {
+    cleanupChunkSession(sessionId);
+    res.status(500).json({ error: `チャンク結合に失敗しました: ${e instanceof Error ? e.message : String(e)}` });
+    return;
+  }
+  cleanupChunkSession(sessionId);
+
+  let sizeBytes = 0;
+  try { sizeBytes = statSync(finalAbs).size; } catch { /* stat 失敗は致命的でない */ }
+
+  const t = resolveTerminal(body.terminal);
+  const shouldSendEnter = String(body.sendEnter ?? '0') !== '0';
+  const result = injectToTerminal(t, [finalAbs], shouldSendEnter);
+
+  res.status(201).json({
+    count: 1,
+    paths: result.paths,
+    injected: result.injected,
+    ...(result.error ? { injectError: result.error } : {}),
+    target: t.tmuxSession,
+    sizeBytes,
+  });
+}
+
 // ─── Router 組み立て ─────────────────────────────────────
 
 /** /api/terminal 配下のルータを返す。index.ts で auth ミドルウェア配下に mount する。 */
 export function terminalUploadRouter(): Router {
   const router = Router();
   router.post('/upload', (req, res) => void handleUpload(req, res));
+  // 大容量ファイル向け分割アップロード（cloudflared ~100MB/req 回避）。
+  router.post('/upload-chunk', (req, res) => void handleUploadChunk(req, res));
   return router;
 }
