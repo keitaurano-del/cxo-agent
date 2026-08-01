@@ -12,6 +12,7 @@ import { type Request, type Response } from 'express';
 import { AGENT_TOKEN } from './config.js';
 import {
   createDecision,
+  getDecision,
   updateDecision,
   type DecisionOption,
 } from './lib/decisionRequestStore.js';
@@ -120,6 +121,32 @@ export function decisionRequestHandler(
       ? body.requesterAgent.trim()
       : (body.from as string).trim();
 
+  // expiresAt / fallbackOptionId（MC-353 P3・どちらも任意）。
+  // expiresAt は ISO8601 かつ未来時刻のみ受理。fallbackOptionId は options 内の id のみ受理。
+  let expiresAt: string | undefined;
+  if (body.expiresAt !== undefined) {
+    const raw = typeof body.expiresAt === 'string' ? body.expiresAt.trim() : '';
+    const ts = Date.parse(raw);
+    if (!raw || Number.isNaN(ts)) {
+      res.status(400).json({ error: 'expiresAt must be an ISO8601 datetime string' });
+      return;
+    }
+    if (ts <= Date.now()) {
+      res.status(400).json({ error: 'expiresAt must be in the future' });
+      return;
+    }
+    expiresAt = new Date(ts).toISOString();
+  }
+  let fallbackOptionId: string | undefined;
+  if (body.fallbackOptionId !== undefined) {
+    const raw = typeof body.fallbackOptionId === 'string' ? body.fallbackOptionId.trim() : '';
+    if (!raw || !options.some((o) => o.id === raw)) {
+      res.status(400).json({ error: 'fallbackOptionId must match an option id' });
+      return;
+    }
+    fallbackOptionId = raw;
+  }
+
   try {
     const rec = createDecision({
       from: (body.from as string).trim(),
@@ -128,6 +155,8 @@ export function decisionRequestHandler(
       detail: (body.detail as string).trim(),
       options,
       requesterAgent,
+      ...(expiresAt ? { expiresAt } : {}),
+      ...(fallbackOptionId ? { fallbackOptionId } : {}),
     });
 
     // 決裁オートモード（MC-203）: ON かつ mode='default' のとき既定 option を自動選択する。
@@ -161,4 +190,80 @@ export function decisionRequestHandler(
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
   }
+}
+
+/**
+ * POST /api/decisions/:id/withdraw（認証外・AGENT_TOKEN・MC-353 P3）
+ * body: { token?, by, reason? }
+ * エージェントによる決裁の取り下げ。状況変化で不要になった pending 決裁を掃除する
+ * （例: GSC再同意の決裁が実対応済みで pending のまま残る＝ノイズ化、の解消）。
+ * pending のみ取り下げ可。decided/withdrawn は 409。
+ */
+export function decisionWithdrawHandler(
+  req: Request,
+  res: Response,
+  broadcast?: Broadcast,
+): void {
+  const bodyToken = (req.body as Record<string, unknown>)?.token as string | undefined;
+  const bearerToken = (() => {
+    const h = req.headers.authorization;
+    if (!h) return undefined;
+    const m = h.match(/^Bearer\s+(.+)$/i);
+    return m ? m[1].trim() : undefined;
+  })();
+  const token = bodyToken ?? bearerToken;
+
+  if (!AGENT_TOKEN) {
+    res.status(503).json({ error: 'decision requests not configured (AGENT_TOKEN not set)' });
+    return;
+  }
+  if (!token || token !== AGENT_TOKEN) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+
+  const id = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+  if (!id) {
+    res.status(400).json({ error: 'id is required' });
+    return;
+  }
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const by = typeof body.by === 'string' ? body.by.trim() : '';
+  if (!by) {
+    res.status(400).json({ error: 'by (agent id) is required' });
+    return;
+  }
+  let reason: string | undefined;
+  if (body.reason !== undefined) {
+    if (typeof body.reason !== 'string' || body.reason.length > MAX_DETAIL_LEN) {
+      res.status(400).json({ error: `reason must be a string (max ${MAX_DETAIL_LEN})` });
+      return;
+    }
+    const r = body.reason.trim();
+    if (r) reason = r;
+  }
+
+  const existing = getDecision(id);
+  if (!existing) {
+    res.status(404).json({ error: `decision request not found: ${id}` });
+    return;
+  }
+  if (existing.status !== 'pending') {
+    res.status(409).json({ error: `この決裁は ${existing.status} のため取り下げできません。` });
+    return;
+  }
+
+  const updated = updateDecision(id, {
+    status: 'withdrawn',
+    withdrawnAt: new Date().toISOString(),
+    withdrawnBy: by,
+    ...(reason ? { withdrawReason: reason } : {}),
+  });
+  if (!updated) {
+    res.status(404).json({ error: `decision request not found: ${id}` });
+    return;
+  }
+  console.log(`[decision-withdraw] ${id} by=${by}${reason ? ` reason=${reason}` : ''}`);
+  broadcast?.('update', { types: ['decisions'], ts: Date.now() });
+  res.json(updated);
 }

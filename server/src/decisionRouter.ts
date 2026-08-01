@@ -19,6 +19,7 @@ import {
   updateDecision,
   listPendingDecisions,
   listDecidedDecisions,
+  sweepExpiredDecisions,
 } from './lib/decisionRequestStore.js';
 import {
   readDecisionAutoMode,
@@ -32,9 +33,34 @@ type Broadcast = (event: string, data: unknown) => void;
 const MAX_COMMENT_LEN = 1000;
 const HISTORY_LIMIT = 50;
 
-/** GET /api/decisions — pending な決裁リクエスト一覧を返す。 */
-function handleList(_req: Request, res: Response): void {
+/**
+ * 期限超過フォールバックの適用（MC-353 P3）。
+ * pending 一覧の読み出し時に lazy sweep する（cron 依存なし・読み出しは軽い JSONL 走査）。
+ * 適用があれば要求元へ notify 配送し SSE を流す。Keita へは履歴（autoDecided＋comment）と
+ * 夜のまとめ報告（board-audit）で必ず伝わる。
+ */
+function applyExpiredFallbacks(broadcast?: Broadcast): void {
   try {
+    for (const applied of sweepExpiredDecisions()) {
+      console.log(
+        `[decision-expire] fallback applied ${applied.id} → option=${applied.decidedOptionId} (${applied.decidedOptionLabel})`,
+      );
+      notifyAgent(
+        applied.requesterAgent,
+        `${applied.title} 決裁(期限超過フォールバック): ${applied.decidedOptionLabel}`,
+      );
+      broadcast?.('update', { types: ['decisions'], ts: Date.now() });
+    }
+  } catch (e) {
+    // sweep は補助機能。失敗しても一覧表示は継続する。
+    console.error('[decision-expire] sweep failed:', e);
+  }
+}
+
+/** GET /api/decisions — pending な決裁リクエスト一覧を返す。 */
+function handleList(_req: Request, res: Response, broadcast?: Broadcast): void {
+  try {
+    applyExpiredFallbacks(broadcast);
     const decisions = listPendingDecisions();
     res.json({
       generatedAt: new Date().toISOString(),
@@ -154,7 +180,7 @@ function handleDecide(req: Request, res: Response, broadcast?: Broadcast): void 
  */
 export function decisionRouter(broadcast?: Broadcast): Router {
   const router = Router();
-  router.get('/', handleList);
+  router.get('/', (req, res) => handleList(req, res, broadcast));
   // history / automode は ':id' ルートより前に登録（taskId/idに食われないよう）。
   router.get('/history', (req, res) => handleHistory(req, res));
   router.get('/automode', (req, res) => handleGetAutoMode(req, res));

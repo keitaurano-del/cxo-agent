@@ -88,7 +88,7 @@ import { taskEditRouter } from './taskEditRouter.js';
 import { approvalRouter } from './approvalRouter.js';
 import { approvalRequestHandler } from './approvalRequestHandler.js';
 import { decisionRouter } from './decisionRouter.js';
-import { decisionRequestHandler } from './decisionRequestHandler.js';
+import { decisionRequestHandler, decisionWithdrawHandler } from './decisionRequestHandler.js';
 import { spawnRouter } from './spawnRouter.js';
 import { terminalHttpHandler, attachUpgrade } from './terminalProxy.js';
 import {
@@ -201,6 +201,13 @@ app.post('/api/approvals/request', (req, res) => {
 // エージェントが選択肢付きの「Keita 決裁依頼」を Cookie なしで curl から投入できる。
 app.post('/api/decisions/request', (req, res) => {
   decisionRequestHandler(req, res, broadcast);
+});
+
+// ─── エージェント決裁取り下げ（認証外・MC-353 P3）─────────────────────────
+// POST /api/decisions/:id/withdraw も AGENT_TOKEN で独立認証（request と同じパターン）。
+// 状況変化で不要になった pending 決裁をエージェントが掃除できるようにする。
+app.post('/api/decisions/:id/withdraw', (req, res) => {
+  decisionWithdrawHandler(req, res, broadcast);
 });
 
 // ─── token 認証（healthz より後、他ルートより前に適用）──────────

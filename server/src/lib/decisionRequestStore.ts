@@ -43,8 +43,18 @@ export interface DecisionRequest {
   requesterAgent: string;
   /** 作成日時（ISO8601）。 */
   requestedAt: string;
-  /** 現在のステータス。 */
-  status: 'pending' | 'decided';
+  /** 現在のステータス（withdrawn=要求元エージェントによる取り下げ。MC-353 P3）。 */
+  status: 'pending' | 'decided' | 'withdrawn';
+  /** 応答期限（ISO8601・任意。期限超過かつ fallbackOptionId ありなら sweep が自動適用。MC-353 P3）。 */
+  expiresAt?: string;
+  /** 期限超過時に自動適用する選択肢の ID（options 内の id・任意。MC-353 P3）。 */
+  fallbackOptionId?: string;
+  /** 取り下げ日時（ISO8601・withdrawn 後に設定）。 */
+  withdrawnAt?: string;
+  /** 取り下げ実行者（エージェント ID）。 */
+  withdrawnBy?: string;
+  /** 取り下げ理由（任意）。 */
+  withdrawReason?: string;
   /** 決定された選択肢の ID（decided 後に設定）。 */
   decidedOptionId?: string;
   /** 決定された選択肢のラベル（履歴・通知表示用。decided 後に設定）。 */
@@ -99,6 +109,8 @@ export function createDecision(data: {
   detail: string;
   options: DecisionOption[];
   requesterAgent: string;
+  expiresAt?: string;
+  fallbackOptionId?: string;
 }): DecisionRequest {
   const rec: DecisionRequest = {
     id: `dec-${randomUUID()}`,
@@ -111,6 +123,8 @@ export function createDecision(data: {
     requesterAgent: data.requesterAgent,
     requestedAt: new Date().toISOString(),
     status: 'pending',
+    ...(data.expiresAt ? { expiresAt: data.expiresAt } : {}),
+    ...(data.fallbackOptionId ? { fallbackOptionId: data.fallbackOptionId } : {}),
   };
   appendRecord(rec);
   return rec;
@@ -144,6 +158,32 @@ export function listPendingDecisions(): DecisionRequest[] {
   }
   pending.sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
   return pending;
+}
+
+/**
+ * 期限超過かつ fallbackOptionId 指定ありの pending を fallback 選択肢で自動決裁する（MC-353 P3）。
+ * 適用した（更新後の）レコード一覧を返す。通知・broadcast は呼び出し元の責務。
+ * fallbackOptionId が options に無い不整合レコードは触らない（手動決裁に委ねる＝安全側）。
+ */
+export function sweepExpiredDecisions(now: Date = new Date()): DecisionRequest[] {
+  const nowIso = now.toISOString();
+  const applied: DecisionRequest[] = [];
+  for (const rec of readAll().values()) {
+    if (rec.status !== 'pending' || !rec.expiresAt || !rec.fallbackOptionId) continue;
+    if (rec.expiresAt > nowIso) continue; // ISO8601 同士は文字列比較＝時系列比較。
+    const chosen = rec.options.find((o) => o.id === rec.fallbackOptionId);
+    if (!chosen) continue;
+    const updated = updateDecision(rec.id, {
+      status: 'decided',
+      decidedOptionId: chosen.id,
+      decidedOptionLabel: chosen.label,
+      decidedAt: nowIso,
+      comment: `応答期限(${rec.expiresAt})超過によりフォールバック案を自動適用`,
+      autoDecided: true,
+    });
+    if (updated) applied.push(updated);
+  }
+  return applied;
 }
 
 /** status=decided の決裁リクエストを返す（decidedAt 降順＝新しいものから。履歴用）。 */
