@@ -390,6 +390,6 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-351 | ClipItNow 集客スプリント | 高 | IN_PROGRESS（夜間PDCA自動運転・Bing順位/GSC反応を観測中。詳細→ tasks/MC-351.md） | Son | MC-331/336/339と連動 |
 | MC-352 | ClipItNow ブログ配信 | 高 | IN_PROGRESS（8/2 18:20 配信流入観測をPDCA Check組込済・Son単独分は消化→残=note/Blogger/Bing WMTのKeita側。詳細→ tasks/MC-352.md） | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
 | MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（毎時ワークループ稼働中 crontab 08-23時JST 毎時15分。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
-| MC-360 | アイデア生成の多様化 | 高 | REVIEW（2026-08-02 実装・実機検証済。詳細→ tasks/MC-360.md） | dev-apollo | MC-359の続き。詳細→ tasks/MC-360.md |
+| MC-360 | アイデア生成の多様化 | 高 | REVIEW（8/2深夜 図鑑2モデル掛け合わせ方式へ改修・実機検証済。詳細→ tasks/MC-360.md） | dev-apollo, Son | MC-359の続き。MC-363図鑑ベース。詳細→ tasks/MC-360.md |
 | MC-361 | モックアップに図解を標準化 | 高 | IN_PROGRESS（林→dev-apollo委譲。詳細→ tasks/MC-361.md） | dev-apollo | MC-360依存。詳細→ tasks/MC-361.md |
 | MC-363 | ビジネスモデル図鑑 | 高 | REVIEW（8/2 16時台 実装完了・12モデルSVG図解・/dev/business-models 本番200実証。詳細→ tasks/MC-363.md） | Son | 開発ページに常設。MC-361の図解方針と整合 |
