@@ -85,7 +85,12 @@ import { notebookRouter } from './notebookRouter.js';
 import { minutesRouter } from './minutesRouter.js';
 import { exportMinutes } from './lib/minutesExport.js';
 import { taskEditRouter } from './taskEditRouter.js';
-import { collectKeitaActions } from './lib/keitaActions.js';
+import {
+  collectKeitaActions,
+  completeKeitaAction,
+  KeitaActionsWriteError,
+  setKeitaCheck,
+} from './lib/keitaActions.js';
 import { approvalRouter } from './approvalRouter.js';
 import { approvalRequestHandler } from './approvalRequestHandler.js';
 import { decisionRouter } from './decisionRouter.js';
@@ -457,10 +462,48 @@ app.get('/api/tasks/:taskId/detail', (req, res) => {
 // GET /api/keita-actions → docs/keita-actions.md（Keitaにしかできない操作の常設キュー）を
 // パースして返す。ボードの「⏱ Keita今日の2分」カードが購読する。
 // 「## 未完」配下の `### n. タイトル` ブロックのみ items（完了ログは返さない）。
-// パスは CXO_ROOT/docs/keita-actions.md 固定・読み取り専用（消し込みは Son がファイル側で実施）。
+// パスは CXO_ROOT/docs/keita-actions.md 固定。
 // ファイル無しは items:[] の 200（カードは非表示になるだけ・安全側）。
 app.get('/api/keita-actions', (_req, res) => {
   safeJson(res, () => collectKeitaActions());
+});
+
+// 消し込み（MC-358 続き・2026-08-02）: ボードのカードから直接チェック/完了できる。
+// どちらも成功時に keita-actions.md 単体を git commit（🔒[Keita]）し、最新の items を返す。
+function handleKeitaActionsWrite(res: Response, fn: () => unknown): void {
+  try {
+    res.json(fn());
+  } catch (e) {
+    if (e instanceof KeitaActionsWriteError) {
+      res.status(e.code === 'NOT_FOUND' ? 404 : 500).json({ error: e.message, code: e.code });
+      return;
+    }
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+// POST /api/keita-actions/check { section, label, done } → チェックボックス 1 つを切替。
+app.post('/api/keita-actions/check', (req, res) => {
+  const { section, label, done } = (req.body ?? {}) as {
+    section?: unknown;
+    label?: unknown;
+    done?: unknown;
+  };
+  if (typeof section !== 'string' || section === '' || typeof label !== 'string' || label === '') {
+    res.status(400).json({ error: 'section と label は必須です' });
+    return;
+  }
+  handleKeitaActionsWrite(res, () => setKeitaCheck(section, label, done !== false));
+});
+
+// POST /api/keita-actions/complete { section } → ブロックを未完から「## 完了ログ」へ移動。
+app.post('/api/keita-actions/complete', (req, res) => {
+  const { section } = (req.body ?? {}) as { section?: unknown };
+  if (typeof section !== 'string' || section === '') {
+    res.status(400).json({ error: 'section は必須です' });
+    return;
+  }
+  handleKeitaActionsWrite(res, () => completeKeitaAction(section));
 });
 
 // ─── タスク↔workflow/agent 明示リンク（MC-62）────────────────────
