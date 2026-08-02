@@ -390,7 +390,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-331 | ClipItNow 海外プロモ | 高 | DONE 🔒[Keita] | Son | 外部送信はKeita確認必須（SOUL境界） |
 | MC-347 | ClipItNow ランキングLP | 中 | IN_PROGRESS（LP第1〜4弾公開済→bilibiliクラスタtitle調整・第5弾はGSC/Bing反応待ち。詳細→ tasks/MC-347.md） | Son | MC-336 / video-dl |
 | MC-351 | ClipItNow 集客スプリント | 高 | IN_PROGRESS（夜間PDCA自動運転・Bing順位/GSC反応を観測中。詳細→ tasks/MC-351.md） | Son | MC-331/336/339と連動 |
-| MC-352 | ClipItNow ブログ配信 | 高 | IN_PROGRESS（8/2 Tumblr開設成功=clipitnow.tumblr.com・メール認証のみKeita待ち→次=投稿。詳細→ tasks/MC-352.md） | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
+| MC-352 | ClipItNow ブログ配信 | 高 | IN_PROGRESS（8/2 15:20 Tumblr初投稿完了・公開確認済→次=note試行と効果観測。詳細→ tasks/MC-352.md） | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
 | MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（毎時ワークループ稼働中 crontab 08-23時JST 毎時15分。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
 | MC-355 | デイリーニュース改善 | 高 | DONE（全スコープ完了・実画面確認済 2026-08-02。詳細→ tasks/MC-355.md） | Son | 詳細→ tasks/MC-355.md |
 | MC-357 | Keita操作キュー常設 | 高 | DONE（keita-actions.md運用開始＋ボード「⏱ Keita今日の2分」カード本番反映・実画面確認済 2026-08-02。詳細→ tasks/MC-357.md） | Son | なし |
