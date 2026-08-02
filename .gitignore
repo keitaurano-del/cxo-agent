@@ -13,4 +13,12 @@ dist/
 # runtime state — inbox 投入データ/添付画像、テスト一時出力（ソースではない）
 data/
 test-results/
-server/tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# 棚卸しC判定の生成物/退避物（2026-08-02 MC-290: ソースではない・git status のノイズ源）
+tmp/
+artifacts/
+_avatar-archive-*/
+
+# 個人情報ファイルはコミット厳禁（ダッシュボード配信用の一時置き。実体はディスクに残る）
+web/public/*.docx
