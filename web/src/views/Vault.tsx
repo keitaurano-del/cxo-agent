@@ -19,6 +19,7 @@ import ObsidianMarkdown from '../components/ObsidianMarkdown';
 import VaultAddSheet from '../components/VaultAddSheet';
 import { makeLinkResolver, extractTags, attachmentUrl } from '../lib/obsidian';
 import { SearchIcon, LinkIcon, TagIcon, CloseIcon, ImageFileIcon, PlusIcon } from '../components/icons';
+import { TabStrip } from '../components/TabStrip';
 import { relativeTime } from '../lib/time';
 
 const IMG_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']);
@@ -505,30 +506,18 @@ export default function Vault() {
         }
       />
       {/* モバイル: ツリー / 本文 の切替セグメント */}
-      <div className="flex border-b border-border md:hidden" role="tablist" aria-label="表示ペイン切替">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mobilePane === 'tree'}
-          onClick={() => setMobilePane('tree')}
-          className={`flex-1 py-2.5 text-xs ${
-            mobilePane === 'tree' ? 'border-b-2 border-accent font-semibold text-text' : 'text-text-muted'
-          }`}
-        >
-          ツリー
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mobilePane === 'note'}
-          onClick={() => setMobilePane('note')}
-          className={`flex-1 py-2.5 text-xs ${
-            mobilePane === 'note' ? 'border-b-2 border-accent font-semibold text-text' : 'text-text-muted'
-          }`}
-        >
-          本文
-        </button>
-      </div>
+      <TabStrip
+        tabs={[
+          { key: 'tree', label: 'ツリー' },
+          { key: 'note', label: '本文' },
+        ]}
+        active={mobilePane}
+        onChange={(key) => setMobilePane(key as 'tree' | 'note')}
+        ariaLabel="表示ペイン切替"
+        className="md:hidden"
+        size="sm"
+        fill
+      />
       <div className="flex min-h-0 flex-1">
         {/* 左: ツリー（モバイルは tree ペイン選択時のみ全幅表示） */}
         <nav

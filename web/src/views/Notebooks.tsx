@@ -29,6 +29,7 @@ import type {
 } from '../lib/types';
 import { PageHeader } from '../components/PageHeader';
 import { ResourceState, EmptyState, Spinner } from '../components/ui';
+import { TabStrip } from '../components/TabStrip';
 import {
   NotebookIcon,
   PlusIcon,
@@ -3389,28 +3390,20 @@ function NotebookDetailView({
         </div>
       </header>
 
-      {/* モバイル: タブ切替 */}
-      <div className="flex shrink-0 border-b border-border md:hidden" role="tablist" aria-label="ペイン切替">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex-1 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors ${
-              tab === t.key
-                ? 'border-accent text-text'
-                : 'border-transparent text-text-muted hover:text-text'
-            }`}
-          >
-            {t.label}
-            {t.count !== undefined && t.count > 0 && (
-              <span className="ml-1 text-[10px] opacity-70">{t.count}</span>
-            )}
-          </button>
-        ))}
-      </div>
+      {/* モバイル: タブ切替（件数 0 のバッジは出さない＝従来挙動） */}
+      <TabStrip
+        tabs={TABS.map((t) => ({
+          key: t.key,
+          label: t.label,
+          ...(t.count !== undefined && t.count > 0 ? { count: t.count } : {}),
+        }))}
+        active={tab}
+        onChange={(key) => setTab(key as DetailTab)}
+        ariaLabel="ペイン切替"
+        className="shrink-0 md:hidden"
+        size="sm"
+        fill
+      />
 
       <div className="min-h-0 flex-1">
         <ResourceState loading={loading} error={error} hasData={!!detail}>

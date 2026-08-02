@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PageHeader } from '../components/PageHeader';
 import ChatMarkdown from '../components/ChatMarkdown';
+import { TabStrip } from '../components/TabStrip';
 import { UserChatBody } from '../components/mediaEmbed';
 import {
   BabyIcon,
@@ -1931,34 +1932,43 @@ function resolveInitialTab(initialTab?: ChildcareTab): ChildcareTab {
 
 // ─── タブバー（成長日記 / 育児ガイド / 育児チャット）。下線アクティブ流儀 ──
 function ChildcareTabBar({ tab, onChange }: { tab: ChildcareTab; onChange: (t: ChildcareTab) => void }) {
-  const tabs: { id: ChildcareTab; label: string; icon: ReactNode }[] = [
-    { id: 'diary', label: '成長日記', icon: <DiaryIcon width={16} height={16} /> },
-    { id: 'guide', label: '育児ガイド', icon: <BabyIcon width={16} height={16} /> },
-    { id: 'chat', label: '育児チャット', icon: <ChildcareChatIcon width={16} height={16} /> },
+  const tabs: { key: ChildcareTab; label: ReactNode }[] = [
+    {
+      key: 'diary',
+      label: (
+        <>
+          <span aria-hidden><DiaryIcon width={16} height={16} /></span>
+          成長日記
+        </>
+      ),
+    },
+    {
+      key: 'guide',
+      label: (
+        <>
+          <span aria-hidden><BabyIcon width={16} height={16} /></span>
+          育児ガイド
+        </>
+      ),
+    },
+    {
+      key: 'chat',
+      label: (
+        <>
+          <span aria-hidden><ChildcareChatIcon width={16} height={16} /></span>
+          育児チャット
+        </>
+      ),
+    },
   ];
   return (
-    <div className="flex border-b border-border px-4 md:px-6" role="tablist" aria-label="育児ページのタブ">
-      {tabs.map((t) => {
-        const active = tab === t.id;
-        return (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            onClick={() => onChange(t.id)}
-            className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm transition-colors ${
-              active
-                ? 'border-accent font-semibold text-text'
-                : 'border-transparent text-text-muted hover:text-text'
-            }`}
-          >
-            <span aria-hidden>{t.icon}</span>
-            {t.label}
-          </button>
-        );
-      })}
-    </div>
+    <TabStrip
+      tabs={tabs}
+      active={tab}
+      onChange={(key) => onChange(key as ChildcareTab)}
+      ariaLabel="育児ページのタブ"
+      className="px-4 md:px-6"
+    />
   );
 }
 

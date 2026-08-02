@@ -3,6 +3,7 @@
 // Deliverables.tsx / Vault.tsx 本体には手を入れず、両者を遅延ロードして切替表示する薄いラッパ。
 // 各ビューは自前の PageHeader を持つため、ここではタブ・ストリップのみ提供する。
 import { lazy, Suspense, useState } from 'react';
+import { TabStrip } from '../components/TabStrip';
 
 const Deliverables = lazy(() => import('./Deliverables'));
 const Vault = lazy(() => import('./Vault'));
@@ -47,28 +48,13 @@ export default function DocumentsTabs({ initialTab }: { initialTab?: DocTab } = 
 
   return (
     <div className="flex h-full flex-col">
-      <div
-        role="tablist"
-        aria-label="ドキュメント領域"
-        className="flex shrink-0 items-center gap-1 border-b border-border bg-bg px-4 md:px-6"
-      >
-        {TABS.map(([key, label]) => (
-          <button
-            key={key}
-            role="tab"
-            type="button"
-            aria-selected={tab === key}
-            onClick={() => changeTab(key)}
-            className={`-mb-px border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-              tab === key
-                ? 'border-accent text-text'
-                : 'border-transparent text-text-muted hover:text-text'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <TabStrip
+        tabs={TABS.map(([key, label]) => ({ key, label }))}
+        active={tab}
+        onChange={(key) => changeTab(key as DocTab)}
+        ariaLabel="ドキュメント領域"
+        className="shrink-0 items-center gap-1 bg-bg px-4 md:px-6"
+      />
       <div className="min-h-0 flex-1">
         <Suspense fallback={<div className="p-6 text-sm text-text-muted">読み込み中…</div>}>
           {tab === 'docs' ? <Deliverables /> : tab === 'vault' ? <Vault /> : <Notebooks />}

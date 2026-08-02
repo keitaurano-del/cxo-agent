@@ -17,6 +17,7 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import ChatMarkdown from '../components/ChatMarkdown';
+import { TabStrip } from '../components/TabStrip';
 import { UserChatBody } from '../components/mediaEmbed';
 import { ChajiIcon, ChildcareChatIcon, CloseIcon, ImageFileIcon, SendIcon } from '../components/icons';
 import { CHAJI_GUIDE_MARKDOWN } from './chajiData';
@@ -763,33 +764,34 @@ function resolveInitialTab(initialTab?: ChajiTab): ChajiTab {
 
 // ─── タブバー（基礎知識ガイド / 茶事チャット）。下線アクティブ流儀 ──────────
 function ChajiTabBar({ tab, onChange }: { tab: ChajiTab; onChange: (t: ChajiTab) => void }) {
-  const tabs: { id: ChajiTab; label: string; icon: ReactNode }[] = [
-    { id: 'guide', label: '基礎知識ガイド', icon: <ChajiIcon width={16} height={16} /> },
-    { id: 'chat', label: '茶事チャット', icon: <ChildcareChatIcon width={16} height={16} /> },
+  const tabs: { key: ChajiTab; label: ReactNode }[] = [
+    {
+      key: 'guide',
+      label: (
+        <>
+          <span aria-hidden><ChajiIcon width={16} height={16} /></span>
+          基礎知識ガイド
+        </>
+      ),
+    },
+    {
+      key: 'chat',
+      label: (
+        <>
+          <span aria-hidden><ChildcareChatIcon width={16} height={16} /></span>
+          茶事チャット
+        </>
+      ),
+    },
   ];
   return (
-    <div className="flex border-b border-border px-4 md:px-6" role="tablist" aria-label="茶事ページのタブ">
-      {tabs.map((t) => {
-        const active = tab === t.id;
-        return (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            onClick={() => onChange(t.id)}
-            className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm transition-colors ${
-              active
-                ? 'border-accent font-semibold text-text'
-                : 'border-transparent text-text-muted hover:text-text'
-            }`}
-          >
-            <span aria-hidden>{t.icon}</span>
-            {t.label}
-          </button>
-        );
-      })}
-    </div>
+    <TabStrip
+      tabs={tabs}
+      active={tab}
+      onChange={(key) => onChange(key as ChajiTab)}
+      ariaLabel="茶事ページのタブ"
+      className="px-4 md:px-6"
+    />
   );
 }
 

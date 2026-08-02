@@ -11,6 +11,7 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import ChatMarkdown from '../components/ChatMarkdown';
+import { TabStrip } from '../components/TabStrip';
 import { UserChatBody } from '../components/mediaEmbed';
 import {
   ChatIcon,
@@ -1704,33 +1705,34 @@ function resolveInitialTab(): WorkTab {
 
 function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) => void }) {
   // 概要（意味が薄い）・動画DL・状況解析は削除（2026-07-20 Keita・MC-319）。単語帳とナレッジは残す。
-  const tabs: { id: WorkTab; label: string; icon: ReactNode }[] = [
-    { id: 'knowledge', label: 'ナレッジ', icon: <NotebookIcon width={16} height={16} /> },
-    { id: 'glossary', label: '単語帳', icon: <TextFileIcon width={16} height={16} /> },
+  const tabs: { key: WorkTab; label: ReactNode }[] = [
+    {
+      key: 'knowledge',
+      label: (
+        <>
+          <span aria-hidden><NotebookIcon width={16} height={16} /></span>
+          ナレッジ
+        </>
+      ),
+    },
+    {
+      key: 'glossary',
+      label: (
+        <>
+          <span aria-hidden><TextFileIcon width={16} height={16} /></span>
+          単語帳
+        </>
+      ),
+    },
   ];
   return (
-    <div className="flex border-b border-border px-4 md:px-6" role="tablist" aria-label="仕事ページのタブ">
-      {tabs.map((t) => {
-        const active = tab === t.id;
-        return (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            onClick={() => onChange(t.id)}
-            className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm transition-colors ${
-              active
-                ? 'border-accent font-semibold text-text'
-                : 'border-transparent text-text-muted hover:text-text'
-            }`}
-          >
-            <span aria-hidden>{t.icon}</span>
-            {t.label}
-          </button>
-        );
-      })}
-    </div>
+    <TabStrip
+      tabs={tabs}
+      active={tab}
+      onChange={(key) => onChange(key as WorkTab)}
+      ariaLabel="仕事ページのタブ"
+      className="px-4 md:px-6"
+    />
   );
 }
 

@@ -7,6 +7,7 @@
 // 2026-07-20 Keita 指示（MC-317）: エージェント（旧ダッシュタブ）と実装進捗（旧独立ナビ）を
 // タスクボードに集約。「今何をやっているか」をこのページ1枚で見られるようにする。
 import { lazy, Suspense, useState } from 'react';
+import { TabStrip } from '../components/TabStrip';
 import { useLiveResource } from '../lib/useLiveData';
 import type { ApprovalsResponse } from '../lib/types';
 
@@ -64,36 +65,18 @@ export default function TasksTabs({ initialTab }: { initialTab?: TaskTab } = {})
 
   return (
     <div className="flex h-full flex-col">
-      <div
-        role="tablist"
-        aria-label="タスクボード領域"
-        className="no-scrollbar flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-bg px-4 md:px-6"
-      >
-        {TABS.map(([key, label]) => (
-          <button
-            key={key}
-            role="tab"
-            type="button"
-            aria-selected={tab === key}
-            onClick={() => changeTab(key)}
-            className={`-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-              tab === key
-                ? 'border-accent text-text'
-                : 'border-transparent text-text-muted hover:text-text'
-            }`}
-          >
-            {label}
-            {key === 'approvals' && pendingCount > 0 && (
-              <span
-                className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-blocked px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
-                aria-label={`未処理 ${pendingCount} 件`}
-              >
-                {pendingCount}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <TabStrip
+        tabs={TABS.map(([key, label]) => ({
+          key,
+          label,
+          // 承認タブのみ未処理件数の赤バッジ（0 件は CountBadge 側で非表示）。
+          ...(key === 'approvals' ? { count: pendingCount, countTone: 'danger' as const } : {}),
+        }))}
+        active={tab}
+        onChange={(key) => changeTab(key as TaskTab)}
+        ariaLabel="タスクボード領域"
+        className="no-scrollbar shrink-0 items-center gap-1 overflow-x-auto bg-bg px-4 md:px-6"
+      />
       {/* 承認/エージェントは本体がルート <div>（自前スクロール無し）のため、ここでスクロール容器にする。
           タスク/実装進捗は本体が h-full 内部スクロールを持つので overflow は付けない（二重スクロール回避）。 */}
       <div className={`min-h-0 flex-1 ${tab === 'tasks' || tab === 'progress' ? '' : 'overflow-y-auto'}`}>
