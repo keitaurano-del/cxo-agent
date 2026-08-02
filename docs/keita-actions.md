@@ -13,7 +13,7 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
 2. keita.urano@gmail.com を選択 → 「許可」をタップ
 3. 完了画面が出たら終わり。以後 Son が clipitnow.net の GSC データ取得を再検証
 
-- [ ] 完了
+- [x] 完了
 
 ### 2. Reddit / SaaSHub 登録（各2分・スマホ）【MC-331】
 Show HN 投稿は承認済み（Sonが火/水夜に投稿）。残りは投稿先アカウントの登録のみ。
