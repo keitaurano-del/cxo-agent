@@ -59,54 +59,6 @@ function BlockerBadge({ b }: { b: Blocker }) {
   );
 }
 
-/** 「今日の2分」カード（MC-353 層2）: Keitaにしかできない操作だけを1画面に集約。
-    各行タップでタスク詳細（次の一手の全文）が開く。決裁が絡むものは承認タブへの導線も出す。 */
-function TodayTwoMinutes({
-  blockers,
-  tasks,
-  onOpen,
-}: {
-  blockers: Blocker[];
-  tasks: Task[];
-  onOpen: (t: Task) => void;
-}) {
-  const items = blockers.filter((b) => b.next_actor === 'keita');
-  if (items.length === 0) return null;
-  return (
-    <div className="mx-4 mb-1 mt-2 rounded-lg border border-blocked/40 bg-surface px-3 py-2 md:mx-6">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[12px] font-bold text-text">
-          ⏱ 今日の2分 <span className="font-normal text-text-muted">— Keitaにしかできない操作 {items.length}件</span>
-        </span>
-        <a
-          href="/approvals"
-          className="shrink-0 rounded-md border border-border bg-surface-2 px-2 py-0.5 text-[11px] text-text-muted transition-colors hover:border-accent/60 hover:text-text"
-        >
-          承認・決裁へ
-        </a>
-      </div>
-      <div className="mt-1.5 flex flex-col gap-1">
-        {items.map((b) => {
-          const task = tasks.find((t) => t.id === b.taskId);
-          return (
-            <button
-              key={b.taskId}
-              type="button"
-              onClick={() => task && onOpen(task)}
-              disabled={!task}
-              className="flex w-full items-baseline gap-2 rounded-md border border-border bg-surface-2 px-2 py-1.5 text-left transition-colors hover:border-accent/60 disabled:cursor-default"
-              title={b.next_action}
-            >
-              <span className="shrink-0 font-mono text-[10px] text-text-faint">{b.taskId}</span>
-              <span className="min-w-0 flex-1 truncate text-[12px] text-text">{b.next_action}</span>
-              <span className="shrink-0 text-[10px] tabular-nums text-blocked">{b.days}日</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function TaskCard({
   t,
@@ -523,14 +475,10 @@ export default function Tasks() {
           </label>
         </div>
         {/* ⏱ Keita今日の2分（MC-358）: docs/keita-actions.md（Keita操作キュー）を常設表示。
-            未完 0 件（ファイル無し含む）ならカード自体が出ない。表示のみ・消し込みは Son。 */}
+            未完 0 件（ファイル無し含む）ならカード自体が出ない。チェック/済にする で直接消し込み可。
+            旧 blockers.json 版の TodayTwoMinutes カードは重複＋「承認・決裁へ」の空振り導線のため
+            撤去し、本カードへ一本化した（2026-08-02 Keita「承認のところだけ残ってるけど、承認にないんだよね」）。 */}
         <KeitaActionsCard tick={tick} />
-        {/* 今日の2分（MC-353）: Keitaにしかできない操作だけを集約。無い日は出ない。 */}
-        <TodayTwoMinutes
-          blockers={blockersData?.blockers ?? []}
-          tasks={tasks}
-          onOpen={setSelected}
-        />
         {/* いま何をやっているか（MC-317）: ステータス件数＋進行中を担当者別にひと目で。 */}
         <NowOverview byColumn={byColumn} onOpen={setSelected} />
         {/* ボード内検索は最上段（フィルタ行）へ統合した（2026-06-27 Keita）。 */}
