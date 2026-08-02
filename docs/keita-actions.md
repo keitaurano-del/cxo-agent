@@ -19,7 +19,7 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
 `web/public/` の履歴書 docx 3点（個人情報・外部露出なしは401確認済み）。
 - 「消していいよ」の一言だけでOK → Son が `trash` で退避削除
 
-- [x] 回答済み
+- [ ] 回答済み
 
 ### 4. Tumblr 認証メールのリンクをタップ（1分・スマホ可）【MC-352】
 Son が公式Gmail（clipitnownet.official@gmail.com）で **Tumblrブログ開設済み**（8/2・clipitnow.tumblr.com）。
