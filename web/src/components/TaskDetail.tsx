@@ -29,6 +29,7 @@ import {
 import { absoluteTime, relativeTime } from '../lib/time';
 import { Badge, StalledBadge, TaskStatusBadge } from './ui';
 import { TaskTimeline } from './TaskTimeline';
+import ChatMarkdown from './ChatMarkdown';
 import { CloseIcon, EditIcon } from './icons';
 
 // (MC-167) 削除: Workflow 型定義は使用されなくなったため削除
@@ -343,17 +344,20 @@ function TaskDetailBody({
   // 詳細本文（detail）の遅延取得状態（MC-206）。一覧 API は軽量化のため detail を返さないので、
   // カードを開いた時に単一タスク API から detail を取りに行く。未取得時は詳細メモを出さない。
   const [detailLoading, setDetailLoading] = useState(false);
+  // MC-358: 個票（docs/tasks/<ID>.md）の本文。台帳から分離した経緯・手順・検証ログ。
+  const [note, setNote] = useState<string | null>(null);
   // 親から別タスクが渡し直されたらローカル状態をリセット。
   useEffect(() => {
     setLocalTask(task);
     setEditing(false);
+    setNote(null);
   }, [task]);
 
   // MC-206: 開いたタスクの detail を単一タスク API から取得して merge する。
   // 一覧（軽量版）には detail が無いため、ここで /api/tasks/:id/detail を 1 回だけ叩く。
-  // 取得済み（detail が既にある）ならスキップ。失敗時はクラッシュさせず詳細メモ非表示のまま。
+  // MC-358: 同レスポンスの note（個票 markdown）も取得する。detail 既取得でも note のため常に叩く。
+  // 失敗時はクラッシュさせず詳細メモ/個票 非表示のまま。
   useEffect(() => {
-    if (task.detail !== undefined) return; // 既に detail を持つ（?detail=1 経由等）なら不要
     let cancelled = false;
     setDetailLoading(true);
     const params = new URLSearchParams();
@@ -361,10 +365,11 @@ function TaskDetailBody({
     const qs = params.toString();
     fetch(`/api/tasks/${encodeURIComponent(task.id)}/detail${qs ? `?${qs}` : ''}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-      .then((json: { task?: Task }) => {
+      .then((json: { task?: Task; note?: string | null }) => {
         if (cancelled || !json.task) return;
         // detail（と取れれば付帯フィールド）だけを上書き merge。編集中のローカル状態は壊さない。
         setLocalTask((prev) => ({ ...prev, detail: json.task!.detail }));
+        setNote(json.note ?? null);
       })
       .catch(() => {
         /* 失敗時は詳細メモ非表示のまま（安全側） */
@@ -581,6 +586,17 @@ function TaskDetailBody({
               <SectionHeading>詳細メモ</SectionHeading>
               <div className="rounded-lg border border-border bg-surface px-3 py-3">
                 <p className="text-[12px] text-text-faint">詳細を読み込み中…</p>
+              </div>
+            </section>
+          ) : null}
+
+          {/* (a-3) 個票（MC-358）— 台帳から分離した経緯・手順・検証ログ（docs/tasks/<ID>.md）。
+              タイトルを短くした分の詳細はここで読める。個票が無いタスクはセクション自体を出さない。 */}
+          {note ? (
+            <section className="mb-5">
+              <SectionHeading>個票（経緯・詳細）</SectionHeading>
+              <div className="select-text rounded-lg border border-border bg-surface px-3 py-3 text-[13px] leading-relaxed">
+                <ChatMarkdown body={note} />
               </div>
             </section>
           ) : null}

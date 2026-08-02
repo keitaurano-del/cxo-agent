@@ -22,7 +22,7 @@ import { basename, dirname, join, resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
-import { PORT, CLAUDE_PROJECTS_DIR, VAULT_DIR, STALL_MINUTES, AGENT_LOG_TTL_MS, DELIVERABLES_DIR, CLIPITNOW_PDCA_STATE_FILE } from './config.js';
+import { PORT, CLAUDE_PROJECTS_DIR, VAULT_DIR, STALL_MINUTES, AGENT_LOG_TTL_MS, DELIVERABLES_DIR, CLIPITNOW_PDCA_STATE_FILE, PROJECTS_DIR } from './config.js';
 import { collectAgents, collectAgentGroups, collectAgentFeed } from './collectors/agents.js';
 import { collectSecretaries } from './collectors/secretaries.js';
 import { collectMoods, type MoodInput } from './collectors/moods.js';
@@ -407,10 +407,34 @@ app.get('/api/tasks', (req, res) => {
   });
 });
 
+// MC-358: タスク個票（docs/tasks/<ID>.md）の置き場。台帳 source プレフィックス→個票ディレクトリの対応。
+// 台帳は「1タスク=1行のインデックス」に薄く保ち、経緯・手順・検証ログは個票へ分離する設計
+// （docs/task-system-redesign-20260802.md）。個票が無い台帳（logic 等）は note: null で返すだけ。
+const TASK_NOTE_DIRS: Record<string, string> = {
+  'cxo/TASK_TRACKER': join(PROJECTS_DIR, 'cxo-agent', 'docs', 'tasks'),
+  'logic/TASK_TRACKER': join(PROJECTS_DIR, 'logic', 'docs', 'tasks'),
+  'videodl/TASK_TRACKER': join(PROJECTS_DIR, 'video-dl', 'docs', 'tasks'),
+};
+
+// 個票 markdown を読む。ID は `MC-123` 形式のみ許可（パストラバーサル防止）。無ければ null。
+function readTaskNote(source: string, id: string): string | null {
+  const dir = TASK_NOTE_DIRS[source];
+  if (!dir) return null;
+  if (!/^[A-Za-z]{1,8}-\d{1,6}$/.test(id)) return null;
+  const path = join(dir, `${id}.md`);
+  if (!existsSync(path)) return null;
+  try {
+    return readFileSync(path, 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
 // MC-206: 単一タスクのフル取得（detail 含む）。一覧は detail を返さないため、
 // TaskDetail がカードを開いた時にここから本文を遅延取得する。
 // パスは `/:taskId/detail` とし、taskEditRouter の固定パス（/hash・/edit）や
 // `:taskId/links`・`:taskId/timeline` と衝突しないようにする。
+// MC-358: 個票（docs/tasks/<ID>.md）があれば note として同梱する（タップで詳細が読める）。
 app.get('/api/tasks/:taskId/detail', (req, res) => {
   safeJson(res, () => {
     const id = req.params.taskId;
@@ -424,7 +448,7 @@ app.get('/api/tasks/:taskId/detail', (req, res) => {
       res.status(404).json({ error: 'task not found', id });
       return undefined;
     }
-    return { task };
+    return { task, note: readTaskNote(task.source, task.id) };
   });
 });
 
