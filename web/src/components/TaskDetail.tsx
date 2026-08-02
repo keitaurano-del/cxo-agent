@@ -32,6 +32,107 @@ import { TaskTimeline } from './TaskTimeline';
 import ChatMarkdown from './ChatMarkdown';
 import { CloseIcon, EditIcon } from './icons';
 
+// ── ワンタップ完了（MC-358 続き）──────────────────────────
+// ドロワーから直接 DONE にする。誤タップ防止に「完了にする→タップで確定」の2段階。
+// status-lock endpoint（MC-166）を使うので 🔒[Keita] が付与され git commit される。
+function CompleteButton({
+  task,
+  source,
+  onCompleted,
+}: {
+  task: Task;
+  source: string;
+  onCompleted: (updated: Task) => void;
+}) {
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  // 一定時間で確認状態を解除（誤タップ防止の戻し）。
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 5000);
+    return () => clearTimeout(t);
+  }, [armed]);
+
+  const handleComplete = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const hashRes = await fetch(`/api/tasks/hash?source=${encodeURIComponent(source)}`);
+      if (!hashRes.ok) {
+        throw new Error(await readApiError(hashRes, 'ハッシュの取得に失敗しました'));
+      }
+      const { hash: baseHash } = (await hashRes.json()) as { hash: string };
+      const res = await fetch('/api/tasks/status-lock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source, id: task.id, status: 'DONE', baseHash }),
+      });
+      if (res.status === 409) {
+        setError('他の更新と競合しました。画面を再読み込みしてください。');
+        return;
+      }
+      if (!res.ok) {
+        setError(await readApiError(res, '完了にできませんでした'));
+        return;
+      }
+      const data = (await res.json()) as EditApiResponse & { commitSha?: string };
+      setDone(data.commitSha ? `完了にしました 🔒（commit: ${data.commitSha}）` : '完了にしました 🔒');
+      const updated = data.task ?? ({ ...task, status: 'DONE' } as Task);
+      // メッセージを見せてから反映（ドロワーは開いたまま・一覧は refetch される）。
+      setTimeout(() => onCompleted(updated), 1500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '完了にできませんでした。');
+    } finally {
+      setBusy(false);
+      setArmed(false);
+    }
+  };
+
+  if (done) {
+    return (
+      <p
+        role="status"
+        className="rounded-lg border border-border px-3 py-2 text-[12px]"
+        style={{ color: 'var(--mc-done)' }}
+      >
+        {done}
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => (armed ? void handleComplete() : setArmed(true))}
+        disabled={busy}
+        aria-label={armed ? 'タップで完了を確定する' : 'このタスクを完了にする'}
+        className={
+          armed
+            ? 'w-full rounded-lg px-4 py-2.5 text-[13px] font-semibold text-bg disabled:opacity-50'
+            : 'w-full rounded-lg border border-border bg-surface px-4 py-2.5 text-[13px] font-semibold text-text hover:bg-surface-2 disabled:opacity-50'
+        }
+        style={armed ? { background: 'var(--mc-done)' } : undefined}
+      >
+        {busy ? '保存中…' : armed ? 'もう一度タップで完了を確定' : '✓ 完了にする'}
+      </button>
+      {error && (
+        <p
+          role="alert"
+          className="rounded-lg border border-border px-3 py-2 text-[12px]"
+          style={{ color: 'var(--mc-stalled)' }}
+        >
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // (MC-167) 削除: Workflow 型定義は使用されなくなったため削除
 // interface WorkflowNode / WorkflowPhase / WorkflowSummary / WorkflowDetail
 
@@ -507,6 +608,19 @@ function TaskDetailBody({
                   <p className="mt-2 text-[11px] text-text-faint">
                     この台帳の項目は Apollo から編集できません（.md を直接編集してください）。
                   </p>
+                )}
+                {/* ワンタップ完了（MC-358 続き）: 未完タスクのみ表示。DONE/CANCELLED では出さない */}
+                {editable && view.status !== 'DONE' && view.status !== 'CANCELLED' && (
+                  <div className="mt-3">
+                    <CompleteButton
+                      task={view}
+                      source={view.source}
+                      onCompleted={(updated) => {
+                        setLocalTask((prev) => ({ ...prev, ...updated }));
+                        onChanged?.();
+                      }}
+                    />
+                  </div>
                 )}
               </>
             )}
