@@ -15,6 +15,7 @@ import {
 } from '../lib/meta';
 import { ResourceState, StalledBadge, Badge } from '../components/ui';
 import { TaskDetail } from '../components/TaskDetail';
+import { KeitaActionsCard } from '../components/KeitaActionsCard';
 import { TaskAgentStatus } from '../components/TaskAgentStatus';
 import { ChevronRightIcon, NoteIcon, EyeIcon, LoopIcon } from '../components/icons';
 
@@ -521,6 +522,9 @@ export default function Tasks() {
             />
           </label>
         </div>
+        {/* ⏱ Keita今日の2分（MC-358）: docs/keita-actions.md（Keita操作キュー）を常設表示。
+            未完 0 件（ファイル無し含む）ならカード自体が出ない。表示のみ・消し込みは Son。 */}
+        <KeitaActionsCard tick={tick} />
         {/* 今日の2分（MC-353）: Keitaにしかできない操作だけを集約。無い日は出ない。 */}
         <TodayTwoMinutes
           blockers={blockersData?.blockers ?? []}

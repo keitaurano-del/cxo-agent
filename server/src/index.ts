@@ -85,6 +85,7 @@ import { notebookRouter } from './notebookRouter.js';
 import { minutesRouter } from './minutesRouter.js';
 import { exportMinutes } from './lib/minutesExport.js';
 import { taskEditRouter } from './taskEditRouter.js';
+import { collectKeitaActions } from './lib/keitaActions.js';
 import { approvalRouter } from './approvalRouter.js';
 import { approvalRequestHandler } from './approvalRequestHandler.js';
 import { decisionRouter } from './decisionRouter.js';
@@ -450,6 +451,16 @@ app.get('/api/tasks/:taskId/detail', (req, res) => {
     }
     return { task, note: readTaskNote(task.source, task.id) };
   });
+});
+
+// ─── Keita操作キュー（MC-358 層2/層4）────────────────────────────
+// GET /api/keita-actions → docs/keita-actions.md（Keitaにしかできない操作の常設キュー）を
+// パースして返す。ボードの「⏱ Keita今日の2分」カードが購読する。
+// 「## 未完」配下の `### n. タイトル` ブロックのみ items（完了ログは返さない）。
+// パスは CXO_ROOT/docs/keita-actions.md 固定・読み取り専用（消し込みは Son がファイル側で実施）。
+// ファイル無しは items:[] の 200（カードは非表示になるだけ・安全側）。
+app.get('/api/keita-actions', (_req, res) => {
+  safeJson(res, () => collectKeitaActions());
 });
 
 // ─── タスク↔workflow/agent 明示リンク（MC-62）────────────────────
