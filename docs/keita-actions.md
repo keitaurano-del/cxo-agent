@@ -15,14 +15,6 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
 
 - [x] 完了
 
-### 2. Reddit / SaaSHub 登録（各2分・スマホ）【MC-331】
-Show HN 投稿は承認済み（Sonが火/水夜に投稿）。残りは投稿先アカウントの登録のみ。
-1. **Reddit**: アプリ or reddit.com → 「Continue with Google」で登録 → ユーザー名をSonに一言（投稿文はSon準備済み）
-2. **SaaSHub**: https://www.saashub.com → 右上 Sign up → Google 連携 → 「できた」の一言でOK（製品ページ作成はSon）
-
-- [ ] Reddit 完了
-- [ ] SaaSHub 完了
-
 ### 3. resume docx×3 の削除可否（10秒）【MC-290】
 `web/public/` の履歴書 docx 3点（個人情報・外部露出なしは401確認済み）。
 - 「消していいよ」の一言だけでOK → Son が `trash` で退避削除
@@ -44,6 +36,7 @@ Tumblr から同 Gmail に認証メールが届いています。Gmail の headl
 
 ## 完了ログ
 
+- 2026-08-02 2. Reddit / SaaSHub 登録（各2分・スマホ）【MC-331】 → ボードから完了 🔒[Keita]
 - 2026-08-01 22:01 MC-339 ExoClick再決済 → **広告テスト中止**で決着（再決済不要）
 - 2026-08-01 22:01 MC-331 Show HN投稿 → **承認**（Sonが火/水夜に投稿）
 - 2026-08-01 22:01 GSC再同意 → 「今やる」選択（→上記1の実操作確認へ）
