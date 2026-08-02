@@ -7,12 +7,6 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
 
 ## 未完（2026-08-02 時点）
 
-### 3. resume docx×3 の削除可否（10秒）【MC-290】
-`web/public/` の履歴書 docx 3点（個人情報・外部露出なしは401確認済み）。
-- 「消していいよ」の一言だけでOK → Son が `trash` で退避削除
-
-- [x] 回答済み
-
 ### 4. Tumblr 認証メールのリンクをタップ（1分・スマホ可）【MC-352】
 Son が公式Gmail（clipitnownet.official@gmail.com）で **Tumblrブログ開設済み**（8/2・clipitnow.tumblr.com）。
 Tumblr から同 Gmail に認証メールが届いています。Gmail の headless ログインは reCAPTCHA で Son 不可のため:
@@ -28,6 +22,7 @@ Tumblr から同 Gmail に認証メールが届いています。Gmail の headl
 
 ## 完了ログ
 
+- 2026-08-02 3. resume docx×3 の削除可否（10秒）【MC-290】 → ボードから完了 🔒[Keita]
 - 2026-08-02 1. GSC 再同意（2分・スマホ可）【MC-351/347】 → ボードから完了 🔒[Keita]
 - 2026-08-02 2. Reddit / SaaSHub 登録（各2分・スマホ）【MC-331】 → ボードから完了 🔒[Keita]
 - 2026-08-01 22:01 MC-339 ExoClick再決済 → **広告テスト中止**で決着（再決済不要）
