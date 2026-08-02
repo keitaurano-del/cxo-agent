@@ -398,3 +398,4 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-359 | アイデア生成の修理 | 高 | DONE（commit b2f634d push済 2026-08-02。実機3回8〜10sでdone確認済。詳細→ tasks/MC-359.md） | dev-apollo | fast opts(--tools ''/中立cwd/短system-prompt/思考オフ)＋IDEA_TIMEOUT 90→120s＋シード刷新 |
 | MC-360 | アイデア生成の多様化 | 高 | REVIEW（2026-08-02 実装・実機検証済。詳細→ tasks/MC-360.md） | dev-apollo | MC-359の続き。詳細→ tasks/MC-360.md |
 | MC-361 | モックアップに図解を標準化 | 高 | IN_PROGRESS（林→dev-apollo委譲。詳細→ tasks/MC-361.md） | dev-apollo | MC-360依存。詳細→ tasks/MC-361.md |
+| MC-362 | 完了ボタン動作確認 | 低 | TODO（ボードのワンタップ完了ボタンのE2E検証用） | Son | なし |
