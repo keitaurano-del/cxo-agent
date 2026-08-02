@@ -29,6 +29,17 @@ Show HN 投稿は承認済み（Sonが火/水夜に投稿）。残りは投稿�
 
 - [ ] 回答済み
 
+### 4. Tumblr 認証メールのリンクをタップ（1分・スマホ可）【MC-352】
+Son が公式Gmail（clipitnownet.official@gmail.com）で **Tumblrブログ開設済み**（8/2・clipitnow.tumblr.com）。
+Tumblr から同 Gmail に認証メールが届いています。Gmail の headless ログインは reCAPTCHA で Son 不可のため:
+1. スマホ等で clipitnownet.official@gmail.com にログイン（pw は Son 保管・共有済みのもの）
+2. Tumblr からのメールを開いて認証リンクをタップ → 「できた」の一言（投稿は Son が実施）
+
+※ Blogger は Google ログイン必須のため Son 単独不可。Tumblr が生きればひとまず不要（必要になったら再掲します）。
+※ 参考: keita.urano@gmail.com には既存の Tumblr アカウントがあるようです（"already in use" 表示）。
+
+- [ ] 認証リンク タップ完了
+
 ---
 
 ## 完了ログ
