@@ -385,17 +385,10 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 
 | ID | タイトル | 優先 | ステータス | 担当 | 備考 |
 |---|---|---|---|---|---|
-| MC-290 | 共有ツリー未コミット整理 | 中 | TODO（残尾=D判定 BottomNav/icons.tsx のソラ意図確認・resume docx削除はKeita確認待ち。詳細→ tasks/MC-290.md） | Son | 依存=共有ツリー整理（[[cxo-agent-shared-tree-concurrency]]相当）。棚卸しで挙げた117ファイル未コミット問題と同根 |
 | MC-313 | Apollo UI 改善 | 中 | IN_PROGRESS（8/2 タブ共通化DONEで🟢全消化。残=🟡要一声/🔴承認のみ→夜まとめで提案。詳細→ tasks/MC-313.md） | Son | [[son-owns-board-reconciliation]] | [[clipitnow-exoclick-integration]] [[son-owns-board-reconciliation]] [[cxo-agent-shared-tree-concurrency]] [[cxo-agent-prod-restart-loads-worktree]] |
-| MC-331 | ClipItNow 海外プロモ | 高 | DONE 🔒[Keita] | Son | 外部送信はKeita確認必須（SOUL境界） |
-| MC-347 | ClipItNow ランキングLP | 中 | IN_PROGRESS（LP第1〜4弾公開済→bilibiliクラスタtitle調整・第5弾はGSC/Bing反応待ち。詳細→ tasks/MC-347.md） | Son | MC-336 / video-dl |
+| MC-347 | ClipItNow ランキングLP | 中 | IN_PROGRESS（8/2 GSC再同意完了で実データ復活(clicks11/imp80・bilibili系中心)→実クエリでtitle調整に着手可。詳細→ tasks/MC-347.md） | Son | MC-336 / video-dl |
 | MC-351 | ClipItNow 集客スプリント | 高 | IN_PROGRESS（夜間PDCA自動運転・Bing順位/GSC反応を観測中。詳細→ tasks/MC-351.md） | Son | MC-331/336/339と連動 |
 | MC-352 | ClipItNow ブログ配信 | 高 | IN_PROGRESS（8/2 15:20 Tumblr初投稿完了・公開確認済→次=note試行と効果観測。詳細→ tasks/MC-352.md） | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
 | MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（毎時ワークループ稼働中 crontab 08-23時JST 毎時15分。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
-| MC-355 | デイリーニュース改善 | 高 | DONE（全スコープ完了・実画面確認済 2026-08-02。詳細→ tasks/MC-355.md） | Son | 詳細→ tasks/MC-355.md |
-| MC-357 | Keita操作キュー常設 | 高 | DONE（keita-actions.md運用開始＋ボード「⏱ Keita今日の2分」カード本番反映・実画面確認済 2026-08-02。詳細→ tasks/MC-357.md） | Son | なし |
-| MC-358 | タスクボード再構築 | 高 | DONE（P1設計〜P4 Keitaキューカードまで全4層完了・本番反映・実画面確認済 2026-08-02。詳細→ tasks/MC-358.md） | Son | MC-357 |
-| MC-359 | アイデア生成の修理 | 高 | DONE（commit b2f634d push済 2026-08-02。実機3回8〜10sでdone確認済。詳細→ tasks/MC-359.md） | dev-apollo | fast opts(--tools ''/中立cwd/短system-prompt/思考オフ)＋IDEA_TIMEOUT 90→120s＋シード刷新 |
 | MC-360 | アイデア生成の多様化 | 高 | REVIEW（2026-08-02 実装・実機検証済。詳細→ tasks/MC-360.md） | dev-apollo | MC-359の続き。詳細→ tasks/MC-360.md |
 | MC-361 | モックアップに図解を標準化 | 高 | IN_PROGRESS（林→dev-apollo委譲。詳細→ tasks/MC-361.md） | dev-apollo | MC-360依存。詳細→ tasks/MC-361.md |
-| MC-362 | 完了ボタン動作確認 | 低 | DONE 🔒[Keita] | Son | なし |

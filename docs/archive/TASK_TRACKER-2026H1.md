@@ -2957,3 +2957,15 @@
 | 依存 | なし（Phase内でインクリメンタル）。関連: MC-260/261（/work）と同じ view 追加作法。 |
 | 更新日 | 2026-07-03 |
 
+
+## 退避: 2026-08-02 完了分（Son 消込・Keita指示「タスクボード上も消込してね」）
+
+| ID | タイトル | 優先 | ステータス | 担当 | 備考 |
+|---|---|---|---|---|---|
+| MC-290 | 共有ツリー未コミット整理 | 中 | DONE（8/2 消込: docx退避済(Keita承認)・gitignore整備済・D判定はソラの追記WIPと判明しスコープ外→ソラへ依頼済。詳細→ tasks/MC-290.md） | Son | 依存=共有ツリー整理（[[cxo-agent-shared-tree-concurrency]]相当）。棚卸しで挙げた117ファイル未コミット問題と同根 |
+| MC-331 | ClipItNow 海外プロモ | 高 | DONE 🔒[Keita] | Son | 外部送信はKeita確認必須（SOUL境界） |
+| MC-355 | デイリーニュース改善 | 高 | DONE（全スコープ完了・実画面確認済 2026-08-02。詳細→ tasks/MC-355.md） | Son | 詳細→ tasks/MC-355.md |
+| MC-357 | Keita操作キュー常設 | 高 | DONE（keita-actions.md運用開始＋ボード「⏱ Keita今日の2分」カード本番反映・実画面確認済 2026-08-02。詳細→ tasks/MC-357.md） | Son | なし |
+| MC-358 | タスクボード再構築 | 高 | DONE（P1設計〜P4 Keitaキューカードまで全4層完了・本番反映・実画面確認済 2026-08-02。詳細→ tasks/MC-358.md） | Son | MC-357 |
+| MC-359 | アイデア生成の修理 | 高 | DONE（commit b2f634d push済 2026-08-02。実機3回8〜10sでdone確認済。詳細→ tasks/MC-359.md） | dev-apollo | fast opts(--tools ''/中立cwd/短system-prompt/思考オフ)＋IDEA_TIMEOUT 90→120s＋シード刷新 |
+| MC-362 | 完了ボタン動作確認 | 低 | DONE 🔒[Keita] | Son | なし |
