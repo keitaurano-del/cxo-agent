@@ -392,3 +392,4 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（毎時ワークループ稼働中 crontab 08-23時JST 毎時15分。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
 | MC-360 | アイデア生成の多様化 | 高 | REVIEW（2026-08-02 実装・実機検証済。詳細→ tasks/MC-360.md） | dev-apollo | MC-359の続き。詳細→ tasks/MC-360.md |
 | MC-361 | モックアップに図解を標準化 | 高 | IN_PROGRESS（林→dev-apollo委譲。詳細→ tasks/MC-361.md） | dev-apollo | MC-360依存。詳細→ tasks/MC-361.md |
+| MC-363 | ビジネスモデル図鑑 | 高 | REVIEW（8/2 16時台 実装完了・12モデルSVG図解・/dev/business-models 本番200実証。詳細→ tasks/MC-363.md） | Son | 開発ページに常設。MC-361の図解方針と整合 |

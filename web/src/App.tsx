@@ -48,6 +48,8 @@ const ClaudeChat = lazy(() => import('./views/ClaudeChat'));
 const ClaudeBrowser = lazy(() => import('./views/ClaudeBrowser'));
 const Schedule = lazy(() => import('./views/Schedule'));
 const Development = lazy(() => import('./views/Development'));
+// ビジネスモデル図鑑（開発ページ配下の常設カタログ。MC-363）。
+const BusinessModels = lazy(() => import('./views/BusinessModels'));
 const Terminal = lazy(() => import('./views/Terminal'));
 // BuildProgress はタスクボード（TasksTabs）内のタブへ移動（MC-317）。
 const Pdca = lazy(() => import('./views/Pdca'));
@@ -736,6 +738,8 @@ export default function App() {
               <Route path="/baby-diary" element={<Childcare initialTab="diary" />} />
               <Route path="/schedule" element={<Schedule />} />
               <Route path="/dev" element={<Development />} />
+              {/* MC-363: ビジネスモデル図鑑（開発ページから導線）。 */}
+              <Route path="/dev/business-models" element={<BusinessModels />} />
               {/* MC-317: 実装進捗はタスクボードの「実装進捗」タブへ統合（旧 /progress は後方互換でタブ着地）。 */}
               <Route path="/progress" element={<TasksTabs initialTab="progress" />} />
               <Route path="/terminal-view" element={<div className="flex h-full flex-col overflow-hidden"><Terminal /></div>} />

@@ -5,6 +5,7 @@
 // プレビューは sandbox="allow-scripts"（allow-same-origin は付けない＝AI 生成 HTML を隔離）。
 // API: POST /api/dev/mockup/generate, GET/POST /api/dev/mockups, GET/DELETE /api/dev/mockups/:id。
 import { useState, useEffect, useRef, useCallback, type ReactElement } from 'react';
+import { Link } from 'react-router-dom';
 import { PageHeader } from '../components/PageHeader';
 import { Spinner, EmptyState } from '../components/ui';
 import { SparkIcon, TrashIcon } from '../components/icons';
@@ -1284,6 +1285,29 @@ export default function Development() {
             mobileTab === 'edit' ? 'flex' : 'hidden'
           } w-full min-h-0 flex-1 flex-col gap-4 overflow-y-auto border-b border-border p-4 md:flex md:w-[26rem] md:flex-none md:border-b-0 md:border-r`}
         >
+          {/* MC-363: ビジネスモデル図鑑への常設導線。 */}
+          <Link
+            to="/dev/business-models"
+            className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 transition-colors hover:border-accent hover:bg-surface-2"
+          >
+            <span
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base"
+              style={{ background: 'var(--mc-surface-2)' }}
+              aria-hidden
+            >
+              📖
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-xs font-bold text-text">ビジネスモデル図鑑</span>
+              <span className="block truncate text-[11px] text-text-muted">
+                優れたビジネスモデル 12 種を 1 枚図解で学ぶ
+              </span>
+            </span>
+            <span className="shrink-0 text-text-faint" aria-hidden>
+              ›
+            </span>
+          </Link>
+
           {/* 生成。まだ試作品が無いときだけ表示し、1 つ作ったら以降は「修正」だけの UI にする
               （Keita 指示 2026-07-03）。作り直したいときは修正セクションの「＋新規作成」で白紙に戻す。 */}
           <section className="flex flex-col gap-2">
