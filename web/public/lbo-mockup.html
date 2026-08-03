@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LBOモデラー（モック） - Apollo</title>
+<style>
+  :root { --accent: #1a6b54; --accent-bg: #eef6f3; --line: #e3e6ea; --txt: #24292f; --sub: #6a737d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Hiragino Sans", "Noto Sans JP", -apple-system, sans-serif; color: var(--txt); background: #fafbfc; line-height: 1.7; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 16px 80px; }
+  header h1 { font-size: 22px; margin: 0 0 4px; }
+  header p { color: var(--sub); font-size: 13px; margin: 0 0 20px; }
+  h2 { font-size: 17px; border-left: 4px solid var(--accent); padding-left: 10px; margin: 36px 0 12px; }
+  h3 { font-size: 14px; margin: 18px 0 8px; }
+  .note { background: var(--accent-bg); border-radius: 8px; padding: 12px 16px; font-size: 13px; margin: 12px 0; }
+  .note b { color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .field { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .field label { display: block; font-size: 12px; color: var(--sub); margin-bottom: 4px; }
+  .field input { width: 100%; border: none; font-size: 16px; font-weight: 600; color: var(--txt); outline: none; background: transparent; }
+  .field .unit { font-size: 11px; color: var(--sub); }
+  table { border-collapse: collapse; width: 100%; background: #fff; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: right; white-space: nowrap; }
+  th { background: #f3f5f7; font-weight: 600; }
+  td:first-child, th:first-child { text-align: left; }
+  .tbl-scroll { overflow-x: auto; border-radius: 8px; border: 1px solid var(--line); }
+  .tbl-scroll table { border: none; }
+  .kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin: 12px 0; }
+  .kpi { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .kpi .k { font-size: 12px; color: var(--sub); }
+  .kpi .v { font-size: 22px; font-weight: 700; color: var(--accent); }
+  .kpi .f { font-size: 11px; color: var(--sub); margin-top: 2px; }
+  .sens td.hot { background: #d9efe7; font-weight: 600; }
+  .sens td.cold { background: #fdf1ee; }
+  details { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin: 8px 0; font-size: 13px; }
+  summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+  footer { margin-top: 48px; font-size: 11px; color: var(--sub); border-top: 1px solid var(--line); padding-top: 12px; }
+  .pos { color: var(--accent); } .neg { color: #b3492f; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>LBOモデラー（モック v1）</h1>
+  <p>前提を入力するとLBO（レバレッジド・バイアウト）モデル一式を自動計算します。すべての数値は編集可能なサンプルです。</p>
+</header>
+
+<div class="note"><b>LBOとは：</b>買収資金の大部分を借入（レバレッジ）で調達して企業を買収し、対象企業のキャッシュフローで借入を返済しながら企業価値を高め、数年後に売却してリターンを得る手法です。自己資金（エクイティ）を小さくするほど、成功時のリターン倍率は大きくなります（失敗時のリスクも大きくなります）。</div>
+
+<h2>① 前提（Assumptions）</h2>
+<div class="grid" id="inputs">
+  <div class="field"><label>初年度EBITDA <span class="unit">（億円）</span></label><input type="number" id="ebitda0" value="100" step="10"></div>
+  <div class="field"><label>買収マルチプル <span class="unit">（EV/EBITDA 倍）</span></label><input type="number" id="entryX" value="8" step="0.5"></div>
+  <div class="field"><label>シニアローン <span class="unit">（EBITDA倍率）</span></label><input type="number" id="srX" value="4" step="0.5"></div>
+  <div class="field"><label>メザニン <span class="unit">（EBITDA倍率）</span></label><input type="number" id="mzX" value="1.5" step="0.5"></div>
+  <div class="field"><label>シニア金利 <span class="unit">（%）</span></label><input type="number" id="srR" value="3" step="0.5"></div>
+  <div class="field"><label>メザニン金利 <span class="unit">（%）</span></label><input type="number" id="mzR" value="8" step="0.5"></div>
+  <div class="field"><label>シニア年間強制返済 <span class="unit">（当初残高比%）</span></label><input type="number" id="amort" value="5" step="1"></div>
+  <div class="field"><label>EBITDA成長率 <span class="unit">（%/年）</span></label><input type="number" id="growth" value="5" step="1"></div>
+  <div class="field"><label>減価償却費 <span class="unit">（EBITDA比%）</span></label><input type="number" id="daPct" value="30" step="5"></div>
+  <div class="field"><label>設備投資 <span class="unit">（EBITDA比%）</span></label><input type="number" id="capexPct" value="25" step="5"></div>
+  <div class="field"><label>実効税率 <span class="unit">（%）</span></label><input type="number" id="taxR" value="30" step="1"></div>
+  <div class="field"><label>保有期間 <span class="unit">（年）</span></label><input type="number" id="years" value="5" step="1" min="1" max="10"></div>
+  <div class="field"><label>売却マルチプル <span class="unit">（EV/EBITDA 倍）</span></label><input type="number" id="exitX" value="8" step="0.5"></div>
+  <div class="field"><label>取引費用 <span class="unit">（EV比%）</span></label><input type="number" id="feePct" value="2" step="0.5"></div>
+</div>
+
+<h2>② Sources &amp; Uses（資金の調達と使途）</h2>
+<div class="note"><b>読み方：</b>Uses（右）＝買収に必要な資金の総額。Sources（左）＝それをどう調達するか。借入で足りない分がスポンサー（PEファンド）の自己資金＝<b>エクイティ</b>です。</div>
+<div class="tbl-scroll"><table id="snu"></table></div>
+
+<h2>③ 予測PL・フリーキャッシュフロー</h2>
+<div class="note"><b>読み方：</b>LBOの生命線は「対象企業が生む現金で借金を返せるか」。EBITDA − 税金 − 設備投資 − 支払利息 が返済原資（FCF）になります。</div>
+<div class="tbl-scroll"><table id="pl"></table></div>
+
+<h2>④ デットスケジュール（返済予定表）</h2>
+<div class="note"><b>読み方：</b>毎年の強制返済に加え、余った現金は追加返済（<b>キャッシュスイープ</b>）に回します。金利の高いメザニンより先に、通常は契約上シニアから返済します。</div>
+<div class="tbl-scroll"><table id="debt"></table></div>
+
+<h2>⑤ 投資リターン</h2>
+<div class="kpi-row" id="kpis"></div>
+<h3>バリュークリエイション分解（リターンの源泉）</h3>
+<div class="tbl-scroll"><table id="bridge"></table></div>
+<div class="note"><b>読み方：</b>LBOのリターンは主に3つの源泉に分解できます。①EBITDA成長（事業改善）②マルチプル変化（買値と売値の倍率差）③デレバレッジ（借入返済によりエクイティ持分が増える）。健全な案件ほど①と③の比率が高くなります。</div>
+
+<h2>⑥ 感応度分析（IRR）</h2>
+<div class="note"><b>読み方：</b>縦＝売却マルチプル、横＝レバレッジ（負債のEBITDA倍率）。前提が動いたときIRRがどう変わるかを確認します。太字緑＝IRR 20%以上（PE案件の一般的な目線）、赤系＝10%未満。</div>
+<div class="tbl-scroll"><table id="sens" class="sens"></table></div>
+
+<details><summary>用語ミニ辞書</summary>
+  <p><b>EV（企業価値）</b>＝株式価値＋純有利子負債。買収価格の基準。<br>
+  <b>EBITDA</b>＝営業利益＋減価償却費。おおまかな現金創出力。<br>
+  <b>IRR（内部収益率）</b>＝投資期間全体の年率リターン。<br>
+  <b>MOIC</b>＝回収額÷投資額の倍率。2.0xなら元本が2倍。<br>
+  <b>メザニン</b>＝シニアローンと株式の中間の劣後性資金。金利は高いが返済順位が低い。<br>
+  <b>キャッシュスイープ</b>＝余剰現金による借入の期限前返済。</p>
+</details>
+
+<footer>本ページは学習・検討用のモックです。実在の企業・案件とは関係のないサンプル値であり、投資助言ではありません。計算はEBITDAベースの簡易モデル（運転資本増減は省略、中間配当なし、売却時費用は考慮外）です。Apollo / MC-367</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (n, d=0) => n.toLocaleString('ja-JP', {maximumFractionDigits:d, minimumFractionDigits:d});
+const pct = n => (n*100).toFixed(1) + '%';
+
+function readInputs(){
+  return {
+    e0:+$('ebitda0').value, enX:+$('entryX').value, srX:+$('srX').value, mzX:+$('mzX').value,
+    srR:+$('srR').value/100, mzR:+$('mzR').value/100, amort:+$('amort').value/100,
+    g:+$('growth').value/100, da:+$('daPct').value/100, capex:+$('capexPct').value/100,
+    tax:+$('taxR').value/100, N:Math.max(1,Math.min(10,Math.round(+$('years').value))),
+    exX:+$('exitX').value, fee:+$('feePct').value/100
+  };
+}
+
+function runModel(p){
+  const ev = p.e0*p.enX, fees = ev*p.fee;
+  const sr0 = p.e0*p.srX, mz0 = p.e0*p.mzX;
+  const debt0 = sr0+mz0;
+  const eq0 = Math.max(ev+fees-debt0, 0);
+  const yrs = [];
+  let sr = sr0, mz = mz0, cash = 0;
+  for(let t=1;t<=p.N;t++){
+    const eb = p.e0*Math.pow(1+p.g,t);
+    const daV = eb*p.da, cap = eb*p.capex;
+    const ebit = eb-daV;
+    const int_ = sr*p.srR + mz*p.mzR;
+    const pre = ebit-int_;
+    const tx = Math.max(0,pre*p.tax);
+    const ni = pre-tx;
+    const fcf = ni+daV-cap;
+    const mand = Math.min(sr, sr0*p.amort);
+    let avail = Math.max(0, fcf-mand);
+    const sweepSr = Math.min(sr-mand, avail); avail-=sweepSr;
+    const sweepMz = Math.min(mz, avail); avail-=sweepMz;
+    sr -= (mand+sweepSr); mz -= sweepMz; cash += avail + Math.min(0,fcf-mand)*0; // 不足時は簡易にゼロ床
+    if(fcf < mand){ cash += fcf-mand; } // 現金取り崩し（簡易）
+    yrs.push({t,eb,daV,ebit,int_,tx,ni,cap,fcf,mand,sweepSr,sweepMz,sr,mz,cash});
+  }
+  const ebN = p.e0*Math.pow(1+p.g,p.N);
+  const evExit = ebN*p.exX;
+  const debtEnd = sr+mz;
+  const eqExit = Math.max(evExit-debtEnd+cash,0);
+  const moic = eq0>0 ? eqExit/eq0 : Infinity;
+  const irr = eq0>0 ? Math.pow(moic,1/p.N)-1 : Infinity;
+  // value creation bridge (equity basis)
+  const growthEff = (ebN-p.e0)*p.enX;             // EBITDA成長 × 買収倍率
+  const multEff = (p.exX-p.enX)*ebN;              // マルチプル変化 × 売却時EBITDA
+  const delevEff = (debt0-debtEnd)+cash;          // 返済+現金積上げ
+  return {ev,fees,sr0,mz0,debt0,eq0,yrs,ebN,evExit,debtEnd,cash,eqExit,moic,irr,growthEff,multEff,delevEff};
+}
+
+function irrOnly(p){ return runModel(p).irr; }
+
+function render(){
+  const p = readInputs();
+  const m = runModel(p);
+  // S&U
+  $('snu').innerHTML = `
+    <tr><th colspan="2">Sources（調達）</th><th colspan="2">Uses（使途）</th></tr>
+    <tr><td>シニアローン（${p.srX.toFixed(1)}x EBITDA）</td><td>${fmt(m.sr0)}</td><td>企業価値 EV（${p.enX.toFixed(1)}x × EBITDA ${fmt(p.e0)}）</td><td>${fmt(m.ev)}</td></tr>
+    <tr><td>メザニン（${p.mzX.toFixed(1)}x EBITDA）</td><td>${fmt(m.mz0)}</td><td>取引費用（EV×${(p.fee*100).toFixed(1)}%）</td><td>${fmt(m.fees)}</td></tr>
+    <tr><td><b>エクイティ（自己資金）</b></td><td><b>${fmt(m.eq0)}</b></td><td></td><td></td></tr>
+    <tr><th>合計</th><th>${fmt(m.sr0+m.mz0+m.eq0)}</th><th>合計</th><th>${fmt(m.ev+m.fees)}</th></tr>`;
+  // PL
+  const hd = m.yrs.map(y=>`<th>Y${y.t}</th>`).join('');
+  const row = (label, f, d=0) => `<tr><td>${label}</td>${m.yrs.map(y=>`<td>${fmt(f(y),d)}</td>`).join('')}</tr>`;
+  $('pl').innerHTML = `<tr><th>（億円）</th>${hd}</tr>`
+    + row('EBITDA', y=>y.eb)
+    + row('（−）減価償却費', y=>-y.daV)
+    + row('EBIT（営業利益）', y=>y.ebit)
+    + row('（−）支払利息', y=>-y.int_)
+    + row('（−）税金', y=>-y.tx)
+    + row('当期純利益', y=>y.ni)
+    + row('（＋）減価償却費 （−）設備投資', y=>y.daV-y.cap)
+    + row('フリーキャッシュフロー（FCF）', y=>y.fcf);
+  // Debt schedule
+  $('debt').innerHTML = `<tr><th>（億円）</th>${hd}</tr>`
+    + row('強制返済（シニア）', y=>-y.mand)
+    + row('キャッシュスイープ（シニア）', y=>-y.sweepSr)
+    + row('キャッシュスイープ（メザニン）', y=>-y.sweepMz)
+    + row('シニア残高', y=>y.sr)
+    + row('メザニン残高', y=>y.mz)
+    + row('総負債残高', y=>y.sr+y.mz)
+    + row('レバレッジ（負債/EBITDA）', y=>(y.sr+y.mz)/y.eb, 1)
+    + row('現金残高', y=>y.cash);
+  // KPI
+  const kpi = (k,v,f)=>`<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div><div class="f">${f}</div></div>`;
+  $('kpis').innerHTML =
+    kpi('投資額（エクイティ）', fmt(m.eq0)+'億円', 'EV＋費用 − 借入')
+    + kpi('売却時エクイティ価値', fmt(m.eqExit)+'億円', `売却EV ${fmt(m.evExit)} − 残債 ${fmt(m.debtEnd)} ＋ 現金 ${fmt(m.cash)}`)
+    + kpi('MOIC', isFinite(m.moic)?m.moic.toFixed(2)+'x':'—', '回収額 ÷ 投資額')
+    + kpi('IRR', isFinite(m.irr)?pct(m.irr):'—', `${p.N}年保有・中間分配なし`)
+    + kpi('売却時レバレッジ', (m.debtEnd/m.ebN).toFixed(1)+'x', `当初 ${((m.sr0+m.mz0)/p.e0).toFixed(1)}x から低下`);
+  // Bridge
+  const total = m.growthEff+m.multEff+m.delevEff;
+  const br=(k,v,f)=>`<tr><td>${k}</td><td class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${fmt(v)}</td><td style="text-align:left;color:var(--sub)">${f}</td></tr>`;
+  $('bridge').innerHTML = `<tr><th>源泉</th><th>寄与（億円）</th><th>計算</th></tr>`
+    + br('① EBITDA成長', m.growthEff, `（売却時EBITDA ${fmt(m.ebN)} − 当初 ${fmt(p.e0)}）× 買収倍率 ${p.enX.toFixed(1)}x`)
+    + br('② マルチプル変化', m.multEff, `（売却 ${p.exX.toFixed(1)}x − 買収 ${p.enX.toFixed(1)}x）× 売却時EBITDA`)
+    + br('③ デレバレッジ・現金', m.delevEff, `負債返済 ${fmt(m.debt0-m.debtEnd)} ＋ 現金 ${fmt(m.cash)}`)
+    + `<tr><th>エクイティ価値増加 合計</th><th>${total>=0?'+':''}${fmt(total)}</th><th style="text-align:left">投資額 ${fmt(m.eq0)} → ${fmt(m.eqExit)}</th></tr>`;
+  // Sensitivity: exit multiple (rows) × total leverage (cols)
+  const exits = [-2,-1,0,1,2].map(d=>p.exX+d).filter(x=>x>0);
+  const levs = [-1.5,-0.75,0,0.75,1.5].map(d=>p.srX+p.mzX+d).filter(x=>x>0.5);
+  let html = `<tr><th>売却x＼負債x</th>${levs.map(l=>`<th>${l.toFixed(2)}x</th>`).join('')}</tr>`;
+  for(const ex of exits){
+    html += `<tr><td>${ex.toFixed(1)}x</td>`;
+    for(const lv of levs){
+      const ratio = (p.srX+p.mzX)>0 ? lv/(p.srX+p.mzX) : 0;
+      const q = {...p, exX:ex, srX:p.srX*ratio, mzX:p.mzX*ratio};
+      const r = irrOnly(q);
+      const cls = r>=0.20?' class="hot"':(r<0.10?' class="cold"':'');
+      html += `<td${cls}>${isFinite(r)?pct(r):'—'}</td>`;
+    }
+    html += '</tr>';
+  }
+  $('sens').innerHTML = html;
+}
+document.querySelectorAll('#inputs input').forEach(el=>el.addEventListener('input', render));
+render();
+</script>
+</body>
+</html>
