@@ -385,13 +385,13 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 
 | ID | タイトル | 優先 | ステータス | 担当 | 備考 |
 |---|---|---|---|---|---|
-| MC-313 | Apollo UI 改善 | 中 | IN_PROGRESS（8/2 タブ共通化DONEで🟢全消化。残=🟡要一声/🔴承認のみ→夜まとめで提案。詳細→ tasks/MC-313.md） | Son | [[son-owns-board-reconciliation]] | [[clipitnow-exoclick-integration]] [[son-owns-board-reconciliation]] [[cxo-agent-shared-tree-concurrency]] [[cxo-agent-prod-restart-loads-worktree]] |
+| MC-313 | Apollo UI 改善 | 中 | IN_PROGRESS（8/3 21:12 Keita決裁=🟡掃除4項目「全部退避方式」承認→Son実施中（_archive/退避＋build検証）。詳細→ tasks/MC-313.md） | Son | [[son-owns-board-reconciliation]] | [[clipitnow-exoclick-integration]] [[son-owns-board-reconciliation]] [[cxo-agent-shared-tree-concurrency]] [[cxo-agent-prod-restart-loads-worktree]] |
 | MC-347 | ClipItNow ランキングLP | 中 | IN_PROGRESS（8/2 19:20 GSC実クエリでtitle調整済(2ページ・本番反映・IndexNow200)→CTR観測フェーズ。詳細→ tasks/MC-347.md） | Son | MC-336 / video-dl |
-| MC-351 | ClipItNow 集客スプリント | 高 | DONE 🔒[Keita] | Son | MC-331/336/339と連動 |
+| MC-351 | ClipItNow 集客スプリント | 高 | DONE 🔒[Keita]（8/3 21:12 決裁=②正直開示で今週投稿→Son が火/水夜に Show HN 実行・launch-pack準備済） | Son | MC-331/336/339と連動 |
 | MC-352 | ClipItNow ブログ配信 | 高 | DONE 🔒[Keita] | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
 | MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（毎時ワークループ稼働中 crontab 08-23時JST 毎時15分。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
-| MC-360 | アイデア生成の多様化 | 高 | REVIEW（8/2深夜 図鑑2モデル掛け合わせ方式へ改修・実機検証済。詳細→ tasks/MC-360.md） | dev-apollo, Son | MC-359の続き。MC-363図鑑ベース。詳細→ tasks/MC-360.md |
+| MC-360 | アイデア生成の多様化 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-360.md） | dev-apollo, Son | MC-359の続き。MC-363図鑑ベース。詳細→ tasks/MC-360.md |
 | MC-361 | モックアップに図解を標準化 | 高 | IN_PROGRESS（林→dev-apollo委譲。詳細→ tasks/MC-361.md） | dev-apollo | MC-360依存。詳細→ tasks/MC-361.md |
-| MC-363 | ビジネスモデル図鑑 | 高 | REVIEW（8/2 16時台 実装完了・12モデルSVG図解・/dev/business-models 本番200実証。詳細→ tasks/MC-363.md） | Son | 開発ページに常設。MC-361の図解方針と整合 |
+| MC-363 | ビジネスモデル図鑑 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-363.md） | Son | 開発ページに常設。MC-361の図解方針と整合 |
 | MC-364 | ENランキングに一般動画混在 | 中 | DONE（8/3 ENシードへbilibili24件追加・service再起動・/api/ranking実測50件中14件bilibili。詳細→ tasks/MC-364.md） | Son | Keita依頼8/3「アダルトだけ→bilibiliとかも」。video-dl commit ffda928 |
 | MC-365 | Keita待ちの決裁自動ボタン化 | 高 | DONE（8/3 blockers.json next_actor=keita→/api/decisions自動投入を機能化・本番実測でMC-352自動作成/投入済4件スキップ確認。詳細→ tasks/MC-365.md） | Son | Keita依頼8/3「一時的なものじゃなくて機能として」。決裁一覧読み出し時のlazy同期・taskId重複防止 |
