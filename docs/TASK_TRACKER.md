@@ -388,7 +388,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-313 | Apollo UI 改善 | 中 | IN_PROGRESS（8/2 タブ共通化DONEで🟢全消化。残=🟡要一声/🔴承認のみ→夜まとめで提案。詳細→ tasks/MC-313.md） | Son | [[son-owns-board-reconciliation]] | [[clipitnow-exoclick-integration]] [[son-owns-board-reconciliation]] [[cxo-agent-shared-tree-concurrency]] [[cxo-agent-prod-restart-loads-worktree]] |
 | MC-347 | ClipItNow ランキングLP | 中 | IN_PROGRESS（8/2 19:20 GSC実クエリでtitle調整済(2ページ・本番反映・IndexNow200)→CTR観測フェーズ。詳細→ tasks/MC-347.md） | Son | MC-336 / video-dl |
 | MC-351 | ClipItNow 集客スプリント | 高 | DONE 🔒[Keita] | Son | MC-331/336/339と連動 |
-| MC-352 | ClipItNow ブログ配信 | 高 | IN_PROGRESS（8/2 18:20 配信流入観測をPDCA Check組込済・Son単独分は消化→残=note/Blogger/Bing WMTのKeita側。詳細→ tasks/MC-352.md） | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
+| MC-352 | ClipItNow ブログ配信 | 高 | DONE 🔒[Keita] | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
 | MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（毎時ワークループ稼働中 crontab 08-23時JST 毎時15分。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
 | MC-360 | アイデア生成の多様化 | 高 | REVIEW（8/2深夜 図鑑2モデル掛け合わせ方式へ改修・実機検証済。詳細→ tasks/MC-360.md） | dev-apollo, Son | MC-359の続き。MC-363図鑑ベース。詳細→ tasks/MC-360.md |
 | MC-361 | モックアップに図解を標準化 | 高 | IN_PROGRESS（林→dev-apollo委譲。詳細→ tasks/MC-361.md） | dev-apollo | MC-360依存。詳細→ tasks/MC-361.md |
