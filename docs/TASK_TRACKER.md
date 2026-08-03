@@ -393,3 +393,4 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-360 | アイデア生成の多様化 | 高 | REVIEW（8/2深夜 図鑑2モデル掛け合わせ方式へ改修・実機検証済。詳細→ tasks/MC-360.md） | dev-apollo, Son | MC-359の続き。MC-363図鑑ベース。詳細→ tasks/MC-360.md |
 | MC-361 | モックアップに図解を標準化 | 高 | IN_PROGRESS（林→dev-apollo委譲。詳細→ tasks/MC-361.md） | dev-apollo | MC-360依存。詳細→ tasks/MC-361.md |
 | MC-363 | ビジネスモデル図鑑 | 高 | REVIEW（8/2 16時台 実装完了・12モデルSVG図解・/dev/business-models 本番200実証。詳細→ tasks/MC-363.md） | Son | 開発ページに常設。MC-361の図解方針と整合 |
+| MC-364 | ENランキングに一般動画混在 | 中 | DONE（8/3 ENシードへbilibili24件追加・service再起動・/api/ranking実測50件中14件bilibili。詳細→ tasks/MC-364.md） | Son | Keita依頼8/3「アダルトだけ→bilibiliとかも」。video-dl commit ffda928 |
