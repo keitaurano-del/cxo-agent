@@ -385,7 +385,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 
 | ID | タイトル | 優先 | ステータス | 担当 | 備考 |
 |---|---|---|---|---|---|
-| MC-313 | Apollo UI 改善 | 中 | IN_PROGRESS（8/3 21:4x 🟡掃除4項目=退避完了（30ファイル→_archive/mc313-20260803・build green・commit 947862d push済）。残=軸②UX🟡と🔴承認系。詳細→ tasks/MC-313.md） | Son | [[son-owns-board-reconciliation]] | [[clipitnow-exoclick-integration]] [[son-owns-board-reconciliation]] [[cxo-agent-shared-tree-concurrency]] [[cxo-agent-prod-restart-loads-worktree]] |
+| MC-313 | Apollo UI 改善 | 中 | IN_PROGRESS（8/3 22:16 🟢最終項テスト残骸退避(3a8d537 push済)・残り🟡6項目を一括決裁投入(dec-da32b7d3・pending)→Keita承認待ち。詳細→ tasks/MC-313.md） | Son | [[son-owns-board-reconciliation]] | [[clipitnow-exoclick-integration]] [[son-owns-board-reconciliation]] [[cxo-agent-shared-tree-concurrency]] [[cxo-agent-prod-restart-loads-worktree]] |
 | MC-347 | ClipItNow ランキングLP | 中 | IN_PROGRESS（8/2 19:20 GSC実クエリでtitle調整済(2ページ・本番反映・IndexNow200)→CTR観測フェーズ。詳細→ tasks/MC-347.md） | Son | MC-336 / video-dl |
 | MC-351 | ClipItNow 集客スプリント | 高 | DONE 🔒[Keita]（8/3 21:12 決裁=②正直開示で今週投稿→Son が火/水夜に Show HN 実行・launch-pack準備済） | Son | MC-331/336/339と連動 |
 | MC-352 | ClipItNow ブログ配信 | 高 | DONE 🔒[Keita] | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
