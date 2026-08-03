@@ -279,6 +279,13 @@ export const DECISION_REQUESTS_FILE = join(INBOX_DATA_DIR, 'decision-requests.js
 export const DECISION_AUTOMODE_FILE = join(INBOX_DATA_DIR, 'decision-automode.json');
 
 /**
+ * ブロッカーレジストリ（MC-353 P1。board-audit が日次で全置換生成する JSON）。
+ * 形: { updatedAt, blockers: [{ taskId, type, since, days, next_action, next_actor, note? }] }。
+ * next_actor='keita' のエントリは決裁フローへ自動同期する（MC-365 blockerDecisionSync）。
+ */
+export const BLOCKERS_FILE = join(INBOX_DATA_DIR, 'blockers.json');
+
+/**
  * エージェント連絡ヘルパ notify-agent.sh の絶対パス（MC-200）。
  * 決裁結果を要求元エージェント（requesterAgent）のターミナルへ流すのに使う（MC-203）。
  * env NOTIFY_AGENT_SCRIPT で差し替え可。

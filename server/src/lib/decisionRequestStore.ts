@@ -41,6 +41,8 @@ export interface DecisionRequest {
   options: DecisionOption[];
   /** 結果を流す要求元エージェント名（notify-agent.sh の宛先キー。例: "rin" / "masayoshi"）。 */
   requesterAgent: string;
+  /** 紐づくタスク ID（例: "MC-351"。blockers.json 自動同期の重複判定に使う。任意。MC-365）。 */
+  taskId?: string;
   /** 作成日時（ISO8601）。 */
   requestedAt: string;
   /** 現在のステータス（withdrawn=要求元エージェントによる取り下げ。MC-353 P3）。 */
@@ -109,6 +111,7 @@ export function createDecision(data: {
   detail: string;
   options: DecisionOption[];
   requesterAgent: string;
+  taskId?: string;
   expiresAt?: string;
   fallbackOptionId?: string;
 }): DecisionRequest {
@@ -123,6 +126,7 @@ export function createDecision(data: {
     requesterAgent: data.requesterAgent,
     requestedAt: new Date().toISOString(),
     status: 'pending',
+    ...(data.taskId ? { taskId: data.taskId } : {}),
     ...(data.expiresAt ? { expiresAt: data.expiresAt } : {}),
     ...(data.fallbackOptionId ? { fallbackOptionId: data.fallbackOptionId } : {}),
   };
@@ -148,6 +152,11 @@ export function updateDecision(
   const updated: DecisionRequest = { ...existing, ...patch, id };
   appendRecord(updated);
   return updated;
+}
+
+/** 全決裁リクエストの最新状態を返す（status 不問。blockers 自動同期の重複判定用。MC-365）。 */
+export function listAllDecisions(): DecisionRequest[] {
+  return [...readAll().values()];
 }
 
 /** status=pending の決裁リクエストを全件返す（requestedAt 昇順）。 */

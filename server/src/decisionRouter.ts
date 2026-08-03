@@ -25,6 +25,7 @@ import {
   readDecisionAutoMode,
   setDecisionAutoMode,
 } from './lib/decisionAutoModeStore.js';
+import { syncBlockersToDecisions } from './lib/blockerDecisionSync.js';
 import { notifyAgent } from './lib/notifyAgent.js';
 
 /** 変更を realtime（SSE）へ流す broadcast 関数の型（index.ts の SSE hub を注入する）。 */
@@ -57,10 +58,30 @@ function applyExpiredFallbacks(broadcast?: Broadcast): void {
   }
 }
 
+/**
+ * blockers.json の Keita 待ち → 決裁フロー自動同期（MC-365）。
+ * applyExpiredFallbacks と同じく一覧読み出し時の lazy sweep（cron 依存なし）。
+ * 失敗しても一覧表示は継続する（同期は補助機能）。
+ */
+function applyBlockerSync(broadcast?: Broadcast): void {
+  try {
+    const created = syncBlockersToDecisions();
+    for (const rec of created) {
+      console.log(`[blocker-decision-sync] auto-created ${rec.id} for ${rec.taskId}: ${rec.title}`);
+    }
+    if (created.length > 0) {
+      broadcast?.('update', { types: ['decisions'], ts: Date.now() });
+    }
+  } catch (e) {
+    console.error('[blocker-decision-sync] sync failed:', e);
+  }
+}
+
 /** GET /api/decisions — pending な決裁リクエスト一覧を返す。 */
 function handleList(_req: Request, res: Response, broadcast?: Broadcast): void {
   try {
     applyExpiredFallbacks(broadcast);
+    applyBlockerSync(broadcast);
     const decisions = listPendingDecisions();
     res.json({
       generatedAt: new Date().toISOString(),
