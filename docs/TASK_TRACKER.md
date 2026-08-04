@@ -387,7 +387,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 |---|---|---|---|---|---|
 | MC-313 | Apollo UI 改善 | 中 | IN_PROGRESS（8/3 22:16 🟢最終項テスト残骸退避(3a8d537 push済)・残り🟡6項目を一括決裁投入(dec-da32b7d3・pending)→Keita承認待ち。詳細→ tasks/MC-313.md） | Son | [[son-owns-board-reconciliation]] | [[clipitnow-exoclick-integration]] [[son-owns-board-reconciliation]] [[cxo-agent-shared-tree-concurrency]] [[cxo-agent-prod-restart-loads-worktree]] |
 | MC-347 | ClipItNow ランキングLP | 中 | IN_PROGRESS（8/2 19:20 GSC実クエリでtitle調整済(2ページ・本番反映・IndexNow200)→CTR観測フェーズ。詳細→ tasks/MC-347.md） | Son | MC-336 / video-dl |
-| MC-351 | ClipItNow 集客スプリント | 高 | IN_PROGRESS（8/3 21:12 決裁=②正直開示で投稿→8/4 21:23 実行するも**HN側の新規アカShow HN制限でブロック・未投稿**。E2E/文面/アカは有効・次の一手はKeita判断→ tasks/MC-351.md） | Son | MC-331/336/339と連動 |
+| MC-351 | ClipItNow 集客スプリント | 高 | IN_PROGRESS（8/4 21:23 Show HN実行→HN新規アカ制限でブロック→22:29 Keita決裁=(a)hn@へメール→Son英文起案済・文面承認待ち(dec-1d8f635c)→ tasks/MC-351.md） | Son | MC-331/336/339と連動 |
 | MC-352 | ClipItNow ブログ配信 | 高 | DONE 🔒[Keita] | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
 | MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（毎時ワークループ稼働中 crontab 08-23時JST 毎時15分。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
 | MC-360 | アイデア生成の多様化 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-360.md） | dev-apollo, Son | MC-359の続き。MC-363図鑑ベース。詳細→ tasks/MC-360.md |
