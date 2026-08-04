@@ -195,12 +195,13 @@ function render(){
     + kpi('IRR', isFinite(m.irr)?pct(m.irr):'—', `${p.N}年保有・中間分配なし`)
     + kpi('売却時レバレッジ', (m.debtEnd/m.ebN).toFixed(1)+'x', `当初 ${((m.sr0+m.mz0)/p.e0).toFixed(1)}x から低下`);
   // Bridge
-  const total = m.growthEff+m.multEff+m.delevEff;
+  const total = m.growthEff+m.multEff+m.delevEff-m.fees;
   const br=(k,v,f)=>`<tr><td>${k}</td><td class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${fmt(v)}</td><td style="text-align:left;color:var(--sub)">${f}</td></tr>`;
   $('bridge').innerHTML = `<tr><th>源泉</th><th>寄与（億円）</th><th>計算</th></tr>`
     + br('① EBITDA成長', m.growthEff, `（売却時EBITDA ${fmt(m.ebN)} − 当初 ${fmt(p.e0)}）× 買収倍率 ${p.enX.toFixed(1)}x`)
     + br('② マルチプル変化', m.multEff, `（売却 ${p.exX.toFixed(1)}x − 買収 ${p.enX.toFixed(1)}x）× 売却時EBITDA`)
     + br('③ デレバレッジ・現金', m.delevEff, `負債返済 ${fmt(m.debt0-m.debtEnd)} ＋ 現金 ${fmt(m.cash)}`)
+    + br('④ 取引費用（控除）', -m.fees, `買収時にエクイティで負担した費用（EV×${(p.fee*100).toFixed(1)}%）`)
     + `<tr><th>エクイティ価値増加 合計</th><th>${total>=0?'+':''}${fmt(total)}</th><th style="text-align:left">投資額 ${fmt(m.eq0)} → ${fmt(m.eqExit)}</th></tr>`;
   // Sensitivity: exit multiple (rows) × total leverage (cols)
   const exits = [-2,-1,0,1,2].map(d=>p.exX+d).filter(x=>x>0);
