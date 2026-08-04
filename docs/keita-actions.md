@@ -5,15 +5,20 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
 
 ---
 
-## 未完（2026-08-04 時点）
+## 未完（2026-08-05 時点）
 
-1. 決裁4件をタップ（計2分・スマホ可）: https://apollomansion.com の決裁タブ
-   - 【MC-351】Show HNがHN側の新規アカ制限でブロック→次の一手 (a)hn@へ依頼メール/(b)カルマ積んで再投稿/(c)Reddit振替（dec-56d95f6a）
-   - 【MC-367】LBOモックの方向性レビュー: P2 EDINET連携/P3 保存・Excel/P4 AI講師の優先度（dec-68e7d6ae）
-   - 【MC-313】UX/トークン改善 残り🟡6項目の一括お任せ可否（dec-da32b7d3）
-   - 【MC-352】note/Blogger投稿: Cowork経由 or 保留（dec-446deb72・旧決裁が消えていたため再投入）
+1. 【MC-351】hn@宛メール文面の承認タップ（30秒・スマホ可）: 決裁タブ dec-1d8f635c
+   - 承認＝Sonが clipitnow.support@gmail.com から hn@ycombinator.com へ送信。全文= video-dl/docs/hn-email-draft-20260804.md
+2. 【MC-352】note/Blogger投稿の Cowork 実操作（8/4決裁=Cowork経由）
+   - Keitaが Cowork でnote/Bloggerにログイン→Sonの校了済ドラフト4本を貼り付け投稿（SonがCowork側の段取り・貼付テキストを準備して待機）
 
 ## 完了ログ
+
+- 2026-08-04 22:29 決裁4件タップ完了 🔒[Keita]
+  - 【MC-351】次の一手 → **(a) hn@へ依頼メール**（dec-56d95f6a）→ Son英文起案済・文面承認 dec-1d8f635c へ継続
+  - 【MC-367】LBOモック方向性 → **承認して進める**（dec-68e7d6ae）
+  - 【MC-313】UX/トークン改善 残り🟡6項目 → **一括でSonに任せる**（dec-da32b7d3）
+  - 【MC-352】note/Blogger投稿 → **Cowork経由で投稿**（dec-446deb72）→ 上記2の実操作へ継続
 
 - 2026-08-02 4. Tumblr 認証メールのリンクをタップ（1分・スマホ可）【MC-352】 → ボードから完了 🔒[Keita]
 - 2026-08-02 3. resume docx×3 の削除可否（10秒）【MC-290】 → ボードから完了 🔒[Keita]

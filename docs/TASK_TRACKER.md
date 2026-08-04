@@ -385,7 +385,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 
 | ID | タイトル | 優先 | ステータス | 担当 | 備考 |
 |---|---|---|---|---|---|
-| MC-313 | Apollo UI 改善 | 中 | IN_PROGRESS（8/3 22:16 🟢最終項テスト残骸退避(3a8d537 push済)・残り🟡6項目を一括決裁投入(dec-da32b7d3・pending)→Keita承認待ち。詳細→ tasks/MC-313.md） | Son | [[son-owns-board-reconciliation]] | [[clipitnow-exoclick-integration]] [[son-owns-board-reconciliation]] [[cxo-agent-shared-tree-concurrency]] [[cxo-agent-prod-restart-loads-worktree]] |
+| MC-313 | Apollo UI 改善 | 中 | IN_PROGRESS（8/4 22:29 Keita決裁=🟡6項目一括お任せ(dec-da32b7d3 approve-all)→①〜⑥順次実装フェーズへ。詳細→ tasks/MC-313.md） | Son | [[son-owns-board-reconciliation]] | [[clipitnow-exoclick-integration]] [[son-owns-board-reconciliation]] [[cxo-agent-shared-tree-concurrency]] [[cxo-agent-prod-restart-loads-worktree]] |
 | MC-347 | ClipItNow ランキングLP | 中 | IN_PROGRESS（8/2 19:20 GSC実クエリでtitle調整済(2ページ・本番反映・IndexNow200)→CTR観測フェーズ。詳細→ tasks/MC-347.md） | Son | MC-336 / video-dl |
 | MC-351 | ClipItNow 集客スプリント | 高 | IN_PROGRESS（8/4 21:23 Show HN実行→HN新規アカ制限でブロック→22:29 Keita決裁=(a)hn@へメール→Son英文起案済・文面承認待ち(dec-1d8f635c)→ tasks/MC-351.md） | Son | MC-331/336/339と連動 |
 | MC-352 | ClipItNow ブログ配信 | 高 | DONE 🔒[Keita] | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
@@ -396,5 +396,5 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-364 | ENランキングに一般動画混在 | 中 | DONE（8/3 ENシードへbilibili24件追加・service再起動・/api/ranking実測50件中14件bilibili。詳細→ tasks/MC-364.md） | Son | Keita依頼8/3「アダルトだけ→bilibiliとかも」。video-dl commit ffda928 |
 | MC-365 | Keita待ちの決裁自動ボタン化 | 高 | DONE（8/3 blockers.json next_actor=keita→/api/decisions自動投入を機能化・本番実測でMC-352自動作成/投入済4件スキップ確認。詳細→ tasks/MC-365.md） | Son | Keita依頼8/3「一時的なものじゃなくて機能として」。決裁一覧読み出し時のlazy同期・taskId重複防止 |
 | MC-366 | bilibiliサムネ表示崩れ修正 | 高 | DONE（8/3 /api/thumb中継新設・本番実測200 image/jpeg。DoD→ tasks/MC-366.md） | Son | Keita報告8/3スクショ。hdslb=http+Referer403の二重原因。video-dl commit 3c2c6c8 |
-| MC-367 | LBOモデラー機能 | 高 | IN_PROGRESS（8/4 P1モック公開済・Keitaレビュー待ち。詳細→ tasks/MC-367.md） | Son | Keita依頼8/4「アポロでLBOモデルを組めるような機能考えて」。/lbo-mockup.html |
+| MC-367 | LBOモデラー機能 | 高 | IN_PROGRESS（8/4 22:29 Keita決裁=承認(dec-68e7d6ae approve)→P1方向性OK・次フェーズ(P2 EDINET/P3 保存・Excel/P4 AI講師)の着手順は要確認。詳細→ tasks/MC-367.md） | Son | Keita依頼8/4「アポロでLBOモデルを組めるような機能考えて」。/lbo-mockup.html |
 | MC-368 | Apolloパスワードログイン | 高 | DONE（8/4 /login フォーム＋MC_PASSWORD照合＋Cookie 400日スライド更新を実装・service restart・外形6項目実測green。auth.ts/index.ts） | fable5 | Keita依頼8/4「毎回token URLで開けなくなるのは困る、パスワード1回で永久アクセスに」。発端はCookie 30日失効による401。Bearer/token URL経路は不変 |
