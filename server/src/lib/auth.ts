@@ -19,9 +19,20 @@ import type { Request, Response, NextFunction } from 'express';
 
 const COOKIE_NAME = 'mc_token';
 
+// Cookie 寿命は 400 日（Chrome の Max-Age 上限）。加えて authMiddleware が
+// Cookie 認証成功のたびに同じ寿命で再発行（スライド更新）するため、
+// 400 日以内に一度でもアクセスすれば実質無期限で使い続けられる。
+const COOKIE_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 400;
+
 /** 設定トークン。空文字/未設定なら null（= 認証無効）。 */
 function configuredToken(): string | null {
   const v = process.env.MC_TOKEN;
+  return v && v.trim() !== '' ? v : null;
+}
+
+/** ログイン画面用パスワード（MC_PASSWORD）。空文字/未設定なら null（= ログイン画面無効）。 */
+function configuredPassword(): string | null {
+  const v = process.env.MC_PASSWORD;
   return v && v.trim() !== '' ? v : null;
 }
 
@@ -72,8 +83,36 @@ function wantsHtml(req: Request): boolean {
   return accept.includes('text/html');
 }
 
+/** パスワードログイン画面（MC_PASSWORD 設定時に HTML 要求の 401 で表示）。 */
+function loginPage(showError: boolean): string {
+  const error = showError
+    ? '<p style="color:#f38ba8;margin:0 0 12px;font-size:14px">パスワードが違います</p>'
+    : '';
+  return (
+    '<!doctype html><html lang="ja"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+    '<title>Apollo — ログイン</title></head>' +
+    '<body style="font-family:system-ui,sans-serif;background:#0b0e14;color:#e6e6e6;' +
+    'display:flex;align-items:center;justify-content:center;height:100vh;margin:0">' +
+    '<form method="post" action="/login" style="text-align:center;padding:24px">' +
+    '<h1 style="font-size:28px;margin:0 0 20px">Apollo</h1>' +
+    error +
+    '<input type="password" name="password" autofocus autocomplete="current-password" ' +
+    'placeholder="パスワード" style="font-size:16px;padding:10px 12px;border-radius:8px;' +
+    'border:1px solid #3a4a6a;background:#192231;color:#e6e6e6;width:220px;outline:none">' +
+    '<br><button type="submit" style="margin-top:14px;font-size:15px;padding:10px 28px;' +
+    'border-radius:8px;border:none;background:#89b4fa;color:#0b0e14;cursor:pointer">' +
+    'ログイン</button></form></body></html>'
+  );
+}
+
 function send401(req: Request, res: Response): void {
   if (wantsHtml(req)) {
+    // MC_PASSWORD 設定時はログインフォームを返す（ブラウザからの再認証経路）。
+    if (configuredPassword() !== null) {
+      res.status(401).type('html').send(loginPage(false));
+      return;
+    }
     res
       .status(401)
       .type('html')
@@ -87,6 +126,37 @@ function send401(req: Request, res: Response): void {
     return;
   }
   res.status(401).json({ error: 'unauthorized' });
+}
+
+/**
+ * POST /login ハンドラ（auth ミドルウェアの外に登録する）。
+ * MC_PASSWORD（または MC_TOKEN そのもの）一致で mc_token Cookie を発行し / へ 302。
+ * 不一致はログインフォームをエラー付きで再表示。express.urlencoded を通した後で呼ぶこと。
+ */
+export function loginHandler(req: Request, res: Response): void {
+  const token = configuredToken();
+  if (!token) {
+    // 認証無効（ローカル開発）ならログイン不要。
+    res.redirect(302, '/');
+    return;
+  }
+  const password = configuredPassword();
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const presented = typeof body.password === 'string' ? body.password : '';
+  const ok =
+    presented !== '' &&
+    ((password !== null && safeEqual(presented, password)) || safeEqual(presented, token));
+  if (ok) {
+    res.cookie?.(COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: COOKIE_MAX_AGE_MS,
+    });
+    res.redirect(302, '/');
+    return;
+  }
+  res.status(401).type('html').send(loginPage(true));
 }
 
 /**
@@ -117,7 +187,7 @@ export function makeAuthMiddleware(healthzPath: string) {
           httpOnly: true,
           sameSite: 'lax',
           path: '/',
-          maxAge: 1000 * 60 * 60 * 24 * 30, // 30 日
+          maxAge: COOKIE_MAX_AGE_MS,
         });
         // クエリから token を除いた綺麗な URL を作って 302。
         const url = new URL(req.originalUrl, 'http://placeholder');
@@ -132,8 +202,19 @@ export function makeAuthMiddleware(healthzPath: string) {
     }
 
     // 2) Bearer / Cookie のいずれかで一致すれば通過。
-    const presented = tokenFromBearer(req) ?? tokenFromCookie(req);
+    const bearer = tokenFromBearer(req);
+    const presented = bearer ?? tokenFromCookie(req);
     if (presented !== null && safeEqual(presented, token)) {
+      // Cookie 認証はアクセスのたびに寿命をスライド更新（実質無期限化）。
+      // Bearer（エージェント/cron）には Cookie を発行しない。
+      if (bearer === null) {
+        res.cookie?.(COOKIE_NAME, token, {
+          httpOnly: true,
+          sameSite: 'lax',
+          path: '/',
+          maxAge: COOKIE_MAX_AGE_MS,
+        });
+      }
       next();
       return;
     }

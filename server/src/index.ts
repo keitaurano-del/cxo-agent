@@ -74,7 +74,7 @@ import {
   isConvertibleToPdf,
   deleteOfficePdfCache,
 } from './lib/officeToPdf.js';
-import { makeAuthMiddleware, authEnabled } from './lib/auth.js';
+import { makeAuthMiddleware, authEnabled, loginHandler } from './lib/auth.js';
 import { inboxRouter } from './inbox.js';
 import { terminalUploadRouter } from './terminalUpload.js';
 import { terminalControlRouter } from './terminalControl.js';
@@ -215,6 +215,12 @@ app.post('/api/decisions/request', (req, res) => {
 app.post('/api/decisions/:id/withdraw', (req, res) => {
   decisionWithdrawHandler(req, res, broadcast);
 });
+
+// ─── パスワードログイン（認証外・フォーム POST）──────────────────
+// MC_PASSWORD 一致で mc_token Cookie（400日・アクセス毎スライド更新）を発行する。
+// Cookie 失効時にブラウザから ?token= URL なしで再ログインできる経路。
+// GET /login は auth ミドルウェア側の send401 がログインフォームを返す。
+app.post('/login', express.urlencoded({ extended: false }), loginHandler);
 
 // ─── token 認証（healthz より後、他ルートより前に適用）──────────
 // MC_TOKEN 設定時は /api/* ・SSE ・静的配信 ・SPA fallback すべてを保護する。
