@@ -1278,24 +1278,26 @@ export const PLANNER_ESTIMATE_CACHE_FILE = join(INBOX_DATA_DIR, 'planner-estimat
 export const DEV_MOCKUPS_FILE = join(INBOX_DATA_DIR, 'dev-mockups.jsonl');
 
 /**
- * 開発ページ生成器の主要（primary）モデル（MC-260 UI 品質強化）。
- * コード生成・修正・仕上げレビューをこのモデルで実行する。既定を Opus に引き上げ、
- * 生成物の作り込み・完成度を底上げする（従来は Sonnet 固定で見た目が安っぽかった）。
- * 利用上限に当たった場合は DEV_MOCKUP_FALLBACK_MODEL（既定 Sonnet）へ自動フォールバックする。
+ * 開発ページ生成器の主要（primary）モデル。
+ * コード生成・修正・仕上げレビューをこのモデルで実行する。
+ * 経緯: MC-260 で Opus 既定に引き上げ（Sonnet 固定時代は見た目が安っぽかった）→
+ * MC-313 トークン効率化（2026-08-05・dec-da32b7d3 決裁）で既定を Sonnet に戻した。
+ * 生成頻度が低くコスト対効果が薄いため。品質不足を感じたら env DEV_MOCKUP_MODEL=claude-opus-4-8
+ * で Opus 運用に切り替え可（コード変更不要）。
  * ※設計ステージ・アイデア生成・仕様書・コード学習は軽い/量産系なので従来どおり
- *   NOTEBOOK_CLAUDE_MODEL（Sonnet）のまま（Opus で回すとコスト/待ち時間に見合わない）。
- * env DEV_MOCKUP_MODEL で差し替え可。 */
-export const DEV_MOCKUP_MODEL = env('DEV_MOCKUP_MODEL', 'claude-opus-4-8');
+ *   NOTEBOOK_CLAUDE_MODEL（Sonnet）のまま。 */
+export const DEV_MOCKUP_MODEL = env('DEV_MOCKUP_MODEL', NOTEBOOK_CLAUDE_MODEL);
 
 /**
  * 開発ページ生成器の利用上限フォールバックモデル（ノートブック RAG と同方針）。
- * 通常は DEV_MOCKUP_MODEL（既定 Opus）で生成するが、利用上限に当たって CLI が失敗
- * （"You've hit your ... limit · resets ..." 等）したとき、このモデル（既定 Sonnet）で再生成して
- * エラー画面に落とさない。Opus→Sonnet フォールバックで「重い/上限」時も止めない。
+ * 通常は DEV_MOCKUP_MODEL（既定 Sonnet）で生成するが、利用上限に当たって CLI が失敗
+ * （"You've hit your ... limit · resets ..." 等）したとき、このモデルで再生成して
+ * エラー画面に落とさない。既定は Haiku（primary と同じ Sonnet だと上限時の逃げ先に
+ * ならないため。MC-313 で primary Sonnet 化に合わせて変更）。
  * env DEV_MOCKUP_FALLBACK_MODEL で差し替え可。 */
 export const DEV_MOCKUP_FALLBACK_MODEL = env(
   'DEV_MOCKUP_FALLBACK_MODEL',
-  NOTEBOOK_CLAUDE_MODEL,
+  'claude-haiku-4-5-20251001',
 );
 
 /**
