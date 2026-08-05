@@ -11,6 +11,8 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
    - 承認＝Sonが clipitnow.support@gmail.com から hn@ycombinator.com へ送信。全文= video-dl/docs/hn-email-draft-20260804.md
 2. 【MC-352】note/Blogger投稿の Cowork 実操作（8/4決裁=Cowork経由）
    - Keitaが Cowork でnote/Bloggerにログイン→Sonの校了済ドラフト4本を貼り付け投稿（SonがCowork側の段取り・貼付テキストを準備して待機）
+3. 【MC-367】EDINET APIキー取得の可否タップ（30秒・スマホ可）: 決裁タブ dec-4b1b2843
+   - 承認＝SonがEDINETライブ連携＋AI講師拡張を実装。見送り＝現行のサンプルデータ版で凍結
 
 ## 完了ログ
 
