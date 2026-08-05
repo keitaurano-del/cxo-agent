@@ -396,5 +396,5 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-364 | ENランキングに一般動画混在 | 中 | DONE（8/3 ENシードへbilibili24件追加・service再起動・/api/ranking実測50件中14件bilibili。詳細→ tasks/MC-364.md） | Son | Keita依頼8/3「アダルトだけ→bilibiliとかも」。video-dl commit ffda928 |
 | MC-365 | Keita待ちの決裁自動ボタン化 | 高 | DONE（8/3 blockers.json next_actor=keita→/api/decisions自動投入を機能化・本番実測でMC-352自動作成/投入済4件スキップ確認。詳細→ tasks/MC-365.md） | Son | Keita依頼8/3「一時的なものじゃなくて機能として」。決裁一覧読み出し時のlazy同期・taskId重複防止 |
 | MC-366 | bilibiliサムネ表示崩れ修正 | 高 | DONE（8/3 /api/thumb中継新設・本番実測200 image/jpeg。DoD→ tasks/MC-366.md） | Son | Keita報告8/3スクショ。hdslb=http+Referer403の二重原因。video-dl commit 3c2c6c8 |
-| MC-367 | LBOモデラー機能 | 高 | IN_PROGRESS（8/4 22:29 Keita決裁=承認(dec-68e7d6ae approve)→P1方向性OK・次フェーズ(P2 EDINET/P3 保存・Excel/P4 AI講師)の着手順は要確認。詳細→ tasks/MC-367.md） | Son | Keita依頼8/4「アポロでLBOモデルを組めるような機能考えて」。/lbo-mockup.html |
+| MC-367 | LBOモデラー機能 | 高 | IN_PROGRESS（8/5 P2先行=実企業プリセット4社を本番反映(f4dd87f)。EDINETライブ連携はAPIキー決裁dec-4b1b2843待ち。詳細→ tasks/MC-367.md） | Son | Keita依頼8/4「アポロでLBOモデルを組めるような機能考えて」。/lbo-mockup.html |
 | MC-368 | Apolloパスワードログイン | 高 | DONE（8/4 /login フォーム＋MC_PASSWORD照合＋Cookie 400日スライド更新を実装・service restart・外形6項目実測green。auth.ts/index.ts） | fable5 | Keita依頼8/4「毎回token URLで開けなくなるのは困る、パスワード1回で永久アクセスに」。発端はCookie 30日失効による401。Bearer/token URL経路は不変 |
