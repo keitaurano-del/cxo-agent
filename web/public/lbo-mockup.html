@@ -37,6 +37,8 @@
   summary { cursor: pointer; font-weight: 600; font-size: 13px; }
   footer { margin-top: 48px; font-size: 11px; color: var(--sub); border-top: 1px solid var(--line); padding-top: 12px; }
   .pos { color: var(--accent); } .neg { color: #b3492f; }
+  .field select { width: 100%; border: none; font-size: 15px; font-weight: 600; color: var(--txt); outline: none; background: transparent; }
+  #presetNote a { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -49,6 +51,11 @@
 <div class="note"><b>LBOとは：</b>買収資金の大部分を借入（レバレッジ）で調達して企業を買収し、対象企業のキャッシュフローで借入を返済しながら企業価値を高め、数年後に売却してリターンを得る手法です。自己資金（エクイティ）を小さくするほど、成功時のリターン倍率は大きくなります（失敗時のリスクも大きくなります）。</div>
 
 <h2>① 前提（Assumptions）</h2>
+<div class="grid" style="grid-template-columns:minmax(260px,420px);margin-bottom:10px">
+  <div class="field"><label>企業プリセット <span class="unit">（実企業の公開決算ベース・概算値を初期セット）</span></label>
+  <select id="preset"></select></div>
+</div>
+<div class="note" id="presetNote" style="display:none"></div>
 <div class="grid" id="inputs">
   <div class="field"><label>初年度EBITDA <span class="unit">（億円）</span></label><input type="number" id="ebitda0" value="100" step="10"></div>
   <div class="field"><label>買収マルチプル <span class="unit">（EV/EBITDA 倍）</span></label><input type="number" id="entryX" value="8" step="0.5"></div>
@@ -97,7 +104,7 @@
   <b>キャッシュスイープ</b>＝余剰現金による借入の期限前返済。</p>
 </details>
 
-<footer>本ページは学習・検討用のモックです。実在の企業・案件とは関係のないサンプル値であり、投資助言ではありません。計算はEBITDAベースの簡易モデル（運転資本増減は省略、中間配当なし、売却時費用は考慮外）です。Apollo / MC-367</footer>
+<footer>本ページは学習・検討用のモックです。企業プリセットは各社決算短信（金融庁EDINETへの提出書類）に基づく概算値であり、実際の買収案件・投資助言とは一切関係ありません。マルチプル・資本構成は業界目安のテンプレ値です。計算はEBITDAベースの簡易モデル（運転資本増減は省略、中間配当なし、売却時費用は考慮外）です。Apollo / MC-367</footer>
 </div>
 
 <script>
@@ -220,6 +227,30 @@ function render(){
   }
   $('sens').innerHTML = html;
 }
+// ===== 企業プリセット（MC-367 P2 先行実装）=====
+// 実企業の公開決算（決算短信/有報）ベースの概算値。EDINET APIライブ連携はAPIキー取得後に差し替え予定。
+// vals: 前提入力の初期値（未指定の項目は既定値のまま）。EBITDA≒営業利益＋減価償却費の概算。
+const PRESETS = [
+  { key:'sample', name:'手動入力（サンプル企業）', vals:{ebitda0:100,entryX:8,srX:4,mzX:1.5,srR:3,mzR:8,amort:5,growth:5,daPct:30,capexPct:25,taxR:30,years:5,exitX:8,feePct:2}, note:null },
+  { key:'skylark', name:'すかいらーくHD（3197）2025/12期', vals:{ebitda0:823,entryX:7,exitX:7,growth:14,daPct:63,capexPct:27,srX:4,mzX:1.5,srR:3,mzR:8,amort:5,taxR:30,years:5,feePct:2},
+    note:'<b>すかいらーくHD（2025年12月期・実績概算）:</b> 会社開示EBITDA 823億円（IFRS16・リース減価償却含む）、売上収益4,578億円（成長率+14%は直近実績。5年間の持続性は自分で吟味を）。D&A比63%はリース会計の影響で高め＝見た目のEBITDAほどFCFは残らない点がこの案件の論点です。Capexは有形固定資産取得ベース。' },
+  { key:'saizeriya', name:'サイゼリヤ（7581）2025/8期', vals:{ebitda0:315,entryX:7,exitX:7,growth:14,daPct:51,capexPct:59,srX:4,mzX:1.5,srR:3,mzR:8,amort:5,taxR:30,years:5,feePct:2},
+    note:'<b>サイゼリヤ（2025年8月期・実績概算）:</b> 営業利益155億円＋減価償却費160億円＝EBITDA約315億円。売上高2,567億円（+14%）。Capex比59%は海外出店・工場投資による高水準＝成長投資が続く間はFCFが薄く、借入返済が進みにくい構造をどう見るかが論点です。' },
+  { key:'nitori', name:'ニトリHD（9843）2026/3期', vals:{ebitda0:1950,entryX:8,exitX:8,growth:-2,daPct:36,capexPct:23,srX:4,mzX:1.5,srR:3,mzR:8,amort:5,taxR:30,years:5,feePct:2},
+    note:'<b>ニトリHD（2026年3月期・実績概算）:</b> 営業利益1,255億円＋減価償却費695億円＝EBITDA約1,950億円（IFRS）。売上収益9,122億円（-1.8%）。成長率マイナスの年＝「EBITDA成長に頼れないLBO」で、デレバレッジとマルチプルだけでリターンが作れるかを試せます。Capexは当期実績ベース（前期比で低水準の年）。' },
+  { key:'uss', name:'USS（4732）2026/3期', vals:{ebitda0:648,entryX:9,exitX:9,growth:10,daPct:8,capexPct:17,srX:4,mzX:1.5,srR:3,mzR:8,amort:5,taxR:30,years:5,feePct:2},
+    note:'<b>USS（2026年3月期・実績概算）:</b> 営業利益598億円＋減価償却費50億円＝EBITDA約648億円。売上高1,139億円（+10%）。D&A比8%と資産の軽い高マージン事業＝EBITDAの大半がFCFになる、LBO向きの典型例です。Capex比17%はリサイクルプラント投資で急増した特異年（前期は約7%）。' }
+];
+// プリセットの企業由来はEBITDA・成長率・D&A比・Capex比のみ（各社決算短信の実績概算）。買収/売却マルチプルは業界目安（変化ゼロの中立前提）、資本構成・金利等は標準テンプレ。出典: 各社決算短信（金融庁EDINET提出書類）。
+function applyPreset(key){
+  const ps = PRESETS.find(x=>x.key===key); if(!ps) return;
+  for(const [id,v] of Object.entries(ps.vals)) if($(id)) $(id).value = v;
+  const nb = $('presetNote');
+  if(ps.note){ nb.style.display='block'; nb.innerHTML = ps.note; } else { nb.style.display='none'; }
+  render();
+}
+$('preset').innerHTML = PRESETS.map(p=>`<option value="${p.key}">${p.name}</option>`).join('');
+$('preset').addEventListener('change', e=>applyPreset(e.target.value));
 document.querySelectorAll('#inputs input').forEach(el=>el.addEventListener('input', render));
 render();
 </script>
