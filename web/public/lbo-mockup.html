@@ -38,6 +38,10 @@
   footer { margin-top: 48px; font-size: 11px; color: var(--sub); border-top: 1px solid var(--line); padding-top: 12px; }
   .pos { color: var(--accent); } .neg { color: #b3492f; }
   .field select { width: 100%; border: none; font-size: 15px; font-weight: 600; color: var(--txt); outline: none; background: transparent; }
+  .btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 10px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn:hover { opacity: .9; }
+  .btn-sm { background: #fff; color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; margin-left: 4px; }
+  .btn-sm.danger { color: #b3492f; border-color: #b3492f; }
   #presetNote a { color: var(--accent); }
 </style>
 </head>
@@ -94,6 +98,15 @@
 <h2>⑥ 感応度分析（IRR）</h2>
 <div class="note"><b>読み方：</b>縦＝売却マルチプル、横＝レバレッジ（負債のEBITDA倍率）。前提が動いたときIRRがどう変わるかを確認します。太字緑＝IRR 20%以上（PE案件の一般的な目線）、赤系＝10%未満。</div>
 <div class="tbl-scroll"><table id="sens" class="sens"></table></div>
+
+<h2>⑦ シナリオ保存・比較・エクスポート</h2>
+<div class="note"><b>使い方：</b>今の前提一式に名前を付けて保存すると、下の比較表にKPIが並びます（保存先はこのブラウザ内＝localStorage）。「読込」でその前提に戻せます。CSVは前提・PL・デットスケジュール・KPIを含み、Excelでそのまま開けます。</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0">
+  <div class="field" style="flex:1;min-width:200px;max-width:320px"><label>シナリオ名</label><input type="text" id="scName" placeholder="例: USSベース / 強気ケース"></div>
+  <button id="scSave" class="btn">保存</button>
+  <button id="scCsv" class="btn">CSVエクスポート（現在の前提）</button>
+</div>
+<div class="tbl-scroll"><table id="scList"></table></div>
 
 <details><summary>用語ミニ辞書</summary>
   <p><b>EV（企業価値）</b>＝株式価値＋純有利子負債。買収価格の基準。<br>
@@ -251,8 +264,80 @@ function applyPreset(key){
 }
 $('preset').innerHTML = PRESETS.map(p=>`<option value="${p.key}">${p.name}</option>`).join('');
 $('preset').addEventListener('change', e=>applyPreset(e.target.value));
+
+// ===== シナリオ保存・比較・CSVエクスポート（MC-367 P3）=====
+const SC_KEY = 'lbo-scenarios-v1';
+const INPUT_IDS = ['ebitda0','entryX','srX','mzX','srR','mzR','amort','growth','daPct','capexPct','taxR','years','exitX','feePct'];
+const esc = s => String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const loadScs = () => { try { return JSON.parse(localStorage.getItem(SC_KEY)) || []; } catch(e){ return []; } };
+const saveScs = a => localStorage.setItem(SC_KEY, JSON.stringify(a));
+
+function renderScenarios(){
+  const scs = loadScs();
+  if(!scs.length){ $('scList').innerHTML = '<tr><th>保存済みシナリオ</th></tr><tr><td style="text-align:left;color:var(--sub)">まだ保存されていません。前提を調整して「保存」を押すと、ここに比較表として並びます。</td></tr>'; return; }
+  let h = '<tr><th>シナリオ</th><th>保存日時</th><th>EBITDA</th><th>買収x→売却x</th><th>投資額</th><th>MOIC</th><th>IRR</th><th></th></tr>';
+  scs.forEach((s,i)=>{
+    h += `<tr><td>${esc(s.name)}</td><td>${esc(s.ts)}</td><td>${fmt(s.kpi.e0)}</td><td>${s.kpi.enX.toFixed(1)}x→${s.kpi.exX.toFixed(1)}x</td><td>${fmt(s.kpi.eq0)}</td><td>${isFinite(s.kpi.moic)?s.kpi.moic.toFixed(2)+'x':'—'}</td><td>${isFinite(s.kpi.irr)?pct(s.kpi.irr):'—'}</td>`
+       + `<td style="text-align:left"><button class="btn-sm" data-load="${i}">読込</button><button class="btn-sm danger" data-del="${i}">削除</button></td></tr>`;
+  });
+  $('scList').innerHTML = h;
+  $('scList').querySelectorAll('[data-load]').forEach(b=>b.addEventListener('click', ()=>{
+    const s = loadScs()[+b.dataset.load]; if(!s) return;
+    for(const [id,v] of Object.entries(s.vals)) if($(id)) $(id).value = v;
+    $('preset').value = 'sample'; $('presetNote').style.display='none'; render();
+  }));
+  $('scList').querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', ()=>{
+    const a = loadScs(); const s = a[+b.dataset.del];
+    if(!confirm(`シナリオ「${s?s.name:''}」を削除しますか？`)) return;
+    a.splice(+b.dataset.del,1); saveScs(a); renderScenarios();
+  }));
+}
+
+$('scSave').addEventListener('click', ()=>{
+  const p = readInputs(), m = runModel(p);
+  const name = $('scName').value.trim() || `シナリオ${loadScs().length+1}`;
+  const vals = {}; INPUT_IDS.forEach(id=>vals[id]=$(id).value);
+  const a = loadScs();
+  a.push({name, ts:new Date().toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}), vals,
+          kpi:{e0:p.e0,enX:p.enX,exX:p.exX,eq0:m.eq0,moic:m.moic,irr:m.irr}});
+  saveScs(a); $('scName').value=''; renderScenarios();
+});
+
+$('scCsv').addEventListener('click', ()=>{
+  const p = readInputs(), m = runModel(p);
+  const L = [];
+  L.push(['LBOモデル（Apollo LBOモデラー・簡易モデル）']);
+  L.push(['出力日時', new Date().toLocaleString('ja-JP')]);
+  L.push([]);
+  L.push(['■前提']);
+  const labels = {ebitda0:'初年度EBITDA(億円)',entryX:'買収マルチプル(x)',srX:'シニア(EBITDA倍)',mzX:'メザニン(EBITDA倍)',srR:'シニア金利(%)',mzR:'メザニン金利(%)',amort:'強制返済(%/当初)',growth:'EBITDA成長率(%)',daPct:'D&A(EBITDA比%)',capexPct:'Capex(EBITDA比%)',taxR:'実効税率(%)',years:'保有期間(年)',exitX:'売却マルチプル(x)',feePct:'取引費用(EV比%)'};
+  INPUT_IDS.forEach(id=>L.push([labels[id], $(id).value]));
+  L.push([]);
+  L.push(['■KPI']);
+  L.push(['投資額(エクイティ)(億円)', m.eq0.toFixed(1)]);
+  L.push(['売却時エクイティ価値(億円)', m.eqExit.toFixed(1)]);
+  L.push(['MOIC(x)', isFinite(m.moic)?m.moic.toFixed(2):'']);
+  L.push(['IRR(%)', isFinite(m.irr)?(m.irr*100).toFixed(1):'']);
+  L.push([]);
+  const yr = ['（億円）'].concat(m.yrs.map(y=>'Y'+y.t));
+  const row = (label,f,d=1)=>[label].concat(m.yrs.map(y=>f(y).toFixed(d)));
+  L.push(['■予測PL/FCF']); L.push(yr);
+  L.push(row('EBITDA',y=>y.eb)); L.push(row('減価償却費',y=>y.daV)); L.push(row('EBIT',y=>y.ebit));
+  L.push(row('支払利息',y=>y.int_)); L.push(row('税金',y=>y.tx)); L.push(row('当期純利益',y=>y.ni));
+  L.push(row('設備投資',y=>y.cap)); L.push(row('FCF',y=>y.fcf));
+  L.push([]);
+  L.push(['■デットスケジュール']); L.push(yr);
+  L.push(row('シニア残高',y=>y.sr)); L.push(row('メザニン残高',y=>y.mz));
+  L.push(row('総負債残高',y=>y.sr+y.mz)); L.push(row('レバレッジ(負債/EBITDA)',y=>(y.sr+y.mz)/y.eb,2)); L.push(row('現金残高',y=>y.cash));
+  const csv = '\ufeff' + L.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  a.download = 'lbo-model.csv'; a.click(); URL.revokeObjectURL(a.href);
+});
+
 document.querySelectorAll('#inputs input').forEach(el=>el.addEventListener('input', render));
 render();
+renderScenarios();
 </script>
 </body>
 </html>
