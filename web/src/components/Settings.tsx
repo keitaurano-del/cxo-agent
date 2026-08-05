@@ -11,6 +11,10 @@ interface SettingsProps {
   themeMode?: ThemeMode;
   isDark?: boolean;
   onThemeChange?: (mode: ThemeMode) => void;
+  // ダッシュボード（/）の既定着地タブ（MC-313 UX）。App から渡された時のみセクションを表示する。
+  landing?: string;
+  landingOptions?: { to: string; label: string }[];
+  onLandingChange?: (to: string) => void;
 }
 
 const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
@@ -19,7 +23,16 @@ const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'dark', label: 'ダーク' },
 ];
 
-export default function Settings({ open, onClose, themeMode, isDark, onThemeChange }: SettingsProps) {
+export default function Settings({
+  open,
+  onClose,
+  themeMode,
+  isDark,
+  onThemeChange,
+  landing,
+  landingOptions,
+  onLandingChange,
+}: SettingsProps) {
   const { fontPx, changeFontPx } = useFontSize();
 
   if (!open) return null;
@@ -79,6 +92,36 @@ export default function Settings({ open, onClose, themeMode, isDark, onThemeChan
               </div>
               <p className="mt-3 text-xs text-text-faint">
                 「自動」は時間帯で昼＝ライト／夜＝ダークに切り替わります（現在: {isDark ? 'ダーク' : 'ライト'}）。
+              </p>
+            </div>
+          )}
+
+          {/* ダッシュボードの着地タブ（MC-313 UX: カウントダウン固定 → 設定で変更可能に） */}
+          {landing && landingOptions && onLandingChange && (
+            <div>
+              <h3 className="mb-3 text-sm font-semibold text-text">ダッシュボードの着地タブ</h3>
+              <div className="grid grid-cols-3 gap-2">
+                {landingOptions.map((opt) => {
+                  const active = landing === opt.to;
+                  return (
+                    <button
+                      key={opt.to}
+                      type="button"
+                      onClick={() => onLandingChange(opt.to)}
+                      aria-pressed={active}
+                      className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                        active
+                          ? 'border-accent bg-accent font-semibold text-bg'
+                          : 'border-border bg-surface-2 text-text-muted hover:bg-surface-3 hover:text-text'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-xs text-text-faint">
+                サイドメニューの「ダッシュボード」を開いた時に最初に表示するタブです（この端末にのみ保存されます）。
               </p>
             </div>
           )}

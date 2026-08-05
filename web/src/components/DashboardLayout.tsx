@@ -48,6 +48,11 @@ const DASH_TABS: DashTab[] = [
   { to: '/pdca', label: 'PDCA', icon: <LoopIcon width={16} height={16} /> },
 ];
 
+/** `/` 既定着地の選択肢（MC-313 UX: 設定モーダルから変更可能）。固定タブ＋各ダッシュタブ。 */
+export const DASH_LANDING_OPTIONS: { to: string; label: string }[] = [PINNED_TAB, ...DASH_TABS].map(
+  ({ to, label }) => ({ to, label }),
+);
+
 export default function DashboardLayout() {
   // タブの並び順をサーバ保存して端末横断同期（MC-158）。
   const { items: tabs, reorder } = useNavOrder('dashboard', DASH_TABS);

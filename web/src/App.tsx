@@ -27,7 +27,7 @@ import {
   SparkIcon,
 } from './components/icons';
 import { GlobalSearch } from './components/GlobalSearch';
-import DashboardLayout from './components/DashboardLayout';
+import DashboardLayout, { DASH_LANDING_OPTIONS } from './components/DashboardLayout';
 import { isDashboardPath } from './lib/nav';
 // 着地ビュー（/ の最初に出る画面）は eager のまま first paint を遅らせない。
 // 既定着地はカウントダウン（ダッシュボードの固定先頭タブ）。
@@ -169,6 +169,9 @@ function useTheme(): { mode: ThemeMode; isDark: boolean; toggle: () => void; set
 }
 
 // ---- ナビ ----
+
+/** `/` 既定着地の localStorage キー（MC-313 UX: 設定モーダルから変更・端末ローカル保存）。 */
+const DASH_LANDING_KEY = 'apollo-dash-landing';
 
 /** サイドバーのセクション（MC-313: フラット9項目のグルーピング）。この並びが表示順。 */
 const NAV_GROUPS = ['運用', '事業', '生活', '開発'] as const;
@@ -693,9 +696,17 @@ export default function App() {
   // 同じ NAV を描くので、並び順を1つ持てば desktop/mobile 両方に効く。
   const { items: navItems, reorder: reorderNav } = useNavOrder('sidebar', NAV);
 
-  // ダッシュボード（/）をタップした時の既定着地は「カウントダウン」。
-  // DashboardLayout で並べ替え不可の固定先頭タブにしているので、保存順に依らず常にここへ着地する。
-  const dashboardLanding = '/countdown';
+  // ダッシュボード（/）タップ時の既定着地。既定は「カウントダウン」（並べ替え不可の固定先頭タブ）。
+  // MC-313 UX: 設定モーダルから変更可能（端末ローカル保存）。保存値が選択肢に無い（廃止ルート等）
+  // 場合はカウントダウンへ fail-soft する。
+  const [dashboardLanding, setDashboardLanding] = useState<string>(() => {
+    const saved = localStorage.getItem(DASH_LANDING_KEY);
+    return saved && DASH_LANDING_OPTIONS.some((o) => o.to === saved) ? saved : '/countdown';
+  });
+  const changeDashboardLanding = (to: string) => {
+    localStorage.setItem(DASH_LANDING_KEY, to);
+    setDashboardLanding(to);
+  };
 
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     return localStorage.getItem('apollo-sidebar-open') !== 'false';
@@ -849,6 +860,9 @@ export default function App() {
             themeMode={themeMode}
             isDark={isDark}
             onThemeChange={setThemeMode}
+            landing={dashboardLanding}
+            landingOptions={DASH_LANDING_OPTIONS}
+            onLandingChange={changeDashboardLanding}
           />
           <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
         </div>
