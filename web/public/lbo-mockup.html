@@ -42,6 +42,11 @@
   .btn:hover { opacity: .9; }
   .btn-sm { background: #fff; color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; margin-left: 4px; }
   .btn-sm.danger { color: #b3492f; border-color: #b3492f; }
+  .coach-item { background: #fff; border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px; padding: 10px 14px; margin: 8px 0; font-size: 13px; }
+  .coach-item.c-red { border-left-color: #b3492f; }
+  .coach-item.c-yellow { border-left-color: #d4a017; }
+  .coach-item.c-green { border-left-color: var(--accent); }
+  .coach-item b { display: inline-block; margin-right: 4px; }
   #presetNote a { color: var(--accent); }
 </style>
 </head>
@@ -107,6 +112,10 @@
   <button id="scCsv" class="btn">CSVエクスポート（現在の前提）</button>
 </div>
 <div class="tbl-scroll"><table id="scList"></table></div>
+
+<h2>⑧ 講師コメント（前提の妥当性チェック）</h2>
+<div class="note"><b>読み方：</b>今の前提と計算結果を、PE実務の一般的な目線で自動レビューします。🔴＝要再考、🟡＝論点あり、🟢＝妥当な範囲。前提を動かすとコメントも変わります（ルールベース初版。AI講師版はEDINET連携後に拡張予定）。</div>
+<div id="coach"></div>
 
 <details><summary>用語ミニ辞書</summary>
   <p><b>EV（企業価値）</b>＝株式価値＋純有利子負債。買収価格の基準。<br>
@@ -239,6 +248,50 @@ function render(){
     html += '</tr>';
   }
   $('sens').innerHTML = html;
+  renderCoach(p, m);
+}
+
+// ===== 講師コメント（MC-367 P4 ルールベース初版）=====
+function coachComments(p, m){
+  const c = [];
+  const lev0 = (m.sr0 + m.mz0) / p.e0;
+  const eqRatio = m.eq0 / (m.ev + m.fees);
+  const y1 = m.yrs[0];
+  const icr = y1 ? y1.eb / Math.max(y1.int_, 0.0001) : Infinity;
+  // レバレッジ水準
+  if(lev0 > 6.5) c.push(['red', 'レバレッジ', `当初負債 ${lev0.toFixed(1)}x EBITDA はかなり攻撃的です。近年のLBO市場では5〜6xが上限帯で、これを超えるとシニアの調達自体が難しく、金利条件も悪化します。`]);
+  else if(lev0 >= 4.5) c.push(['yellow', 'レバレッジ', `当初負債 ${lev0.toFixed(1)}x EBITDA は市場の標準〜やや高めの水準です。業績が計画を下回った場合の返済余力（ダウンサイド耐性）を感応度表で確認しておきましょう。`]);
+  else c.push(['green', 'レバレッジ', `当初負債 ${lev0.toFixed(1)}x EBITDA は保守的〜標準的な水準です。`]);
+  // エクイティ比率
+  if(eqRatio < 0.25) c.push(['red', 'エクイティ比率', `自己資金が買収総額の ${(eqRatio*100).toFixed(0)}% しかありません。金融危機以前の水準で、現在のマーケットでは通常30〜50%のエクイティが求められます。`]);
+  else if(eqRatio > 0.6) c.push(['yellow', 'エクイティ比率', `エクイティ比率 ${(eqRatio*100).toFixed(0)}% は高めです。レバレッジ効果が薄く、LBOとしてのリターン増幅が働きにくい資本構成です。`]);
+  else c.push(['green', 'エクイティ比率', `エクイティ比率 ${(eqRatio*100).toFixed(0)}% は現在の市場慣行（30〜50%程度）の範囲内です。`]);
+  // 金利カバレッジ
+  if(icr < 2) c.push(['red', '金利カバレッジ', `初年度の EBITDA/支払利息 が ${icr.toFixed(1)}x です。2x を下回ると少しの業績悪化で利払いが危うくなり、レンダーはまず通しません。`]);
+  else if(icr < 3) c.push(['yellow', '金利カバレッジ', `初年度の EBITDA/支払利息 は ${icr.toFixed(1)}x。回る水準ですが、金利上昇や業績下振れへの余裕は薄めです。`]);
+  // 成長前提
+  if(p.g > 0.10) c.push(['yellow', '成長前提', `EBITDA成長率 ${(p.g*100).toFixed(0)}%/年 を${p.N}年間続ける前提です。直近実績が高くても、保有期間全体で持続するかは要検証（市場成長率・競合・一過性要因の切り分け）。保守ケースも保存して比較を。`]);
+  else if(p.g < 0) c.push(['yellow', '成長前提', `EBITDA成長がマイナス前提です。リターンの源泉が「デレバレッジ」と「マルチプル」に依存します（下のバリュークリエイション分解を確認）。事業改善ストーリーが描けない案件は、買収価格の規律がいっそう重要になります。`]);
+  // マルチプル前提
+  if(p.exX > p.enX + 0.01) c.push(['yellow', 'マルチプル前提', `売却 ${p.exX.toFixed(1)}x ＞ 買収 ${p.enX.toFixed(1)}x のマルチプル拡大前提です。市場環境に依存する要素で自力ではコントロールできません。同倍率（${p.enX.toFixed(1)}x）でもリターンが成立するか確認するのが実務の作法です。`]);
+  else if(p.exX <= p.enX) c.push(['green', 'マルチプル前提', `売却マルチプルを買収と同等以下に置いており、マルチプル拡大に頼らない保守的な前提です。`]);
+  // FCF・資金繰り
+  const negFcf = m.yrs.filter(y=>y.fcf < 0).length;
+  if(negFcf > 0) c.push(['red', 'FCF', `FCFがマイナスの年が${negFcf}年あります。返済原資が出ないだけでなく、追加資金が必要になる構造です。Capex・金利・成長率の前提を見直してください。`]);
+  // Capex vs D&A
+  if(p.capex > p.da * 1.5) c.push(['yellow', '投資負担', `Capex（EBITDA比${(p.capex*100).toFixed(0)}%）がD&A（同${(p.da*100).toFixed(0)}%）を大きく上回っています。成長投資フェーズの会社で、投資を続ける限りFCFは薄くなります。投資を絞ると成長率前提も下がる点に注意（両方いいとこ取りの前提は矛盾）。`]);
+  // 総合（IRR/MOIC）
+  if(isFinite(m.irr)){
+    if(m.irr >= 0.20) c.push(['green', '総合', `IRR ${(m.irr*100).toFixed(1)}% / MOIC ${m.moic.toFixed(2)}x。PEファンドの一般的な目線（IRR 20%・MOIC 2.0x以上）をクリアしています。前提の妥当性（特に🟡項目）を確認した上で成立し得る水準です。`]);
+    else if(m.irr >= 0.10) c.push(['yellow', '総合', `IRR ${(m.irr*100).toFixed(1)}% / MOIC ${m.moic.toFixed(2)}x。ファンドの目線（20%）には未達です。買収価格を下げる・事業改善を深掘る・資本構成を見直す、のどれで届かせるかが論点です。`]);
+    else c.push(['red', '総合', `IRR ${(m.irr*100).toFixed(1)}% / MOIC ${m.moic.toFixed(2)}x。この前提では投資として成立しません。エクイティストーリーの根本的な見直しが必要です。`]);
+  }
+  return c;
+}
+function renderCoach(p, m){
+  const icons = {red:'🔴', yellow:'🟡', green:'🟢'};
+  $('coach').innerHTML = coachComments(p, m).map(([lv, title, txt]) =>
+    `<div class="coach-item c-${lv}">${icons[lv]} <b>${title}：</b>${txt}</div>`).join('');
 }
 // ===== 企業プリセット（MC-367 P2 先行実装）=====
 // 実企業の公開決算（決算短信/有報）ベースの概算値。EDINET APIライブ連携はAPIキー取得後に差し替え予定。
