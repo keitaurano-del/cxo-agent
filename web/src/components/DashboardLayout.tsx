@@ -40,7 +40,8 @@ const PINNED_TAB: DashTab = {
 const DASH_TABS: DashTab[] = [
   // エージェントはタスクボードの「エージェント」タブへ統合（2026-07-20 Keita・MC-317）。/agents-live は後方互換。
   // 使用量（/activity）はあまり見ないため非表示（2026-07-20 Keita・MC-317）。ルートは後方互換で残置。
-  { to: '/plan-usage', label: 'Claude', icon: <GaugeIcon width={16} height={16} /> },
+  // 「Claude」はコスト系と分かりにくいため「プラン消費」へ改名（2026-08-05 Son・MC-313 UX・dec-da32b7d3）。
+  { to: '/plan-usage', label: 'プラン消費', icon: <GaugeIcon width={16} height={16} /> },
   { to: '/news', label: 'ニュース', icon: <NewsIcon width={16} height={16} /> },
   // 収益コックピットは独立ナビからダッシュボードのタブへ統合（2026-07-20 Keita・MC-317）。
   { to: '/revenue', label: '収益', icon: <UsageIcon width={16} height={16} /> },
