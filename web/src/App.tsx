@@ -58,7 +58,7 @@ const Revenue = lazy(() => import('./views/Revenue'));
 import BottomNav from './components/BottomNav';
 import { SortableNav, DragHandle } from './components/SortableNav';
 import type { DragHandleProps } from './components/SortableNav';
-import { useNavOrder } from './lib/useNavOrder';
+import { useNavOrder, mergeOrder } from './lib/useNavOrder';
 import AddTaskFab from './components/AddTaskFab';
 import { UploadProvider } from './lib/UploadContext';
 import { UploadToast } from './components/UploadToast';
@@ -169,39 +169,46 @@ function useTheme(): { mode: ThemeMode; isDark: boolean; toggle: () => void; set
 }
 
 // ---- ナビ ----
+
+/** サイドバーのセクション（MC-313: フラット9項目のグルーピング）。この並びが表示順。 */
+const NAV_GROUPS = ['運用', '事業', '生活', '開発'] as const;
+type NavGroup = (typeof NAV_GROUPS)[number];
+
 interface NavItem {
   to: string;
   label: string;
   shortLabel: string;
   icon: ReactNode;
+  /** 所属セクション（MC-313）。デスクトップのサイドバーで見出し付きにグルーピングする。 */
+  group: NavGroup;
   external?: boolean; // true の場合は React ルートでなく実リンク（別タブ）で開く（例: /site/ の独立サイト）。
 }
 
 const NAV: NavItem[] = [
   // 実装進捗はタスクボードの「実装進捗」タブへ統合（2026-07-20 Keita・MC-317）。/progress は後方互換。
-  { to: '/', label: 'ダッシュボード', shortLabel: 'ダッシュ', icon: <GridIcon /> },
-  { to: '/tasks', label: 'タスクボード', shortLabel: 'ボード', icon: <BoardIcon /> },
+  { to: '/', label: 'ダッシュボード', shortLabel: 'ダッシュ', icon: <GridIcon />, group: '運用' },
+  { to: '/tasks', label: 'タスクボード', shortLabel: 'ボード', icon: <BoardIcon />, group: '運用' },
   // 承認フローは独立ナビから外し、タスクボードページ内の「承認フロー」タブに統合した（/approvals は後方互換で残す）。
   // Vault は独立ナビから外し、ドキュメントページ内の「Vault」タブに統合した（/vault は後方互換で残す）。
   // RAG は独立ナビから外し、ドキュメントページ内の「RAG」タブに統合した（/notebooks は後方互換で残す）。
-  { to: '/deliverables', label: 'ドキュメント', shortLabel: 'ドキュ', icon: <DocumentsIcon /> },
+  { to: '/deliverables', label: 'ドキュメント', shortLabel: 'ドキュ', icon: <DocumentsIcon />, group: '運用' },
   // PDF.ai（公開PDFエディタ）は廃止し関連画面/ルートを撤去した（2026-07-19 Keita）。
   // 動画DL（ClipItNow）はサイドメニューから外し、仕事ページの「動画DL」タブに集約した（2026-07-16 Keita）。
   // ライブサイトは https://clipitnow.net/（旧 videodl.apollomansion.com は301転送）。
   // 収益コックピットはダッシュボードの「収益」タブへ統合（2026-07-20 Keita・MC-317）。/revenue は後方互換。
-  { to: '/childcare', label: '育児', shortLabel: '育児', icon: <BabyIcon /> },
-  { to: '/chaji', label: '茶事', shortLabel: '茶事', icon: <ChajiIcon /> },
-  { to: '/work', label: '仕事', shortLabel: '仕事', icon: <WorkIcon /> },
+  { to: '/childcare', label: '育児', shortLabel: '育児', icon: <BabyIcon />, group: '生活' },
+  { to: '/chaji', label: '茶事', shortLabel: '茶事', icon: <ChajiIcon />, group: '事業' },
+  { to: '/work', label: '仕事', shortLabel: '仕事', icon: <WorkIcon />, group: '事業' },
   // Claude は未使用のためサイドメニューから削除（2026-06-30 Keita）。/claude ルートは後方互換で残置。
   // スケジュールは未使用のためサイドメニューから削除（2026-06-29 Keita）。/schedule ルートは後方互換で残置。
-  { to: '/dev', label: '開発', shortLabel: '開発', icon: <CodeIcon /> },
+  { to: '/dev', label: '開発', shortLabel: '開発', icon: <CodeIcon />, group: '開発' },
   // 成長日記は独立ナビから外し、育児ページ内の「成長日記」タブに統合した（/baby-diary は後方互換で残す）。
   // ターミナル: iframe ホスト用 React ルートは /terminal-view。
   // サーバ proxy ルート /terminal（→ ttyd）と衝突させないため別パスにする。
-  { to: '/terminal-view', label: 'ターミナル', shortLabel: '端末', icon: <TerminalIcon /> },
+  { to: '/terminal-view', label: 'ターミナル', shortLabel: '端末', icon: <TerminalIcon />, group: '開発' },
   // Cowork（MC-350）: claude.ai を noVNC ストリーミングで埋め込み表示（旧MC-314 の復活）。
   // サーバ proxy ルート /claude-browser と衝突させないため React ルートは /claude-browser-view。
-  { to: '/claude-browser-view', label: 'Cowork', shortLabel: 'Cowork', icon: <SparkIcon /> },
+  { to: '/claude-browser-view', label: 'Cowork', shortLabel: 'Cowork', icon: <SparkIcon />, group: '開発' },
 ];
 
 /** ナビ項目の件数バッジ（0 なら非表示）。要承認件数をタスクボード（/tasks）に出す。 */
@@ -477,7 +484,39 @@ function Sidebar({
       {/* ナビ一覧は min-h-0 + overflow-y-auto でスクロール可能にし、低いウィンドウでも
           下のフッター（検索・設定・再読み込み）が画面外に押し出されないようにする。 */}
       <nav className={`flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto py-2 ${compact ? 'px-2' : 'px-3'}`}>
-        <SortableNav items={navItems} onReorder={onReorder} direction="vertical">
+        {/* セクション見出し付きグルーピング（MC-313）。ドラッグ並べ替えはセクション内のみ
+            （グループを跨ぐ移動は意味が壊れるので不可）。compact 時は見出しの代わりに区切り線。 */}
+        {NAV_GROUPS.map((group, gi) => {
+          const groupItems = navItems.filter((i) => i.group === group);
+          if (groupItems.length === 0) return null;
+          return (
+            <div key={group} className="flex flex-col gap-1">
+              {compact ? (
+                gi > 0 && <div className="mx-1 mt-2 border-t border-border" aria-hidden />
+              ) : (
+                <div
+                  className={`px-3 pb-0.5 text-[10px] font-semibold tracking-widest text-text-muted/80 ${
+                    gi > 0 ? 'pt-3' : 'pt-1'
+                  }`}
+                >
+                  {group}
+                </div>
+              )}
+              <SortableNav
+                items={groupItems}
+                onReorder={(nextGroup) => {
+                  // グループ内の並べ替えを全体順序（サーバ保存の flat 配列）へ反映する。
+                  // 全体はグループ表示順で flatten するので、モバイル（BottomNav）の flat 表示も
+                  // 同じグルーピング順になる。
+                  const next: NavItem[] = [];
+                  for (const g of NAV_GROUPS) {
+                    if (g === group) next.push(...nextGroup);
+                    else next.push(...navItems.filter((i) => i.group === g));
+                  }
+                  onReorder(next);
+                }}
+                direction="vertical"
+              >
           {(item: NavItem, handle: DragHandleProps) => {
             const forceActive = item.to === '/' && dashActive;
             const badge = badges[item.to] ?? 0;
@@ -538,7 +577,10 @@ function Sidebar({
               </NavLink>
             );
           }}
-        </SortableNav>
+              </SortableNav>
+            </div>
+          );
+        })}
       </nav>
       <div
         className={`shrink-0 border-t border-border py-3 flex flex-col gap-2 ${
@@ -752,7 +794,9 @@ export default function App() {
           <BottomNav
             items={navItems}
             badges={badges}
-            onReorder={reorderNav}
+            // BottomNavItem には group が無いため、`to` の順序だけ受け取って NAV 側の実体へ
+            // 引き直してから保存する（MC-313 グルーピング対応・BottomNav 本体は不変更）。
+            onReorder={(next) => reorderNav(mergeOrder(navItems, next.map((i) => i.to)))}
             footerActions={(close) => (
               <>
                 {/* 横断検索（モバイル） */}
