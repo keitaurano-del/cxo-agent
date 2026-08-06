@@ -1,8 +1,9 @@
 // revenueRouter — 収益コックピット API（auth ミドルウェア配下）。
 //
-//  GET /api/revenue/summary
+//  GET /api/revenue/summary?range=7d|1m|3m|all
 //    ClipItNow（video-dl, localhost:4319）の収益・トラフィックを 1 レスポンスに集約して返す。
-//    - 広告収益: ExoClick(/api/exostats) + Adsterra(/api/adstats) の本日/7日実額と日別内訳
+//    - 広告収益: ExoClick(/api/exostats) + Adsterra(/api/adstats) の本日/期間実額と日別内訳
+//      range で集計期間を切替（MC-369 Keita「全期間とか1ヶ月とか株価みたいに」・既定 7d、all=365日）
 //    - ClipItNow: /api/stats の PV/UU/DL（24h/7d）と参照元
 //    - PDCA: $HOME/logs/clipitnow-pdca-state.json のサイクル状態（read-only）
 //
@@ -20,6 +21,14 @@ import { CLIPITNOW_PDCA_STATE_FILE } from './config.js';
 const CLIPITNOW_API_BASE = process.env.CLIPITNOW_API_BASE?.trim() || 'http://localhost:4319';
 const CACHE_TTL_MS = 60_000;
 const FETCH_TIMEOUT_MS = 10_000;
+
+/** 期間キー → 上流 ?days= の対応（MC-369）。all はサイト公開(2026-07)以降を全て含む 365 日。 */
+const RANGE_DAYS: Record<string, number> = { '7d': 7, '1m': 30, '3m': 90, all: 365 };
+type RangeKey = keyof typeof RANGE_DAYS;
+
+function normRange(v: unknown): RangeKey {
+  return typeof v === 'string' && v in RANGE_DAYS ? v : '7d';
+}
 
 // ─── 正規化ヘルパー ────────────────────────────────────────────
 
@@ -71,6 +80,9 @@ interface FxRate {
 
 interface RevenueSummary {
   generatedAt: string;
+  /** 集計期間（7d|1m|3m|all）と日数。total7d/revenue7d 等の "7d" 系フィールドはこの期間の合計。 */
+  range: string;
+  rangeDays: number;
   /** 収益の円換算表示用 USD/JPY レート。 */
   usdJpy: FxRate;
   revenue: {
@@ -243,16 +255,17 @@ async function getUsdJpy(): Promise<FxRate> {
   return { rate: FX_FALLBACK_RATE, asOf: 'fallback', source: 'fixed' };
 }
 
-// ─── 集約本体（60 秒キャッシュ）───────────────────────────────
+// ─── 集約本体（期間別 60 秒キャッシュ）─────────────────────────
 
-let cache: { at: number; body: RevenueSummary } | null = null;
+const cacheByRange = new Map<RangeKey, { at: number; body: RevenueSummary }>();
 
-async function buildSummary(): Promise<RevenueSummary> {
+async function buildSummary(range: RangeKey): Promise<RevenueSummary> {
+  const days = RANGE_DAYS[range];
   // 上流 3 本は並列取得。1 本失敗しても他は活かす（allSettled + fetchJson の null 化）。
   const [statsRaw, exoRaw, adsRaw, usdJpy] = await Promise.all([
     fetchJson('/api/stats'),
-    fetchJson('/api/exostats'),
-    fetchJson('/api/adstats'),
+    fetchJson(`/api/exostats?days=${days}`),
+    fetchJson(`/api/adstats?days=${days}`),
     getUsdJpy(),
   ]);
 
@@ -261,6 +274,8 @@ async function buildSummary(): Promise<RevenueSummary> {
 
   return {
     generatedAt: new Date().toISOString(),
+    range,
+    rangeDays: days,
     usdJpy,
     revenue: {
       todayTotal: exoclick.todayRevenue + adsterra.todayRevenue,
@@ -277,15 +292,17 @@ async function buildSummary(): Promise<RevenueSummary> {
 export function revenueRouter(): Router {
   const router = Router();
 
-  router.get('/summary', (_req: Request, res: Response) => {
+  router.get('/summary', (req: Request, res: Response) => {
     void (async () => {
       try {
-        if (cache && Date.now() - cache.at < CACHE_TTL_MS) {
-          res.json(cache.body);
+        const range = normRange(req.query.range);
+        const cached = cacheByRange.get(range);
+        if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+          res.json(cached.body);
           return;
         }
-        const body = await buildSummary();
-        cache = { at: Date.now(), body };
+        const body = await buildSummary(range);
+        cacheByRange.set(range, { at: Date.now(), body });
         res.json(body);
       } catch (err) {
         // buildSummary 自体は各ソースで fail-soft 済み。ここに来るのは想定外の内部エラーのみ。

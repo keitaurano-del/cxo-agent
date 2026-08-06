@@ -28,6 +28,9 @@ interface FxRate {
 
 interface RevenueSummary {
   generatedAt: string;
+  /** 集計期間（7d|1m|3m|all）。revenue の *7d 系フィールドはこの期間の合計値。 */
+  range: string;
+  rangeDays: number;
   /** 収益の円換算表示用 USD/JPY レート（サーバ側で取得・12h キャッシュ）。 */
   usdJpy: FxRate;
   revenue: {
@@ -51,6 +54,21 @@ interface RevenueSummary {
     lastReportDate: string | null;
     searchReferrals7d: number;
   };
+}
+
+// ─── 期間切替（MC-369 Keita「全期間とか1ヶ月とか株価みたいに」）───
+// 株価チャート風のレンジタブ。all はサイト公開(2026-07)以降を全て含む。
+const RANGES = [
+  { key: '7d', label: '7日' },
+  { key: '1m', label: '1ヶ月' },
+  { key: '3m', label: '3ヶ月' },
+  { key: 'all', label: '全期間' },
+] as const;
+type RangeKey = (typeof RANGES)[number]['key'];
+
+/** 期間の表示名（カードラベル用）。 */
+function rangeName(key: RangeKey): string {
+  return key === 'all' ? '全期間' : `直近${RANGES.find((r) => r.key === key)?.label ?? key}`;
 }
 
 /** 収益額の USD 表示（極小額のため小数 4 桁固定）。 */
@@ -169,12 +187,13 @@ export default function Revenue() {
   const [data, setData] = useState<RevenueSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [range, setRange] = useState<RangeKey>('7d');
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
     try {
-      const res = await fetch('/api/revenue/summary', { headers: { Accept: 'application/json' } });
+      const res = await fetch(`/api/revenue/summary?range=${range}`, { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setData((await res.json()) as RevenueSummary);
     } catch {
@@ -182,7 +201,7 @@ export default function Revenue() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [range]);
 
   useEffect(() => {
     void load();
@@ -226,10 +245,35 @@ export default function Revenue() {
 
             {/* 広告収益（ExoClick + Adsterra） */}
             <section className="flex flex-col gap-2">
-              <h2 className="text-xs font-semibold text-text-muted">広告収益（ExoClick + Adsterra）</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xs font-semibold text-text-muted">広告収益（ExoClick + Adsterra）</h2>
+                {/* 期間切替タブ（株価チャート風・MC-369） */}
+                <div className="ml-auto inline-flex overflow-hidden rounded-md border border-border">
+                  {RANGES.map((r) => (
+                    <button
+                      key={r.key}
+                      type="button"
+                      onClick={() => setRange(r.key)}
+                      disabled={loading && range === r.key}
+                      className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                        range === r.key
+                          ? 'bg-accent/15 text-accent'
+                          : 'text-text-muted hover:bg-surface-2 hover:text-text'
+                      }`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <StatCard label="本日の収益（合算）" main={jpy(rev?.todayTotal ?? 0, fxRate)} sub={usd(rev?.todayTotal ?? 0)} accent />
-                <StatCard label="直近7日の収益（合算）" main={jpy(rev?.total7d ?? 0, fxRate)} sub={usd(rev?.total7d ?? 0)} accent />
+                <StatCard
+                  label={`${rangeName(range)}の収益（合算）`}
+                  main={jpy(rev?.total7d ?? 0, fxRate)}
+                  sub={usd(rev?.total7d ?? 0)}
+                  accent
+                />
                 <StatCard
                   label="ExoClick"
                   main={rev?.exoclick.available ? jpy(rev.exoclick.revenue7d, fxRate) : '—'}
@@ -254,7 +298,9 @@ export default function Revenue() {
                 />
               </div>
               <div className="rounded-lg border border-border bg-surface-2/40 p-3">
-                <span className="mb-1 block text-[11px] font-semibold text-text-muted">日別収益（合算）</span>
+                <span className="mb-1 block text-[11px] font-semibold text-text-muted">
+                  日別収益（合算・{rangeName(range)}）
+                </span>
                 <RevenueSparkline daily={rev?.daily ?? []} rate={fxRate} />
               </div>
             </section>
