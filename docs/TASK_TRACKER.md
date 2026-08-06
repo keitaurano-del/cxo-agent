@@ -391,7 +391,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-352 | ClipItNow ブログ配信 | 高 | DONE 🔒[Keita] | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
 | MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（8/5 08-21時 全13回稼働・MC-347を7件/MC-313🟡6項目/MC-367 P4を消化。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
 | MC-360 | アイデア生成の多様化 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-360.md） | dev-apollo, Son | MC-359の続き。MC-363図鑑ベース。詳細→ tasks/MC-360.md |
-| MC-361 | モックアップに図解を標準化 | 高 | IN_PROGRESS（8/5棚卸し: 8/2からWIP停滞3日→devチャンネルでソラへ状況確認送信。詳細→ tasks/MC-361.md） | dev-apollo | MC-360依存。詳細→ tasks/MC-361.md |
+| MC-361 | モックアップに図解を標準化 | 高 | IN_PROGRESS（8/6棚卸し: ソラ応答なし→期限付き再掲送信（8/7夜まで）。無応答ならSonがWIPバックアップ→巻き取り提案へ。詳細→ tasks/MC-361.md） | dev-apollo | MC-360依存。詳細→ tasks/MC-361.md |
 | MC-363 | ビジネスモデル図鑑 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-363.md） | Son | 開発ページに常設。MC-361の図解方針と整合 |
 | MC-364 | ENランキングに一般動画混在 | 中 | DONE（8/3 ENシードへbilibili24件追加・service再起動・/api/ranking実測50件中14件bilibili。詳細→ tasks/MC-364.md） | Son | Keita依頼8/3「アダルトだけ→bilibiliとかも」。video-dl commit ffda928 |
 | MC-365 | Keita待ちの決裁自動ボタン化 | 高 | DONE（8/3 blockers.json next_actor=keita→/api/decisions自動投入を機能化・本番実測でMC-352自動作成/投入済4件スキップ確認。詳細→ tasks/MC-365.md） | Son | Keita依頼8/3「一時的なものじゃなくて機能として」。決裁一覧読み出し時のlazy同期・taskId重複防止 |
