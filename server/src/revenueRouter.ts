@@ -2,8 +2,9 @@
 //
 //  GET /api/revenue/summary?range=7d|1m|3m|all
 //    ClipItNow（video-dl, localhost:4319）の収益・トラフィックを 1 レスポンスに集約して返す。
-//    - 広告収益: ExoClick(/api/exostats) + Adsterra(/api/adstats) の本日/期間実額と日別内訳
+//    - 広告収益: ExoClick(/api/exostats) の本日/期間実額と日別内訳
 //      range で集計期間を切替（MC-369 Keita「全期間とか1ヶ月とか株価みたいに」・既定 7d、all=365日）
+//      Adsterra は表示・集計から撤去（2026-08-07 Keita「Adsterraは消していいよ」。上流 /api/adstats 自体は残置）
 //    - ClipItNow: /api/stats の PV/UU/DL（24h/7d）と参照元
 //    - PDCA: $HOME/logs/clipitnow-pdca-state.json のサイクル状態（read-only）
 //
@@ -86,13 +87,12 @@ interface RevenueSummary {
   /** 収益の円換算表示用 USD/JPY レート。 */
   usdJpy: FxRate;
   revenue: {
-    /** ExoClick + Adsterra の合算（取得できたソースのみ）。 */
+    /** ExoClick の実額（Adsterra は 2026-08-07 撤去）。 */
     todayTotal: number;
     total7d: number;
     exoclick: AdNetworkStats;
-    adsterra: AdNetworkStats;
-    /** 日別合算（スパークライン用・日付昇順）。 */
-    daily: Array<{ date: string; exoclick: number; adsterra: number; total: number }>;
+    /** 日別（スパークライン用・日付昇順）。 */
+    daily: Array<{ date: string; total: number }>;
   };
   clipitnow: {
     available: boolean;
@@ -146,26 +146,6 @@ function emptyAdStats(): AdNetworkStats {
   };
 }
 
-/** ExoClick/Adsterra の日別収益を日付でマージ（昇順）。 */
-function mergeDaily(
-  exo: AdNetworkStats,
-  ads: AdNetworkStats,
-): Array<{ date: string; exoclick: number; adsterra: number; total: number }> {
-  const map = new Map<string, { exoclick: number; adsterra: number }>();
-  for (const d of exo.daily) {
-    const cur = map.get(d.date) ?? { exoclick: 0, adsterra: 0 };
-    cur.exoclick += d.revenue;
-    map.set(d.date, cur);
-  }
-  for (const d of ads.daily) {
-    const cur = map.get(d.date) ?? { exoclick: 0, adsterra: 0 };
-    cur.adsterra += d.revenue;
-    map.set(d.date, cur);
-  }
-  return [...map.entries()]
-    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-    .map(([date, v]) => ({ date, exoclick: v.exoclick, adsterra: v.adsterra, total: v.exoclick + v.adsterra }));
-}
 
 /** ClipItNow /api/stats を正規化（null なら available:false）。 */
 function normClipStats(raw: unknown): RevenueSummary['clipitnow'] {
@@ -261,16 +241,14 @@ const cacheByRange = new Map<RangeKey, { at: number; body: RevenueSummary }>();
 
 async function buildSummary(range: RangeKey): Promise<RevenueSummary> {
   const days = RANGE_DAYS[range];
-  // 上流 3 本は並列取得。1 本失敗しても他は活かす（allSettled + fetchJson の null 化）。
-  const [statsRaw, exoRaw, adsRaw, usdJpy] = await Promise.all([
+  // 上流は並列取得。1 本失敗しても他は活かす（fetchJson の null 化）。
+  const [statsRaw, exoRaw, usdJpy] = await Promise.all([
     fetchJson('/api/stats'),
     fetchJson(`/api/exostats?days=${days}`),
-    fetchJson(`/api/adstats?days=${days}`),
     getUsdJpy(),
   ]);
 
   const exoclick = exoRaw == null ? emptyAdStats() : normAdStats(exoRaw);
-  const adsterra = adsRaw == null ? emptyAdStats() : normAdStats(adsRaw);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -278,11 +256,10 @@ async function buildSummary(range: RangeKey): Promise<RevenueSummary> {
     rangeDays: days,
     usdJpy,
     revenue: {
-      todayTotal: exoclick.todayRevenue + adsterra.todayRevenue,
-      total7d: exoclick.revenue7d + adsterra.revenue7d,
+      todayTotal: exoclick.todayRevenue,
+      total7d: exoclick.revenue7d,
       exoclick,
-      adsterra,
-      daily: mergeDaily(exoclick, adsterra),
+      daily: exoclick.daily.map((d) => ({ date: d.date, total: d.revenue })),
     },
     clipitnow: normClipStats(statsRaw),
     pdca: collectPdca(),

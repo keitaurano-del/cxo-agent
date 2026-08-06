@@ -1,6 +1,7 @@
 // 収益コックピット — ClipItNow の収益・トラフィックを 1 画面に統合表示する。
 // データは GET /api/revenue/summary（サーバ側で上流集約・60 秒キャッシュ・部分データ許容）から取得。
-//   - 広告収益: ExoClick + Adsterra の本日/7日実額（合算と内訳）＋日別スパークライン
+//   - 広告収益: ExoClick の本日/期間実額＋日別スパークライン
+//     （Adsterra は 2026-08-07 Keita「消していいよ」で表示・集計から撤去）
 //   - ClipItNow: PV / UU / DL / 検索流入（PDCA state 由来）
 //   - PDCA: 現在のサイクル番号とフェーズ
 // スパークラインはインライン SVG 自作（外部ライブラリなし）。
@@ -37,8 +38,7 @@ interface RevenueSummary {
     todayTotal: number;
     total7d: number;
     exoclick: AdNetworkStats;
-    adsterra: AdNetworkStats;
-    daily: Array<{ date: string; exoclick: number; adsterra: number; total: number }>;
+    daily: Array<{ date: string; total: number }>;
   };
   clipitnow: {
     available: boolean;
@@ -124,7 +124,7 @@ function RevenueSparkline({ daily, rate }: { daily: RevenueSummary['revenue']['d
       <polyline points={line} fill="none" stroke="var(--mc-accent)" strokeWidth={2} />
       {daily.map((d, i) => (
         <circle key={d.date} cx={x(i)} cy={y(d.total)} r={3} fill="var(--mc-accent)">
-          <title>{`${d.date}: 合計 ${jpy(d.total, rate)}（ExoClick ${jpy(d.exoclick, rate)} / Adsterra ${jpy(d.adsterra, rate)} / ${usd(d.total)}）`}</title>
+          <title>{`${d.date}: ${jpy(d.total, rate)}（${usd(d.total)}）`}</title>
         </circle>
       ))}
       {daily.map((d, i) =>
@@ -155,7 +155,6 @@ function Unavailable({ label }: { label: string }) {
 function SourceStatusRow({ data }: { data: RevenueSummary }) {
   const sources: Array<{ name: string; ok: boolean }> = [
     { name: 'ExoClick', ok: data.revenue.exoclick.available },
-    { name: 'Adsterra', ok: data.revenue.adsterra.available },
     { name: 'ClipItNow', ok: data.clipitnow.available },
     { name: 'PDCA', ok: data.pdca.available },
   ];
@@ -243,10 +242,10 @@ export default function Revenue() {
           <>
             <SourceStatusRow data={data} />
 
-            {/* 広告収益（ExoClick + Adsterra） */}
+            {/* 広告収益（ExoClick） */}
             <section className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xs font-semibold text-text-muted">広告収益（ExoClick + Adsterra）</h2>
+                <h2 className="text-xs font-semibold text-text-muted">広告収益（ExoClick）</h2>
                 {/* 期間切替タブ（株価チャート風・MC-369） */}
                 <div className="ml-auto inline-flex overflow-hidden rounded-md border border-border">
                   {RANGES.map((r) => (
@@ -266,40 +265,29 @@ export default function Revenue() {
                   ))}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <StatCard label="本日の収益（合算）" main={jpy(rev?.todayTotal ?? 0, fxRate)} sub={usd(rev?.todayTotal ?? 0)} accent />
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <StatCard label="本日の収益" main={jpy(rev?.todayTotal ?? 0, fxRate)} sub={usd(rev?.todayTotal ?? 0)} accent />
                 <StatCard
-                  label={`${rangeName(range)}の収益（合算）`}
+                  label={`${rangeName(range)}の収益`}
                   main={jpy(rev?.total7d ?? 0, fxRate)}
                   sub={usd(rev?.total7d ?? 0)}
                   accent
                 />
                 <StatCard
-                  label="ExoClick"
-                  main={rev?.exoclick.available ? jpy(rev.exoclick.revenue7d, fxRate) : '—'}
+                  label="表示 / クリック"
+                  main={rev?.exoclick.available ? rev.exoclick.impressions7d.toLocaleString() : '—'}
                   sub={
                     rev?.exoclick.available
                       ? rev.exoclick.revenue7d === 0 && rev.exoclick.impressions7d === 0
                         ? '取得OK・実績ゼロ（imp 0）'
-                        : `本日 ${jpy(rev.exoclick.todayRevenue, fxRate)} / imp ${rev.exoclick.impressions7d.toLocaleString()}`
-                      : '取得失敗'
-                  }
-                />
-                <StatCard
-                  label="Adsterra"
-                  main={rev?.adsterra.available ? jpy(rev.adsterra.revenue7d, fxRate) : '—'}
-                  sub={
-                    rev?.adsterra.available
-                      ? rev.adsterra.revenue7d === 0 && rev.adsterra.impressions7d === 0
-                        ? '取得OK・実績ゼロ（imp 0）'
-                        : `本日 ${jpy(rev.adsterra.todayRevenue, fxRate)} / imp ${rev.adsterra.impressions7d.toLocaleString()}`
+                        : `${rangeName(range)} imp / クリック ${rev.exoclick.clicks7d.toLocaleString()}`
                       : '取得失敗'
                   }
                 />
               </div>
               <div className="rounded-lg border border-border bg-surface-2/40 p-3">
                 <span className="mb-1 block text-[11px] font-semibold text-text-muted">
-                  日別収益（合算・{rangeName(range)}）
+                  日別収益（{rangeName(range)}）
                 </span>
                 <RevenueSparkline daily={rev?.daily ?? []} rate={fxRate} />
               </div>
