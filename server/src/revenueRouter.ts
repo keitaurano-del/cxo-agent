@@ -2,9 +2,10 @@
 //
 //  GET /api/revenue/summary?range=7d|1m|3m|all
 //    ClipItNow（video-dl, localhost:4319）の収益・トラフィックを 1 レスポンスに集約して返す。
-//    - 広告収益: ExoClick(/api/exostats) の本日/期間実額と日別内訳
+//    - 広告収益: ExoClick(/api/exostats) + Adsterra(/api/adstats) の本日/期間実額と日別合算
 //      range で集計期間を切替（MC-369 Keita「全期間とか1ヶ月とか株価みたいに」・既定 7d、all=365日）
-//      Adsterra は表示・集計から撤去（2026-08-07 Keita「Adsterraは消していいよ」。上流 /api/adstats 自体は残置）
+//      Adsterra は個別カード表示を撤去（2026-08-07 Keita「消していいよ」）が、過去実績（〜7/22 $0.025）は
+//      合計・日別チャートに含め続ける（8/7 Keita「デグレしてる」→ 履歴消失の巻き戻し）
 //    - ClipItNow: /api/stats の PV/UU/DL（24h/7d）と参照元
 //    - PDCA: $HOME/logs/clipitnow-pdca-state.json のサイクル状態（read-only）
 //
@@ -87,11 +88,11 @@ interface RevenueSummary {
   /** 収益の円換算表示用 USD/JPY レート。 */
   usdJpy: FxRate;
   revenue: {
-    /** ExoClick の実額（Adsterra は 2026-08-07 撤去）。 */
+    /** ExoClick + Adsterra 過去実績の合算（Adsterra の個別カードは出さないが履歴は含める）。 */
     todayTotal: number;
     total7d: number;
     exoclick: AdNetworkStats;
-    /** 日別（スパークライン用・日付昇順）。 */
+    /** 日別合算（スパークライン用・日付昇順）。 */
     daily: Array<{ date: string; total: number }>;
   };
   clipitnow: {
@@ -242,13 +243,24 @@ const cacheByRange = new Map<RangeKey, { at: number; body: RevenueSummary }>();
 async function buildSummary(range: RangeKey): Promise<RevenueSummary> {
   const days = RANGE_DAYS[range];
   // 上流は並列取得。1 本失敗しても他は活かす（fetchJson の null 化）。
-  const [statsRaw, exoRaw, usdJpy] = await Promise.all([
+  const [statsRaw, exoRaw, adsRaw, usdJpy] = await Promise.all([
     fetchJson('/api/stats'),
     fetchJson(`/api/exostats?days=${days}`),
+    fetchJson(`/api/adstats?days=${days}`),
     getUsdJpy(),
   ]);
 
   const exoclick = exoRaw == null ? emptyAdStats() : normAdStats(exoRaw);
+  const adsterra = adsRaw == null ? emptyAdStats() : normAdStats(adsRaw);
+
+  // 日別は両ネットワークを日付でマージ（Adsterra の過去実績も履歴として残す）。
+  const dailyMap = new Map<string, number>();
+  for (const d of [...exoclick.daily, ...adsterra.daily]) {
+    dailyMap.set(d.date, (dailyMap.get(d.date) ?? 0) + d.revenue);
+  }
+  const daily = [...dailyMap.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([date, total]) => ({ date, total }));
 
   return {
     generatedAt: new Date().toISOString(),
@@ -256,10 +268,10 @@ async function buildSummary(range: RangeKey): Promise<RevenueSummary> {
     rangeDays: days,
     usdJpy,
     revenue: {
-      todayTotal: exoclick.todayRevenue,
-      total7d: exoclick.revenue7d,
+      todayTotal: exoclick.todayRevenue + adsterra.todayRevenue,
+      total7d: exoclick.revenue7d + adsterra.revenue7d,
       exoclick,
-      daily: exoclick.daily.map((d) => ({ date: d.date, total: d.revenue })),
+      daily,
     },
     clipitnow: normClipStats(statsRaw),
     pdca: collectPdca(),

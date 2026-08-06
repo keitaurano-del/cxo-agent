@@ -245,7 +245,7 @@ export default function Revenue() {
             {/* 広告収益（ExoClick） */}
             <section className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xs font-semibold text-text-muted">広告収益（ExoClick）</h2>
+                <h2 className="text-xs font-semibold text-text-muted">広告収益</h2>
                 {/* 期間切替タブ（株価チャート風・MC-369） */}
                 <div className="ml-auto inline-flex overflow-hidden rounded-md border border-border">
                   {RANGES.map((r) => (
