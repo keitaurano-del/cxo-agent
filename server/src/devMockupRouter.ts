@@ -874,8 +874,8 @@ async function generateHtmlWithRetry(
   onChunk?: (accumulated: string, thinking: string) => void,
   jobId?: string,
 ): Promise<GenResult> {
-  // primary は DEV_MOCKUP_MODEL（既定 Opus＝作り込みが強い）。利用上限検出で
-  // fallback（既定 Sonnet）へ切替え、上限/重い時も生成を止めない。
+  // primary は DEV_MOCKUP_MODEL（既定 Sonnet。MC-313 で Opus→Sonnet 化、env で Opus 復帰可）。
+  // 利用上限検出で fallback（既定 Haiku）へ切替え、上限/重い時も生成を止めない。
   let model = DEV_MOCKUP_MODEL;
   let switchedToFallback = false;
   let lastReason: GenFailReason = 'error';
@@ -1061,7 +1061,7 @@ async function runDesignStage(
 /**
  * デザイン昇格・パス1（critique）。生成済み HTML の見た目の弱点を箇条書きで洗い出させる（MC-260）。
  * コードは書かせず指摘のみなので軽い。失敗時は ''（＝指摘なし）を返し、refine 側はチェックリストで磨く。
- * primary は DEV_MOCKUP_MODEL（既定 Opus）、利用上限で fallback（既定 Sonnet）。
+ * primary は DEV_MOCKUP_MODEL（既定 Sonnet・MC-313）、利用上限で fallback（既定 Haiku）。
  */
 async function runCritiquePass(html: string, jobId?: string): Promise<string> {
   let model = DEV_MOCKUP_MODEL;
