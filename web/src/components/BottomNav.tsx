@@ -11,6 +11,8 @@ export interface BottomNavItem {
   label: string;
   shortLabel: string;
   icon: ReactNode;
+  /** true なら React ルート外の実リンク（別タブ）。NavLink だと SPA の `*` ルートに吸われて開けない（MC-367）。 */
+  external?: boolean;
 }
 
 export default function BottomNav({
@@ -42,6 +44,27 @@ export default function BottomNav({
   const renderItem = (item: BottomNavItem, handleProps?: Record<string, unknown>): ReactNode => {
     const forceActive = item.to === '/' && dashActive;
     const badge = badges[item.to] ?? 0;
+    if (item.external) {
+      // 静的ページ等（例: /lbo-mockup.html）は NavLink で client-side 遷移すると
+      // マッチするルートが無くダッシュボードへ戻されるため、実リンクで別タブに開く。
+      return (
+        <div className="flex items-center">
+          <a
+            href={item.to}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => setOpen(false)}
+            className="flex flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+          >
+            <span className="relative shrink-0" aria-hidden>
+              {item.icon}
+            </span>
+            <span>{item.label}</span>
+          </a>
+          {handleProps && <DragHandle handleProps={handleProps} className="shrink-0 p-1.5" />}
+        </div>
+      );
+    }
     return (
       <div className="flex items-center">
         <NavLink
