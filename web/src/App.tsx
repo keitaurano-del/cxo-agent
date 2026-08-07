@@ -25,6 +25,7 @@ import {
   ExpandIcon,
   ShrinkIcon,
   SparkIcon,
+  LboIcon,
 } from './components/icons';
 import { GlobalSearch } from './components/GlobalSearch';
 import DashboardLayout, { DASH_LANDING_OPTIONS } from './components/DashboardLayout';
@@ -202,6 +203,8 @@ const NAV: NavItem[] = [
   { to: '/childcare', label: '育児', shortLabel: '育児', icon: <BabyIcon />, group: '生活' },
   { to: '/chaji', label: '茶事', shortLabel: '茶事', icon: <ChajiIcon />, group: '事業' },
   { to: '/work', label: '仕事', shortLabel: '仕事', icon: <WorkIcon />, group: '事業' },
+  // LBOモデラー（MC-367）: 静的ページのため React ルート外・実リンクで別タブに開く。
+  { to: '/lbo-mockup.html', label: 'LBOモデラー', shortLabel: 'LBO', icon: <LboIcon />, group: '事業', external: true },
   // Claude は未使用のためサイドメニューから削除（2026-06-30 Keita）。/claude ルートは後方互換で残置。
   // スケジュールは未使用のためサイドメニューから削除（2026-06-29 Keita）。/schedule ルートは後方互換で残置。
   { to: '/dev', label: '開発', shortLabel: '開発', icon: <CodeIcon />, group: '開発' },

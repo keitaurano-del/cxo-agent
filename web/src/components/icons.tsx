@@ -747,3 +747,16 @@ export function StarIcon(props: IconProps) {
     </svg>
   );
 }
+
+// LBOモデラー（/lbo-mockup.html, MC-367）ナビ用。上昇する棒グラフ＋トレンド線で「財務モデル」を表す。
+export function LboIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 20h16" />
+      <path d="M6 20v-5" />
+      <path d="M11 20v-8" />
+      <path d="M16 20v-11" />
+      <path d="M5 9.5 10 6l4 2 5-3.5" />
+    </svg>
+  );
+}
