@@ -5,7 +5,7 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
 
 ---
 
-## 未完（2026-08-05 時点）
+## 未完（2026-08-07 時点）
 
 1. 【MC-351】hn@宛メール文面の承認タップ（30秒・スマホ可）: 決裁タブ dec-1d8f635c
    - 承認＝Sonが clipitnow.support@gmail.com から hn@ycombinator.com へ送信。全文= video-dl/docs/hn-email-draft-20260804.md
@@ -13,6 +13,8 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
    - Keitaが Cowork でnote/Bloggerにログイン→Sonの校了済ドラフト4本を貼り付け投稿（SonがCowork側の段取り・貼付テキストを準備して待機）
 3. 【MC-367】EDINET APIキー取得の可否タップ（30秒・スマホ可）: 決裁タブ dec-4b1b2843
    - 承認＝SonがEDINETライブ連携＋AI講師拡張を実装。見送り＝現行のサンプルデータ版で凍結
+4. 【MC-361】ソラ無応答→Son巻き取りの可否タップ（30秒・スマホ可）: 決裁タブ dec-3c38402e
+   - (a)Son巻き取り再開（推奨）／(b)ソラ復帰まで保留。WIPはstash＋patchで保全済み
 
 ## 完了ログ
 
