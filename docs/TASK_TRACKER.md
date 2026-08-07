@@ -387,15 +387,15 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 |---|---|---|---|---|---|
 | MC-313 | Apollo UI 改善 | 中 | DONE（8/6 23:47 server restart 実施・healthz ok。Keita決裁でMC-361 WIPをstash退避→クリーンツリーで反映。詳細→ tasks/MC-313.md） | Son | [[son-owns-board-reconciliation]] | [[clipitnow-exoclick-integration]] [[son-owns-board-reconciliation]] [[cxo-agent-shared-tree-concurrency]] [[cxo-agent-prod-restart-loads-worktree]] |
 | MC-347 | ClipItNow ランキングLP | 中 | IN_PROGRESS（8/7 GSC観測第5回=28d横ばい・/bilibili-save-app実測展開でクラスタ全12頁完了(efbd00b)。次=8/9-8/10観測第6回。詳細→ tasks/MC-347.md） | Son | MC-336 / video-dl |
-| MC-351 | ClipItNow 集客スプリント | 高 | IN_PROGRESS（8/4 21:23 Show HN実行→HN新規アカ制限でブロック→22:29 Keita決裁=(a)hn@へメール→Son英文起案済・文面承認待ち(dec-1d8f635c)→ tasks/MC-351.md） | Son | MC-331/336/339と連動 |
+| MC-351 | ClipItNow 集客スプリント | 高 | IN_PROGRESS（8/8 文面承認済(dec-1d8f635c)→Son送信試行=Gmail新規デバイス保護で不可(SMS認証必須)→Cowork送信プロンプト作成済(videodl/drafts/cowork-hn-email-prompt-20260808.md)・Keita端末送信待ち。詳細→ tasks/MC-351.md） | Son | MC-331/336/339と連動 |
 | MC-352 | ClipItNow ブログ配信 | 高 | DONE 🔒[Keita] | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
 | MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（8/7 08-21時 全14回稼働・GSC観測第5回/save-app実測展開/MC-367サイドメニュー常設化を消化。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
 | MC-360 | アイデア生成の多様化 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-360.md） | dev-apollo, Son | MC-359の続き。MC-363図鑑ベース。詳細→ tasks/MC-360.md |
-| MC-361 | モックアップに図解を標準化 | 高 | IN_PROGRESS（8/7 ソラ無応答期限到来→WIPをpatch二重バックアップ→Son巻き取り可否の決裁起案 dec-3c38402e。詳細→ tasks/MC-361.md） | dev-apollo | MC-360依存。詳細→ tasks/MC-361.md |
+| MC-361 | モックアップに図解を標準化 | 高 | IN_PROGRESS（8/8 決裁dec-3c38402e=(a)承認→Son巻き取り確定。patch(_archive/mc361-sora-wip-20260807.patch)起点に実装再開予定。詳細→ tasks/MC-361.md） | Son(旧dev-apollo) | MC-360依存。詳細→ tasks/MC-361.md |
 | MC-363 | ビジネスモデル図鑑 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-363.md） | Son | 開発ページに常設。MC-361の図解方針と整合 |
 | MC-364 | ENランキングに一般動画混在 | 中 | DONE（8/3 ENシードへbilibili24件追加・service再起動・/api/ranking実測50件中14件bilibili。詳細→ tasks/MC-364.md） | Son | Keita依頼8/3「アダルトだけ→bilibiliとかも」。video-dl commit ffda928 |
 | MC-365 | Keita待ちの決裁自動ボタン化 | 高 | DONE（8/3 blockers.json next_actor=keita→/api/decisions自動投入を機能化・本番実測でMC-352自動作成/投入済4件スキップ確認。詳細→ tasks/MC-365.md） | Son | Keita依頼8/3「一時的なものじゃなくて機能として」。決裁一覧読み出し時のlazy同期・taskId重複防止 |
 | MC-366 | bilibiliサムネ表示崩れ修正 | 高 | DONE（8/3 /api/thumb中継新設・本番実測200 image/jpeg。DoD→ tasks/MC-366.md） | Son | Keita報告8/3スクショ。hdslb=http+Referer403の二重原因。video-dl commit 3c2c6c8 |
-| MC-367 | LBOモデラー機能 | 高 | IN_PROGRESS（8/7 サイドメニュー常設化=106d0dd＋22:40 モバイル導線バグ修正=1b52400（Keita報告→即日修正・実画面検証・push済）。残=EDINETライブ連携＋AI講師拡張のみ（決裁dec-4b1b2843待ち）。詳細→ tasks/MC-367.md） | Son | Keita依頼8/4「アポロでLBOモデルを組めるような機能考えて」。/lbo-mockup.html |
+| MC-367 | LBOモデラー機能 | 高 | IN_PROGRESS（8/7 サイドメニュー常設化=106d0dd＋22:40 モバイル導線バグ修正=1b52400（Keita報告→即日修正・実画面検証・push済）。8/8 決裁dec-4b1b2843=son-register承認→SonがEDINET APIキー登録→ライブ連携実装へ。詳細→ tasks/MC-367.md） | Son | Keita依頼8/4「アポロでLBOモデルを組めるような機能考えて」。/lbo-mockup.html |
 | MC-368 | Apolloパスワードログイン | 高 | DONE（8/4 /login フォーム＋MC_PASSWORD照合＋Cookie 400日スライド更新を実装・service restart・外形6項目実測green。auth.ts/index.ts） | fable5 | Keita依頼8/4「毎回token URLで開けなくなるのは困る、パスワード1回で永久アクセスに」。発端はCookie 30日失効による401。Bearer/token URL経路は不変 |
 | MC-369 | 収益タブ期間切替 | 高 | DONE（8/7 00:20 7日/1ヶ月/3ヶ月/全期間タブ実装・両service再起動・本番実画面検証済。DoD→ tasks/MC-369.md） | Son | Keita依頼8/6「収益の期間は全期間とか1ヶ月とか株価みたいに」。video-dl days拡張＋revenueRouter range＋Revenue.tsx期間タブ。today誤表示バグも修正 |
