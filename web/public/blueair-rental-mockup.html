@@ -4,191 +4,237 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AirRent | ブルーエア Classic Pro レンタル</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Shippori+Mincho:wght@500;600&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#16202e; --sub:#68738200; --gray:#697180; --faint:#98a1af;
-    --blue:#2456d6; --blue-d:#1a41a8; --bg:#fff; --soft:#f6f8fa; --line:#e9edf1;
+    --ink:#111;
+    --gray:#555;
+    --faint:#8a8a8a;
+    --line:#e3e0da;
+    --bg:#fff;
+    --soft:#f7f5f1;
   }
   *{margin:0;padding:0;box-sizing:border-box}
   html{scroll-behavior:smooth}
-  body{font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",-apple-system,sans-serif;color:var(--ink);line-height:1.85;background:var(--bg);font-size:15px;letter-spacing:.01em}
-  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
-  a{color:var(--blue);text-decoration:none}
+  body{font-family:"Noto Sans JP",-apple-system,sans-serif;font-weight:300;color:var(--ink);line-height:1.95;background:var(--bg);font-size:14px;letter-spacing:.02em;-webkit-font-smoothing:antialiased}
+  .serif{font-family:"Cormorant Garamond","Shippori Mincho",serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 28px}
+  a{color:var(--ink);text-decoration:none}
+  .eyebrow{display:block;font-size:10.5px;font-weight:500;letter-spacing:.32em;text-transform:uppercase;color:var(--faint)}
   /* header */
-  header{position:sticky;top:0;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);z-index:10}
-  .nav{display:flex;align-items:center;justify-content:space-between;height:64px;gap:16px}
-  .logo{font-weight:800;font-size:19px;letter-spacing:.02em;color:var(--ink);cursor:pointer;white-space:nowrap}
-  .logo b{color:var(--blue)}
-  .nav-links{display:flex;gap:2px;align-items:center}
-  .nav-links a{color:var(--gray);font-size:13.5px;font-weight:600;padding:7px 14px;border-radius:8px}
-  .nav-links a.active{color:var(--ink);background:var(--soft)}
-  .nav-links a.cta{background:var(--ink);color:#fff;border-radius:10px;margin-left:8px}
+  header{position:sticky;top:0;background:rgba(255,255,255,.96);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);z-index:10}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:72px;gap:16px}
+  .logo{font-family:"Cormorant Garamond",serif;font-weight:500;font-size:26px;letter-spacing:.14em;cursor:pointer;white-space:nowrap;text-transform:uppercase}
+  .nav-links{display:flex;gap:34px;align-items:center}
+  .nav-links a{font-size:11px;font-weight:500;letter-spacing:.22em;text-transform:uppercase;color:var(--gray);padding:4px 0;border-bottom:1px solid transparent}
+  .nav-links a.active{color:var(--ink);border-bottom-color:var(--ink)}
+  .nav-links a.cta{background:var(--ink);color:#fff;padding:12px 26px;border-bottom:none}
+  .nav-links a.cta:hover{background:#000}
   /* buttons */
-  .btn{display:inline-block;background:var(--blue);color:#fff;font-weight:700;font-size:15px;padding:14px 36px;border-radius:12px;border:none;cursor:pointer;text-align:center}
-  .btn:hover{background:var(--blue-d)}
-  .btn.ghost{background:transparent;color:var(--ink);border:1px solid #d4dae1}
-  .btn.small{font-size:13px;padding:9px 20px;border-radius:10px}
+  .btn{display:inline-block;background:var(--ink);color:#fff;font-family:"Noto Sans JP",sans-serif;font-weight:500;font-size:12px;letter-spacing:.24em;text-transform:uppercase;padding:17px 46px;border:1px solid var(--ink);cursor:pointer;text-align:center;transition:background .15s}
+  .btn:hover{background:#000}
+  .btn.ghost{background:transparent;color:var(--ink)}
+  .btn.ghost:hover{background:var(--ink);color:#fff}
+  .btn.small{font-size:10.5px;padding:11px 26px;letter-spacing:.2em}
   .screen{display:none}
   .screen.active{display:block}
   /* hero */
-  .hero{padding:96px 0 80px;text-align:center}
-  .hero .tag{display:inline-block;font-size:12.5px;font-weight:700;color:var(--blue);background:#eef3fd;padding:5px 14px;border-radius:20px;margin-bottom:24px}
-  h1{font-size:40px;line-height:1.5;font-weight:800;letter-spacing:.01em}
-  .hero p{margin:20px auto 8px;color:var(--gray);font-size:15.5px;max-width:560px}
-  .hero .price{margin:24px 0 32px;font-size:15px;color:var(--gray)}
-  .hero .price b{font-size:40px;font-weight:800;color:var(--ink);margin:0 2px}
+  .hero{border-bottom:1px solid var(--line)}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;min-height:560px;align-items:stretch}
+  .hero-copy{display:flex;flex-direction:column;justify-content:center;padding:80px 64px 80px 28px}
+  .hero-copy .eyebrow{margin-bottom:26px}
+  h1{font-family:"Shippori Mincho",serif;font-weight:500;font-size:44px;line-height:1.55;letter-spacing:.04em}
+  h1 .en{font-family:"Cormorant Garamond",serif;font-style:italic;font-weight:400}
+  .hero-copy p{margin:26px 0 0;color:var(--gray);font-size:14px;max-width:420px}
+  .hero-copy .price{margin:30px 0 38px;font-size:13px;color:var(--gray);letter-spacing:.06em}
+  .hero-copy .price b{font-family:"Cormorant Garamond",serif;font-size:44px;font-weight:500;color:var(--ink);margin:0 4px;letter-spacing:.02em}
+  .hero-visual{background:var(--soft);display:flex;align-items:center;justify-content:center;border-left:1px solid var(--line)}
+  /* product illustration */
+  .unit-art{width:200px;height:290px;background:linear-gradient(175deg,#ffffff,#e9e6e0);position:relative;border:1px solid #dcd8d0;box-shadow:24px 30px 60px rgba(0,0,0,.07)}
+  .unit-art::before{content:"";position:absolute;inset:20px 20px auto 20px;height:150px;background:repeating-linear-gradient(90deg,#c9c4bb 0 3px,transparent 3px 10px);opacity:.55}
+  .unit-art::after{content:"BLUEAIR";position:absolute;bottom:18px;left:0;right:0;font-size:10px;color:#9a948a;letter-spacing:.34em;text-align:center}
   /* sections */
-  section{padding:72px 0}
-  section.alt{background:var(--soft)}
-  h2{font-size:24px;font-weight:800;text-align:center;margin-bottom:48px;letter-spacing:.02em}
+  section{padding:100px 0}
+  section.alt{background:var(--soft);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .sec-head{text-align:center;margin-bottom:64px}
+  .sec-head .eyebrow{margin-bottom:14px}
+  h2{font-family:"Shippori Mincho",serif;font-weight:500;font-size:27px;letter-spacing:.1em}
   /* audience */
-  .cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:36px}
-  .col h3{font-size:15.5px;font-weight:700;margin-bottom:8px}
-  .col p{font-size:13.5px;color:var(--gray)}
-  .col .bar{width:28px;height:3px;background:var(--blue);border-radius:2px;margin-bottom:14px}
+  .cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-top:1px solid var(--line)}
+  .col{padding:40px 34px;border-bottom:1px solid var(--line)}
+  .col + .col{border-left:1px solid var(--line)}
+  .col .num{font-family:"Cormorant Garamond",serif;font-size:15px;font-style:italic;color:var(--faint);display:block;margin-bottom:14px}
+  .col h3{font-family:"Shippori Mincho",serif;font-weight:600;font-size:16px;margin-bottom:10px;letter-spacing:.06em}
+  .col p{font-size:12.5px;color:var(--gray)}
   /* plans */
-  .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:stretch}
-  .plan{background:#fff;border:1px solid var(--line);border-radius:16px;padding:32px 28px;display:flex;flex-direction:column;position:relative}
-  .plan.featured{border:2px solid var(--ink)}
-  .plan .tag{position:absolute;top:-11px;left:28px;background:var(--ink);color:#fff;font-size:11px;font-weight:700;padding:2px 12px;border-radius:11px}
-  .plan h3{font-size:14px;font-weight:700;color:var(--gray)}
-  .plan .pp{margin:10px 0 2px;font-size:30px;font-weight:800}
-  .plan .pp small{font-size:13px;font-weight:600;color:var(--faint)}
-  .plan .pmin{font-size:12.5px;color:var(--faint);margin-bottom:18px}
-  .plan ul{list-style:none;font-size:13px;color:var(--ink);margin-bottom:24px;flex:1}
-  .plan ul li{padding:7px 0;border-top:1px solid var(--line)}
-  .plan button{width:100%}
-  .plans-note{text-align:center;font-size:12.5px;color:var(--faint);margin-top:24px}
+  .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--line);background:#fff}
+  .plan{padding:48px 36px;display:flex;flex-direction:column;position:relative}
+  .plan + .plan{border-left:1px solid var(--line)}
+  .plan.featured{background:var(--ink);color:#fff}
+  .plan.featured .pmin,.plan.featured h3{color:#bbb}
+  .plan.featured ul li{border-color:#333;color:#eee}
+  .plan .tag{position:absolute;top:20px;right:20px;font-size:9.5px;letter-spacing:.26em;text-transform:uppercase;color:#bbb}
+  .plan h3{font-size:11px;font-weight:500;letter-spacing:.26em;text-transform:uppercase;color:var(--faint)}
+  .plan .pp{font-family:"Cormorant Garamond",serif;margin:20px 0 2px;font-size:46px;font-weight:500;line-height:1.1}
+  .plan .pp small{font-family:"Noto Sans JP",sans-serif;font-size:12px;font-weight:300;letter-spacing:.08em;margin-left:4px}
+  .plan .pmin{font-size:11.5px;color:var(--faint);letter-spacing:.1em;margin:6px 0 26px}
+  .plan ul{list-style:none;font-size:12.5px;margin-bottom:34px;flex:1}
+  .plan ul li{padding:11px 0;border-top:1px solid var(--line)}
+  .plan.featured .btn{background:#fff;color:var(--ink);border-color:#fff}
+  .plan.featured .btn:hover{background:var(--soft)}
+  .plans-note{text-align:center;font-size:11.5px;color:var(--faint);letter-spacing:.08em;margin-top:28px}
   /* steps */
-  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:28px;counter-reset:st}
-  .step{text-align:left}
-  .step::before{counter-increment:st;content:"0" counter(st);display:block;font-size:13px;font-weight:800;color:var(--blue);margin-bottom:8px;letter-spacing:.06em}
-  .step h3{font-size:14.5px;font-weight:700;margin-bottom:5px}
-  .step p{font-size:13px;color:var(--gray)}
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:44px;counter-reset:st}
+  .step{text-align:center}
+  .step::before{counter-increment:st;content:counter(st,decimal-leading-zero);display:block;font-family:"Cormorant Garamond",serif;font-style:italic;font-size:30px;color:var(--faint);margin-bottom:14px}
+  .step h3{font-family:"Shippori Mincho",serif;font-weight:600;font-size:15px;margin-bottom:8px;letter-spacing:.1em}
+  .step p{font-size:12.5px;color:var(--gray)}
   /* faq */
-  .faq{max-width:680px;margin:0 auto}
-  .faq details{border-bottom:1px solid var(--line);padding:18px 4px}
-  .faq summary{font-weight:700;font-size:14.5px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
-  .faq summary::after{content:"+";color:var(--faint);font-weight:400;font-size:18px}
+  .faq{max-width:640px;margin:0 auto}
+  .faq details{border-bottom:1px solid var(--line);padding:22px 4px}
+  .faq details:first-of-type{border-top:1px solid var(--line)}
+  .faq summary{font-weight:400;font-size:14px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;letter-spacing:.04em}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:"+";font-family:"Cormorant Garamond",serif;color:var(--faint);font-size:22px;font-weight:400}
   .faq details[open] summary::after{content:"−"}
-  .faq p{font-size:13.5px;color:var(--gray);margin-top:10px}
+  .faq p{font-size:13px;color:var(--gray);margin-top:12px}
   /* cta band */
-  .cta-band{text-align:center;padding:88px 24px}
-  .cta-band h2{margin-bottom:28px}
-  footer{border-top:1px solid var(--line);color:var(--faint);font-size:12px;text-align:center;padding:32px 24px}
-  footer a{color:var(--gray);margin:0 12px}
-  footer p{margin-top:12px}
-  .mock-note{position:fixed;bottom:14px;right:14px;background:#111;color:#fff;font-size:10.5px;padding:5px 11px;border-radius:12px;opacity:.6;z-index:99}
+  .cta-band{text-align:center;padding:110px 24px;background:var(--ink);color:#fff}
+  .cta-band h2{color:#fff;margin-bottom:38px}
+  .cta-band .eyebrow{color:#888;margin-bottom:16px}
+  .cta-band .btn{background:#fff;color:var(--ink);border-color:#fff}
+  .cta-band .btn:hover{background:var(--soft)}
+  footer{color:var(--faint);font-size:10.5px;text-align:center;padding:44px 24px;letter-spacing:.14em}
+  footer a{color:var(--gray);margin:0 16px;text-transform:uppercase;letter-spacing:.18em;font-size:10px}
+  footer p{margin-top:18px}
+  .mock-note{position:fixed;bottom:14px;right:14px;background:#111;color:#fff;font-size:10px;letter-spacing:.1em;padding:5px 12px;opacity:.55;z-index:99}
   /* product */
-  .prod{padding:72px 0;display:grid;grid-template-columns:.85fr 1.15fr;gap:56px;align-items:start}
-  .prod-art{background:var(--soft);border-radius:20px;padding:56px 20px;text-align:center}
-  .unit-art{width:170px;height:240px;margin:0 auto;background:linear-gradient(180deg,#fff,#e7ebf0);border-radius:14px;position:relative;border:1px solid #dbe1e8}
-  .unit-art::before{content:"";position:absolute;inset:16px 16px auto 16px;height:125px;background:repeating-linear-gradient(90deg,#c3ccd6 0 3px,transparent 3px 9px);border-radius:8px;opacity:.6}
-  .unit-art::after{content:"Blueair";position:absolute;bottom:14px;left:0;right:0;font-size:11px;color:#8f9aa8;letter-spacing:.14em}
-  .prod h1{font-size:28px}
-  .prod .sub{color:var(--gray);font-size:14.5px;margin:14px 0 24px}
-  .spec{width:100%;border-collapse:collapse;font-size:13.5px;margin-bottom:24px}
-  .spec th{width:36%;text-align:left;color:var(--faint);font-weight:600;padding:10px 4px;border-bottom:1px solid var(--line)}
-  .spec td{padding:10px 4px;border-bottom:1px solid var(--line)}
-  .ext{display:flex;flex-direction:column;gap:2px;margin:20px 0 28px}
-  .ext a{font-size:13.5px;font-weight:600;padding:10px 4px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
-  .ext a::after{content:"↗";color:var(--faint)}
+  .prod{padding:90px 0;display:grid;grid-template-columns:.9fr 1.1fr;gap:72px;align-items:center}
+  .prod-art{background:var(--soft);border:1px solid var(--line);padding:80px 20px;display:flex;justify-content:center}
+  .prod .eyebrow{margin-bottom:16px}
+  .prod h1{font-size:30px}
+  .prod .sub{color:var(--gray);font-size:13.5px;margin:18px 0 30px;max-width:460px}
+  .spec{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:26px}
+  .spec th{width:36%;text-align:left;color:var(--faint);font-weight:400;letter-spacing:.06em;padding:12px 4px;border-bottom:1px solid var(--line)}
+  .spec td{padding:12px 4px;border-bottom:1px solid var(--line)}
+  .ext{display:flex;flex-direction:column;margin:24px 0 36px}
+  .ext a{font-size:12px;letter-spacing:.12em;padding:13px 4px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;text-transform:uppercase}
+  .ext a:first-child{border-top:1px solid var(--line)}
+  .ext a::after{content:"→";color:var(--faint)}
+  .ext a:hover::after{color:var(--ink)}
   /* checkout */
-  .checkout{max-width:880px;margin:0 auto;padding:56px 24px 80px;display:grid;grid-template-columns:1.1fr .9fr;gap:20px;align-items:start}
-  .panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:32px}
-  .panel h3{font-size:13px;font-weight:700;color:var(--faint);letter-spacing:.05em;margin:26px 0 14px}
+  .checkout{max-width:920px;margin:0 auto;padding:72px 28px 100px;display:grid;grid-template-columns:1.1fr .9fr;gap:0;align-items:start;border:none}
+  .panel{background:#fff;border:1px solid var(--line);padding:44px 40px}
+  .checkout .panel + .panel{border-left:none}
+  .panel h3{font-size:10.5px;font-weight:500;color:var(--faint);letter-spacing:.3em;text-transform:uppercase;margin:34px 0 18px}
   .panel h3:first-child{margin-top:0}
-  .field{margin-bottom:14px}
-  .field label{display:block;font-size:12.5px;font-weight:600;color:var(--gray);margin-bottom:6px}
-  .field input,.field select{width:100%;border:1px solid #d4dae1;border-radius:10px;padding:11px 13px;font-size:14px;background:#fff;color:var(--ink)}
-  .field input:focus,.field select:focus{outline:2px solid var(--blue);outline-offset:-1px;border-color:transparent}
-  .frow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .agree{display:flex;gap:9px;align-items:flex-start;font-size:12.5px;color:var(--gray);margin:20px 0}
-  .agree input{margin-top:5px}
-  .sum .row{display:flex;justify-content:space-between;font-size:13.5px;padding:9px 0;border-bottom:1px solid var(--line);color:var(--gray)}
-  .sum .row b{color:var(--ink);font-weight:600}
-  .sum .row.total{border-bottom:none;padding-top:16px;font-size:15px}
-  .sum .row.total b{font-size:22px;font-weight:800}
-  .rule{font-size:12px;color:var(--faint);margin-top:16px;line-height:1.7}
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:11px;font-weight:400;color:var(--gray);letter-spacing:.1em;margin-bottom:7px}
+  .field input,.field select{width:100%;border:1px solid #cfcac2;border-radius:0;padding:12px 14px;font-size:14px;background:#fff;color:var(--ink);font-family:inherit;font-weight:300}
+  .field input:focus,.field select:focus{outline:1px solid var(--ink);outline-offset:-1px}
+  .frow{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .agree{display:flex;gap:10px;align-items:flex-start;font-size:12px;color:var(--gray);margin:24px 0}
+  .agree input{margin-top:6px}
+  .agree a{text-decoration:underline;text-underline-offset:3px}
+  .sum .row{display:flex;justify-content:space-between;font-size:13px;padding:11px 0;border-bottom:1px solid var(--line);color:var(--gray)}
+  .sum .row b{color:var(--ink);font-weight:400}
+  .sum .row.total{border-bottom:none;padding-top:20px;font-size:13px;letter-spacing:.06em}
+  .sum .row.total b{font-family:"Cormorant Garamond",serif;font-size:30px;font-weight:500}
+  .rule{font-size:11.5px;color:var(--faint);margin-top:18px;line-height:1.8;letter-spacing:.04em}
   /* mypage */
-  .mypage{max-width:680px;margin:0 auto;padding:56px 24px 80px;display:flex;flex-direction:column;gap:14px}
-  .mypage h1{font-size:24px;margin-bottom:8px}
-  .mp{background:#fff;border:1px solid var(--line);border-radius:16px;padding:26px 28px}
-  .mp h3{font-size:13px;font-weight:700;color:var(--faint);letter-spacing:.05em;margin-bottom:16px}
-  .kv{display:grid;grid-template-columns:1fr 1fr;gap:14px 24px;font-size:14px}
-  .kv b{display:block;font-size:11.5px;color:var(--faint);font-weight:600;margin-bottom:1px}
-  .pill{display:inline-block;background:#e8f6ee;color:#178a4c;font-size:12px;font-weight:700;padding:2px 12px;border-radius:12px}
-  .opt{display:flex;justify-content:space-between;align-items:center;padding:13px 2px;border-top:1px solid var(--line);font-size:14px}
+  .mypage{max-width:680px;margin:0 auto;padding:72px 28px 100px;display:flex;flex-direction:column;gap:0}
+  .mypage-head{margin-bottom:36px}
+  .mypage h1{font-size:28px;margin:6px 0 10px}
+  .mp{background:#fff;border:1px solid var(--line);padding:34px 36px}
+  .mp + .mp{border-top:none}
+  .mp h3{font-size:10.5px;font-weight:500;color:var(--faint);letter-spacing:.3em;text-transform:uppercase;margin-bottom:20px}
+  .kv{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px;font-size:14px}
+  .kv b{display:block;font-size:10.5px;color:var(--faint);font-weight:400;letter-spacing:.12em;margin-bottom:2px}
+  .pill{display:inline-block;border:1px solid var(--ink);font-size:10px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;padding:2px 12px}
+  .opt{display:flex;justify-content:space-between;align-items:center;padding:15px 2px;border-top:1px solid var(--line);font-size:13.5px}
   .opt:first-of-type{border-top:none}
-  .opt .st{font-size:12px;font-weight:700;color:#178a4c}
+  .opt .st{font-size:10.5px;font-weight:500;letter-spacing:.16em;text-transform:uppercase}
   .opt.ng{color:var(--faint)}
-  .opt.ng .st{color:var(--faint);font-weight:600}
-  .cardrow{display:flex;justify-content:space-between;align-items:center;font-size:14px}
-  .switcher{font-size:12px;color:var(--faint)}
-  .switcher select{border:1px solid #d4dae1;border-radius:8px;padding:4px 8px;font-size:12px;margin-left:6px;color:var(--ink)}
-  .mp .note{font-size:12px;color:var(--faint);margin-top:12px}
-  @media(max-width:820px){
-    .cols3,.plans,.prod,.checkout{grid-template-columns:1fr}
-    .steps{grid-template-columns:repeat(2,1fr)}
-    h1{font-size:28px}
-    .hero{padding:64px 0 56px}
+  .opt.ng .st{color:var(--faint);font-weight:400}
+  .cardrow{display:flex;justify-content:space-between;align-items:center;font-size:13.5px;gap:16px}
+  .switcher{font-size:11.5px;color:var(--faint);letter-spacing:.06em}
+  .switcher select{border:1px solid #cfcac2;border-radius:0;padding:5px 10px;font-size:12px;margin-left:8px;color:var(--ink);background:#fff;font-family:inherit}
+  .mp .note{font-size:11.5px;color:var(--faint);margin-top:14px;letter-spacing:.04em}
+  .mp .buyout-price{font-family:"Cormorant Garamond",serif;font-size:26px;font-weight:500}
+  @media(max-width:860px){
+    .cols3,.plans,.prod,.checkout,.hero-grid{grid-template-columns:1fr}
+    .steps{grid-template-columns:repeat(2,1fr);gap:36px}
+    h1{font-size:30px}
+    .hero-copy{padding:64px 0}
+    .hero-visual{min-height:320px;border-left:none;border-top:1px solid var(--line)}
+    .nav-links{gap:18px}
     .nav-links a:not(.cta){display:none}
+    .col + .col{border-left:none}
+    .plan + .plan{border-left:none;border-top:1px solid var(--line)}
     .plan.featured{order:-1}
+    .checkout .panel + .panel{border-left:1px solid var(--line);border-top:none;margin-top:-1px}
   }
 </style>
 </head>
 <body>
-<div class="mock-note">MOCKUP v4 — MC-370</div>
+<div class="mock-note">MOCKUP v5 — MC-370</div>
 <header><div class="wrap nav">
-  <div class="logo" onclick="go('home')">Air<b>Rent</b></div>
+  <div class="logo" onclick="go('home')">AirRent</div>
   <nav class="nav-links">
-    <a href="#home" data-s="home">ホーム</a>
-    <a href="#product" data-s="product">商品</a>
-    <a href="#mypage" data-s="mypage">マイページ</a>
+    <a href="#home" data-s="home">Home</a>
+    <a href="#product" data-s="product">Product</a>
+    <a href="#mypage" data-s="mypage">My Page</a>
     <a class="cta" href="#checkout">申し込む</a>
   </nav>
 </div></header>
 
 <!-- ════════ LP ════════ -->
 <div class="screen" id="s-home">
-<div class="hero"><div class="wrap">
-  <span class="tag">送料・フィルター交換込み</span>
-  <h1>最上位の空気清浄機を、<br>必要な季節だけ。</h1>
-  <p>Blueair Classic Pro（〜56畳）を月額でお届けします。花粉の3ヶ月だけでも、そのまま買取まででも。</p>
-  <div class="price">月額 <b>7,980</b>円〜（税込）</div>
-  <button class="btn" onclick="go('checkout')">申し込む</button>
-  <a class="btn ghost" style="margin-left:10px" href="#product" onclick="go('product')">商品を見る</a>
+<div class="hero"><div class="wrap hero-grid">
+  <div class="hero-copy">
+    <span class="eyebrow">Air Purifier Rental — 送料・フィルター交換込み</span>
+    <h1>最上位の空気清浄機を、<br>必要な季節だけ。</h1>
+    <p>Blueair Classic Pro（〜56畳）を月額でお届けします。花粉の3ヶ月だけでも、そのまま買取まででも。</p>
+    <div class="price">月額 <b>7,980</b>円〜（税込）</div>
+    <div>
+      <button class="btn" onclick="go('checkout')">申し込む</button>
+      <a class="btn ghost" style="margin-left:12px" href="#product" onclick="go('product')">商品を見る</a>
+    </div>
+  </div>
+  <div class="hero-visual"><div class="unit-art"></div></div>
 </div></div>
 
-<section class="alt"><div class="wrap">
-  <h2>こんな方に</h2>
+<section><div class="wrap">
+  <div class="sec-head"><span class="eyebrow">For You</span><h2>こんな方に</h2></div>
   <div class="cols3">
-    <div class="col"><div class="bar"></div><h3>花粉の季節だけ</h3><p>2〜5月の3ヶ月で約3万円。購入の1/3以下で最上位クラスを。</p></div>
-    <div class="col"><div class="bar"></div><h3>赤ちゃんのいる家庭に</h3><p>いちばん空気を綺麗にしたい時期だけ。使い終わったら返すだけ。</p></div>
-    <div class="col"><div class="bar"></div><h3>ペットと暮らす家庭に</h3><p>ニオイと抜け毛には大空間クラスの清浄力を。気に入ればそのまま買取も。</p></div>
+    <div class="col"><span class="num">i.</span><h3>花粉の季節だけ</h3><p>2〜5月の3ヶ月で約3万円。購入の1/3以下で最上位クラスを。</p></div>
+    <div class="col"><span class="num">ii.</span><h3>赤ちゃんのいる家庭に</h3><p>いちばん空気を綺麗にしたい時期だけ。使い終わったら返すだけ。</p></div>
+    <div class="col"><span class="num">iii.</span><h3>ペットと暮らす家庭に</h3><p>ニオイと抜け毛には大空間クラスの清浄力を。気に入ればそのまま買取も。</p></div>
   </div>
 </div></section>
 
-<section id="plans"><div class="wrap">
-  <h2>料金プラン</h2>
+<section class="alt" id="plans"><div class="wrap">
+  <div class="sec-head"><span class="eyebrow">Plans</span><h2>料金プラン</h2></div>
   <div class="plans">
     <div class="plan">
-      <h3>2週トライアル</h3>
+      <h3>Trial</h3>
       <div class="pp">13,980<small>円</small></div>
       <p class="pmin">2週間</p>
       <ul><li>往復送料無料</li><li>まず効果を体感</li><li>月額プランへ切替時は全額充当</li></ul>
       <button class="btn ghost small" onclick="selectPlan('trial')">申し込む</button>
     </div>
     <div class="plan">
-      <h3>シーズン</h3>
+      <h3>Season</h3>
       <div class="pp">9,980<small>円/月</small></div>
       <p class="pmin">3ヶ月〜</p>
       <ul><li>往復送料無料</li><li>3ヶ月目以降いつでも返却</li><li>スタンダードへ切替可</li></ul>
       <button class="btn ghost small" onclick="selectPlan('season')">申し込む</button>
     </div>
     <div class="plan featured">
-      <span class="tag">人気</span>
-      <h3>スタンダード</h3>
+      <span class="tag">Most Popular</span>
+      <h3>Standard</h3>
       <div class="pp">7,980<small>円/月</small></div>
       <p class="pmin">6ヶ月〜</p>
       <ul><li>往復送料無料</li><li>フィルター交換無料</li><li>いつでも買取可（既払分を全額充当）</li></ul>
@@ -198,8 +244,8 @@
   <p class="plans-note">プラン変更は期間が長くなる方向のみ可能です。期間を短くする変更はできません。</p>
 </div></section>
 
-<section class="alt"><div class="wrap">
-  <h2>ご利用の流れ</h2>
+<section><div class="wrap">
+  <div class="sec-head"><span class="eyebrow">How It Works</span><h2>ご利用の流れ</h2></div>
   <div class="steps">
     <div class="step"><h3>申し込み</h3><p>プランを選んでカード登録。</p></div>
     <div class="step"><h3>届く</h3><p>整備済みの本体を最短3日でお届け。</p></div>
@@ -208,8 +254,8 @@
   </div>
 </div></section>
 
-<section><div class="wrap faq">
-  <h2>よくあるご質問</h2>
+<section class="alt"><div class="wrap faq">
+  <div class="sec-head"><span class="eyebrow">FAQ</span><h2>よくあるご質問</h2></div>
   <details><summary>フィルター代はかかりますか？</summary><p>かかりません。交換費用は月額に含まれ、交換時期に新品フィルターをお送りします。</p></details>
   <details><summary>プランの変更はできますか？</summary><p>期間が長くなる方向のみ可能です（トライアル→シーズン／トライアル→スタンダード／シーズン→スタンダード）。期間を短くするような変更はできません。</p></details>
   <details><summary>壊してしまったら？</summary><p>自然故障は無償で交換します。過失破損もご負担は上限2万円までです。</p></details>
@@ -217,7 +263,8 @@
   <details><summary>途中で返却できますか？</summary><p>可能ですが、最低利用期間分の料金はお支払いいただきます。</p></details>
 </div></section>
 
-<div class="cta-band alt">
+<div class="cta-band">
+  <span class="eyebrow">AirRent</span>
   <h2>今シーズン、最高の空気で。</h2>
   <button class="btn" onclick="go('checkout')">申し込む</button>
 </div>
@@ -228,6 +275,7 @@
 <div class="wrap prod">
   <div class="prod-art"><div class="unit-art"></div></div>
   <div>
+    <span class="eyebrow">Blueair — Flagship</span>
     <h1>Blueair Classic Pro CP7i</h1>
     <p class="sub">HEPASilent™ テクノロジーで0.1μmの微粒子まで除去。〜56畳の大空間をこれ1台でカバーする、Blueairの最上位クラスです。</p>
     <table class="spec">
@@ -251,7 +299,7 @@
 <div class="screen" id="s-checkout">
 <div class="checkout">
   <div class="panel">
-    <h3>プラン</h3>
+    <h3>Plan</h3>
     <div class="field">
       <select id="co-plan" onchange="syncSummary()">
         <option value="trial">2週トライアル — 13,980円</option>
@@ -259,14 +307,14 @@
         <option value="standard" selected>スタンダード — 7,980円/月</option>
       </select>
     </div>
-    <h3>お届け先</h3>
+    <h3>Shipping</h3>
     <div class="field"><label>お名前</label><input placeholder=""></div>
     <div class="field"><label>住所</label><input placeholder=""></div>
     <div class="frow">
       <div class="field"><label>電話番号</label><input inputmode="tel"></div>
       <div class="field"><label>お届け希望日</label><input type="date"></div>
     </div>
-    <h3>お支払い</h3>
+    <h3>Payment</h3>
     <div class="field"><label>カード番号</label><input placeholder="1234 5678 9012 3456" inputmode="numeric"></div>
     <div class="frow">
       <div class="field"><label>有効期限</label><input placeholder="MM / YY"></div>
@@ -276,7 +324,7 @@
     <button class="btn" style="width:100%" onclick="alert('モックアップのため、この先は未実装です。')">申し込む</button>
   </div>
   <div class="panel sum">
-    <h3>ご注文内容</h3>
+    <h3>Order Summary</h3>
     <div class="row"><span>プラン</span><b id="sum-plan">スタンダード</b></div>
     <div class="row"><span>料金</span><b id="sum-price">7,980円/月</b></div>
     <div class="row"><span>最低利用期間</span><b id="sum-min">6ヶ月</b></div>
@@ -290,7 +338,8 @@
 <!-- ════════ マイページ ════════ -->
 <div class="screen" id="s-mypage">
 <div class="mypage">
-  <div>
+  <div class="mypage-head">
+    <span class="eyebrow">My Page</span>
     <h1>マイページ</h1>
     <p class="switcher">表示確認用:
       <select id="mp-plan" onchange="renderMypage()">
@@ -302,7 +351,7 @@
   </div>
 
   <div class="mp">
-    <h3>ご契約</h3>
+    <h3>Contract</h3>
     <div class="kv">
       <div><b>プラン</b><span id="mp-cur">シーズン（9,980円/月）</span></div>
       <div><b>ステータス</b><span class="pill">利用中</span></div>
@@ -312,23 +361,23 @@
   </div>
 
   <div class="mp">
-    <h3>プラン変更</h3>
+    <h3>Plan Change</h3>
     <div id="mp-options"></div>
     <p class="note">変更は期間が長くなる方向のみ可能です。</p>
   </div>
 
   <div class="mp">
-    <h3>買取</h3>
+    <h3>Buyout</h3>
     <div class="kv">
       <div><b>買取基準価格</b>108,900円</div>
       <div><b>お支払い済み</b><span id="mp-paid">29,940円</span></div>
-      <div><b>買取価格</b><span id="mp-buyout" style="font-weight:800">78,960円</span></div>
+      <div><b>買取価格</b><span id="mp-buyout" class="buyout-price">78,960円</span></div>
     </div>
-    <button class="btn small" style="margin-top:16px" onclick="alert('モックアップのため未実装です。')">買い取る</button>
+    <button class="btn small" style="margin-top:20px" onclick="alert('モックアップのため未実装です。')">買い取る</button>
   </div>
 
   <div class="mp">
-    <h3>お支払い方法</h3>
+    <h3>Payment Method</h3>
     <div class="cardrow">
       <span>VISA •••• 4242</span>
       <button class="btn ghost small" onclick="alert('モックアップのため未実装です。')">変更</button>
@@ -336,7 +385,7 @@
   </div>
 
   <div class="mp">
-    <h3>返却</h3>
+    <h3>Return</h3>
     <div class="cardrow">
       <span>届いた箱に戻して、集荷をご依頼ください。</span>
       <button class="btn ghost small" onclick="alert('モックアップのため未実装です。')">返却手続き</button>
@@ -347,7 +396,7 @@
 
 <footer>
   <a href="#">特定商取引法に基づく表記</a><a href="#">利用規約</a><a href="#">プライバシーポリシー</a><a href="#">お問い合わせ</a>
-  <p>© 2026 AirRent</p>
+  <p>© 2026 AIRRENT</p>
 </footer>
 
 <script>
