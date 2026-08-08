@@ -77,19 +77,19 @@ export default function AirRent() {
           <div className={SECTION}>
             <h3 className={H3}>収支試算 — 送料・経費・リスク引当込み</h3>
             <p className="mb-2 text-slate-700 dark:text-slate-200">
-              <b>前提経費</b>: 往復送料 6,500円/回転（CP7i=箱込み160サイズ・関東内 片道約2,500〜2,900円、遠方含む平均を保守設定）＋梱包材500円＋整備・除菌500円＋本人確認300円 = <b>回転あたり固定 7,800円</b>。
+              <b>前提経費</b>: 往復送料 6,500円/回転（CP7i=箱込み160サイズ・関東内 片道約2,500〜2,900円、遠方含む平均を保守設定）＋梱包材500円＋整備・除菌500円 = <b>回転あたり固定 7,500円</b>（本人確認は不要・8/8 Keita）。
               貸出中は フィルター月割2,000円＋動産保険300円 = <b>2,300円/月</b>。売上に対し 決済3.6%＋<b>リスク引当5%</b>（破損・盗難・回収不能・想定外送料）。
             </p>
             <table className="w-full border-collapse text-[13px]">
               <thead><tr><th className={TH}>プラン</th><th className={TH}>売上/回転</th><th className={TH}>経費計</th><th className={TH}>利益/回転</th><th className={TH}>利益率</th></tr></thead>
               <tbody>
-                <tr><td className={TD}>2週トライアル</td><td className={TD}>13,980円</td><td className={TD}>約10,000円</td><td className={TD}>約4,000円</td><td className={TD}>28%</td></tr>
-                <tr><td className={TD}>シーズン3ヶ月</td><td className={TD}>29,940円</td><td className={TD}>約17,300円</td><td className={TD}>約12,700円</td><td className={TD}>42%</td></tr>
-                <tr><td className={TD}>スタンダード6ヶ月</td><td className={TD}>47,880円</td><td className={TD}>約25,700円</td><td className={TD}>約22,200円</td><td className={TD}>46%（月あたり約3,700円）</td></tr>
+                <tr><td className={TD}>2週トライアル</td><td className={TD}>13,980円</td><td className={TD}>約9,700円</td><td className={TD}>約4,300円</td><td className={TD}>31%</td></tr>
+                <tr><td className={TD}>シーズン3ヶ月</td><td className={TD}>29,940円</td><td className={TD}>約17,000円</td><td className={TD}>約13,000円</td><td className={TD}>43%</td></tr>
+                <tr><td className={TD}>スタンダード6ヶ月</td><td className={TD}>47,880円</td><td className={TD}>約25,400円</td><td className={TD}>約22,500円</td><td className={TD}>47%（月あたり約3,750円）</td></tr>
               </tbody>
             </table>
             <ul className="mt-3 list-disc space-y-1.5 pl-5 text-slate-700 dark:text-slate-200">
-              <li><b>月商10万円達成時の月次利益 ≒ 約4.7万円</b>（シーズン5台＋スタンダード7台・リスク引当後）。</li>
+              <li><b>月商10万円達成時の月次利益 ≒ 約4.8万円</b>（シーズン5台＋スタンダード7台・リスク引当後）。</li>
               <li>年間ベース（繁忙期4ヶ月フル稼働＋他8ヶ月 月2万円前後）で<b>年間利益 約30-40万円</b>。投資50-70万円（中古中心）→ <b>回収 約1.5〜2年</b>（保守見積り）。</li>
               <li>利益レバー: ①買取成立（1件 約3.5万円）②近隣手渡しで送料圧縮 ③フィルター周期の実運用最適化。</li>
             </ul>
@@ -137,7 +137,7 @@ export default function AirRent() {
           <div className={SECTION}>
             <h3 className={H3}>自動化スタックと法規</h3>
             <ul className="list-disc space-y-1.5 pl-5 text-slate-700 dark:text-slate-200">
-              <li>決済/契約: Stripe Payment Links（サブスク自動更新・解約セルフ）＋クリックラップ規約＋Stripe Identity 本人確認（300円/件）。</li>
+              <li>決済/契約: Stripe Payment Links（サブスク自動更新・解約セルフ）＋クリックラップ規約。本人確認は行わない（8/8 Keita・カード決済成立をもって貸出）。</li>
               <li>物流: 往路=宅急便（B2クラウド半自動）、復路=純正箱＋着払い伝票「集荷を呼ぶだけ」。動産保険を月額に内包・過失破損の客負担上限2万円。</li>
               <li>法規: 新品仕入れ→レンタルは許認可不要。<b>中古仕入れは古物商許可が必要</b>（約1.9万円）。メルカリでのレンタル出品は規約違反のため不可。LPに特商法表記必須。</li>
               <li>定常運用の人手 = 発送・返却検品のみ（1件30分想定）。</li>
