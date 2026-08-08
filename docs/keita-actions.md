@@ -5,18 +5,22 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
 
 ---
 
-## 未完（2026-08-07 時点）
+## 未完（2026-08-08 時点）
 
-1. 【MC-351】hn@宛メール文面の承認タップ（30秒・スマホ可）: 決裁タブ dec-1d8f635c
-   - 承認＝Sonが clipitnow.support@gmail.com から hn@ycombinator.com へ送信。全文= video-dl/docs/hn-email-draft-20260804.md
-2. 【MC-352】note/Blogger投稿の Cowork 実操作（8/4決裁=Cowork経由）
-   - Keitaが Cowork でnote/Bloggerにログイン→Sonの校了済ドラフト4本を貼り付け投稿（SonがCowork側の段取り・貼付テキストを準備して待機）
-3. 【MC-367】EDINET APIキー取得の可否タップ（30秒・スマホ可）: 決裁タブ dec-4b1b2843
-   - 承認＝SonがEDINETライブ連携＋AI講師拡張を実装。見送り＝現行のサンプルデータ版で凍結
-4. 【MC-361】ソラ無応答→Son巻き取りの可否タップ（30秒・スマホ可）: 決裁タブ dec-3c38402e
-   - (a)Son巻き取り再開（推奨）／(b)ソラ復帰まで保留。WIPはstash＋patchで保全済み
+1. 【MC-351/367】Keita端末で Cowork の Gmail ログイン1回（5分・PC推奨）
+   - プロンプト= obsidian-vault/30-Projects/videodl/drafts/cowork-hn-email-prompt-20260808.md
+   - 1回のログインで両取り: ①hn@宛メール送信（文面承認済 dec-1d8f635c、Son側はSMS認証壁で送信不可） ②EDINET登録の確認コード中継（MC-367）
+2. 【MC-352】note/Blogger投稿の Cowork 実操作（8/4決裁=Cowork経由・6日経過）
+   - Keitaが Cowork でnote/Bloggerにログイン→Sonの校了済ドラフト貼り付け投稿。段取り= videodl/drafts/cowork-post-prompts-20260805.md
+3. 【MC-370】AirRent の GO/NO-GO ほか3点（判断のみ・2分）
+   - ①GO/NO-GO＋Phase 0 投資約15万円 ②仕入=中古（要古物商）or 新品1台先行 ③airrent.jp 取得（空き確認済・レジストラ決済はKeita操作）
+   - 詳細= https://apollomansion.com/work?tab=airrent
 
 ## 完了ログ
+
+- 2026-08-07 【MC-351】hn@宛メール文面の承認 dec-1d8f635c → **approve-send** 🔒[Keita]（送信実行はSon側Gmail壁で上記1へ振替）
+- 2026-08-07 【MC-361】Son巻き取り dec-3c38402e → **承認** 🔒[Keita]（現在は共有ファイルの他者WIP待ちで適用保留）
+- 2026-08-07 【MC-367】EDINET APIキー取得 dec-4b1b2843 → **son-register 承認** 🔒[Keita]（登録実行はメール確認コード壁で上記1へ振替）
 
 - 2026-08-04 22:29 決裁4件タップ完了 🔒[Keita]
   - 【MC-351】次の一手 → **(a) hn@へ依頼メール**（dec-56d95f6a）→ Son英文起案済・文面承認 dec-1d8f635c へ継続
