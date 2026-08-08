@@ -29,6 +29,7 @@ export default function AirRent() {
             <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-700 dark:text-slate-200">
               <li>需要分析・収支試算・プラン v3（2週トライアル/シーズン/スタンダード＋移行ルール）まで確定。</li>
               <li>モックアップは <b>LP／商品説明／決済／マイページの4画面</b>構成。<b>v4 でデザイン刷新</b>（8/8 Keita「きれいに・シンプルに」）: 余白基調のミニマルデザインに一新、「Stripeで決済します」等の解説文を全撤去、文言を最小・明確に。移行ルール文言（期間短縮不可）は維持。</li>
+              <li>8/8 11:52 指示対応: <b>決済手段の比較（Stripe/Square/PAY.JP）・コスト全洗い出し・損益分岐点グラフ</b>を下部に追加。本人確認は廃止（11:49）。</li>
               <li>Keita 判断待ち: GO/NO-GO・仕入れ方針・ドメイン取得（airrent.jp は空き確認済み）。</li>
             </ul>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -142,6 +143,96 @@ export default function AirRent() {
               <li>法規: 新品仕入れ→レンタルは許認可不要。<b>中古仕入れは古物商許可が必要</b>（約1.9万円）。メルカリでのレンタル出品は規約違反のため不可。LPに特商法表記必須。</li>
               <li>定常運用の人手 = 発送・返却検品のみ（1件30分想定）。</li>
             </ul>
+          </div>
+
+          {/* 決済手段の比較 */}
+          <div className={SECTION}>
+            <h3 className={H3}>決済手段の比較（8/8 調査・Keita「Stripe以外の選択肢は？」）</h3>
+            <table className="w-full border-collapse text-[13px]">
+              <thead><tr><th className={TH}>サービス</th><th className={TH}>月額</th><th className={TH}>決済手数料</th><th className={TH}>サブスク対応</th><th className={TH}>評価</th></tr></thead>
+              <tbody>
+                <tr><td className={TD}><b>Stripe</b></td><td className={TD}>0円</td><td className={TD}>3.6%（海外カード+2%）</td><td className={TD}>◎ Payment Links＋Billingでノーコード級</td><td className={TD}><b>推奨</b>。自動化が最強（自動更新・解約セルフ・請求管理）</td></tr>
+                <tr><td className={TD}>Square</td><td className={TD}>0円</td><td className={TD}>3.6%</td><td className={TD}>○ サブスク請求リンクあり</td><td className={TD}>対抗。翌営業日入金・振込無料は魅力。API柔軟性はStripe劣後</td></tr>
+                <tr><td className={TD}>PAY.JP</td><td className={TD}>0円（スタンダード）</td><td className={TD}><b>3.3%</b>（一律・最安）</td><td className={TD}>△ 定期課金はv1 API（v2は2026年中予定）・実装量多め</td><td className={TD}>率は最安だが月商10万で差は月300円。自動化の手間が勝る</td></tr>
+                <tr><td className={TD}>GMO等 月額固定型</td><td className={TD}>数千円〜</td><td className={TD}>〜3.0%前後</td><td className={TD}>○</td><td className={TD}>×。月商10万規模では固定費負け</td></tr>
+              </tbody>
+            </table>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              結論: <b>Stripe 継続推奨</b>。手数料差（3.6% vs PAY.JP 3.3%）は月商10万円で月300円。プラン変更（アップグレードのみ）・自動更新・解約セルフをコード最小で組めるのはStripeのみ。将来月商50万超で PAY.JP ビジネス（月2万円・2.78%）へ移行検討ライン。
+            </p>
+          </div>
+
+          {/* コスト全体像 */}
+          <div className={SECTION}>
+            <h3 className={H3}>コスト全体像（ドメイン・サーバー・メール・決済）</h3>
+            <table className="w-full border-collapse text-[13px]">
+              <thead><tr><th className={TH}>項目</th><th className={TH}>初期</th><th className={TH}>月次</th><th className={TH}>備考</th></tr></thead>
+              <tbody>
+                <tr><td className={TD}>ドメイン airrent.jp</td><td className={TD}>約1,600円/年</td><td className={TD}>約134円</td><td className={TD}>お名前.com・維持調整費込み実額</td></tr>
+                <tr><td className={TD}>サーバー（LP）</td><td className={TD}>0円</td><td className={TD}>0円</td><td className={TD}>静的LP＝Cloudflare Pages無料枠で十分</td></tr>
+                <tr><td className={TD}>メール（info@airrent.jp）</td><td className={TD}>0円</td><td className={TD}>0円〜880円</td><td className={TD}>受信=Cloudflare Email Routing無料＋Gmail送信で0円。体裁重視なら Google Workspace Starter 800円/月(税抜)</td></tr>
+                <tr><td className={TD}>決済（Stripe）</td><td className={TD}>0円</td><td className={TD}>売上の3.6%</td><td className={TD}>月商10万円時 3,600円</td></tr>
+                <tr><td className={TD}>機材（Phase 0）</td><td className={TD}>約15万円</td><td className={TD}>—</td><td className={TD}>中古2台＋古物商1.9万 or 新品1台</td></tr>
+                <tr><td className={TD}><b>運転固定費 計</b></td><td className={TD}>—</td><td className={TD}><b>約150〜1,100円</b></td><td className={TD}>決済・変動費除く。ほぼゼロ固定費で運営可能</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* 損益分岐点 */}
+          <div className={SECTION}>
+            <h3 className={H3}>損益分岐点</h3>
+            <p className="mb-1 text-slate-700 dark:text-slate-200">
+              <b>① 稼働台数ベース（月次）</b> — スタンダード単価・機材償却込みの保守ケース。固定費が極小のため<b>稼働1台目から黒字</b>（分岐点 ≒ 0.6台）。
+            </p>
+            <svg viewBox="0 0 480 230" className="w-full" role="img" aria-label="稼働台数と月次売上・コストの損益分岐点グラフ">
+              <line x1="40" y1="190" x2="460" y2="190" stroke="#94a3b8" strokeWidth="1" />
+              <line x1="40" y1="20" x2="40" y2="190" stroke="#94a3b8" strokeWidth="1" />
+              {[0, 3, 6, 9, 12].map((u) => (
+                <g key={u}>
+                  <text x={40 + u * 35} y="205" textAnchor="middle" fontSize="10" fill="#64748b">{u}台</text>
+                  <line x1={40 + u * 35} y1="188" x2={40 + u * 35} y2="192" stroke="#94a3b8" />
+                </g>
+              ))}
+              {[0, 5, 10].map((m) => (
+                <text key={m} x="34" y={194 - m * 17} textAnchor="end" fontSize="10" fill="#64748b">{m}万</text>
+              ))}
+              {/* 売上 7,980円/台 */}
+              <polyline fill="none" stroke="#0284c7" strokeWidth="2.5" points={Array.from({ length: 13 }, (_, u) => `${40 + u * 35},${190 - (u * 7980) / 100000 * 170}`).join(' ')} />
+              {/* 総コスト 固定1,100＋変動4,240＋償却1,790/台 */}
+              <polyline fill="none" stroke="#f59e0b" strokeWidth="2.5" points={Array.from({ length: 13 }, (_, u) => `${40 + u * 35},${190 - (1100 + u * 6030) / 100000 * 170}`).join(' ')} />
+              <circle cx={40 + 0.6 * 35} cy={190 - (0.6 * 7980) / 100000 * 170} r="4" fill="#dc2626" />
+              <text x={40 + 0.6 * 35 + 8} y={190 - (0.6 * 7980) / 100000 * 170 - 6} fontSize="10.5" fill="#dc2626" fontWeight="bold">損益分岐 ≒ 0.6台</text>
+              <text x="430" y={190 - 95760 / 100000 * 170 - 6} textAnchor="end" fontSize="10.5" fill="#0284c7" fontWeight="bold">売上</text>
+              <text x="430" y={190 - (1100 + 12 * 6030) / 100000 * 170 + 14} textAnchor="end" fontSize="10.5" fill="#f59e0b" fontWeight="bold">総コスト（償却込）</text>
+            </svg>
+            <p className="mb-1 mt-4 text-slate-700 dark:text-slate-200">
+              <b>② 累計キャッシュフロー（投資回収）</b> — Phase計画どおり投資（8月15万・12月25万）した場合。<b>回収 ≒ 開始から約18ヶ月（2028年2月）</b>。
+            </p>
+            <svg viewBox="0 0 480 230" className="w-full" role="img" aria-label="累計キャッシュフローの推移と投資回収時期">
+              <line x1="40" y1="72" x2="460" y2="72" stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 3" />
+              <text x="34" y="76" textAnchor="end" fontSize="10" fill="#64748b">0</text>
+              <text x="34" y="44" textAnchor="end" fontSize="10" fill="#64748b">+10万</text>
+              <text x="34" y="204" textAnchor="end" fontSize="10" fill="#64748b">−40万</text>
+              {(() => {
+                const cf = [-15, -14, -13, -12, -34.9, -32.8, -28, -23.2, -18.4, -16.3, -14.2, -12.1, -11.1, -10.1, -9.1, -8.1, -6, -3.9, 0.9, 5.7];
+                const pts = cf.map((v, i) => `${40 + i * (420 / 19)},${40 + ((10 - v) / 50) * 160}`).join(' ');
+                return (
+                  <>
+                    <polyline fill="none" stroke="#0284c7" strokeWidth="2.5" points={pts} />
+                    <circle cx={40 + 18 * (420 / 19)} cy={40 + ((10 - 0.9) / 50) * 160} r="4" fill="#dc2626" />
+                    <text x={40 + 18 * (420 / 19) - 8} y={40 + ((10 - 0.9) / 50) * 160 - 10} textAnchor="end" fontSize="10.5" fill="#dc2626" fontWeight="bold">黒字転換 2028年2月</text>
+                  </>
+                );
+              })()}
+              {[0, 4, 8, 12, 16, 19].map((i) => (
+                <text key={i} x={40 + i * (420 / 19)} y="222" textAnchor="middle" fontSize="9.5" fill="#64748b">
+                  {['26/8', '26/12', '27/4', '27/8', '27/12', '28/3'][[0, 4, 8, 12, 16, 19].indexOf(i)]}
+                </text>
+              ))}
+            </svg>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              前提: ①はスタンダード単価7,980円・変動費4,240円/台月（送料月割1,250＋フィルター/保険2,300＋決済/引当686）＋機材償却1,790円/台月（中古4.3万・24ヶ月）＋運転固定費1,100円/月。②は稼働 3台(9-11月)→6台(12-1月)→12台(2-4月)→季節連動の保守シナリオ。
+            </p>
           </div>
 
           {/* ドメイン */}
