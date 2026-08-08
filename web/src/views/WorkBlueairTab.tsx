@@ -52,7 +52,7 @@ export function WorkBlueairTab() {
           <thead><tr><th className={TH}>プラン</th><th className={TH}>月額(税込)</th><th className={TH}>最低期間</th><th className={TH}>狙い</th></tr></thead>
           <tbody>
             <tr><td className={TD}>シーズン</td><td className={TD}>9,980円</td><td className={TD}>3ヶ月</td><td className={TD}>花粉期の短期。夏の遊休月を織り込んだ単価</td></tr>
-            <tr><td className={TD}><b>スタンダード</b></td><td className={TD}><b>7,980円</b></td><td className={TD}>6ヶ月</td><td className={TD}>主力。18ヶ月継続でそのまま譲渡（追加0円）</td></tr>
+            <tr><td className={TD}><b>スタンダード</b></td><td className={TD}><b>7,980円</b></td><td className={TD}>6ヶ月</td><td className={TD}>主力。いつでも買取可（新品定価108,900円基準・既払レンタル料は全額充当）</td></tr>
           </tbody>
         </table>
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
@@ -68,7 +68,7 @@ export function WorkBlueairTab() {
         </p>
         <ul className="list-disc space-y-1.5 pl-5 text-slate-700 dark:text-slate-200">
           <li><b>シーズン機の稼働前提 = 年2回転・約6ヶ月（稼働率50%）</b>。1回転の限界利益 ≒ 29,940円 −（送料6,000＋整備1,000＋フィルター6,000＋決済1,100）≒ <b>約1.6万円</b>。年2回転で約3.2万円/台 → 中古仕入れ4.3万円を<b>約1.4年で回収</b>。夏に全く貸せなくても成立する単価が 9,980円。</li>
-          <li><b>スタンダードは遊休が少なく回収が速い</b>。6ヶ月で限界利益 約2.7万円。18ヶ月譲渡時の受取総額 143,640円 −（本体7万＋フィルター2セット4.3万＋送料・決済1.1万）≒ <b>約2万円の黒字で出口も確保</b>（12ヶ月全額充当のv1案は原価割れのため廃止）。</li>
+          <li><b>スタンダードは遊休が少なく回収が速い</b>。6ヶ月で限界利益 約2.7万円。買取条件は<b>新品定価108,900円基準・既払全額充当</b>（8/8 Keita「最初は新品の価格でいい」）: 買取成立時の受取総額108,900円 −（中古仕入4.3万＋フィルター2.1万＋送料・決済1万）≒ <b>約3.5万円の黒字で出口も確保</b>（12ヶ月で実売価格に全額充当するv1案は原価割れのため廃止）。</li>
           <li><b>資本の逐次投入</b>: 増台は繁忙期直前（12-1月）のみ・予約が入ってから仕入れる。夏前の増台はしない。</li>
           <li><b>下方リスクの限定</b>: 中古美品で仕入れれば売却出口が中古相場 約4万円にあり、撤退時の毀損は台あたり数千円〜1万円程度。</li>
           <li><b>夏の遊休対策（法人なし版）</b>: 6-8月はスタンダード限定のオフシーズン割（例 5,980円）で回転を拾う＋梅雨カビ・ハウスダスト訴求。埋まらない在庫は整備・撮影・SEO仕込み期間に充てる。</li>
