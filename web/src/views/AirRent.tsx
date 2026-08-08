@@ -28,7 +28,7 @@ export default function AirRent() {
             </div>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-700 dark:text-slate-200">
               <li>需要分析・収支試算・プラン v3（2週トライアル/シーズン/スタンダード＋移行ルール）まで確定。</li>
-              <li>モックアップは <b>LP／商品説明／決済／マイページの4画面</b>構成（v3）。</li>
+              <li>モックアップは <b>LP／商品説明／決済／マイページの4画面</b>構成。<b>v4 でデザイン刷新</b>（8/8 Keita「きれいに・シンプルに」）: 余白基調のミニマルデザインに一新、「Stripeで決済します」等の解説文を全撤去、文言を最小・明確に。移行ルール文言（期間短縮不可）は維持。</li>
               <li>Keita 判断待ち: GO/NO-GO・仕入れ方針・ドメイン取得（airrent.jp は空き確認済み）。</li>
             </ul>
             <div className="mt-3 flex flex-wrap gap-2">
