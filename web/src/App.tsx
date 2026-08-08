@@ -45,6 +45,8 @@ const PlanUsage = lazy(() => import('./views/PlanUsage'));
 const Childcare = lazy(() => import('./views/Childcare'));
 const Chaji = lazy(() => import('./views/Chaji'));
 const Work = lazy(() => import('./views/Work'));
+// AirRent（Blueair Classic Pro レンタル事業・MC-370）。仕事ページのタブから独立（2026-08-08 Keita）。
+const AirRent = lazy(() => import('./views/AirRent'));
 const ClaudeChat = lazy(() => import('./views/ClaudeChat'));
 const ClaudeBrowser = lazy(() => import('./views/ClaudeBrowser'));
 const Schedule = lazy(() => import('./views/Schedule'));
@@ -203,6 +205,8 @@ const NAV: NavItem[] = [
   { to: '/childcare', label: '育児', shortLabel: '育児', icon: <BabyIcon />, group: '生活' },
   { to: '/chaji', label: '茶事', shortLabel: '茶事', icon: <ChajiIcon />, group: '事業' },
   { to: '/work', label: '仕事', shortLabel: '仕事', icon: <WorkIcon />, group: '事業' },
+  // AirRent（Blueairレンタル事業・MC-370）: 仕事ページのタブから独立ページ化（2026-08-08 Keita）。
+  { to: '/airrent', label: 'AirRent', shortLabel: 'Air', icon: <SparkIcon />, group: '事業' },
   // LBOモデラー（MC-367）: 静的ページのため React ルート外・実リンクで別タブに開く。
   { to: '/lbo-mockup.html', label: 'LBOモデラー', shortLabel: 'LBO', icon: <LboIcon />, group: '事業', external: true },
   // Claude は未使用のためサイドメニューから削除（2026-06-30 Keita）。/claude ルートは後方互換で残置。
@@ -787,6 +791,7 @@ export default function App() {
               <Route path="/childcare" element={<Childcare />} />
               <Route path="/chaji" element={<Chaji />} />
               <Route path="/work" element={<Work />} />
+              <Route path="/airrent" element={<AirRent />} />
               <Route path="/claude" element={<ClaudeChat />} />
               {/* MC-350: Cowork 埋め込みブラウザ（noVNC）。proxy の /claude-browser とは別パス。 */}
               <Route path="/claude-browser-view" element={<ClaudeBrowser />} />

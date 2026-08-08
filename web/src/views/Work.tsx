@@ -39,7 +39,6 @@ import {
   type GlossaryCategory,
   type GlossaryTerm,
 } from './workGlossary';
-import { WorkBlueairTab } from './WorkBlueairTab';
 
 // ナレッジのカテゴリ既定リスト（server: workKnowledgeStore.KNOWLEDGE_CATEGORIES と一致させる）。
 const WORK_CATEGORIES = [
@@ -1693,13 +1692,14 @@ function WorkGlossaryTab({ onSeedChat }: { onSeedChat: (seed: string) => void })
 }
 
 // ─── タブ統括 ────────────────────────────────────────────────────────
-type WorkTab = 'chat' | 'knowledge' | 'glossary' | 'blueair';
+type WorkTab = 'chat' | 'knowledge' | 'glossary';
 
 function resolveInitialTab(): WorkTab {
   if (typeof window !== 'undefined') {
     const t = new URLSearchParams(window.location.search).get('tab');
     // 概要/動画DL/状況解析タブは削除（2026-07-20 Keita・MC-319）。旧 URL はナレッジへ寄せる。
-    if (t === 'chat' || t === 'knowledge' || t === 'glossary' || t === 'blueair') return t;
+    // Blueairレンタル（MC-370）は /airrent 独立ページへ転出（2026-08-08 Keita）。
+    if (t === 'chat' || t === 'knowledge' || t === 'glossary') return t;
   }
   return 'knowledge';
 }
@@ -1722,16 +1722,6 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
         <>
           <span aria-hidden><TextFileIcon width={16} height={16} /></span>
           単語帳
-        </>
-      ),
-    },
-    // Blueairレンタル事業（MC-370, 2026-08-08 Keita「仕事の独立タブにまとめておいて」）。
-    {
-      key: 'blueair',
-      label: (
-        <>
-          <span aria-hidden><SparkIcon width={16} height={16} /></span>
-          Blueairレンタル
         </>
       ),
     },
@@ -1800,13 +1790,7 @@ export default function Work() {
       <WorkTabBar tab={tab} onChange={changeTab} />
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
         {/* 概要/動画DL/状況解析は削除（MC-319）。既定＝ナレッジ。 */}
-        {tab === 'glossary' ? (
-          <WorkGlossaryTab onSeedChat={seedChat} />
-        ) : tab === 'blueair' ? (
-          <WorkBlueairTab />
-        ) : (
-          <WorkKnowledgeTab />
-        )}
+        {tab === 'glossary' ? <WorkGlossaryTab onSeedChat={seedChat} /> : <WorkKnowledgeTab />}
       </div>
       {/* 右下に常設の壁打ちチャット（どのタブでも相談できる） */}
       <FloatingWorkChat chat={chat} open={chatOpen} onToggle={toggleChat} />

@@ -3,20 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ブルーエア Classic Pro レンタル | AirRent（エアレント）</title>
+<title>AirRent（エアレント）| ブルーエア Classic Pro レンタル</title>
 <style>
   :root{
     --navy:#0b2545; --blue:#1d6fd6; --sky:#eaf3fd; --ink:#1a2333;
-    --gray:#6b7686; --line:#e3e9f1; --white:#fff; --accent:#ff8a3d;
+    --gray:#6b7686; --line:#e3e9f1; --white:#fff; --accent:#ff8a3d; --green:#1a9e5c; --red:#d64545;
   }
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:var(--ink);line-height:1.75;background:var(--white)}
   .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
   header{position:sticky;top:0;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);z-index:10}
-  .nav{display:flex;align-items:center;justify-content:space-between;height:60px}
-  .logo{font-weight:800;font-size:20px;color:var(--navy);letter-spacing:.04em}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:60px;gap:12px}
+  .logo{font-weight:800;font-size:20px;color:var(--navy);letter-spacing:.04em;cursor:pointer;white-space:nowrap}
   .logo span{color:var(--blue)}
-  .nav a.cta{background:var(--blue);color:#fff;padding:9px 20px;border-radius:24px;text-decoration:none;font-size:14px;font-weight:700}
+  .nav-links{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+  .nav-links a{color:var(--gray);text-decoration:none;font-size:13px;font-weight:700;padding:6px 12px;border-radius:16px}
+  .nav-links a.active{background:var(--sky);color:var(--blue)}
+  .nav-links a.cta{background:var(--blue);color:#fff}
+  .screen{display:none}
+  .screen.active{display:block}
   .hero{background:linear-gradient(160deg,var(--sky) 0%,#f7fbff 70%);padding:64px 0 56px}
   .hero-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:36px;align-items:center}
   .badge{display:inline-block;background:var(--navy);color:#fff;font-size:12px;font-weight:700;padding:4px 12px;border-radius:14px;margin-bottom:14px;letter-spacing:.06em}
@@ -27,8 +32,9 @@
   .price-tag .num{font-size:44px;font-weight:800;color:var(--blue)}
   .price-tag .unit{font-size:15px;color:var(--gray)}
   .price-tag .note{font-size:12px;color:var(--gray)}
-  .btn-main{display:inline-block;background:var(--accent);color:#fff;font-weight:800;font-size:17px;padding:15px 40px;border-radius:32px;text-decoration:none;box-shadow:0 6px 18px rgba(255,138,61,.35)}
+  .btn-main{display:inline-block;background:var(--accent);color:#fff;font-weight:800;font-size:17px;padding:15px 40px;border-radius:32px;text-decoration:none;box-shadow:0 6px 18px rgba(255,138,61,.35);border:none;cursor:pointer}
   .btn-sub{display:inline-block;margin-left:12px;color:var(--blue);font-weight:700;font-size:14px;text-decoration:none}
+  .btn-navy{display:inline-block;background:var(--navy);color:#fff;font-weight:700;font-size:14px;padding:11px 26px;border-radius:24px;text-decoration:none;border:none;cursor:pointer}
   .product-visual{background:#fff;border:1px solid var(--line);border-radius:18px;padding:28px;text-align:center;box-shadow:0 10px 30px rgba(11,37,69,.08)}
   .unit-art{width:150px;height:210px;margin:0 auto 14px;background:linear-gradient(180deg,#f2f5f9,#dfe6ee);border-radius:12px;position:relative;border:1px solid #cdd6e0}
   .unit-art::before{content:"";position:absolute;inset:14px 14px auto 14px;height:110px;background:repeating-linear-gradient(90deg,#b9c4d1 0 3px,transparent 3px 8px);border-radius:6px;opacity:.7}
@@ -51,14 +57,14 @@
   .plan.featured{border-color:var(--blue);box-shadow:0 12px 32px rgba(29,111,214,.14)}
   .plan .tag{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--blue);color:#fff;font-size:11.5px;font-weight:800;padding:3px 16px;border-radius:13px;white-space:nowrap}
   .plan h3{font-size:16px;color:var(--navy)}
-  .plan .p-price{font-size:34px;font-weight:800;color:var(--navy);margin:10px 0 2px}
+  .plan .p-price{font-size:32px;font-weight:800;color:var(--navy);margin:10px 0 2px}
   .plan .p-price small{font-size:13px;color:var(--gray);font-weight:600}
   .plan .p-note{font-size:12px;color:var(--gray);margin-bottom:14px}
   .plan ul{list-style:none;text-align:left;font-size:13px;color:var(--ink);margin-bottom:18px;flex:1}
   .plan ul li{padding:5px 0 5px 22px;position:relative;border-bottom:1px dashed var(--line)}
   .plan ul li::before{content:"✓";position:absolute;left:2px;color:var(--blue);font-weight:800}
-  .plan a{display:block;background:var(--navy);color:#fff;font-weight:700;font-size:14px;padding:11px;border-radius:24px;text-decoration:none}
-  .plan.featured a{background:var(--accent)}
+  .plan button{display:block;width:100%;background:var(--navy);color:#fff;font-weight:700;font-size:14px;padding:11px;border-radius:24px;border:none;cursor:pointer}
+  .plan.featured button{background:var(--accent)}
   .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;counter-reset:st}
   .step{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 18px;text-align:center}
   .step::before{counter-increment:st;content:counter(st);display:block;width:34px;height:34px;line-height:34px;margin:0 auto 10px;background:var(--blue);color:#fff;font-weight:800;border-radius:50%}
@@ -74,8 +80,46 @@
   footer{background:#081a33;color:#8fa2ba;font-size:12px;text-align:center;padding:26px 20px}
   footer a{color:#b9c8dc;margin:0 10px;text-decoration:none}
   .mock-note{position:fixed;bottom:14px;right:14px;background:#111;color:#fff;font-size:11px;padding:6px 12px;border-radius:14px;opacity:.75;z-index:99}
+  /* ── 商品説明 ── */
+  .prod-grid{display:grid;grid-template-columns:.9fr 1.1fr;gap:36px;align-items:start;padding-top:40px}
+  .spec-table{width:100%;border-collapse:collapse;font-size:13.5px;margin:18px 0}
+  .spec-table th{width:38%;text-align:left;color:var(--gray);font-weight:600;padding:9px 10px;border-bottom:1px solid var(--line);background:#f8fafc}
+  .spec-table td{padding:9px 10px;border-bottom:1px solid var(--line)}
+  .ext-links{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+  .ext-links a{display:block;border:1px solid var(--line);border-radius:10px;padding:12px 16px;text-decoration:none;color:var(--blue);font-weight:700;font-size:13.5px;background:#fff}
+  .ext-links a small{display:block;color:var(--gray);font-weight:400;font-size:11.5px}
+  /* ── 決済 ── */
+  .checkout{max-width:860px;margin:0 auto;padding:40px 20px;display:grid;grid-template-columns:1.1fr .9fr;gap:28px;align-items:start}
+  .co-form,.co-summary{background:#fff;border:1px solid var(--line);border-radius:14px;padding:26px}
+  .co-form h3,.co-summary h3{font-size:15px;color:var(--navy);margin-bottom:16px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:12.5px;font-weight:700;color:var(--gray);margin-bottom:5px}
+  .field input,.field select{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:10px 12px;font-size:14px;background:#fff}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .co-summary .row{display:flex;justify-content:space-between;font-size:13.5px;padding:7px 0;border-bottom:1px dashed var(--line)}
+  .co-summary .row.total{font-weight:800;font-size:16px;color:var(--navy);border-bottom:none;padding-top:12px}
+  .secure-note{font-size:11.5px;color:var(--gray);margin-top:12px}
+  .rule-note{background:#fff8f0;border:1px solid #f2d9bd;border-radius:10px;padding:12px 14px;font-size:12.5px;color:#8a5a1e;margin-top:14px}
+  /* ── マイページ ── */
+  .mypage{max-width:860px;margin:0 auto;padding:40px 20px;display:flex;flex-direction:column;gap:20px}
+  .mp-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px}
+  .mp-card h3{font-size:15px;color:var(--navy);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .mp-status{display:flex;flex-wrap:wrap;gap:18px;font-size:13.5px}
+  .mp-status div b{display:block;font-size:12px;color:var(--gray);font-weight:600}
+  .pill{display:inline-block;background:#e7f6ee;color:var(--green);font-size:12px;font-weight:800;padding:3px 12px;border-radius:13px}
+  .plan-opt{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:10px;font-size:13.5px}
+  .plan-opt.ok{border-color:#bfe0cd}
+  .plan-opt.ng{opacity:.55;background:#f8fafc}
+  .plan-opt .st{font-size:11.5px;font-weight:800}
+  .plan-opt.ok .st{color:var(--green)}
+  .plan-opt.ng .st{color:var(--red)}
+  .plan-opt button{background:var(--blue);color:#fff;border:none;border-radius:16px;padding:6px 16px;font-size:12px;font-weight:700;cursor:pointer}
+  .card-line{display:flex;justify-content:space-between;align-items:center;font-size:14px;border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+  .muted{font-size:12px;color:var(--gray);margin-top:10px}
+  .switcher{font-size:12px;color:var(--gray);margin-bottom:6px}
+  .switcher select{border:1px solid #cbd5e1;border-radius:6px;padding:4px 8px;font-size:12px;margin-left:6px}
   @media(max-width:820px){
-    .hero-grid,.cards,.plans{grid-template-columns:1fr}
+    .hero-grid,.cards,.plans,.prod-grid,.checkout{grid-template-columns:1fr}
     .steps{grid-template-columns:repeat(2,1fr)}
     h1{font-size:26px}
     .plan.featured{order:-1}
@@ -83,20 +127,28 @@
 </style>
 </head>
 <body>
-<div class="mock-note">MOCKUP v2 — MC-370</div>
+<div class="mock-note">MOCKUP v3 — MC-370</div>
 <header><div class="wrap nav">
-  <div class="logo">Air<span>Rent</span> <small style="font-size:11px;color:var(--gray);font-weight:600">| 空気清浄機レンタル</small></div>
-  <a class="cta" href="#plans">料金プラン</a>
+  <div class="logo" onclick="go('home')">Air<span>Rent</span></div>
+  <nav class="nav-links">
+    <a href="#home" data-s="home">ホーム</a>
+    <a href="#product" data-s="product">商品について</a>
+    <a href="#checkout" data-s="checkout">申し込み</a>
+    <a href="#mypage" data-s="mypage">マイページ</a>
+    <a class="cta" href="#checkout" onclick="go('checkout')">今すぐ申し込む</a>
+  </nav>
 </div></header>
 
+<!-- ════════ 画面1: LP ════════ -->
+<div class="screen" id="s-home">
 <div class="hero"><div class="wrap hero-grid">
   <div>
     <span class="badge">送料込み・フィルター交換込み</span>
     <h1>10万円の最上位空気清浄機を、<br><span class="hl">買わずに、必要な季節だけ。</span></h1>
-    <p class="lead">Blueair Classic Pro CP7i（〜56畳・世界基準の清浄力）を、フィルター交換込み・送料込みの月額制でお届け。花粉の3ヶ月だけ、赤ちゃんの1年だけ、気に入ればそのまま手元に。</p>
+    <p class="lead">Blueair Classic Pro CP7i（〜56畳・世界基準の清浄力）を、フィルター交換込み・送料込みの月額制でお届け。まず2週間のトライアルから、花粉の3ヶ月、そのまま買取まで。</p>
     <div class="price-tag"><span class="num">7,980</span><span class="unit">円/月（税込）〜</span><span class="note">送料込・フィルター交換込</span></div>
-    <a class="btn-main" href="#plans">今すぐ申し込む</a>
-    <a class="btn-sub" href="#flow">利用の流れを見る →</a>
+    <button class="btn-main" onclick="go('checkout')">今すぐ申し込む</button>
+    <a class="btn-sub" href="#product" onclick="go('product')">商品について詳しく →</a>
   </div>
   <div class="product-visual">
     <div class="unit-art"></div>
@@ -112,7 +164,7 @@
   <div class="cards">
     <div class="card"><div class="ico">🌸</div><h3>重症花粉症の方</h3><p>スギ・ヒノキの2〜5月だけ最強クラスを導入。シーズン計約3万円で、購入(10万円)の1/3以下。</p></div>
     <div class="card"><div class="ico">👶</div><h3>赤ちゃんが生まれるご家庭</h3><p>新生児期〜1歳の「一番きれいな空気にしたい時期」だけ。卒業したら返すだけ、置き場所にも困りません。</p></div>
-    <div class="card"><div class="ico">🐈</div><h3>ペットと暮らすご家庭</h3><p>多頭飼いのニオイ・抜け毛には大空間クラスの清浄力を。効果を試してから、気に入ればそのまま継続・譲渡も。</p></div>
+    <div class="card"><div class="ico">🐈</div><h3>ペットと暮らすご家庭</h3><p>多頭飼いのニオイ・抜け毛には大空間クラスの清浄力を。効果を試してから、気に入ればそのまま買取も。</p></div>
   </div>
 </div></section>
 
@@ -121,32 +173,35 @@
   <p class="sec-lead">すべて送料込み・フィルター交換込み・面倒な手続きなし</p>
   <div class="plans">
     <div class="plan">
-      <h3>お試しプラン</h3>
+      <h3>2週トライアル</h3>
       <div class="p-price">13,980<small>円/2週間</small></div>
-      <p class="p-note">1週間なら 9,980円・延長は1週ごと +3,500円</p>
-      <ul><li>往復送料無料</li><li>効果を体感してから決められる</li><li>そのまま月額プランへ切替OK</li><li>切替時はお試し料金を全額充当</li></ul>
-      <a href="#">このプランで申し込む</a>
+      <p class="p-note">まず効果を体感したい方に</p>
+      <ul><li>往復送料無料</li><li>効果を体感してから決められる</li><li>シーズン/スタンダードへ切替OK</li><li>切替時はトライアル料金を全額充当</li></ul>
+      <button onclick="selectPlan('trial')">このプランで申し込む</button>
     </div>
     <div class="plan">
       <h3>シーズンプラン</h3>
       <div class="p-price">9,980<small>円/月</small></div>
       <p class="p-note">最低3ヶ月〜（花粉シーズン向け）</p>
-      <ul><li>往復送料無料</li><li>整備・除菌済みの本体をお届け</li><li>3ヶ月目以降いつでも返却OK</li><li>返却は「箱に入れて集荷」だけ</li></ul>
-      <a href="#">このプランで申し込む</a>
+      <ul><li>往復送料無料</li><li>整備・除菌済みの本体をお届け</li><li>3ヶ月目以降いつでも返却OK</li><li>スタンダードへの切替OK</li></ul>
+      <button onclick="selectPlan('season')">このプランで申し込む</button>
     </div>
     <div class="plan featured">
       <span class="tag">いちばん人気</span>
       <h3>スタンダード</h3>
       <div class="p-price">7,980<small>円/月</small></div>
       <p class="p-note">最低6ヶ月〜（長く使うほどお得）</p>
-      <ul><li>往復送料無料</li><li>期間中フィルター交換無料</li><li>故障時は即・交換機をお届け</li><li>いつでも買取OK（支払済みレンタル料は全額充当）</li></ul>
-      <a href="#">このプランで申し込む</a>
+      <ul><li>往復送料無料</li><li>期間中フィルター交換無料</li><li>故障時は即・交換機をお届け</li><li>いつでも買取OK（既払分を全額充当）</li></ul>
+      <button onclick="selectPlan('standard')">このプランで申し込む</button>
     </div>
   </div>
-  <p style="text-align:center;font-size:12px;color:var(--gray);margin-top:18px">お支払いはクレジットカード（自動更新・解約はマイページから1クリック）。純正フィルター（21,450円相当）の交換費用も月額に含まれます。</p>
+  <p style="text-align:center;font-size:12px;color:var(--gray);margin-top:18px">
+    お支払いはクレジットカード（自動更新・解約はマイページから）。純正フィルター（21,450円相当）の交換費用も月額に含まれます。<br>
+    プラン変更は<b>期間が長くなる方向のみ</b>可能です（トライアル→シーズン／トライアル→スタンダード／シーズン→スタンダード）。期間を短くする変更はできません。
+  </p>
 </div></section>
 
-<section id="flow"><div class="wrap">
+<section><div class="wrap">
   <h2>ご利用の流れ</h2>
   <p class="sec-lead">お申し込みから最短3日でお届け。返すときも玄関先で渡すだけ。</p>
   <div class="steps">
@@ -161,6 +216,7 @@
   <h2>よくあるご質問</h2>
   <p class="sec-lead"></p>
   <details><summary>本当にフィルター代はかからないのですか？</summary><p>かかりません。純正フィルター（2個セット 21,450円相当）の交換費用は月額に含まれています。交換時期になったら新品フィルターをお送りします。</p></details>
+  <details><summary>プランの変更はできますか？</summary><p>期間が長くなる方向への変更のみ可能です（2週トライアル→シーズン／2週トライアル→スタンダード／シーズン→スタンダード）。<b>スタンダードからシーズンやトライアルなど、期間を短くするような変更はできません。</b>トライアルから月額プランへ切り替えた場合、お支払い済みのトライアル料金は全額充当されます。</p></details>
   <details><summary>壊してしまったら弁償ですか？</summary><p>通常利用による故障・自然故障は無償で交換機をお送りします。落下等の過失破損の場合もご負担は上限2万円までです（動産保険加入済み）。</p></details>
   <details><summary>気に入ったらそのまま買えますか？</summary><p>はい。スタンダードプランはいつでも買取が可能です。買取価格は新品価格（108,900円）を基準に、お支払い済みのレンタル料を全額差し引いた金額です（実質「試してから買う」が可能です）。</p></details>
   <details><summary>タバコ・ペットのニオイにも効きますか？</summary><p>Classic Proはニオイ・有害ガスに強いカーボンフィルター搭載モデルです。多頭飼いのご家庭や喫煙環境でも多くご利用いただいています。</p></details>
@@ -170,12 +226,232 @@
 <div class="cta-band">
   <h2>今シーズン、最強の空気で過ごしませんか</h2>
   <p>在庫に限りがあります。花粉シーズンは毎年1月に予約満了となる見込みです。</p>
-  <a class="btn-main" href="#plans">空き状況を確認する</a>
+  <button class="btn-main" onclick="go('checkout')">空き状況を確認する</button>
+</div>
+</div>
+
+<!-- ════════ 画面2: 商品説明 ════════ -->
+<div class="screen" id="s-product">
+<div class="wrap prod-grid">
+  <div>
+    <div class="product-visual">
+      <div class="unit-art" style="width:190px;height:270px"></div>
+      <h3>Blueair Classic Pro CP7i</h3>
+      <p>スウェーデン・Blueair社 最上位クラス</p>
+      <div class="spec-chips"><span>〜56畳</span><span>HEPASilent™</span><span>Wi-Fi/アプリ</span><span>静音</span></div>
+    </div>
+    <div class="ext-links">
+      <a href="https://www.blueair.jp/" target="_blank" rel="noreferrer">Blueair 公式サイト ↗<small>メーカー公式。ブランド・技術の詳細はこちら</small></a>
+      <a href="https://store.blueair.jp/item/111757.html" target="_blank" rel="noreferrer">Classic Pro CP7i 公式製品ページ ↗<small>メーカー希望小売価格 108,900円（税込）</small></a>
+      <a href="https://kakaku.com/item/K0001667071/" target="_blank" rel="noreferrer">価格.com の製品情報・レビュー ↗<small>実勢価格・ユーザーレビューの確認はこちら</small></a>
+    </div>
+  </div>
+  <div>
+    <span class="badge">商品について</span>
+    <h1 style="font-size:26px">世界基準の清浄力を、<br>リビングまるごとに。</h1>
+    <p style="margin:14px 0;color:var(--gray);font-size:14.5px">
+      Classic Pro CP7i は、Blueair 独自の HEPASilent™ テクノロジーで 0.1μm レベルの微粒子まで除去する最上位クラスの空気清浄機です。
+      〜56畳の大空間に対応し、花粉・PM2.5・ハウスダストからペットのニオイまで、リビング全体をこれ1台でカバーします。
+    </p>
+    <table class="spec-table">
+      <tr><th>適用床面積</th><td>〜56畳（92m²）</td></tr>
+      <tr><th>本体サイズ</th><td>幅500 × 高さ600 × 奥行250 mm</td></tr>
+      <tr><th>重量</th><td>約15kg</td></tr>
+      <tr><th>フィルター</th><td>パーティクル プラス カーボン（花粉・ニオイ両対応）</td></tr>
+      <tr><th>スマート機能</th><td>Wi-Fi接続・専用アプリ・空気質モニター</td></tr>
+      <tr><th>運転音</th><td>ナイトモード対応の静音設計</td></tr>
+      <tr><th>メーカー希望小売価格</th><td>108,900円（税込）</td></tr>
+    </table>
+    <p style="font-size:13px;color:var(--gray);margin-bottom:18px">
+      AirRent では、この Classic Pro CP7i を整備・除菌済みの状態で、フィルター交換込み・送料込みの月額制でお届けします。
+    </p>
+    <button class="btn-main" onclick="go('checkout')">レンタルを申し込む</button>
+    <a class="btn-sub" href="#home" onclick="go('home')">料金プランを見る →</a>
+  </div>
+</div>
+</div>
+
+<!-- ════════ 画面3: 決済 ════════ -->
+<div class="screen" id="s-checkout">
+<div class="wrap" style="padding-top:40px">
+  <h2>お申し込み</h2>
+  <p class="sec-lead">ご入力からお届けまで最短3日。決済は Stripe による安全な処理です。</p>
+</div>
+<div class="checkout">
+  <div class="co-form">
+    <h3>1. プランの選択</h3>
+    <div class="field">
+      <label>プラン</label>
+      <select id="co-plan" onchange="syncSummary()">
+        <option value="trial">2週トライアル — 13,980円（2週間）</option>
+        <option value="season">シーズンプラン — 9,980円/月（最低3ヶ月）</option>
+        <option value="standard" selected>スタンダード — 7,980円/月（最低6ヶ月）</option>
+      </select>
+    </div>
+    <h3 style="margin-top:22px">2. お届け先</h3>
+    <div class="field"><label>お名前</label><input placeholder="浦野 圭太"></div>
+    <div class="field"><label>住所</label><input placeholder="東京都〇〇区…"></div>
+    <div class="field-row">
+      <div class="field"><label>電話番号</label><input placeholder="090-0000-0000"></div>
+      <div class="field"><label>お届け希望日</label><input type="date"></div>
+    </div>
+    <h3 style="margin-top:22px">3. お支払い（クレジットカード）</h3>
+    <div class="field"><label>カード番号</label><input placeholder="4242 4242 4242 4242" inputmode="numeric"></div>
+    <div class="field-row">
+      <div class="field"><label>有効期限</label><input placeholder="MM / YY"></div>
+      <div class="field"><label>セキュリティコード</label><input placeholder="CVC" inputmode="numeric"></div>
+    </div>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--gray);margin:14px 0">
+      <input type="checkbox" style="margin-top:4px">
+      <span><a href="#" style="color:var(--blue)">利用規約</a>・<a href="#" style="color:var(--blue)">プライバシーポリシー</a>に同意します。プラン変更は期間が長くなる方向のみ可能である旨を確認しました。</span>
+    </label>
+    <button class="btn-main" style="width:100%" onclick="alert('モックアップのため、この先の本人確認（Stripe Identity）・決済処理は未実装です。')">本人確認へ進む（スマホで約2分）</button>
+    <p class="secure-note">🔒 決済情報は Stripe に直接送信され、当社サーバには保存されません。初回のみ本人確認（身分証＋セルフィー）をお願いしています。</p>
+  </div>
+  <div class="co-summary">
+    <h3>ご注文内容</h3>
+    <div class="row"><span>プラン</span><b id="sum-plan">スタンダード</b></div>
+    <div class="row"><span>月額 / 料金</span><b id="sum-price">7,980円/月</b></div>
+    <div class="row"><span>最低利用期間</span><b id="sum-min">6ヶ月</b></div>
+    <div class="row"><span>往復送料</span><b>0円（込み）</b></div>
+    <div class="row"><span>フィルター交換</span><b>0円（込み）</b></div>
+    <div class="row total"><span>初回お支払い</span><b id="sum-total">7,980円</b></div>
+    <div class="rule-note">
+      <b>プラン変更のルール</b><br>
+      変更できるのは期間が長くなる方向のみです。<br>
+      ・2週トライアル → シーズン / スタンダード ○<br>
+      ・シーズン → スタンダード ○<br>
+      ・スタンダード → シーズン / トライアル ×<br>
+      （期間を短くするような変更はできません）
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ════════ 画面4: マイページ ════════ -->
+<div class="screen" id="s-mypage">
+<div class="mypage">
+  <div>
+    <h2 style="text-align:left">マイページ</h2>
+    <p class="switcher">［モック動作確認用］現在のプランを切り替えて表示を確認:
+      <select id="mp-plan" onchange="renderMypage()">
+        <option value="trial">2週トライアル 利用中</option>
+        <option value="season" selected>シーズンプラン 利用中</option>
+        <option value="standard">スタンダード 利用中</option>
+      </select>
+    </p>
+  </div>
+
+  <div class="mp-card">
+    <h3>📦 ご契約状況</h3>
+    <div class="mp-status">
+      <div><b>現在のプラン</b><span id="mp-cur">シーズンプラン（9,980円/月）</span></div>
+      <div><b>ステータス</b><span class="pill">利用中</span></div>
+      <div><b>次回請求日</b><span>2026年9月8日</span></div>
+      <div><b>お届け中の機器</b><span>Blueair Classic Pro CP7i（No. AR-0007）</span></div>
+    </div>
+  </div>
+
+  <div class="mp-card">
+    <h3>🔁 プラン変更</h3>
+    <div id="mp-options"></div>
+    <p class="muted">※ プラン変更は<b>期間が長くなる方向のみ</b>可能です（トライアル→シーズン／トライアル→スタンダード／シーズン→スタンダード）。スタンダードからシーズン・トライアルなど、期間を短くするような変更はできません。トライアルからの切替時は、お支払い済みのトライアル料金を全額充当します。</p>
+  </div>
+
+  <div class="mp-card" id="mp-buyout-card">
+    <h3>🏷 買取</h3>
+    <div class="mp-status">
+      <div><b>買取基準価格</b><span>108,900円（新品価格）</span></div>
+      <div><b>お支払い済みレンタル料</b><span id="mp-paid">29,940円（3ヶ月分）</span></div>
+      <div><b>いま買い取る場合</b><span id="mp-buyout" style="font-weight:800;color:var(--navy)">78,960円</span></div>
+    </div>
+    <p class="muted">お支払い済みのレンタル料は全額、買取価格に充当されます。</p>
+    <button class="btn-navy" style="margin-top:8px" onclick="alert('モックアップのため買取決済は未実装です。')">この価格で買い取る</button>
+  </div>
+
+  <div class="mp-card">
+    <h3>💳 お支払い方法</h3>
+    <div class="card-line">
+      <span>VISA •••• 4242（有効期限 12/28）</span>
+      <button class="btn-navy" style="padding:7px 18px;font-size:12.5px" onclick="alert('モックアップのためカード変更（Stripe カスタマーポータル）は未実装です。')">カードを変更する</button>
+    </div>
+    <p class="muted">カード情報の変更は Stripe の安全なページで行われます。</p>
+  </div>
+
+  <div class="mp-card">
+    <h3>↩️ 返却・解約</h3>
+    <p style="font-size:13.5px;color:var(--gray)">返却をご希望の場合は、お届け時の箱に本体を戻し、同梱の着払い伝票で集荷をご依頼ください。最低利用期間内の解約は残期間分のお支払いが必要です。</p>
+    <button class="btn-navy" style="margin-top:12px;background:#fff;color:var(--red);border:1px solid var(--red)" onclick="alert('モックアップのため返却手続きは未実装です。')">返却手続きへ</button>
+  </div>
+</div>
 </div>
 
 <footer>
   <a href="#">特定商取引法に基づく表記</a><a href="#">利用規約</a><a href="#">プライバシーポリシー</a><a href="#">お問い合わせ</a>
   <p style="margin-top:10px">© 2026 AirRent — 空気清浄機レンタル（モックアップ）</p>
 </footer>
+
+<script>
+// ── 疑似ルーター（hash切替の4画面: home / product / checkout / mypage）──
+const PLANS = {
+  trial:    { name: '2週トライアル', price: '13,980円（2週間）', min: '2週間',  first: '13,980円', monthly: 13980 },
+  season:   { name: 'シーズンプラン', price: '9,980円/月',        min: '3ヶ月', first: '9,980円',  monthly: 9980 },
+  standard: { name: 'スタンダード',   price: '7,980円/月',        min: '6ヶ月', first: '7,980円',  monthly: 7980 },
+};
+// 期間が長くなる方向のみ許可（Keita仕様 2026-08-08）
+const UPGRADES = { trial: ['season', 'standard'], season: ['standard'], standard: [] };
+
+function go(s) {
+  document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+  const target = document.getElementById('s-' + s) || document.getElementById('s-home');
+  target.classList.add('active');
+  document.querySelectorAll('.nav-links a[data-s]').forEach(a =>
+    a.classList.toggle('active', a.dataset.s === s));
+  window.scrollTo(0, 0);
+  if (s === 'mypage') renderMypage();
+}
+window.addEventListener('hashchange', () => go(location.hash.replace('#', '') || 'home'));
+
+function selectPlan(p) {
+  document.getElementById('co-plan').value = p;
+  syncSummary();
+  location.hash = 'checkout';
+}
+function syncSummary() {
+  const p = PLANS[document.getElementById('co-plan').value];
+  document.getElementById('sum-plan').textContent = p.name;
+  document.getElementById('sum-price').textContent = p.price;
+  document.getElementById('sum-min').textContent = p.min;
+  document.getElementById('sum-total').textContent = p.first;
+}
+function renderMypage() {
+  const cur = document.getElementById('mp-plan').value;
+  const p = PLANS[cur];
+  document.getElementById('mp-cur').textContent = p.name + '（' + p.price + '）';
+  // プラン変更の選択肢（不可のものはグレーアウトで理由を明示）
+  const box = document.getElementById('mp-options');
+  box.innerHTML = '';
+  for (const key of ['trial', 'season', 'standard']) {
+    if (key === cur) continue;
+    const t = PLANS[key];
+    const ok = UPGRADES[cur].includes(key);
+    const div = document.createElement('div');
+    div.className = 'plan-opt ' + (ok ? 'ok' : 'ng');
+    div.innerHTML = '<span><b>' + t.name + '</b>（' + t.price + '）</span>' +
+      (ok
+        ? '<span><span class="st">変更可</span> <button onclick="alert(\'モックアップのためプラン変更は未実装です。\')">変更する</button></span>'
+        : '<span class="st">変更不可（期間を短くする変更はできません）</span>');
+    box.appendChild(div);
+  }
+  // 買取カード（スタンダード=いつでも可・他プランは切替後に案内）
+  const paid = { trial: '13,980円（トライアル）', season: '29,940円（3ヶ月分）', standard: '47,880円（6ヶ月分）' }[cur];
+  const buyout = { trial: 94920, season: 78960, standard: 61020 }[cur];
+  document.getElementById('mp-paid').textContent = paid;
+  document.getElementById('mp-buyout').textContent = buyout.toLocaleString('ja-JP') + '円';
+}
+// 初期表示
+go(location.hash.replace('#', '') || 'home');
+syncSummary();
+</script>
 </body>
 </html>
