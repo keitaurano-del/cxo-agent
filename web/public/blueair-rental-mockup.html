@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ブルーエア Classic Pro レンタル | AERENT（エアレント）</title>
+<style>
+  :root{
+    --navy:#0b2545; --blue:#1d6fd6; --sky:#eaf3fd; --ink:#1a2333;
+    --gray:#6b7686; --line:#e3e9f1; --white:#fff; --accent:#ff8a3d;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:var(--ink);line-height:1.75;background:var(--white)}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+  header{position:sticky;top:0;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);z-index:10}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .logo{font-weight:800;font-size:20px;color:var(--navy);letter-spacing:.04em}
+  .logo span{color:var(--blue)}
+  .nav a.cta{background:var(--blue);color:#fff;padding:9px 20px;border-radius:24px;text-decoration:none;font-size:14px;font-weight:700}
+  .hero{background:linear-gradient(160deg,var(--sky) 0%,#f7fbff 70%);padding:64px 0 56px}
+  .hero-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:36px;align-items:center}
+  .badge{display:inline-block;background:var(--navy);color:#fff;font-size:12px;font-weight:700;padding:4px 12px;border-radius:14px;margin-bottom:14px;letter-spacing:.06em}
+  h1{font-size:34px;line-height:1.45;color:var(--navy);font-weight:800}
+  h1 .hl{color:var(--blue)}
+  .hero p.lead{margin:16px 0 24px;color:var(--gray);font-size:15.5px}
+  .price-tag{display:flex;align-items:baseline;gap:8px;margin-bottom:22px}
+  .price-tag .num{font-size:44px;font-weight:800;color:var(--blue)}
+  .price-tag .unit{font-size:15px;color:var(--gray)}
+  .price-tag .note{font-size:12px;color:var(--gray)}
+  .btn-main{display:inline-block;background:var(--accent);color:#fff;font-weight:800;font-size:17px;padding:15px 40px;border-radius:32px;text-decoration:none;box-shadow:0 6px 18px rgba(255,138,61,.35)}
+  .btn-sub{display:inline-block;margin-left:12px;color:var(--blue);font-weight:700;font-size:14px;text-decoration:none}
+  .product-visual{background:#fff;border:1px solid var(--line);border-radius:18px;padding:28px;text-align:center;box-shadow:0 10px 30px rgba(11,37,69,.08)}
+  .unit-art{width:150px;height:210px;margin:0 auto 14px;background:linear-gradient(180deg,#f2f5f9,#dfe6ee);border-radius:12px;position:relative;border:1px solid #cdd6e0}
+  .unit-art::before{content:"";position:absolute;inset:14px 14px auto 14px;height:110px;background:repeating-linear-gradient(90deg,#b9c4d1 0 3px,transparent 3px 8px);border-radius:6px;opacity:.7}
+  .unit-art::after{content:"Blueair";position:absolute;bottom:12px;left:0;right:0;font-size:11px;color:#8795a6;letter-spacing:.12em}
+  .product-visual h3{font-size:16px;color:var(--navy)}
+  .product-visual p{font-size:12.5px;color:var(--gray)}
+  .spec-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:10px}
+  .spec-chips span{font-size:11px;background:var(--sky);color:var(--blue);font-weight:700;padding:3px 10px;border-radius:12px}
+  section{padding:56px 0}
+  section.alt{background:#f8fafc}
+  h2{font-size:26px;color:var(--navy);text-align:center;margin-bottom:8px;font-weight:800}
+  .sec-lead{text-align:center;color:var(--gray);font-size:14px;margin-bottom:36px}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:26px 22px}
+  .card .ico{font-size:30px;margin-bottom:10px}
+  .card h3{font-size:16.5px;color:var(--navy);margin-bottom:8px}
+  .card p{font-size:13.5px;color:var(--gray)}
+  .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:stretch}
+  .plan{background:#fff;border:2px solid var(--line);border-radius:16px;padding:28px 24px;text-align:center;position:relative;display:flex;flex-direction:column}
+  .plan.featured{border-color:var(--blue);box-shadow:0 12px 32px rgba(29,111,214,.14)}
+  .plan .tag{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--blue);color:#fff;font-size:11.5px;font-weight:800;padding:3px 16px;border-radius:13px;white-space:nowrap}
+  .plan h3{font-size:16px;color:var(--navy)}
+  .plan .p-price{font-size:34px;font-weight:800;color:var(--navy);margin:10px 0 2px}
+  .plan .p-price small{font-size:13px;color:var(--gray);font-weight:600}
+  .plan .p-note{font-size:12px;color:var(--gray);margin-bottom:14px}
+  .plan ul{list-style:none;text-align:left;font-size:13px;color:var(--ink);margin-bottom:18px;flex:1}
+  .plan ul li{padding:5px 0 5px 22px;position:relative;border-bottom:1px dashed var(--line)}
+  .plan ul li::before{content:"✓";position:absolute;left:2px;color:var(--blue);font-weight:800}
+  .plan a{display:block;background:var(--navy);color:#fff;font-weight:700;font-size:14px;padding:11px;border-radius:24px;text-decoration:none}
+  .plan.featured a{background:var(--accent)}
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;counter-reset:st}
+  .step{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 18px;text-align:center}
+  .step::before{counter-increment:st;content:counter(st);display:block;width:34px;height:34px;line-height:34px;margin:0 auto 10px;background:var(--blue);color:#fff;font-weight:800;border-radius:50%}
+  .step h3{font-size:14.5px;color:var(--navy);margin-bottom:6px}
+  .step p{font-size:12.5px;color:var(--gray)}
+  .faq{max-width:760px;margin:0 auto}
+  .faq details{background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:10px;padding:14px 18px}
+  .faq summary{font-weight:700;font-size:14.5px;color:var(--navy);cursor:pointer}
+  .faq p{font-size:13.5px;color:var(--gray);margin-top:8px}
+  .cta-band{background:var(--navy);color:#fff;text-align:center;padding:52px 20px}
+  .cta-band h2{color:#fff}
+  .cta-band p{color:#b9c8dc;font-size:14px;margin-bottom:24px}
+  footer{background:#081a33;color:#8fa2ba;font-size:12px;text-align:center;padding:26px 20px}
+  footer a{color:#b9c8dc;margin:0 10px;text-decoration:none}
+  .mock-note{position:fixed;bottom:14px;right:14px;background:#111;color:#fff;font-size:11px;padding:6px 12px;border-radius:14px;opacity:.75;z-index:99}
+  @media(max-width:820px){
+    .hero-grid,.cards,.plans{grid-template-columns:1fr}
+    .steps{grid-template-columns:repeat(2,1fr)}
+    h1{font-size:26px}
+    .plan.featured{order:-1}
+  }
+</style>
+</head>
+<body>
+<div class="mock-note">MOCKUP v1 — MC-370</div>
+<header><div class="wrap nav">
+  <div class="logo">AE<span>RENT</span> <small style="font-size:11px;color:var(--gray);font-weight:600">| ブルーエア Classic Pro 専門レンタル</small></div>
+  <a class="cta" href="#plans">料金プラン</a>
+</div></header>
+
+<div class="hero"><div class="wrap hero-grid">
+  <div>
+    <span class="badge">国内唯一※ Classic Pro 特化レンタル</span>
+    <h1>10万円の最上位空気清浄機を、<br><span class="hl">買わずに、必要な季節だけ。</span></h1>
+    <p class="lead">Blueair Classic Pro CP7i（〜56畳・世界基準の清浄力）を、フィルター交換込み・送料込みの月額制でお届け。花粉の3ヶ月だけ、赤ちゃんの1年だけ、店舗の通年利用まで。</p>
+    <div class="price-tag"><span class="num">7,980</span><span class="unit">円/月（税込）</span><span class="note">送料込・フィルター交換込・最低3ヶ月</span></div>
+    <a class="btn-main" href="#plans">今すぐ申し込む</a>
+    <a class="btn-sub" href="#flow">利用の流れを見る →</a>
+    <p style="font-size:11px;color:var(--gray);margin-top:14px">※ 2026年8月時点・当社調べ（大手レンタル各社のClassic Pro取扱状況）</p>
+  </div>
+  <div class="product-visual">
+    <div class="unit-art"></div>
+    <h3>Blueair Classic Pro CP7i</h3>
+    <p>メーカー希望小売価格 108,900円</p>
+    <div class="spec-chips"><span>〜56畳</span><span>花粉/PM2.5</span><span>ペット臭</span><span>HEPASilent™</span><span>Wi-Fi対応</span></div>
+  </div>
+</div></div>
+
+<section><div class="wrap">
+  <h2>こんな方に選ばれています</h2>
+  <p class="sec-lead">「年に数ヶ月しか使わないのに10万円は出せない」を解決します</p>
+  <div class="cards">
+    <div class="card"><div class="ico">🌸</div><h3>重症花粉症の方</h3><p>スギ・ヒノキの2〜5月だけ最強クラスを導入。シーズン計2.4万円で、購入(10万円)の1/4以下。</p></div>
+    <div class="card"><div class="ico">👶</div><h3>赤ちゃんが生まれるご家庭</h3><p>新生児期〜1歳の「一番きれいな空気にしたい時期」だけ。卒業したら返すだけ、置き場所にも困りません。</p></div>
+    <div class="card"><div class="ico">🏥</div><h3>クリニック・保育園・店舗</h3><p>〜56畳の大空間対応。フィルター管理は丸ごとお任せ、全額経費処理OK。通年の法人プランをご用意。</p></div>
+  </div>
+</div></section>
+
+<section class="alt" id="plans"><div class="wrap">
+  <h2>料金プラン</h2>
+  <p class="sec-lead">すべて送料込み・フィルター交換込み・面倒な手続きなし</p>
+  <div class="plans">
+    <div class="plan">
+      <h3>シーズンプラン</h3>
+      <div class="p-price">8,980<small>円/月</small></div>
+      <p class="p-note">最低3ヶ月〜（花粉シーズン向け）</p>
+      <ul><li>往復送料無料</li><li>フィルターは整備済みを装着</li><li>3ヶ月目以降いつでも返却OK</li><li>返却は「箱に入れて集荷」だけ</li></ul>
+      <a href="#">このプランで申し込む</a>
+    </div>
+    <div class="plan featured">
+      <span class="tag">いちばん人気</span>
+      <h3>スタンダード</h3>
+      <div class="p-price">7,980<small>円/月</small></div>
+      <p class="p-note">最低6ヶ月〜（長く使うほどお得）</p>
+      <ul><li>往復送料無料</li><li>期間中フィルター交換無料</li><li>故障時は即・交換機をお届け</li><li>12ヶ月継続で買取価格から全額充当</li></ul>
+      <a href="#">このプランで申し込む</a>
+    </div>
+    <div class="plan">
+      <h3>法人・通年プラン</h3>
+      <div class="p-price">9,800<small>円/月</small></div>
+      <p class="p-note">請求書払い対応・複数台割引あり</p>
+      <ul><li>全額経費処理OK</li><li>フィルター交換・保守込み</li><li>設置場所のご相談対応</li><li>2台目以降 10%OFF</li></ul>
+      <a href="#">見積もりを依頼する</a>
+    </div>
+  </div>
+  <p style="text-align:center;font-size:12px;color:var(--gray);margin-top:18px">お支払いはクレジットカード（自動更新・解約はマイページから1クリック）。純正フィルター（21,450円相当）の交換費用も月額に含まれます。</p>
+</div></section>
+
+<section id="flow"><div class="wrap">
+  <h2>ご利用の流れ</h2>
+  <p class="sec-lead">お申し込みから最短3日でお届け。返すときも玄関先で渡すだけ。</p>
+  <div class="steps">
+    <div class="step"><h3>Webで申し込み</h3><p>プランを選んでカード登録。本人確認もスマホで2分。</p></div>
+    <div class="step"><h3>整備済み品が届く</h3><p>クリーニング・動作確認済みの本体を宅配でお届け。</p></div>
+    <div class="step"><h3>電源を入れるだけ</h3><p>フィルター装着済み。設置ガイド同梱で迷いません。</p></div>
+    <div class="step"><h3>返却は集荷を呼ぶだけ</h3><p>届いた箱に戻して同梱の着払い伝票でご返送。</p></div>
+  </div>
+</div></section>
+
+<section class="alt"><div class="wrap faq">
+  <h2>よくあるご質問</h2>
+  <p class="sec-lead"></p>
+  <details><summary>本当にフィルター代はかからないのですか？</summary><p>かかりません。純正フィルター（2個セット 21,450円相当）の交換費用は月額に含まれています。交換時期になったら新品フィルターをお送りします。</p></details>
+  <details><summary>壊してしまったら弁償ですか？</summary><p>通常利用による故障・自然故障は無償で交換機をお送りします。落下等の過失破損の場合もご負担は上限2万円までです（動産保険加入済み）。</p></details>
+  <details><summary>気に入ったらそのまま買えますか？</summary><p>はい。スタンダードプランは12ヶ月のお支払い分を全額買取価格に充当できます（実質「試してから買う」が可能です）。</p></details>
+  <details><summary>タバコ・ペットのニオイにも効きますか？</summary><p>Classic Proはニオイ・有害ガスに強いカーボンフィルター搭載モデルです。多頭飼いのご家庭や喫煙環境でも多くご利用いただいています。</p></details>
+  <details><summary>最低利用期間の途中で返却できますか？</summary><p>可能ですが、最低利用期間分の料金はお支払いいただきます（往復送料・整備費用を含むため）。</p></details>
+</div></section>
+
+<div class="cta-band">
+  <h2>今シーズン、最強の空気で過ごしませんか</h2>
+  <p>在庫に限りがあります。花粉シーズンは毎年1月に予約満了となる見込みです。</p>
+  <a class="btn-main" href="#plans">空き状況を確認する</a>
+</div>
+
+<footer>
+  <a href="#">特定商取引法に基づく表記</a><a href="#">利用規約</a><a href="#">プライバシーポリシー</a><a href="#">お問い合わせ</a>
+  <p style="margin-top:10px">© 2026 AERENT — Blueair Classic Pro 専門レンタル（モックアップ）</p>
+</footer>
+</body>
+</html>

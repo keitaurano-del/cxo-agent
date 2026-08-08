@@ -399,3 +399,4 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-367 | LBOモデラー機能 | 高 | IN_PROGRESS（8/7 サイドメニュー常設化=106d0dd＋22:40 モバイル導線バグ修正=1b52400（Keita報告→即日修正・実画面検証・push済）。8/8 EDINET登録=メール確認コード必須でGmail壁(型B)→Coworkプロンプトへコード中継を追記・Keita Gmailログイン待ち。プリセット5社で先行運用中。詳細→ tasks/MC-367.md） | Son | Keita依頼8/4「アポロでLBOモデルを組めるような機能考えて」。/lbo-mockup.html |
 | MC-368 | Apolloパスワードログイン | 高 | DONE（8/4 /login フォーム＋MC_PASSWORD照合＋Cookie 400日スライド更新を実装・service restart・外形6項目実測green。auth.ts/index.ts） | fable5 | Keita依頼8/4「毎回token URLで開けなくなるのは困る、パスワード1回で永久アクセスに」。発端はCookie 30日失効による401。Bearer/token URL経路は不変 |
 | MC-369 | 収益タブ期間切替 | 高 | DONE（8/7 00:20 7日/1ヶ月/3ヶ月/全期間タブ実装・両service再起動・本番実画面検証済。DoD→ tasks/MC-369.md） | Son | Keita依頼8/6「収益の期間は全期間とか1ヶ月とか株価みたいに」。video-dl days拡張＋revenueRouter range＋Revenue.tsx期間タブ。today誤表示バグも修正 |
+| MC-370 | Blueairレンタル事業立上げ | 高 | IN_PROGRESS（8/8 起票。需要分析・モックアップ・集客・売上10万円プラン作成中。詳細→ tasks/MC-370.md） | Son | Keita依頼8/8「Classic Pro特化レンタル、月商10万・極力自動化」。新規事業 |
