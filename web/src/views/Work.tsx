@@ -20,6 +20,7 @@ import {
   EditIcon,
   ExpandIcon,
   ImageFileIcon,
+  LboIcon,
   NotebookIcon,
   PlusIcon,
   SearchIcon,
@@ -39,6 +40,8 @@ import {
   type GlossaryCategory,
   type GlossaryTerm,
 } from './workGlossary';
+// AirRent（MC-370）本文。独立ページから仕事タブへ移設（2026-08-08 Keita）。/airrent は後方互換で残置。
+import { AirRentContent } from './AirRent';
 
 // ナレッジのカテゴリ既定リスト（server: workKnowledgeStore.KNOWLEDGE_CATEGORIES と一致させる）。
 const WORK_CATEGORIES = [
@@ -1691,15 +1694,42 @@ function WorkGlossaryTab({ onSeedChat }: { onSeedChat: (seed: string) => void })
   );
 }
 
+// ─── LBOモデラータブ（MC-367）───────────────────────────────────────────
+// 静的ページ /lbo-mockup.html を iframe で埋め込む（2026-08-08 Keita「LBOモデラーは仕事の別タブに入れて」）。
+// サイドメニューの独立項目からこちらへ移設。全画面で使いたい場合向けに「別タブで開く」も残す。
+function WorkLboTab() {
+  return (
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex items-center justify-end">
+        <a
+          href="/lbo-mockup.html"
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+        >
+          別タブで開く ↗
+        </a>
+      </div>
+      <iframe
+        src="/lbo-mockup.html"
+        title="LBOモデラー"
+        className="min-h-0 w-full flex-1 rounded-lg border border-border bg-white"
+      />
+    </div>
+  );
+}
+
 // ─── タブ統括 ────────────────────────────────────────────────────────
-type WorkTab = 'chat' | 'knowledge' | 'glossary';
+type WorkTab = 'chat' | 'knowledge' | 'glossary' | 'airrent' | 'lbo';
 
 function resolveInitialTab(): WorkTab {
   if (typeof window !== 'undefined') {
     const t = new URLSearchParams(window.location.search).get('tab');
     // 概要/動画DL/状況解析タブは削除（2026-07-20 Keita・MC-319）。旧 URL はナレッジへ寄せる。
-    // Blueairレンタル（MC-370）は /airrent 独立ページへ転出（2026-08-08 Keita）。
-    if (t === 'chat' || t === 'knowledge' || t === 'glossary') return t;
+    // AirRent（MC-370）と LBOモデラー（MC-367）は仕事タブへ集約（2026-08-08 Keita）。
+    // 旧 tab=blueair も AirRent タブへ寄せる。
+    if (t === 'chat' || t === 'knowledge' || t === 'glossary' || t === 'airrent' || t === 'lbo') return t;
+    if (t === 'blueair') return 'airrent';
   }
   return 'knowledge';
 }
@@ -1722,6 +1752,25 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
         <>
           <span aria-hidden><TextFileIcon width={16} height={16} /></span>
           単語帳
+        </>
+      ),
+    },
+    // AirRent（MC-370）・LBOモデラー（MC-367）: サイドメニューの独立項目から仕事タブへ移設（2026-08-08 Keita）。
+    {
+      key: 'airrent',
+      label: (
+        <>
+          <span aria-hidden><SparkIcon width={16} height={16} /></span>
+          AirRent
+        </>
+      ),
+    },
+    {
+      key: 'lbo',
+      label: (
+        <>
+          <span aria-hidden><LboIcon width={16} height={16} /></span>
+          LBOモデラー
         </>
       ),
     },
@@ -1788,9 +1837,17 @@ export default function Work() {
         fetchedAt={undefined}
       />
       <WorkTabBar tab={tab} onChange={changeTab} />
-      <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
-        {/* 概要/動画DL/状況解析は削除（MC-319）。既定＝ナレッジ。 */}
-        {tab === 'glossary' ? <WorkGlossaryTab onSeedChat={seedChat} /> : <WorkKnowledgeTab />}
+      <div className={tab === 'lbo' ? 'flex-1 overflow-hidden px-4 py-4 md:px-6' : 'flex-1 overflow-y-auto px-4 py-4 md:px-6'}>
+        {/* 概要/動画DL/状況解析は削除（MC-319）。既定＝ナレッジ。AirRent/LBO は独立ナビから移設（2026-08-08）。 */}
+        {tab === 'glossary' ? (
+          <WorkGlossaryTab onSeedChat={seedChat} />
+        ) : tab === 'airrent' ? (
+          <AirRentContent />
+        ) : tab === 'lbo' ? (
+          <WorkLboTab />
+        ) : (
+          <WorkKnowledgeTab />
+        )}
       </div>
       {/* 右下に常設の壁打ちチャット（どのタブでも相談できる） */}
       <FloatingWorkChat chat={chat} open={chatOpen} onToggle={toggleChat} />

@@ -9,16 +9,11 @@ const H3 = 'mb-3 text-sm font-bold text-slate-800 dark:text-slate-100';
 const TH = 'border-b border-slate-200 px-3 py-2 text-left font-semibold text-slate-500 dark:border-slate-600 dark:text-slate-400';
 const TD = 'border-b border-slate-100 px-3 py-2 text-slate-700 dark:border-slate-700 dark:text-slate-200';
 
-export default function AirRent() {
+// 本文のみ（ヘッダ・スクロール枠なし）。仕事ページの「AirRent」タブへ埋め込むためのエクスポート
+// （2026-08-08 Keita「Airrentは仕事の別タブに入れて」）。/airrent 直リンクは後方互換で残す。
+export function AirRentContent() {
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        title="AirRent"
-        subtitle="Blueair Classic Pro レンタル事業（MC-370）— 目標月商10万円・極力自動化。最新状況はこのページに集約。"
-        fetchedAt={undefined}
-      />
-      <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
-        <div className="mx-auto flex max-w-3xl flex-col gap-4 pb-8 text-[13.5px] leading-relaxed">
+    <div className="mx-auto flex max-w-3xl flex-col gap-4 pb-8 text-[13.5px] leading-relaxed">
 
           {/* 最新状況 */}
           <div className={SECTION}>
@@ -255,7 +250,21 @@ export default function AirRent() {
             </ol>
             <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">GO なら Stripe 設定と本番LP化に着手します。詳細正本: docs/tasks/MC-370.md</p>
           </div>
-        </div>
+    </div>
+  );
+}
+
+// /airrent 直リンク用の単独ページ（後方互換）。正式な置き場所は 仕事 ＞ AirRent タブ。
+export default function AirRent() {
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader
+        title="AirRent"
+        subtitle="Blueair Classic Pro レンタル事業（MC-370）— 目標月商10万円・極力自動化。最新状況はこのページに集約。"
+        fetchedAt={undefined}
+      />
+      <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
+        <AirRentContent />
       </div>
     </div>
   );
