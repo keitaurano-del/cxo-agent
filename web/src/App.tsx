@@ -208,7 +208,8 @@ const NAV: NavItem[] = [
   // 「AirRent」「LBOモデラー」タブに統合した（2026-08-08 Keita）。/airrent は後方互換で残す。
   // Claude は未使用のためサイドメニューから削除（2026-06-30 Keita）。/claude ルートは後方互換で残置。
   // スケジュールは未使用のためサイドメニューから削除（2026-06-29 Keita）。/schedule ルートは後方互換で残置。
-  { to: '/dev', label: '開発', shortLabel: '開発', icon: <CodeIcon />, group: '開発' },
+  // 「開発」→「ラボ」に改名（2026-08-09 Keita: オリジナルでシンプルな名前に）。ルート /dev は不変。
+  { to: '/dev', label: 'ラボ', shortLabel: 'ラボ', icon: <CodeIcon />, group: '開発' },
   // 成長日記は独立ナビから外し、育児ページ内の「成長日記」タブに統合した（/baby-diary は後方互換で残す）。
   // ターミナル: iframe ホスト用 React ルートは /terminal-view。
   // サーバ proxy ルート /terminal（→ ttyd）と衝突させないため別パスにする。

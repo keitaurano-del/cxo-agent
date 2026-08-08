@@ -1225,7 +1225,8 @@ export default function Development() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="開発" subtitle="作りたい画面や機能を説明すると、AI がボタンが実際に動く試作品を 1 つ生成します。" />
+      {/* 「開発」→「ラボ」に改名（2026-08-09 Keita: オリジナルでシンプルな名前に）。 */}
+      <PageHeader title="ラボ" subtitle="作りたい画面や機能を説明すると、AI がボタンが実際に動く試作品を 1 つ生成します。" />
 
       {/* 通知/エラー帯 */}
       {(error || notice) && (
