@@ -597,6 +597,19 @@ export function WorkIcon(props: IconProps) {
   );
 }
 
+// 汎用 Claude チャット（吹き出し＋きらめき）。サイドメニュー「Claude」用。
+export function ClaudeIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      {/* 吹き出し */}
+      <path d="M20 13a2 2 0 0 1-2 2H8l-4 3.5V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" />
+      {/* きらめき（4方向のスパーク） */}
+      <path d="M17 4.5v3" />
+      <path d="M15.5 6h3" />
+    </svg>
+  );
+}
+
 // 成長日記（/baby-diary, MC-233）ナビ用。開いたノート＋しおりリボンで「日記」を表す。
 export function DiaryIcon(props: IconProps) {
   return (

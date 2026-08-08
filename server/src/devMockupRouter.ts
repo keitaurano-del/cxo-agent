@@ -114,6 +114,30 @@ const INTERACTIVE_RULES = [
 ].join('\n');
 
 /**
+ * ビジネスモデル図解ビューの指示（MC-361）。2026-08-02 Keita 指示「標準のアイデアの生成もビジネスモデルの
+ * 図解もやって」を受け、要望が「ビジネス・サービスのアイデア」である場合は、試作品の中に
+ * ビジネスモデル図解ビュー（タブ/切替ボタンで到達）を必ず含めさせる。
+ * 純粋な業務ツール・画面の依頼には付けない（この判断はモデルに任せる）。
+ * 設計段（buildDesignPrompt）とコード段（buildCodeFromDesignPrompt）の両方に結合し、
+ * 設計の画面リストとコードの実装の両方で図解ビューが確実に出るようにする。
+ */
+const BUSINESS_MODEL_DIAGRAM_RULES = [
+  '【ビジネスモデル図解ビュー】要望が「ビジネス・サービスのアイデア」（誰かに価値を届けてお金が動く事業の',
+  '説明。収益・市場規模・プレイヤーへの言及があるものは典型）である場合は、試作品の中に',
+  '「ビジネスモデル図解」ビューを必ず 1 つ含めること。タブまたは切替ボタンで到達できる画面にする。',
+  '図解ビューの内容（すべて盛り込む）:',
+  '- 登場プレイヤー: 供給側・需要側・プラットフォーム（このサービス）を箱で描き、位置関係を示す',
+  '- お金の流れ: 誰が誰にいくら払うか（手数料・サブスク・従量課金などの収益源）を矢印＋金額ラベルで示す',
+  '- AI がレバレッジを効かせるポイント: どの工程を AI が担い、何が安く/速く/良くなるかを図中に明示する',
+  '- 市場規模: 要望に市場規模があればそれを、無ければ妥当な推定を図中に添える',
+  '描き方: インライン SVG で、プレイヤー間を矢印でつないだ「関係図」として描くこと（外部ライブラリ・',
+  '外部画像は使わない）。文字だけの箇条書きで済ませるのは不可。矢印には「¥○○/月」「手数料○%」等の',
+  'ラベルを付け、お金の流れ（実線）と価値の流れ（点線等）を線種や色で区別すると分かりやすい。',
+  '一方、純粋な業務ツール・画面の依頼（ビジネスアイデアではないもの。例: 社内の在庫管理画面、',
+  '単機能のユーティリティ）には、この図解ビューを無理に付けないこと。付けるかどうかは要望の内容から判断する。',
+].join('\n');
+
+/**
  * デザインシステム指示（MC-252 P1）。obsidian-vault/20-Knowledge/design/mobile-ui-design-fundamentals
  * を蒸留した、見た目と画面構成の質を担保する具体基準（一次情報: WCAG2.2 / Material3 / Android a11y / NN/g）。
  * 生成・修正の両方に結合し、「良いトークン体系の枠内で組ませる」ことで平均品質を底上げする。
@@ -215,6 +239,12 @@ function buildDesignPrompt(prompt: string): string {
     ']',
     '画面は要望を満たすのに必要な数だけ出すこと（単一画面で十分なら 1 件、複数機能があればその数だけ。目安は最大 5 画面）。',
     '要望にある機能を削ってまで画面数を減らさないこと。一方で要望に無い画面は足さない。',
+    '',
+    // MC-361: ビジネス・サービスのアイデアなら、設計段階から「ビジネスモデル図解」画面を確実に予定に入れる。
+    '例外として、要望が「ビジネス・サービスのアイデア」（誰かに価値を届けてお金が動く事業の説明。',
+    '収益・市場規模・プレイヤーへの言及があるものは典型）である場合は、画面リストに',
+    '「ビジネスモデル図解」画面（登場プレイヤー・お金の流れ・AI のレバレッジポイント・市場規模を図で示す画面）を',
+    '必ず 1 件含めること。純粋な業務ツール・画面の依頼であれば含めない（要望の内容から判断する）。',
   ].join('\n');
 }
 
@@ -367,6 +397,9 @@ function buildCodeFromDesignPrompt(
     '（タブ・ビュー切替・モーダル等）。設計書の各画面をこの 1 つの試作品の中で行き来できるようにする。',
     '',
     INTERACTIVE_RULES,
+    '',
+    // MC-361: ビジネスアイデアの試作品にはビジネスモデル図解ビュー（SVG 関係図）を必ず実装させる。
+    BUSINESS_MODEL_DIAGRAM_RULES,
     '',
     DESIGN_SYSTEM_RULES,
     '',
@@ -768,6 +801,11 @@ interface Job {
   /** 自動保存できた結果（単一画面でも [{id,title}] 1 件を入れて後方互換を保つ）。 */
   saved?: { id: string; title: string }[];
   createdAt: number;
+  /** 終了（done/error/canceled）を sweep が最初に観測した時刻。終了ジョブの TTL はここから数える。
+   *  MC-361 で発見したバグの修正: createdAt 起点で TTL を数えると、順番待ち＋生成で 15 分を超えた
+   *  ジョブが done 直後の sweep で即消え、ポーリング中のクライアントが完了を受け取れず
+   *  「job not found」になっていた（実データは保存済みなのに結果が届かない）。 */
+  finishedAt?: number;
 }
 
 /** jobId → Job。インメモリのみ。 */
@@ -851,9 +889,19 @@ const GENERATE_FAILURE_MESSAGE = GENERATE_FAILURE_MESSAGES.error;
 function sweepExpiredJobs(): void {
   const now = Date.now();
   for (const [id, job] of jobs) {
-    const age = now - job.createdAt;
     const active = job.status === 'pending' || job.status === 'generating';
-    if (active ? age > JOB_ACTIVE_MAX_MS : age > JOB_TTL_MS) jobs.delete(id);
+    if (active) {
+      if (now - job.createdAt > JOB_ACTIVE_MAX_MS) jobs.delete(id);
+      continue;
+    }
+    // 終了ジョブ: 最初に終了を観測した時刻を finishedAt として記録し、TTL はそこから数える。
+    // （createdAt 起点だと長い順番待ち＋生成の後に done 直後で即消え、完了がクライアントへ届かない。
+    //   終端 status を書く箇所は複数あるため、sweep 側の一点で観測記録する方式にした。MC-361）
+    if (job.finishedAt === undefined) {
+      job.finishedAt = now;
+      continue;
+    }
+    if (now - job.finishedAt > JOB_TTL_MS) jobs.delete(id);
   }
 }
 
