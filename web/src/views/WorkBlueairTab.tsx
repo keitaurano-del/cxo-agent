@@ -49,15 +49,40 @@ export function WorkBlueairTab() {
       <div className={SECTION}>
         <h3 className={H3}>料金プラン v2（すべて送料・フィルター交換込み／個人のみ）</h3>
         <table className="w-full border-collapse text-[13px]">
-          <thead><tr><th className={TH}>プラン</th><th className={TH}>月額(税込)</th><th className={TH}>最低期間</th><th className={TH}>狙い</th></tr></thead>
+          <thead><tr><th className={TH}>プラン</th><th className={TH}>料金(税込)</th><th className={TH}>期間</th><th className={TH}>狙い</th></tr></thead>
           <tbody>
-            <tr><td className={TD}>シーズン</td><td className={TD}>9,980円</td><td className={TD}>3ヶ月</td><td className={TD}>花粉期の短期。夏の遊休月を織り込んだ単価</td></tr>
-            <tr><td className={TD}><b>スタンダード</b></td><td className={TD}><b>7,980円</b></td><td className={TD}>6ヶ月</td><td className={TD}>主力。いつでも買取可（新品定価108,900円基準・既払レンタル料は全額充当）</td></tr>
+            <tr><td className={TD}>お試し</td><td className={TD}>1週間 9,980円<br />2週間 13,980円</td><td className={TD}>1週間〜（延長 +3,500円/週）</td><td className={TD}>体感→月額転換の導線。転換時はお試し料金を全額充当</td></tr>
+            <tr><td className={TD}>シーズン</td><td className={TD}>9,980円/月</td><td className={TD}>3ヶ月〜</td><td className={TD}>花粉期の短期。夏の遊休月を織り込んだ単価</td></tr>
+            <tr><td className={TD}><b>スタンダード</b></td><td className={TD}><b>7,980円/月</b></td><td className={TD}>6ヶ月〜</td><td className={TD}>主力。いつでも買取可（新品定価108,900円基準・既払レンタル料は全額充当）</td></tr>
           </tbody>
         </table>
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-          月商10万円 = 12台稼働（シーズン5台 49,900円 ＋ スタンダード7台 55,860円 = 105,760円）
+          月商10万円 = 12台稼働（シーズン5台 49,900円 ＋ スタンダード7台 55,860円 = 105,760円）＋お試しは上乗せ
         </p>
+      </div>
+
+      {/* 収支試算（8/8 Keita「送料・経費・リスクを加味して利益を計算して」） */}
+      <div className={SECTION}>
+        <h3 className={H3}>収支試算 — 送料・経費・リスク引当込み</h3>
+        <p className="mb-2 text-slate-700 dark:text-slate-200">
+          <b>前提経費</b>: 往復送料 6,500円/回転（CP7i=箱込み160サイズ・関東内 片道約2,500〜2,900円、遠方も含む平均で往路元払い＋復路着払いの往復を6,500円と保守的に設定）＋梱包材500円＋整備・除菌500円＋本人確認300円 = <b>回転あたり固定 7,800円</b>。
+          貸出中は フィルター月割2,000円＋動産保険300円 = <b>2,300円/月</b>。売上に対し 決済3.6%＋<b>リスク引当5%</b>（破損・盗難・回収不能・想定外送料）。
+        </p>
+        <table className="w-full border-collapse text-[13px]">
+          <thead><tr><th className={TH}>プラン</th><th className={TH}>売上/回転</th><th className={TH}>経費計</th><th className={TH}>利益/回転</th><th className={TH}>利益率</th></tr></thead>
+          <tbody>
+            <tr><td className={TD}>お試し1週間</td><td className={TD}>9,980円</td><td className={TD}>約9,200円</td><td className={TD}>約800円</td><td className={TD}>8%（ほぼ導線扱い）</td></tr>
+            <tr><td className={TD}>お試し2週間</td><td className={TD}>13,980円</td><td className={TD}>約10,000円</td><td className={TD}>約4,000円</td><td className={TD}>28%</td></tr>
+            <tr><td className={TD}>シーズン3ヶ月</td><td className={TD}>29,940円</td><td className={TD}>約17,300円</td><td className={TD}>約12,700円</td><td className={TD}>42%</td></tr>
+            <tr><td className={TD}>スタンダード6ヶ月</td><td className={TD}>47,880円</td><td className={TD}>約25,700円</td><td className={TD}>約22,200円</td><td className={TD}>46%（月あたり約3,700円）</td></tr>
+          </tbody>
+        </table>
+        <ul className="mt-3 list-disc space-y-1.5 pl-5 text-slate-700 dark:text-slate-200">
+          <li><b>送料が固定で7,800円/回転かかるため、1週間プラン単体はほぼ利益ゼロ</b>。「効果体感→月額転換（お試し料金全額充当）」の獲得チャネルと割り切り、お試しの主推しは2週間にする。</li>
+          <li><b>月商10万円達成時の月次利益 ≒ 約4.7万円</b>（シーズン5台 21,200円＋スタンダード7台 25,900円・リスク引当後）。</li>
+          <li>年間ベース（繁忙期4ヶ月フル稼働＋他8ヶ月はスタンダード中心 月2万円前後）で<b>年間利益 約30-40万円</b>。投資50-70万円（中古中心）→ <b>回収 約1.5〜2年</b>（リスク引当込みの保守見積り）。</li>
+          <li>利益を厚くするレバー: ①買取成立（1件 約3.5万円）②近隣手渡しオプションで送料圧縮 ③フィルター交換周期の実運用最適化（利用9ヶ月未満なら次客に継続使用）。</li>
+        </ul>
       </div>
 
       {/* 在庫リスクと事業継続性（v2で追加） */}
