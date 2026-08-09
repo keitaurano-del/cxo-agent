@@ -392,7 +392,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（8/7 08-21時 全14回稼働・GSC観測第5回/save-app実測展開/MC-367サイドメニュー常設化を消化。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
 | MC-360 | アイデア生成の多様化 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-360.md） | dev-apollo, Son | MC-359の続き。MC-363図鑑ベース。詳細→ tasks/MC-360.md |
 | MC-361 | モックアップに図解を標準化 | 高 | DONE（8/9 13:20 5案すべて履歴投入・図解SVG検証済・restart反映済。DoD記載済→ tasks/MC-361.md。生成不具合は MC-371 へ切り出し） | Son(旧dev-apollo) | MC-360依存。詳細→ tasks/MC-361.md |
-| MC-371 | 生成の迷いファイル書き出し対策 | 中 | TODO（コード段エージェントがHTMLをリポジトリ直下へ書き出しstdout破損・6ジョブ中2件。対策候補=ツール無効起動/プロンプト明記/保存前`</html>`検証。詳細→ tasks/MC-371.md） | Son | MC-361から切り出し |
+| MC-371 | 生成の迷いファイル書き出し対策 | 中 | IN_PROGRESS（8/9 14:40 実装済=生成系CLIをツール無効起動＋プロンプトでファイル書き出し禁止＋保存前`</html>`完結チェック(ed8d1d3)・tsc green・restart反映済。残=実生成1件での検証＋過去迷いファイル5件の掃除＋DoD。詳細→ tasks/MC-371.md） | Son | MC-361から切り出し |
 | MC-363 | ビジネスモデル図鑑 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-363.md） | Son | 開発ページに常設。MC-361の図解方針と整合 |
 | MC-364 | ENランキングに一般動画混在 | 中 | DONE（8/3 ENシードへbilibili24件追加・service再起動・/api/ranking実測50件中14件bilibili。詳細→ tasks/MC-364.md） | Son | Keita依頼8/3「アダルトだけ→bilibiliとかも」。video-dl commit ffda928 |
 | MC-365 | Keita待ちの決裁自動ボタン化 | 高 | DONE（8/3 blockers.json next_actor=keita→/api/decisions自動投入を機能化・本番実測でMC-352自動作成/投入済4件スキップ確認。詳細→ tasks/MC-365.md） | Son | Keita依頼8/3「一時的なものじゃなくて機能として」。決裁一覧読み出し時のlazy同期・taskId重複防止 |
