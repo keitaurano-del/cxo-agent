@@ -386,7 +386,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | ID | タイトル | 優先 | ステータス | 担当 | 備考 |
 |---|---|---|---|---|---|
 | MC-313 | Apollo UI 改善 | 中 | DONE（8/6 23:47 server restart 実施・healthz ok。Keita決裁でMC-361 WIPをstash退避→クリーンツリーで反映。詳細→ tasks/MC-313.md） | Son | [[son-owns-board-reconciliation]] | [[clipitnow-exoclick-integration]] [[son-owns-board-reconciliation]] [[cxo-agent-shared-tree-concurrency]] [[cxo-agent-prod-restart-loads-worktree]] |
-| MC-347 | ClipItNow ランキングLP | 中 | IN_PROGRESS（8/9 17:20 インデックス回復計画を設計し決裁起案 dec-cb7dbe1d・案A=bilibili群15→3統合を推奨。計画書=vault/videodl/index-recovery-plan-20260809.md。Keitaタップ待ち。詳細→ tasks/MC-347.md） | Son | MC-336 / video-dl |
+| MC-347 | ClipItNow ランキングLP | 中 | IN_PROGRESS（8/9 22:26 Keita決裁 dec-cb7dbe1d=**案A承認**🔒[Keita]。bilibili群15頁→3ハブ＋301統合をSonが実装へ（本文マージ・301・sitemap・内部リンク張替え→実機検証→反映）。計画書=vault/videodl/index-recovery-plan-20260809.md。詳細→ tasks/MC-347.md） | Son | MC-336 / video-dl |
 | MC-351 | ClipItNow 集客スプリント | 高 | IN_PROGRESS（8/8 文面承認済(dec-1d8f635c)→Son送信試行=Gmail新規デバイス保護で不可(SMS認証必須)→Cowork送信プロンプト作成済(videodl/drafts/cowork-hn-email-prompt-20260808.md)・Keita端末送信待ち。詳細→ tasks/MC-351.md） | Son | MC-331/336/339と連動 |
 | MC-352 | ClipItNow ブログ配信 | 高 | DONE 🔒[Keita] | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
 | MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（8/9 全稼働: MC-361 DONE→派生MC-371を同日実装ed8d1d3・DONE→MC-347インデックス落ち特定・回復計画起案dec-cb7dbe1d。18時以降は全タスクKeita待ちで待機。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |

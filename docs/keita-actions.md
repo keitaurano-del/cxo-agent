@@ -15,11 +15,10 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
 3. 【MC-370】AirRent の GO/NO-GO ほか3点（判断のみ・2分）
    - ①GO/NO-GO＋Phase 0 投資約15万円 ②仕入=中古（要古物商）or 新品1台先行 ③airrent.jp 取得（空き確認済・レジストラ決済はKeita操作）
    - 詳細= https://apollomansion.com/work?tab=airrent
-4. 【MC-347】インデックス回復計画の決裁タップ dec-cb7dbe1d（30秒・スマホ可）
-   - ClipItNowガイド群がGoogleインデックスから脱落（8/3以降 表示回数0・残存はホームのみ）。案A=bilibili群15→3頁統合を推奨
-   - 計画書= obsidian-vault/30-Projects/videodl/index-recovery-plan-20260809.md → 承認され次第Sonが統合実装
 
 ## 完了ログ
+
+- 2026-08-09 22:26 【MC-347】インデックス回復計画 dec-cb7dbe1d → **案A承認** 🔒[Keita]（bilibili群15頁→3ハブ＋301統合・2週間観測後に横展開判断。Son実装へ。決裁記録=decision-requests.jsonl decidedAt=2026-08-09T13:26:20Z）
 
 - 2026-08-07 【MC-351】hn@宛メール文面の承認 dec-1d8f635c → **approve-send** 🔒[Keita]（送信実行はSon側Gmail壁で上記1へ振替）
 - 2026-08-07 【MC-361】Son巻き取り dec-3c38402e → **承認** 🔒[Keita]（現在は共有ファイルの他者WIP待ちで適用保留）
