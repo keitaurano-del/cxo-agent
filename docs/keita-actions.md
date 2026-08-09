@@ -5,7 +5,7 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
 
 ---
 
-## 未完（2026-08-08 時点）
+## 未完（2026-08-09 時点）
 
 1. 【MC-351/367】Keita端末で Cowork の Gmail ログイン1回（5分・PC推奨）
    - プロンプト= obsidian-vault/30-Projects/videodl/drafts/cowork-hn-email-prompt-20260808.md
@@ -15,6 +15,9 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
 3. 【MC-370】AirRent の GO/NO-GO ほか3点（判断のみ・2分）
    - ①GO/NO-GO＋Phase 0 投資約15万円 ②仕入=中古（要古物商）or 新品1台先行 ③airrent.jp 取得（空き確認済・レジストラ決済はKeita操作）
    - 詳細= https://apollomansion.com/work?tab=airrent
+4. 【MC-347】インデックス回復計画の決裁タップ dec-cb7dbe1d（30秒・スマホ可）
+   - ClipItNowガイド群がGoogleインデックスから脱落（8/3以降 表示回数0・残存はホームのみ）。案A=bilibili群15→3頁統合を推奨
+   - 計画書= obsidian-vault/30-Projects/videodl/index-recovery-plan-20260809.md → 承認され次第Sonが統合実装
 
 ## 完了ログ
 

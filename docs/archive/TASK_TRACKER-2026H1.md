@@ -2969,3 +2969,5 @@
 | MC-358 | タスクボード再構築 | 高 | DONE（P1設計〜P4 Keitaキューカードまで全4層完了・本番反映・実画面確認済 2026-08-02。詳細→ tasks/MC-358.md） | Son | MC-357 |
 | MC-359 | アイデア生成の修理 | 高 | DONE（commit b2f634d push済 2026-08-02。実機3回8〜10sでdone確認済。詳細→ tasks/MC-359.md） | dev-apollo | fast opts(--tools ''/中立cwd/短system-prompt/思考オフ)＋IDEA_TIMEOUT 90→120s＋シード刷新 |
 | MC-362 | 完了ボタン動作確認 | 低 | DONE 🔒[Keita] | Son | なし |
+| MC-361 | モックアップに図解を標準化 | 高 | DONE（8/9 13:20 5案すべて履歴投入・図解SVG検証済・restart反映済。DoD記載済→ tasks/MC-361.md。生成不具合は MC-371 へ切り出し） | Son(旧dev-apollo) | MC-360依存。詳細→ tasks/MC-361.md |
+| MC-371 | 生成の迷いファイル書き出し対策 | 中 | DONE（8/9 15:30 実装(ed8d1d3)・restart反映・実生成1件で迷いファイルゼロ＆完結HTML確認・過去迷いファイル5件は健全性確認の上退避(airshareのみ修復)。DoD記載済→ tasks/MC-371.md） | Son | MC-361から切り出し |

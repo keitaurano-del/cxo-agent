@@ -389,15 +389,13 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-347 | ClipItNow ランキングLP | 中 | IN_PROGRESS（8/9 17:20 インデックス回復計画を設計し決裁起案 dec-cb7dbe1d・案A=bilibili群15→3統合を推奨。計画書=vault/videodl/index-recovery-plan-20260809.md。Keitaタップ待ち。詳細→ tasks/MC-347.md） | Son | MC-336 / video-dl |
 | MC-351 | ClipItNow 集客スプリント | 高 | IN_PROGRESS（8/8 文面承認済(dec-1d8f635c)→Son送信試行=Gmail新規デバイス保護で不可(SMS認証必須)→Cowork送信プロンプト作成済(videodl/drafts/cowork-hn-email-prompt-20260808.md)・Keita端末送信待ち。詳細→ tasks/MC-351.md） | Son | MC-331/336/339と連動 |
 | MC-352 | ClipItNow ブログ配信 | 高 | DONE 🔒[Keita] | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
-| MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（8/7 08-21時 全14回稼働・GSC観測第5回/save-app実測展開/MC-367サイドメニュー常設化を消化。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
+| MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（8/9 全稼働: MC-361 DONE→派生MC-371を同日実装ed8d1d3・DONE→MC-347インデックス落ち特定・回復計画起案dec-cb7dbe1d。18時以降は全タスクKeita待ちで待機。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
 | MC-360 | アイデア生成の多様化 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-360.md） | dev-apollo, Son | MC-359の続き。MC-363図鑑ベース。詳細→ tasks/MC-360.md |
-| MC-361 | モックアップに図解を標準化 | 高 | DONE（8/9 13:20 5案すべて履歴投入・図解SVG検証済・restart反映済。DoD記載済→ tasks/MC-361.md。生成不具合は MC-371 へ切り出し） | Son(旧dev-apollo) | MC-360依存。詳細→ tasks/MC-361.md |
-| MC-371 | 生成の迷いファイル書き出し対策 | 中 | DONE（8/9 15:30 実装(ed8d1d3)・restart反映・実生成1件で迷いファイルゼロ＆完結HTML確認・過去迷いファイル5件は健全性確認の上退避(airshareのみ修復)。DoD記載済→ tasks/MC-371.md） | Son | MC-361から切り出し |
 | MC-363 | ビジネスモデル図鑑 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-363.md） | Son | 開発ページに常設。MC-361の図解方針と整合 |
 | MC-364 | ENランキングに一般動画混在 | 中 | DONE（8/3 ENシードへbilibili24件追加・service再起動・/api/ranking実測50件中14件bilibili。詳細→ tasks/MC-364.md） | Son | Keita依頼8/3「アダルトだけ→bilibiliとかも」。video-dl commit ffda928 |
 | MC-365 | Keita待ちの決裁自動ボタン化 | 高 | DONE（8/3 blockers.json next_actor=keita→/api/decisions自動投入を機能化・本番実測でMC-352自動作成/投入済4件スキップ確認。詳細→ tasks/MC-365.md） | Son | Keita依頼8/3「一時的なものじゃなくて機能として」。決裁一覧読み出し時のlazy同期・taskId重複防止 |
 | MC-366 | bilibiliサムネ表示崩れ修正 | 高 | DONE（8/3 /api/thumb中継新設・本番実測200 image/jpeg。DoD→ tasks/MC-366.md） | Son | Keita報告8/3スクショ。hdslb=http+Referer403の二重原因。video-dl commit 3c2c6c8 |
-| MC-367 | LBOモデラー機能 | 高 | IN_PROGRESS（8/7 サイドメニュー常設化=106d0dd＋22:40 モバイル導線バグ修正=1b52400（Keita報告→即日修正・実画面検証・push済）。8/8 EDINET登録=メール確認コード必須でGmail壁(型B)→Coworkプロンプトへコード中継を追記・Keita Gmailログイン待ち。プリセット5社で先行運用中。詳細→ tasks/MC-367.md） | Son | Keita依頼8/4「アポロでLBOモデルを組めるような機能考えて」。/lbo-mockup.html |
+| MC-367 | LBOモデラー機能 | 高 | IN_PROGRESS（プリセット5社で先行運用中。EDINET登録=メール確認コード壁(型B)→Cowork中継待ち🔒[Keita]。詳細→ tasks/MC-367.md） | Son | Keita依頼8/4。/work?tab=lbo |
 | MC-368 | Apolloパスワードログイン | 高 | DONE（8/4 /login フォーム＋MC_PASSWORD照合＋Cookie 400日スライド更新を実装・service restart・外形6項目実測green。auth.ts/index.ts） | fable5 | Keita依頼8/4「毎回token URLで開けなくなるのは困る、パスワード1回で永久アクセスに」。発端はCookie 30日失効による401。Bearer/token URL経路は不変 |
 | MC-369 | 収益タブ期間切替 | 高 | DONE（8/7 00:20 7日/1ヶ月/3ヶ月/全期間タブ実装・両service再起動・本番実画面検証済。DoD→ tasks/MC-369.md） | Son | Keita依頼8/6「収益の期間は全期間とか1ヶ月とか株価みたいに」。video-dl days拡張＋revenueRouter range＋Revenue.tsx期間タブ。today誤表示バグも修正 |
-| MC-370 | Blueairレンタル事業立上げ | 高 | IN_PROGRESS（8/8 12:15 決済比較（Stripe/Square/PAY.JP→Stripe推奨）・コスト洗い出し（運転固定費150〜1,100円/月）・損益分岐点グラフ2枚（分岐0.6台/回収18ヶ月）を /airrent に追加・本番反映済。本人確認は不要（11:49）→固定7,500円/回転・月次利益約4.8万に再計算。モックv5=RTR風エディトリアルデザイン刷新（セリフ体見出し・白黒基調・黒矩形ボタン、Keita 13:54指示・本番検証済）。プランv3=2週トライアル/シーズン/スタンダード＋移行ルール(期間短縮不可)。16:51指示でAirRent・LBOモデラーを仕事ページのタブへ統合（73be004・本番検証済）。残=GO/NO-GO・仕入方針・airrent.jp取得(決済)のKeita判断待ち。詳細→ tasks/MC-370.md） | Son | Keita依頼8/8「Classic Pro特化レンタル、月商10万・極力自動化」。最新情報は /work?tab=airrent に集約 |
+| MC-370 | Blueairレンタル事業立上げ | 高 | IN_PROGRESS（モックv5・プランv3・決済/コスト/損益分岐まで完了、/work?tab=airrent に集約。残=GO/NO-GO・仕入方針・airrent.jp取得の決裁3点🔒[Keita]。詳細→ tasks/MC-370.md） | Son | Keita依頼8/8「Classic Pro特化レンタル、月商10万・極力自動化」 |
