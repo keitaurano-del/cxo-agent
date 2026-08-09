@@ -86,6 +86,8 @@ const HTML_RULES = [
   '何をしているか分かる短い日本語コメントを入れること（例: <!-- ボタンを押したら数字を増やす --> や',
   '/* 画面の配色・余白の設定 */）。コメントは要点だけ・専門用語を避け、入れすぎないこと。',
   '重要: ---HTML--- 以降は、マークダウンや ``` のコードフェンス・説明文を一切入れず、HTML 本文のみを出力すること。',
+  // MC-371: 完成 HTML をリポジトリ内のファイルへ Write して stdout が切れる事故があったため明示的に禁止する。
+  '重要: ファイルへの書き出し・保存は一切しないこと。完成した HTML はこの応答本文にそのまま全文出力すること。',
 ].join('\n');
 
 /**
@@ -567,6 +569,10 @@ interface RunClaudeOpts {
    *  - env MAX_THINKING_TOKENS=0（拡張思考オフ。first token 短縮の最大要因）
    *  注意: `--bare` は OAuth 認証まで飛ばして "Not logged in" になるので使わない。 */
   fast?: boolean;
+  /** ツールだけ無効化する（`--tools ""`）。cwd・system prompt・拡張思考は従来どおり。
+   *  mockup/design 等の「テキスト生成のみ」の工程で、エージェントが完成 HTML をリポジトリ内の
+   *  ファイルへ Write してしまい stdout が途中で切れる事故（MC-371・6ジョブ中2件）を封じる。 */
+  noTools?: boolean;
 }
 
 /**
@@ -608,6 +614,8 @@ function runClaudeRaw(
             '--verbose',
           ];
           if (opts?.fast) args.push('--tools', '', '--system-prompt', FAST_SYSTEM_PROMPT);
+          else if (opts?.noTools) args.push('--tools', ''); // MC-371: ファイル書き出し封じ
+
           args.push('-p', safePrompt);
           child = spawn(
             NOTEBOOK_CLAUDE_BIN,
@@ -932,14 +940,16 @@ async function generateHtmlWithRetry(
   for (let attempt = 1; attempt <= GENERATE_MAX_ATTEMPTS; attempt += 1) {
     // ユーザが中止したら以降の試行はしない。
     if (jobId && isCanceled(jobId)) return { html: null, reason: 'error' };
-    const raw = await runClaudeRaw(cliPrompt, model, onChunk, GENERATE_TIMEOUT_MS, jobId);
+    const raw = await runClaudeRaw(cliPrompt, model, onChunk, GENERATE_TIMEOUT_MS, jobId, { noTools: true });
 
     if (!raw.error) {
       // 「作り方メモ → ---HTML--- → HTML 本文」のうち HTML 本文だけを取り出す。
       const html = stripFences(splitPlanHtml(raw.stdout).html);
       // HTML らしさの最低限チェック: 空・タグを含まないものは無効（リトライ対象）。
-      if (html && html.includes('<')) return { html };
-      // 応答はあるが HTML ではない（空・フェンスのみ等）。
+      // MC-371: さらに </html> で完結していることも要求する。エージェントが完成版をファイルへ
+      // 書き出して stdout が途中で切れた「破損 HTML」を、そのまま履歴保存してしまう事故を防ぐ。
+      if (html && html.includes('<') && /<\/html>/i.test(html)) return { html };
+      // 応答はあるが HTML ではない（空・フェンスのみ・途中切れ等）。
       lastReason = 'empty';
       lastDetail = undefined;
     } else if (isLimitFailure(raw)) {
@@ -1093,7 +1103,7 @@ async function runDesignStage(
   let model = NOTEBOOK_CLAUDE_MODEL;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     if (isCanceled(jobId)) return { designDoc: '', screens: [] };
-    const raw = await runClaudeRaw(buildDesignPrompt(userPrompt), model, onChunk, GENERATE_TIMEOUT_MS, jobId);
+    const raw = await runClaudeRaw(buildDesignPrompt(userPrompt), model, onChunk, GENERATE_TIMEOUT_MS, jobId, { noTools: true });
     if (!raw.error) return splitDesignScreens(raw.stdout);
     if (isLimitFailure(raw) && attempt === 1) {
       model = DEV_MOCKUP_FALLBACK_MODEL;
@@ -1115,7 +1125,7 @@ async function runCritiquePass(html: string, jobId?: string): Promise<string> {
   let model = DEV_MOCKUP_MODEL;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     if (jobId && isCanceled(jobId)) return '';
-    const raw = await runClaudeRaw(buildCritiquePrompt(html), model, undefined, CRITIQUE_TIMEOUT_MS, jobId);
+    const raw = await runClaudeRaw(buildCritiquePrompt(html), model, undefined, CRITIQUE_TIMEOUT_MS, jobId, { noTools: true });
     if (!raw.error) {
       const critique = stripFences(raw.stdout).trim();
       return critique;
@@ -1153,11 +1163,12 @@ async function runReviewStage(jobId: string, html: string): Promise<string | nul
   let model = DEV_MOCKUP_MODEL;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     if (isCanceled(jobId)) return null;
-    const raw = await runClaudeRaw(buildRefinePrompt(html, critique), model, setPartial, REVIEW_TIMEOUT_MS, jobId);
+    const raw = await runClaudeRaw(buildRefinePrompt(html, critique), model, setPartial, REVIEW_TIMEOUT_MS, jobId, { noTools: true });
     if (!raw.error) {
       const improved = stripFences(splitPlanHtml(raw.stdout).html);
       // 劣化ガード: HTML として妥当か＋元の 60% 以上の分量か（丸ごと短く壊していないか）。
-      if (improved && improved.includes('<') && improved.length >= html.length * 0.6) {
+      // MC-371: </html> 完結も要求（途中切れの refine 結果で良品を上書きしない）。
+      if (improved && improved.includes('<') && /<\/html>/i.test(improved) && improved.length >= html.length * 0.6) {
         return improved;
       }
       console.warn('[dev-mockup] refine pass output rejected (too short / invalid) → keep original');
@@ -1248,6 +1259,8 @@ async function runSpecJob(
         model,
         onChunk,
         SPEC_TIMEOUT_MS,
+        undefined,
+        { noTools: true }, // MC-371
       );
       if (!raw.error) {
         const spec = stripFences(raw.stdout).trim();
@@ -1377,6 +1390,8 @@ async function runCodeLessonJob(
         model,
         onChunk,
         CODE_LESSON_TIMEOUT_MS,
+        undefined,
+        { noTools: true }, // MC-371
       );
       if (!raw.error) {
         const lesson = toMarkdown(raw.stdout.trim()).trim();
