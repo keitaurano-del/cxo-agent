@@ -12,12 +12,14 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
    - 1回のログインで両取り: ①hn@宛メール送信（文面承認済 dec-1d8f635c、Son側はSMS認証壁で送信不可） ②EDINET登録の確認コード中継（MC-367）
 2. 【MC-352】note/Blogger投稿の Cowork 実操作（8/4決裁=Cowork経由・6日経過）
    - Keitaが Cowork でnote/Bloggerにログイン→Sonの校了済ドラフト貼り付け投稿。段取り= videodl/drafts/cowork-post-prompts-20260805.md
-3. 【MC-370】AirRent の GO/NO-GO ほか3点（判断のみ・2分）
-   - ①GO/NO-GO＋Phase 0 投資約15万円 ②仕入=中古（要古物商）or 新品1台先行 ③airrent.jp 取得（空き確認済・レジストラ決済はKeita操作）
+3. 【MC-370】AirRent 残り2操作（GO決裁は8/9承認済 → 完了ログ参照）
+   - ①仕入方針の一言だけ返答: 中古美品2台@4.3万＋古物商申請（約1.9万・警察署・Keita名義）か、新品1台@7万先行（許可不要・即開始）か。8/9のapproveは一括ボタンでここだけ未確定
+   - ②airrent.jp のレジストラ決済（年約3千円・空き確認済8/8・.jpは早い者勝ちなので早め推奨・決済系のためSon実施不可）
    - 詳細= https://apollomansion.com/work?tab=airrent
 
 ## 完了ログ
 
+- 2026-08-09 22:26 【MC-370】AirRent決裁 dec-3ca292c1 → **承認して進める** 🔒[Keita]（GO確定・Phase0約15万円承認・ドメイン=airrent.jp。仕入二択とレジストラ決済は上記3へ振替。決裁記録=decision-requests.jsonl decidedAt=2026-08-09T13:26:22Z）
 - 2026-08-09 22:26 【MC-347】インデックス回復計画 dec-cb7dbe1d → **案A承認** 🔒[Keita]（bilibili群15頁→3ハブ＋301統合・2週間観測後に横展開判断。Son実装へ。決裁記録=decision-requests.jsonl decidedAt=2026-08-09T13:26:20Z）
 
 - 2026-08-07 【MC-351】hn@宛メール文面の承認 dec-1d8f635c → **approve-send** 🔒[Keita]（送信実行はSon側Gmail壁で上記1へ振替）
