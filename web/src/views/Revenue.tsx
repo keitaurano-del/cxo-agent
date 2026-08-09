@@ -46,6 +46,8 @@ interface RevenueSummary {
     visitors: { uu24h: number; uu7d: number };
     downloads: { h24: number; d7: number };
     referrers24h: Array<{ name: string; count: number }>;
+    /** 最近の実DL履歴（新しい順・MC-372）。 */
+    recentDownloads: Array<{ ts: number; url: string; title: string; thumbnail: string; host: string }>;
   };
   pdca: {
     available: boolean;
@@ -82,6 +84,14 @@ function jpy(vUsd: number, rate: number): string {
   if (yen >= 1000) return `¥${Math.round(yen).toLocaleString()}`;
   if (yen >= 10) return `¥${yen.toFixed(1)}`;
   return `¥${yen.toFixed(2)}`;
+}
+
+/** DL履歴の時刻表示（epoch秒 → "M/D HH:mm"）。 */
+function dlTime(ts: number): string {
+  const d = new Date(ts * 1000);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${d.getMonth() + 1}/${d.getDate()} ${hh}:${mm}`;
 }
 
 /** "YYYY-MM-DD" → "M/D"。 */
@@ -338,6 +348,53 @@ export default function Revenue() {
                 <Unavailable label="ClipItNow" />
               )}
             </section>
+
+            {/* 最近ダウンロードされた動画（MC-372 Keita「何の動画がDLされたか見たい」） */}
+            {clip?.available && (
+              <section className="flex flex-col gap-2">
+                <h2 className="text-xs font-semibold text-text-muted">
+                  最近ダウンロードされた動画（新しい順・最大30件）
+                </h2>
+                {clip.recentDownloads.length === 0 ? (
+                  <p className="text-[11px] text-text-faint">まだダウンロード実績がありません。</p>
+                ) : (
+                  <ul className="flex flex-col divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
+                    {clip.recentDownloads.map((d, i) => (
+                      <li key={`${d.ts}-${i}`} className="flex items-center gap-3 p-2">
+                        {d.thumbnail ? (
+                          <img
+                            src={d.thumbnail}
+                            alt=""
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            className="h-12 w-20 shrink-0 rounded object-cover bg-surface-2"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.visibility = 'hidden';
+                            }}
+                          />
+                        ) : (
+                          <div className="h-12 w-20 shrink-0 rounded bg-surface-2" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <a
+                            href={d.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block truncate text-xs font-medium text-text hover:text-accent hover:underline"
+                            title={d.title || d.url}
+                          >
+                            {d.title || d.url}
+                          </a>
+                          <span className="text-[10px] text-text-faint">
+                            {d.host} ・ {dlTime(d.ts)}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            )}
 
             <p className="text-[10px] leading-relaxed text-text-faint">
               収益は各広告ネットワークの API 実績値（USD）を日本円に換算して表示しています（レート:

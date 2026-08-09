@@ -101,6 +101,8 @@ interface RevenueSummary {
     visitors: { uu24h: number; uu7d: number };
     downloads: { h24: number; d7: number };
     referrers24h: Array<{ name: string; count: number }>;
+    /** 最近の実DL履歴（新しい順・MC-372）。video-dl /api/dlhistory はローカル限定公開。 */
+    recentDownloads: Array<{ ts: number; url: string; title: string; thumbnail: string; host: string }>;
   };
   pdca: {
     available: boolean;
@@ -148,8 +150,25 @@ function emptyAdStats(): AdNetworkStats {
 }
 
 
+/** ClipItNow /api/dlhistory を正規化（失敗時は空配列）。 */
+function normDlHistory(raw: unknown): RevenueSummary['clipitnow']['recentDownloads'] {
+  const items = Array.isArray(rec(raw).items) ? (rec(raw).items as unknown[]) : [];
+  return items
+    .map((x) => {
+      const r = rec(x);
+      return {
+        ts: numOr0(r.ts),
+        url: strOr(r.url, ''),
+        title: strOr(r.title, ''),
+        thumbnail: strOr(r.thumbnail, ''),
+        host: strOr(r.host, ''),
+      };
+    })
+    .filter((x) => x.url !== '');
+}
+
 /** ClipItNow /api/stats を正規化（null なら available:false）。 */
-function normClipStats(raw: unknown): RevenueSummary['clipitnow'] {
+function normClipStats(raw: unknown, dlHistoryRaw: unknown): RevenueSummary['clipitnow'] {
   if (raw == null) {
     return {
       available: false,
@@ -157,6 +176,7 @@ function normClipStats(raw: unknown): RevenueSummary['clipitnow'] {
       visitors: { uu24h: 0, uu7d: 0 },
       downloads: { h24: 0, d7: 0 },
       referrers24h: [],
+      recentDownloads: [],
     };
   }
   const o = rec(raw);
@@ -176,6 +196,7 @@ function normClipStats(raw: unknown): RevenueSummary['clipitnow'] {
       })
       .filter((x) => x.name !== '')
       .slice(0, 10),
+    recentDownloads: normDlHistory(dlHistoryRaw),
   };
 }
 
@@ -243,11 +264,12 @@ const cacheByRange = new Map<RangeKey, { at: number; body: RevenueSummary }>();
 async function buildSummary(range: RangeKey): Promise<RevenueSummary> {
   const days = RANGE_DAYS[range];
   // 上流は並列取得。1 本失敗しても他は活かす（fetchJson の null 化）。
-  const [statsRaw, exoRaw, adsRaw, usdJpy] = await Promise.all([
+  const [statsRaw, exoRaw, adsRaw, usdJpy, dlHistoryRaw] = await Promise.all([
     fetchJson('/api/stats'),
     fetchJson(`/api/exostats?days=${days}`),
     fetchJson(`/api/adstats?days=${days}`),
     getUsdJpy(),
+    fetchJson('/api/dlhistory?limit=30'),
   ]);
 
   const exoclick = exoRaw == null ? emptyAdStats() : normAdStats(exoRaw);
@@ -273,7 +295,7 @@ async function buildSummary(range: RangeKey): Promise<RevenueSummary> {
       exoclick,
       daily,
     },
-    clipitnow: normClipStats(statsRaw),
+    clipitnow: normClipStats(statsRaw, dlHistoryRaw),
     pdca: collectPdca(),
   };
 }
