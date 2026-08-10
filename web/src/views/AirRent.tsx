@@ -23,7 +23,7 @@ export function AirRentContent() {
             </div>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-700 dark:text-slate-200">
               <li><b>8/9 22:26 Keita決裁: GO承認</b>（dec-3ca292c1・Phase 0 約15万円・ドメイン=airrent.jp）。残る判断は②仕入方針（中古2台＋古物商 or 新品1台先行）と airrent.jp のレジストラ決済のみ。</li>
-              <li><b>8/10 Son先行準備（決済不要分）完了:</b> 特商法表記ドラフト・利用規約（レンタル約款13条）ドラフト・アリススタイル出品ドラフトを作成 → vault/30-Projects/airrent/ に3ファイル（tokushoho / rental-terms / alice-style-listing）。特商法の事業者名等【要Keita】以外は記入済み。</li>
+              <li><b>8/10 Son先行準備（決済不要分）完了:</b> 特商法表記・利用規約（レンタル約款13条）・アリススタイル出品・<b>Stripe設定手順書</b>の4ドラフトを作成 → vault/30-Projects/airrent/（tokushoho / rental-terms / alice-style-listing / stripe-setup-guide）。Stripeは<b>アカウント開設約15分のみKeita</b>・商品設定以降はSonが代行可の分担まで整理済み。特商法の事業者名等【要Keita】以外は記入済み。</li>
               <li>需要分析・収支試算・プラン v3（2週トライアル/シーズン/スタンダード＋移行ルール）まで確定。</li>
               <li>モックアップは <b>LP／商品説明／決済／マイページの4画面</b>構成。<b>v5 でスタイリッシュに刷新</b>（8/8 Keita「Rent the Runway 参考に」）: セリフ体の大見出し × 白黒基調のエディトリアルデザイン、角なし黒ボタン、大文字レタースペーシングのラベル、人気プランは黒反転カード。解説文ゼロ・移行ルール文言（期間短縮不可）は維持。</li>
               <li>8/8 11:52 指示対応: <b>決済手段の比較（Stripe/Square/PAY.JP）・コスト全洗い出し・損益分岐点グラフ</b>を下部に追加。本人確認は廃止（11:49）。</li>

@@ -398,5 +398,5 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-367 | LBOモデラー機能 | 高 | IN_PROGRESS（プリセット5社で先行運用中。EDINET登録=メール確認コード壁(型B)→Cowork中継待ち🔒[Keita]。詳細→ tasks/MC-367.md） | Son | Keita依頼8/4。/work?tab=lbo |
 | MC-368 | Apolloパスワードログイン | 高 | DONE（8/4 /login フォーム＋MC_PASSWORD照合＋Cookie 400日スライド更新を実装・service restart・外形6項目実測green。auth.ts/index.ts） | fable5 | Keita依頼8/4「毎回token URLで開けなくなるのは困る、パスワード1回で永久アクセスに」。発端はCookie 30日失効による401。Bearer/token URL経路は不変 |
 | MC-369 | 収益タブ期間切替 | 高 | DONE（8/7 00:20 7日/1ヶ月/3ヶ月/全期間タブ実装・両service再起動・本番実画面検証済。DoD→ tasks/MC-369.md） | Son | Keita依頼8/6「収益の期間は全期間とか1ヶ月とか株価みたいに」。video-dl days拡張＋revenueRouter range＋Revenue.tsx期間タブ。today誤表示バグも修正 |
-| MC-370 | Blueairレンタル事業立上げ | 高 | IN_PROGRESS（8/10 09:40 Son先行準備完了: 特商法表記・利用規約13条・アリススタイル出品の3ドラフト作成(vault/30-Projects/airrent/)＋/airrentページ更新・本番反映済。残=仕入方針の一言(中古or新品)＋airrent.jpレジストラ決済の2操作🔒[Keita]。詳細→ tasks/MC-370.md） | Son | Keita依頼8/8「Classic Pro特化レンタル、月商10万・極力自動化」 |
+| MC-370 | Blueairレンタル事業立上げ | 高 | IN_PROGRESS（8/10 10:30 Son先行準備4点完了: 特商法・規約13条・アリス出品・Stripe設定手順書(vault/30-Projects/airrent/)＋/airrentページ反映済。Stripe開設約15分のみKeita・以降Son代行可。残=仕入方針＋airrent.jp決済＋Stripe開設🔒[Keita]。詳細→ tasks/MC-370.md） | Son | Keita依頼8/8「Classic Pro特化レンタル、月商10万・極力自動化」 |
 | MC-372 | DL履歴の可視化 | 高 | DONE（8/9 23:05 実装・両service再起動・実画面検証済。DoD→ tasks/MC-372.md） | Son | Keita依頼8/9「何の動画がDLされたか見たい」。video-dl /api/dlhistory(ローカル限定)＋Apollo収益タブに最近DL一覧 |
