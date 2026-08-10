@@ -398,6 +398,6 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-367 | LBOモデラー機能 | 高 | CANCELLED 🔒[Keita] | Son | Keita依頼8/4。/work?tab=lbo |
 | MC-368 | Apolloパスワードログイン | 高 | DONE（8/4 /login フォーム＋MC_PASSWORD照合＋Cookie 400日スライド更新を実装・service restart・外形6項目実測green。auth.ts/index.ts） | fable5 | Keita依頼8/4「毎回token URLで開けなくなるのは困る、パスワード1回で永久アクセスに」。発端はCookie 30日失効による401。Bearer/token URL経路は不変 |
 | MC-369 | 収益タブ期間切替 | 高 | DONE（8/7 00:20 7日/1ヶ月/3ヶ月/全期間タブ実装・両service再起動・本番実画面検証済。DoD→ tasks/MC-369.md） | Son | Keita依頼8/6「収益の期間は全期間とか1ヶ月とか株価みたいに」。video-dl days拡張＋revenueRouter range＋Revenue.tsx期間タブ。today誤表示バグも修正 |
-| MC-370 | Blueairレンタル事業立上げ | 高 | IN_PROGRESS（8/10 11:35 LP本番化完了: モックv5→本番静的サイト7ページ(~/projects/airrent・503e773)・ドメイン+Stripe開設後は即日公開可。先行準備4ドラフトも完了済。残=仕入方針＋airrent.jp決済＋Stripe開設15分🔒[Keita]。詳細→ tasks/MC-370.md） | Son | Keita依頼8/8「Classic Pro特化レンタル、月商10万・極力自動化」 |
+| MC-370 | Blueairレンタル事業立上げ | 高 | CANCELLED 🔒[Keita] | Son | Keita依頼8/8「Classic Pro特化レンタル、月商10万・極力自動化」 |
 | MC-372 | DL履歴の可視化 | 高 | DONE（8/9 23:05 実装・両service再起動・実画面検証済。DoD→ tasks/MC-372.md） | Son | Keita依頼8/9「何の動画がDLされたか見たい」。video-dl /api/dlhistory(ローカル限定)＋Apollo収益タブに最近DL一覧 |
 | MC-373 | 受託SEO記事工場の構築 | 高 | IN_PROGRESS（8/11 P0完: 設計書+要件シート+品質ガード検証済 → P1: ポートフォリオ3本+応募文テンプレ） | Son | Keita指示8/11 00:22「1(SEO記事受託)の自動化を仕組化」。リポジトリ=~/projects/writing-factory・設計=DESIGN.md。P2で案件ウォッチ/WP入稿 |
