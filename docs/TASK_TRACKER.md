@@ -400,4 +400,4 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-369 | 収益タブ期間切替 | 高 | DONE（8/7 00:20 7日/1ヶ月/3ヶ月/全期間タブ実装・両service再起動・本番実画面検証済。DoD→ tasks/MC-369.md） | Son | Keita依頼8/6「収益の期間は全期間とか1ヶ月とか株価みたいに」。video-dl days拡張＋revenueRouter range＋Revenue.tsx期間タブ。today誤表示バグも修正 |
 | MC-370 | Blueairレンタル事業立上げ | 高 | CANCELLED 🔒[Keita] | Son | Keita依頼8/8「Classic Pro特化レンタル、月商10万・極力自動化」 |
 | MC-372 | DL履歴の可視化 | 高 | DONE（8/9 23:05 実装・両service再起動・実画面検証済。DoD→ tasks/MC-372.md） | Son | Keita依頼8/9「何の動画がDLされたか見たい」。video-dl /api/dlhistory(ローカル限定)＋Apollo収益タブに最近DL一覧 |
-| MC-373 | 受託SEO記事工場の構築 | 高 | IN_PROGRESS（8/11 09:25 P1完: ポートフォリオ3本+テンプレ 708f7c0・SERP半自動化 serp_research.py E2E検証済 3ce8910 → P2: 案件ウォッチ巡回+WP入稿） | Son | Keita指示8/11 00:22「1(SEO記事受託)の自動化を仕組化」。リポジトリ=~/projects/writing-factory・設計=DESIGN.md。P2で案件ウォッチ/WP入稿 |
+| MC-373 | 受託SEO記事工場の構築 | 高 | IN_PROGRESS（8/11 10:30 P2前半完: 案件ウォッチ job_watch.py 実巡回177→候補15件 31e69d0。残: 日次組込+CW/ランサーズ登録依頼(夜まとめ)+WP入稿(初受注後)） | Son | Keita指示8/11 00:22「1(SEO記事受託)の自動化を仕組化」。リポジトリ=~/projects/writing-factory・設計=DESIGN.md。P2で案件ウォッチ/WP入稿 |
