@@ -14,11 +14,16 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
    - Keitaが Cowork でnote/Bloggerにログイン→Sonの校了済ドラフト貼り付け投稿。段取り= videodl/drafts/cowork-post-prompts-20260805.md
 3. 【MC-370】AirRent 残り2操作（GO決裁は8/9承認済 → 完了ログ参照）
    - ①仕入方針の一言だけ返答: 中古美品2台@4.3万＋古物商申請（約1.9万・警察署・Keita名義）か、新品1台@7万先行（許可不要・即開始）か。8/9のapproveは一括ボタンでここだけ未確定
+     - **2026-08-10 23時台 対話セッションでKeitaに確認→「まだ保留」の明示回答**。未決のまま維持（捏造・見落としではない）。再確認は棚卸しまとめ等で改めて
    - ②airrent.jp のレジストラ決済（年約3千円・空き確認済8/8・.jpは早い者勝ちなので早め推奨・決済系のためSon実施不可）
    - 詳細= https://apollomansion.com/work?tab=airrent
    - ※LP本番サイト7頁は Son 実装完了（~/projects/airrent・即日公開可）。上記②のドメイン決済が公開の最後の壁
 4. 【MC-347】GSC 手動インデックス申請 ×3（各1分・スマホ可）
    - 8/10 に3ハブ統合を本番反映済（301+IndexNow送信済）。Google は IndexNow 非対応のため GSC の「URL検査→インデックス登録をリクエスト」を3件: https://clipitnow.net/bilibili-download / https://clipitnow.net/bilibili-1080p-save / https://clipitnow.net/bilibili-register-japan
+5. 【MC-373】CrowdWorks アカウント登録＋応募3件（**JOB-1は締切8/14優先**）
+   - ①CWアカウント登録（プロフィール= writing-factory/portfolio/profile.md 貼付）
+   - ②応募3件: writing-factory/intake/JOB-1〜3.md の応募文をコピペ提出
+   - 決裁記録= dec-348063e2（8/12 01:22 JST approve）。Son側の全工程（スカウト→執筆→品質ガード→納品）は実装/検証済、日次巡回 cron 20:45 自走中
 
 ## 完了ログ
 
