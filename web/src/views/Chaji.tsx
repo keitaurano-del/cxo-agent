@@ -811,7 +811,7 @@ function EnchakaiSiteInfo() {
             <EnchakaiLink href="https://enchakai.com/admin" />
           </EnchakaiInfoRow>
           <EnchakaiInfoRow label="管理画面パスワード">
-            <EnchakaiSecret value="Bh779na0rhmcnj3DJQSS" />
+            <EnchakaiSecret value="enchakai1234" />
           </EnchakaiInfoRow>
           <EnchakaiInfoRow label="旧URL（併存・同じ画面）">
             <EnchakaiLink href="https://chakai.apollomansion.com" />
