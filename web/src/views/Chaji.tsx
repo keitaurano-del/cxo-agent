@@ -749,15 +749,115 @@ function ChajiChatFab({ onOpen, hidden }: { onOpen: () => void; hidden?: boolean
   );
 }
 
-type ChajiTab = 'guide' | 'chat';
+// ─── 円茶会サイト情報タブ（EC-1〜EC-3 で構築した本番環境のクイックリファレンス）────
+// サイト URL・管理画面・メール設定など、Keita が運用時にすぐ参照したい情報を一覧にする。
+// 管理画面パスワードは伏せ字で表示し、タップで表示切替（ボードはトークン保護だが念のため）。
+function EnchakaiInfoRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5 border-b border-border/60 py-2.5 last:border-b-0 sm:flex-row sm:items-center sm:gap-3">
+      <span className="w-40 shrink-0 text-xs text-text-muted">{label}</span>
+      <span className="min-w-0 break-all text-sm text-text">{children}</span>
+    </div>
+  );
+}
 
-/** 初期タブ判定: prop 優先。既定は 'guide'（基礎知識ガイド）。?tab=chat を尊重。 */
+function EnchakaiLink({ href, children }: { href: string; children?: ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-accent underline decoration-dotted underline-offset-2 hover:opacity-80"
+    >
+      {children ?? href}
+    </a>
+  );
+}
+
+function EnchakaiSecret({ value }: { value: string }) {
+  const [shown, setShown] = useState(false);
+  return (
+    <span className="inline-flex items-center gap-2">
+      <code className="rounded bg-surface-2 px-1.5 py-0.5 text-[13px]">
+        {shown ? value : '••••••••••••'}
+      </code>
+      <button
+        type="button"
+        onClick={() => setShown((s) => !s)}
+        className="rounded-md border border-border px-2 py-0.5 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+      >
+        {shown ? '隠す' : '表示'}
+      </button>
+    </span>
+  );
+}
+
+function EnchakaiSiteInfo() {
+  return (
+    <div className="mx-auto flex max-w-3xl flex-col gap-4">
+      <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+        <h2 className="text-base font-bold text-text">円茶会 サイト情報</h2>
+        <p className="mt-1 text-xs text-text-muted">
+          2026-08-11 に自宅サーバへ移行・enchakai.com で本公開（EC-1〜EC-3）。予約枠の登録は管理画面から。
+        </p>
+        <div className="mt-3">
+          <EnchakaiInfoRow label="公開サイト">
+            <EnchakaiLink href="https://enchakai.com" />
+          </EnchakaiInfoRow>
+          <EnchakaiInfoRow label="予約ページ">
+            <EnchakaiLink href="https://enchakai.com/en/book">https://enchakai.com/en/book</EnchakaiLink>
+          </EnchakaiInfoRow>
+          <EnchakaiInfoRow label="管理画面（枠登録・予約一覧）">
+            <EnchakaiLink href="https://enchakai.com/admin" />
+          </EnchakaiInfoRow>
+          <EnchakaiInfoRow label="管理画面パスワード">
+            <EnchakaiSecret value="Bh779na0rhmcnj3DJQSS" />
+          </EnchakaiInfoRow>
+          <EnchakaiInfoRow label="旧URL（併存・同じ画面）">
+            <EnchakaiLink href="https://chakai.apollomansion.com" />
+          </EnchakaiInfoRow>
+        </div>
+      </section>
+      <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+        <h3 className="text-sm font-bold text-text">メール</h3>
+        <div className="mt-2">
+          <EnchakaiInfoRow label="送信元アドレス">
+            <code className="rounded bg-surface-2 px-1.5 py-0.5 text-[13px]">bookings@enchakai.com</code>
+            <span className="ml-2 text-xs text-text-muted">（表示名: 円茶会）</span>
+          </EnchakaiInfoRow>
+          <EnchakaiInfoRow label="新規予約の通知先">
+            <code className="rounded bg-surface-2 px-1.5 py-0.5 text-[13px]">keita.urano@gmail.com</code>
+          </EnchakaiInfoRow>
+          <EnchakaiInfoRow label="配信基盤">
+            <EnchakaiLink href="https://resend.com/emails">Resend</EnchakaiLink>
+            <span className="ml-2 text-xs text-text-muted">
+              （enchakai.com 認証済・無料枠 月3,000通・お客様宛にも送達可）
+            </span>
+          </EnchakaiInfoRow>
+        </div>
+      </section>
+      <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
+        <h3 className="text-sm font-bold text-text">運用メモ</h3>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-relaxed text-text-muted">
+          <li>ホスティング: 自宅サーバ（systemd en-chakai.service / port 3002）＋ Cloudflare Tunnel。Render / Supabase は廃止済み</li>
+          <li>予約・枠データはサーバ内 JSON（en-chakai/data/）が正本。障害・変更の相談は Son へ</li>
+          <li>予約が入ると Keita へ通知メール＋お客様へ受付メールが自動送信される（送達実測済み）</li>
+        </ul>
+      </section>
+    </div>
+  );
+}
+
+type ChajiTab = 'guide' | 'chat' | 'site';
+
+/** 初期タブ判定: prop 優先。既定は 'guide'（基礎知識ガイド）。?tab=chat / ?tab=site を尊重。 */
 function resolveInitialTab(initialTab?: ChajiTab): ChajiTab {
   if (initialTab) return initialTab;
   if (typeof window !== 'undefined') {
     const t = new URLSearchParams(window.location.search).get('tab');
     if (t === 'chat') return 'chat';
     if (t === 'guide') return 'guide';
+    if (t === 'site') return 'site';
   }
   return 'guide';
 }
@@ -783,6 +883,15 @@ function ChajiTabBar({ tab, onChange }: { tab: ChajiTab; onChange: (t: ChajiTab)
         </>
       ),
     },
+    {
+      key: 'site',
+      label: (
+        <>
+          <span aria-hidden><ChajiIcon width={16} height={16} /></span>
+          円茶会サイト
+        </>
+      ),
+    },
   ];
   return (
     <TabStrip
@@ -802,7 +911,7 @@ export default function Chaji({ initialTab }: { initialTab?: ChajiTab } = {}) {
     setTab(next);
     // URL をタブに同期（リロードでタブ維持・履歴は汚さない）。基礎知識ガイドが既定。
     if (typeof window !== 'undefined') {
-      const url = next === 'chat' ? '/chaji?tab=chat' : '/chaji';
+      const url = next === 'guide' ? '/chaji' : `/chaji?tab=${next}`;
       window.history.replaceState(null, '', url);
     }
   };
@@ -816,7 +925,7 @@ export default function Chaji({ initialTab }: { initialTab?: ChajiTab } = {}) {
       />
       <ChajiTabBar tab={tab} onChange={changeTab} />
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
-        {tab === 'chat' ? <ChajiChatTab /> : <ChajiGuide />}
+        {tab === 'chat' ? <ChajiChatTab /> : tab === 'site' ? <EnchakaiSiteInfo /> : <ChajiGuide />}
       </div>
       {/* チャットタブ以外のときだけ FAB を出す（タップで茶事チャットタブへ遷移）。 */}
       <ChajiChatFab hidden={tab === 'chat'} onOpen={() => changeTab('chat')} />
