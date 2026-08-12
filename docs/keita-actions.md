@@ -5,29 +5,26 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
 
 ---
 
-## 未完（2026-08-10 時点）
+## 未完（2026-08-12 時点）
 
-1. 【MC-351/367】Keita端末で Cowork の Gmail ログイン1回（5分・PC推奨）
-   - プロンプト= obsidian-vault/30-Projects/videodl/drafts/cowork-hn-email-prompt-20260808.md
-   - 1回のログインで両取り: ①hn@宛メール送信（文面承認済 dec-1d8f635c、Son側はSMS認証壁で送信不可） ②EDINET登録の確認コード中継（MC-367）
-2. 【MC-352】note/Blogger投稿の Cowork 実操作（8/4決裁=Cowork経由・6日経過）
-   - Keitaが Cowork でnote/Bloggerにログイン→Sonの校了済ドラフト貼り付け投稿。段取り= videodl/drafts/cowork-post-prompts-20260805.md
-3. 【MC-370】AirRent 残り2操作（GO決裁は8/9承認済 → 完了ログ参照）
-   - ①仕入方針の一言だけ返答: 中古美品2台@4.3万＋古物商申請（約1.9万・警察署・Keita名義）か、新品1台@7万先行（許可不要・即開始）か。8/9のapproveは一括ボタンでここだけ未確定
-     - **2026-08-10 23時台 対話セッションでKeitaに確認→「まだ保留」の明示回答**。未決のまま維持（捏造・見落としではない）。再確認は棚卸しまとめ等で改めて
-   - ②airrent.jp のレジストラ決済（年約3千円・空き確認済8/8・.jpは早い者勝ちなので早め推奨・決済系のためSon実施不可）
-   - 詳細= https://apollomansion.com/work?tab=airrent
-   - ※LP本番サイト7頁は Son 実装完了（~/projects/airrent・即日公開可）。上記②のドメイン決済が公開の最後の壁
-4. 【MC-347】GSC 手動インデックス申請 ×3（各1分・スマホ可）
-   - 8/10 に3ハブ統合を本番反映済（301+IndexNow送信済）。Google は IndexNow 非対応のため GSC の「URL検査→インデックス登録をリクエスト」を3件: https://clipitnow.net/bilibili-download / https://clipitnow.net/bilibili-1080p-save / https://clipitnow.net/bilibili-register-japan
-5. 【MC-373】CrowdWorks アカウント登録＋応募3件（**JOB-1は締切8/14優先**）
+1. 【MC-373】CrowdWorks アカウント登録＋応募3件（**JOB-1は締切8/14優先**）
    - ①CWアカウント登録（プロフィール= writing-factory/portfolio/profile.md 貼付）
    - ②応募3件: writing-factory/intake/JOB-1〜3.md の応募文をコピペ提出
    - 決裁記録= dec-348063e2（8/12 01:22 JST approve）。Son側の全工程（スカウト→執筆→品質ガード→納品）は実装/検証済、日次巡回 cron 20:45 自走中
+2. 【MC-347】GSC 手動インデックス申請 ×3（各1分・スマホ可）
+   - 8/10 に3ハブ統合を本番反映済（301+IndexNow送信済）。Google は IndexNow 非対応のため GSC の「URL検査→インデックス登録をリクエスト」を3件: https://clipitnow.net/bilibili-download / https://clipitnow.net/bilibili-1080p-save / https://clipitnow.net/bilibili-register-japan
+3. 【MC-351】Keita端末で Cowork の Gmail ログイン1回→hn@宛メール送信（5分・PC推奨）
+   - プロンプト= obsidian-vault/30-Projects/videodl/drafts/cowork-hn-email-prompt-20260808.md
+   - 文面承認済 dec-1d8f635c、Son側はSMS認証壁で送信不可
+   - ※旧「MC-367 EDINET確認コード中継との両取り」は MC-367 CANCELLED につき削除（8/12 棚卸し）
+4. 【MC-352】note/Blogger投稿の Cowork 実操作（8/4決裁=Cowork経由・8日経過）
+   - Keitaが Cowork でnote/Bloggerにログイン→Sonの校了済ドラフト貼り付け投稿。段取り= videodl/drafts/cowork-post-prompts-20260805.md
 
 ## 完了ログ
 
-- 2026-08-09 22:26 【MC-370】AirRent決裁 dec-3ca292c1 → **承認して進める** 🔒[Keita]（GO確定・Phase0約15万円承認・ドメイン=airrent.jp。仕入二択とレジストラ決済は上記3へ振替。決裁記録=decision-requests.jsonl decidedAt=2026-08-09T13:26:22Z）
+- 2026-08-12 【MC-370】AirRent 残り2操作（仕入方針・airrent.jp決済）→ **キューから除去**（MC-370 は 8/11 Keita が台帳で CANCELLED 🔒。LP実装7頁は ~/projects/airrent に保全、再開時に流用可）
+- 2026-08-12 【MC-367】EDINET確認コード中継 → **キューから除去**（MC-367 は 8/11 Keita が台帳で CANCELLED 🔒）
+- 2026-08-09 22:26 【MC-370】AirRent決裁 dec-3ca292c1 → **承認して進める** 🔒[Keita]（GO確定・Phase0約15万円承認・ドメイン=airrent.jp。仕入二択とレジストラ決済は上記3へ振替。決裁記録=decision-requests.jsonl decidedAt=2026-08-09T13:26:22Z→ その後 8/11 CANCELLED）
 - 2026-08-09 22:26 【MC-347】インデックス回復計画 dec-cb7dbe1d → **案A承認** 🔒[Keita]（bilibili群15頁→3ハブ＋301統合・2週間観測後に横展開判断。Son実装へ。決裁記録=decision-requests.jsonl decidedAt=2026-08-09T13:26:20Z）
 
 - 2026-08-07 【MC-351】hn@宛メール文面の承認 dec-1d8f635c → **approve-send** 🔒[Keita]（送信実行はSon側Gmail壁で上記1へ振替）
