@@ -360,7 +360,7 @@ export default function Revenue() {
             {/* ClipItNow トラフィック */}
             <section className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
-                <h2 className="text-xs font-semibold text-text-muted">ClipItNow（直近7日）</h2>
+                <h2 className="text-xs font-semibold text-text-muted">ClipItNow（{rangeName(range)}）</h2>
                 <a
                   href="https://clipitnow.net/"
                   target="_blank"

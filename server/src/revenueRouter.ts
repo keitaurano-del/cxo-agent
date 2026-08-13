@@ -321,7 +321,7 @@ async function buildSummary(range: RangeKey): Promise<RevenueSummary> {
   const days = RANGE_DAYS[range];
   // 上流は並列取得。1 本失敗しても他は活かす（fetchJson の null 化）。
   const [statsRaw, exoRaw, adsRaw, usdJpy, dlHistoryRaw, audienceRaw] = await Promise.all([
-    fetchJson('/api/stats'),
+    fetchJson(`/api/stats?days=${days}`),
     fetchJson(`/api/exostats?days=${days}`),
     fetchJson(`/api/adstats?days=${days}`),
     getUsdJpy(),
