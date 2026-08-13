@@ -389,7 +389,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-347 | ClipItNow ランキングLP | 中 | DONE 🔒[Keita] | Son | MC-336 / video-dl |
 | MC-351 | ClipItNow 集客スプリント | 高 | DONE 🔒[Keita] | Son | MC-331/336/339と連動 |
 | MC-352 | ClipItNow ブログ配信 | 高 | DONE 🔒[Keita] | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
-| MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（8/13 実績: 朝ヘルスチェック=enchakai.com/clipitnow3ハブ全200。12時台Keita依頼: exostats表示回数バグ修正(1568ed4)＋DL者属性分析・国コードcc記録実装(b414ff6)・共に実機検証済。残未完は全てKeita操作待ち4件。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
+| MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（8/13 実績: 朝ヘルスチェック=enchakai.com/clipitnow3ハブ全200。12時台Keita依頼: exostats表示回数バグ修正(1568ed4)＋DL者属性分析・国コードcc記録実装(b414ff6)・共に実機検証済。14時台: 属性分析をApollo収益タブへ常設化(オーディエンス分析セクション・実画面確認/push済)。残未完は全てKeita操作待ち4件。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
 | MC-360 | アイデア生成の多様化 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-360.md） | dev-apollo, Son | MC-359の続き。MC-363図鑑ベース。詳細→ tasks/MC-360.md |
 | MC-363 | ビジネスモデル図鑑 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-363.md） | Son | 開発ページに常設。MC-361の図解方針と整合 |
 | MC-364 | ENランキングに一般動画混在 | 中 | DONE（8/3 ENシードへbilibili24件追加・service再起動・/api/ranking実測50件中14件bilibili。詳細→ tasks/MC-364.md） | Son | Keita依頼8/3「アダルトだけ→bilibiliとかも」。video-dl commit ffda928 |
