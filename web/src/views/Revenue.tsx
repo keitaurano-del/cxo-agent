@@ -48,6 +48,24 @@ interface RevenueSummary {
     referrers24h: Array<{ name: string; count: number }>;
     /** 最近の実DL履歴（新しい順・MC-372）。 */
     recentDownloads: Array<{ ts: number; url: string; title: string; thumbnail: string; host: string }>;
+    /** 訪問者属性（言語/端末/国/DL実行者・直近30日・2026-08-13追加）。 */
+    audience: {
+      available: boolean;
+      days: number;
+      uu: number;
+      langs: Array<{ name: string; count: number }>;
+      devices: Array<{ name: string; count: number }>;
+      countries: Array<{ name: string; count: number }>;
+      dlUsers: Array<{
+        vid: string;
+        dlEvents: number;
+        pv: number;
+        lang: string;
+        device: string;
+        country: string;
+        lastSeen: number;
+      }>;
+    };
   };
   pdca: {
     available: boolean;
@@ -98,6 +116,42 @@ function dlTime(ts: number): string {
 function shortDate(date: string): string {
   const [, m, d] = date.split('-');
   return `${Number(m)}/${Number(d)}`;
+}
+
+// ─── オーディエンス分析（2026-08-13 Keita「DLした人の属性・国」）───
+
+const LANG_NAMES: Record<string, string> = { ja: '日本語', en: '英語', zh: '中国語', ko: '韓国語' };
+
+function langName(code: string): string {
+  return LANG_NAMES[code] ?? code;
+}
+
+/** 属性内訳 1 枠（言語/端末/国）。UU 基準の件数を構成比バー付きで並べる。 */
+function BreakdownCard({ title, items, mapName }: { title: string; items: Array<{ name: string; count: number }>; mapName?: (n: string) => string }) {
+  const total = items.reduce((s, x) => s + x.count, 0);
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface p-3">
+      <span className="text-[11px] font-semibold text-text-muted">{title}</span>
+      {items.length === 0 ? (
+        <span className="text-[11px] text-text-faint">データなし</span>
+      ) : (
+        items.slice(0, 5).map((x) => (
+          <div key={x.name} className="flex items-center gap-2">
+            <span className="w-16 shrink-0 truncate text-[11px] text-text" title={x.name}>
+              {mapName ? mapName(x.name) : x.name}
+            </span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+              <div
+                className="h-full rounded-full bg-accent/70"
+                style={{ width: `${total > 0 ? Math.max((x.count / total) * 100, 4) : 0}%` }}
+              />
+            </div>
+            <span className="w-8 shrink-0 text-right text-[11px] tabular-nums text-text-muted">{x.count}</span>
+          </div>
+        ))
+      )}
+    </div>
+  );
 }
 
 /** 指標カード 1 枚。 */
@@ -393,6 +447,54 @@ export default function Revenue() {
                     ))}
                   </ul>
                 )}
+              </section>
+            )}
+
+            {/* オーディエンス分析（2026-08-13 Keita「DLした人の属性・どの国か」） */}
+            {clip?.available && clip.audience.available && (
+              <section className="flex flex-col gap-2">
+                <h2 className="text-xs font-semibold text-text-muted">
+                  オーディエンス分析（直近{clip.audience.days}日・実訪問者 {clip.audience.uu} 人）
+                </h2>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <BreakdownCard title="言語" items={clip.audience.langs} mapName={langName} />
+                  <BreakdownCard title="端末" items={clip.audience.devices} />
+                  <BreakdownCard title="国" items={clip.audience.countries} />
+                </div>
+                {clip.audience.dlUsers.length > 0 && (
+                  <div className="overflow-x-auto rounded-lg border border-border bg-surface">
+                    <table className="w-full text-[11px]">
+                      <thead>
+                        <tr className="border-b border-border text-left text-[10px] text-text-muted">
+                          <th className="px-2 py-1.5 font-semibold">DL実行者（匿名ID）</th>
+                          <th className="px-2 py-1.5 font-semibold text-right">DL操作</th>
+                          <th className="px-2 py-1.5 font-semibold text-right">PV</th>
+                          <th className="px-2 py-1.5 font-semibold">言語</th>
+                          <th className="px-2 py-1.5 font-semibold">端末</th>
+                          <th className="px-2 py-1.5 font-semibold">国</th>
+                          <th className="px-2 py-1.5 font-semibold">最終来訪</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {clip.audience.dlUsers.map((u) => (
+                          <tr key={u.vid} className="text-text">
+                            <td className="px-2 py-1.5 font-mono text-[10px]">{u.vid}</td>
+                            <td className="px-2 py-1.5 text-right tabular-nums">{u.dlEvents}</td>
+                            <td className="px-2 py-1.5 text-right tabular-nums">{u.pv}</td>
+                            <td className="px-2 py-1.5">{langName(u.lang)}</td>
+                            <td className="px-2 py-1.5">{u.device}</td>
+                            <td className="px-2 py-1.5">{u.country || '—'}</td>
+                            <td className="px-2 py-1.5 text-text-faint">{u.lastSeen > 0 ? dlTime(u.lastSeen) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <p className="text-[10px] leading-relaxed text-text-faint">
+                  bot を除いた実訪問者（匿名 vid 単位・IP 不保存）の属性です。国は Cloudflare の国コード（2026-08-13
+                  記録開始）に基づくため、それ以前の訪問者は「(記録前)」＝言語からの推定のみになります。
+                </p>
               </section>
             )}
 

@@ -103,6 +103,24 @@ interface RevenueSummary {
     referrers24h: Array<{ name: string; count: number }>;
     /** 最近の実DL履歴（新しい順・MC-372）。video-dl /api/dlhistory はローカル限定公開。 */
     recentDownloads: Array<{ ts: number; url: string; title: string; thumbnail: string; host: string }>;
+    /** 訪問者属性（言語/端末/国/DL実行者・直近30日）。video-dl /api/audience はローカル限定公開。 */
+    audience: {
+      available: boolean;
+      days: number;
+      uu: number;
+      langs: Array<{ name: string; count: number }>;
+      devices: Array<{ name: string; count: number }>;
+      countries: Array<{ name: string; count: number }>;
+      dlUsers: Array<{
+        vid: string;
+        dlEvents: number;
+        pv: number;
+        lang: string;
+        device: string;
+        country: string;
+        lastSeen: number;
+      }>;
+    };
   };
   pdca: {
     available: boolean;
@@ -167,8 +185,44 @@ function normDlHistory(raw: unknown): RevenueSummary['clipitnow']['recentDownloa
     .filter((x) => x.url !== '');
 }
 
+/** ClipItNow /api/audience を正規化（失敗時は available:false）。 */
+function normAudience(raw: unknown): RevenueSummary['clipitnow']['audience'] {
+  const nameCount = (v: unknown): Array<{ name: string; count: number }> =>
+    (Array.isArray(v) ? v : [])
+      .map((x) => {
+        const r = rec(x);
+        return { name: strOr(r.name, ''), count: numOr0(r.count) };
+      })
+      .filter((x) => x.name !== '');
+  if (raw == null) {
+    return { available: false, days: 0, uu: 0, langs: [], devices: [], countries: [], dlUsers: [] };
+  }
+  const o = rec(raw);
+  const users = Array.isArray(o.dl_users) ? o.dl_users : [];
+  return {
+    available: true,
+    days: numOr0(o.days),
+    uu: numOr0(o.uu),
+    langs: nameCount(o.langs),
+    devices: nameCount(o.devices),
+    countries: nameCount(o.countries),
+    dlUsers: users.map((x) => {
+      const r = rec(x);
+      return {
+        vid: strOr(r.vid, '?'),
+        dlEvents: numOr0(r.dl_events),
+        pv: numOr0(r.pv),
+        lang: strOr(r.lang, '?'),
+        device: strOr(r.device, '?'),
+        country: strOr(r.country, ''),
+        lastSeen: numOr0(r.last_seen),
+      };
+    }),
+  };
+}
+
 /** ClipItNow /api/stats を正規化（null なら available:false）。 */
-function normClipStats(raw: unknown, dlHistoryRaw: unknown): RevenueSummary['clipitnow'] {
+function normClipStats(raw: unknown, dlHistoryRaw: unknown, audienceRaw: unknown): RevenueSummary['clipitnow'] {
   if (raw == null) {
     return {
       available: false,
@@ -177,6 +231,7 @@ function normClipStats(raw: unknown, dlHistoryRaw: unknown): RevenueSummary['cli
       downloads: { h24: 0, d7: 0 },
       referrers24h: [],
       recentDownloads: [],
+      audience: normAudience(audienceRaw),
     };
   }
   const o = rec(raw);
@@ -197,6 +252,7 @@ function normClipStats(raw: unknown, dlHistoryRaw: unknown): RevenueSummary['cli
       .filter((x) => x.name !== '')
       .slice(0, 10),
     recentDownloads: normDlHistory(dlHistoryRaw),
+    audience: normAudience(audienceRaw),
   };
 }
 
@@ -264,12 +320,13 @@ const cacheByRange = new Map<RangeKey, { at: number; body: RevenueSummary }>();
 async function buildSummary(range: RangeKey): Promise<RevenueSummary> {
   const days = RANGE_DAYS[range];
   // 上流は並列取得。1 本失敗しても他は活かす（fetchJson の null 化）。
-  const [statsRaw, exoRaw, adsRaw, usdJpy, dlHistoryRaw] = await Promise.all([
+  const [statsRaw, exoRaw, adsRaw, usdJpy, dlHistoryRaw, audienceRaw] = await Promise.all([
     fetchJson('/api/stats'),
     fetchJson(`/api/exostats?days=${days}`),
     fetchJson(`/api/adstats?days=${days}`),
     getUsdJpy(),
     fetchJson('/api/dlhistory?limit=30'),
+    fetchJson('/api/audience?days=30'),
   ]);
 
   const exoclick = exoRaw == null ? emptyAdStats() : normAdStats(exoRaw);
@@ -295,7 +352,7 @@ async function buildSummary(range: RangeKey): Promise<RevenueSummary> {
       exoclick,
       daily,
     },
-    clipitnow: normClipStats(statsRaw, dlHistoryRaw),
+    clipitnow: normClipStats(statsRaw, dlHistoryRaw, audienceRaw),
     pdca: collectPdca(),
   };
 }
