@@ -389,7 +389,7 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-347 | ClipItNow ランキングLP | 中 | DONE 🔒[Keita] | Son | MC-336 / video-dl |
 | MC-351 | ClipItNow 集客スプリント | 高 | DONE 🔒[Keita] | Son | MC-331/336/339と連動 |
 | MC-352 | ClipItNow ブログ配信 | 高 | DONE 🔒[Keita] | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
-| MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（8/14 実績: 朝08:15ヘルスチェック全200。MC-373前進=当日案件ウォッチ(候補15件)・JOB-1/2/3の3案件CW募集継続を確認・JOB-4重複(=JOB-3同一案件)を統合削除しJOB-3を現物詳細で更新・Keita用1タップ応募パックintake/APPLY-PACK.mdを締切順に整備。他は全てKeita操作待ち。詳細→ tasks/MC-354.md ／ 8/13分は個票参照） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
+| MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（8/15 実績: 朝08:15全200。MC-373重要修正=JOB-1(洋服レンタル)が締切経過で募集終了かつAI生成禁止と判明→除外。根本原因のjob_watch検索スニペット判定漏れを本文AI禁止再判定で修正(writing-factory 34dd1c4)・応募パックをAI利用前提の2件へ再構成(429fd87)。8/14分は個票参照。他は全てKeita操作待ち。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
 | MC-360 | アイデア生成の多様化 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-360.md） | dev-apollo, Son | MC-359の続き。MC-363図鑑ベース。詳細→ tasks/MC-360.md |
 | MC-363 | ビジネスモデル図鑑 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-363.md） | Son | 開発ページに常設。MC-361の図解方針と整合 |
 | MC-364 | ENランキングに一般動画混在 | 中 | DONE（8/3 ENシードへbilibili24件追加・service再起動・/api/ranking実測50件中14件bilibili。詳細→ tasks/MC-364.md） | Son | Keita依頼8/3「アダルトだけ→bilibiliとかも」。video-dl commit ffda928 |
