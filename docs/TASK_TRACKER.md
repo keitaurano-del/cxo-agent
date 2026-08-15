@@ -387,8 +387,9 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 |---|---|---|---|---|---|
 | MC-313 | Apollo UI 改善 | 中 | DONE（8/6 23:47 server restart 実施・healthz ok。Keita決裁でMC-361 WIPをstash退避→クリーンツリーで反映。詳細→ tasks/MC-313.md） | Son | [[son-owns-board-reconciliation]] | [[clipitnow-exoclick-integration]] [[son-owns-board-reconciliation]] [[cxo-agent-shared-tree-concurrency]] [[cxo-agent-prod-restart-loads-worktree]] |
 | MC-347 | ClipItNow ランキングLP | 中 | DONE 🔒[Keita] | Son | MC-336 / video-dl |
-| MC-351 | ClipItNow 集客スプリント | 高 | DONE 🔒[Keita] | Son | MC-331/336/339と連動 |
-| MC-352 | ClipItNow ブログ配信 | 高 | DONE 🔒[Keita] | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動 |
+| MC-351 | ClipItNow 集客スプリント | 高 | DONE 🔒[Keita] | Son | MC-331/336/339と連動。※残っていたKeita操作(HNメール送信 Cowork)は2026-08-15「347以外キャンセル」で見送り＝blockers解決済 |
+| MC-352 | ClipItNow ブログ配信 | 高 | DONE 🔒[Keita] | Son | 外部投稿はKeita承認済（2026-07-31）。MC-331/351と連動。※残っていたKeita操作(note→Blogger投稿 Cowork)は2026-08-15「347以外キャンセル」で見送り＝blockers解決済 |
+| MC-374 | サイト別DLページ | 中 | DONE（8/15 Keita直依頼。snapany型SSR個別ページ /​<slug>-downloader を11本公開=bilibili/dailymotion/tiktok/twitter/instagram/facebook/twitch/vimeo/pornhub/xhamster/xvideos。title/h1/hreflang5言語/JSON-LD焼込み・sitemap反映・本番clipitnow.net実測200・未登録slug404。Keita直依頼のためPjD2.0のLP凍結の例外。詳細→ tasks/MC-374.md） | Son | MC-336 / MC-347 / video-dl。増減(xnxx追加/アダルトをトップ掲出)はKeita判断の追加要望扱い |
 | MC-354 | 毎時ワークループ | 高 | IN_PROGRESS（8/15 実績: 朝08:15全200。MC-373重要修正=JOB-1(洋服レンタル)が締切経過で募集終了かつAI生成禁止と判明→除外。根本原因のjob_watch検索スニペット判定漏れを本文AI禁止再判定で修正(writing-factory 34dd1c4)・応募パックをAI利用前提の2件へ再構成(429fd87)。8/14分は個票参照。他は全てKeita操作待ち。詳細→ tasks/MC-354.md） | Son | MC-353層3の常時運転化。cronがセッションを跨いで駆動 |
 | MC-360 | アイデア生成の多様化 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-360.md） | dev-apollo, Son | MC-359の続き。MC-363図鑑ベース。詳細→ tasks/MC-360.md |
 | MC-363 | ビジネスモデル図鑑 | 高 | DONE（8/3 21:12 Keita決裁OK。DoD記載済→ tasks/MC-363.md） | Son | 開発ページに常設。MC-361の図解方針と整合 |
@@ -400,4 +401,4 @@ C群共通方針: 既存 cron スクリプトの「LLM ドライバ部分（`cla
 | MC-369 | 収益タブ期間切替 | 高 | DONE（8/7 00:20 7日/1ヶ月/3ヶ月/全期間タブ実装・両service再起動・本番実画面検証済。DoD→ tasks/MC-369.md） | Son | Keita依頼8/6「収益の期間は全期間とか1ヶ月とか株価みたいに」。video-dl days拡張＋revenueRouter range＋Revenue.tsx期間タブ。today誤表示バグも修正 |
 | MC-370 | Blueairレンタル事業立上げ | 高 | CANCELLED 🔒[Keita] | Son | Keita依頼8/8「Classic Pro特化レンタル、月商10万・極力自動化」 |
 | MC-372 | DL履歴の可視化 | 高 | DONE（8/9 23:05 実装・両service再起動・実画面検証済。DoD→ tasks/MC-372.md） | Son | Keita依頼8/9「何の動画がDLされたか見たい」。video-dl /api/dlhistory(ローカル限定)＋Apollo収益タブに最近DL一覧 |
-| MC-373 | 受託SEO記事工場の構築 | 高 | IN_PROGRESS（8/11 14:25 Son側全工程完備・個票作成済 → 残: Keita操作(今夜依頼: CW登録+応募3件)→初受注サイクル。詳細→ tasks/MC-373.md） | Son | Keita指示8/11 00:22「1(SEO記事受託)の自動化を仕組化」。リポジトリ=~/projects/writing-factory・設計=DESIGN.md。P2で案件ウォッチ/WP入稿 |
+| MC-373 | 受託SEO記事工場の構築 | 高 | CANCELLED 🔒[Keita]（2026-08-15 10:11 Keita指示「347以外キャンセル」。CW登録+応募は見送り。Son側成果物=writing-factory一式は記録として残置・再開時は APPLY-PACK.md から流用可。日次job_watch cron 20:45は停止。詳細→ tasks/MC-373.md） | Son | Keita指示8/11 00:22「1(SEO記事受託)の自動化を仕組化」。リポジトリ=~/projects/writing-factory・設計=DESIGN.md。P2で案件ウォッチ/WP入稿 |
