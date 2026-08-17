@@ -464,6 +464,14 @@ export const TERMINALS: TerminalDef[] = [
     // この箱（local）の OpenClaw 秘書補佐 Son（tmux 'openclaw-son'、openclaw chat --session agent:son:main）。MC-181。
     tmuxSession: env('TERMINAL_5_TMUX', 'openclaw-son'),
   },
+  {
+    id: 6,
+    port: envNum('TERMINAL_6_PORT', 7686),
+    service: env('TERMINAL_6_SERVICE', 'apollo-terminal-6.service'),
+    label: env('TERMINAL_6_LABEL', 'Kimi'),
+    // この箱（local）の Kimi 専用ターミナル（tmux 'openclaw-kimi'、openclaw chat --session agent:kimi:main）。MC-375。
+    tmuxSession: env('TERMINAL_6_TMUX', 'openclaw-kimi'),
+  },
 ];
 
 /** ターミナル定義から ttyd の origin（http://host:port）を作る。host 既定は TERMINAL_TTYD_HOST。 */
