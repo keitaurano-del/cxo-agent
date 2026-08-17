@@ -5,22 +5,16 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
 
 ---
 
-## 未完（2026-08-12 時点）
+## 未完
 
-1. 【MC-373】CrowdWorks アカウント登録＋応募3件（**JOB-1は締切8/14優先**）
-   - ①CWアカウント登録（プロフィール= writing-factory/portfolio/profile.md 貼付）
-   - ②応募3件: writing-factory/intake/JOB-1〜3.md の応募文をコピペ提出
-   - 決裁記録= dec-348063e2（8/12 01:22 JST approve）。Son側の全工程（スカウト→執筆→品質ガード→納品）は実装/検証済、日次巡回 cron 20:45 自走中
-2. 【MC-347】GSC 手動インデックス申請 ×3（各1分・スマホ可）
-   - 8/10 に3ハブ統合を本番反映済（301+IndexNow送信済）。Google は IndexNow 非対応のため GSC の「URL検査→インデックス登録をリクエスト」を3件: https://clipitnow.net/bilibili-download / https://clipitnow.net/bilibili-1080p-save / https://clipitnow.net/bilibili-register-japan
-3. 【MC-351】Keita端末で Cowork の Gmail ログイン1回→hn@宛メール送信（5分・PC推奨）
-   - プロンプト= obsidian-vault/30-Projects/videodl/drafts/cowork-hn-email-prompt-20260808.md
-   - 文面承認済 dec-1d8f635c、Son側はSMS認証壁で送信不可
-   - ※旧「MC-367 EDINET確認コード中継との両取り」は MC-367 CANCELLED につき削除（8/12 棚卸し）
-4. 【MC-352】note/Blogger投稿の Cowork 実操作（8/4決裁=Cowork経由・8日経過）
-   - Keitaが Cowork でnote/Bloggerにログイン→Sonの校了済ドラフト貼り付け投稿。段取り= videodl/drafts/cowork-post-prompts-20260805.md
+（なし — 2026-08-15 10:11 Keita指示「347完了、それ以外はキャンセルでいいよ」で全消化。Keita待ちゼロ）
 
 ## 完了ログ
+
+- 2026-08-15 10:11 【MC-347】GSC 手動インデックス申請 ×3 → **完了** 🔒[Keita]（Keita本人が申請実施。以後2週間はSonが観測→横展開判断。決裁の発話記録= d95110cb jsonl 2026-08-15T01:11:03Z）
+- 2026-08-15 10:11 【MC-373】CW登録＋応募2件 → **キャンセル** 🔒[Keita]（「347以外キャンセル」。writing-factory一式は記録として残置・再開時は intake/APPLY-PACK.md から流用可。日次job_watch cron 20:45停止済・復元は /tmp/cron.bak.20260815）
+- 2026-08-15 10:11 【MC-351】Cowork Gmail ログイン＋hn@宛メール送信 → **見送り** 🔒[Keita]（「347以外キャンセル」）
+- 2026-08-15 10:11 【MC-352】note/Blogger投稿の Cowork 実操作 → **見送り** 🔒[Keita]（「347以外キャンセル」）
 
 - 2026-08-12 【MC-370】AirRent 残り2操作（仕入方針・airrent.jp決済）→ **キューから除去**（MC-370 は 8/11 Keita が台帳で CANCELLED 🔒。LP実装7頁は ~/projects/airrent に保全、再開時に流用可）
 - 2026-08-12 【MC-367】EDINET確認コード中継 → **キューから除去**（MC-367 は 8/11 Keita が台帳で CANCELLED 🔒）
