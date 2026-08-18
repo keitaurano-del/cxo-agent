@@ -805,7 +805,7 @@ function EnchakaiSiteInfo() {
             <EnchakaiLink href="https://enchakai.com" />
           </EnchakaiInfoRow>
           <EnchakaiInfoRow label="予約ページ">
-            <EnchakaiLink href="https://enchakai.com/en/book">https://enchakai.com/en/book</EnchakaiLink>
+            <EnchakaiLink href="https://enchakai.com/ja/booking">https://enchakai.com/ja/booking</EnchakaiLink>
           </EnchakaiInfoRow>
           <EnchakaiInfoRow label="管理画面（枠登録・予約一覧）">
             <EnchakaiLink href="https://enchakai.com/admin" />
