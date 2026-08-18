@@ -826,7 +826,7 @@ function EnchakaiSiteInfo() {
             <span className="ml-2 text-xs text-text-muted">（表示名: 円茶会）</span>
           </EnchakaiInfoRow>
           <EnchakaiInfoRow label="新規予約の通知先">
-            <code className="rounded bg-surface-2 px-1.5 py-0.5 text-[13px]">keita.urano@gmail.com</code>
+            <code className="rounded bg-surface-2 px-1.5 py-0.5 text-[13px]">enchakai.support@gmail.com</code>
           </EnchakaiInfoRow>
           <EnchakaiInfoRow label="配信基盤">
             <EnchakaiLink href="https://resend.com/emails">Resend</EnchakaiLink>
