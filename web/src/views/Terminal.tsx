@@ -68,6 +68,7 @@ const DEFAULT_TERMINAL_LABELS: Record<number, string> = {
   3: 'Aux',
   4: 'Ops',
   5: 'Sub',
+  6: 'Kimi',
 };
 
 const TERMINAL_TABS: TerminalTab[] = [
@@ -75,6 +76,7 @@ const TERMINAL_TABS: TerminalTab[] = [
   { id: 3, label: DEFAULT_TERMINAL_LABELS[3], path: '/terminal/3/' },
   { id: 4, label: DEFAULT_TERMINAL_LABELS[4], path: '/terminal/4/' },
   { id: 5, label: DEFAULT_TERMINAL_LABELS[5], path: '/terminal/5/' },
+  { id: 6, label: DEFAULT_TERMINAL_LABELS[6], path: '/terminal/6/' },
 ];
 
 const ACTIVE_TAB_STORAGE_KEY = 'apollo.terminal.activeTab';
@@ -1462,6 +1464,28 @@ export default function Terminal() {
           >
             出力を見る
           </button>
+          {activeBackend.kind === 'ready' && (
+            <>
+              <button
+                type="button"
+                onClick={() => sendKey('C-l')}
+                title="表示をリセット（再描画）"
+                aria-label="表示をリセット（再描画）"
+                className="rounded border border-border px-2 py-1 text-xs text-text-muted hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                リセット
+              </button>
+              <button
+                type="button"
+                onClick={() => sendKey('C-u')}
+                title="入力行を一括クリア"
+                aria-label="入力行を一括クリア"
+                className="rounded border border-border px-2 py-1 text-xs text-text-muted hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                行クリア
+              </button>
+            </>
+          )}
           <a
             href={activeId === 1 ? '/terminal-standalone' : activeTab.path}
             target="_blank"

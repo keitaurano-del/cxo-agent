@@ -432,6 +432,7 @@ const TMUX_SPECIAL_KEYS = new Set([
   'Up', 'Down', 'Left', 'Right',
   'Enter', 'Escape', 'Tab', 'Space',
   'BSpace', 'DC', // Backspace / Delete
+  'C-l', 'C-u', 'C-c', // C-l=再描画 / C-u=行クリア / C-c=中断（UIボタン用, MC 追記）
 ]);
 
 async function handleSendKeys(req: Request, res: Response): Promise<void> {
