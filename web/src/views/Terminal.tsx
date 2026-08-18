@@ -898,6 +898,20 @@ export default function Terminal() {
     void postSendKeys(text, activeIdRef.current);
   }, []);
 
+  // 割込送信: openclaw TUI が実行中だと Enter を「agent is busy — press Esc to abort」で
+  // 弾くため、まず Esc で走行中を中断（＝interrupt）してから本文＋Enter を送る。
+  // Esc→入力の間に TUI が abort を処理する猶予を置く（無いと直後の入力が食われることがある）。
+  // 本文が空なら Esc だけ送る（＝単なる中断ボタンとしても使える）。
+  const sendInterrupt = useCallback(async (text: string) => {
+    const terminal = activeIdRef.current;
+    await postSendKeys('Escape', terminal);
+    if (text.length === 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await postSendKeys(text, terminal);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    await postSendKeys('Enter', terminal);
+  }, []);
+
   // ── 画像ステージング（MC-102、ターミナル1 のみ）──────────────
   const [staged, setStaged] = useState<StagedImage[]>([]);
   const stagedRef = useRef<StagedImage[]>([]);
@@ -1975,6 +1989,18 @@ export default function Terminal() {
             className="flex h-11 min-w-11 shrink-0 items-center justify-center rounded border border-border bg-surface-2 px-2 text-xs text-text active:bg-surface-3"
           >
             Esc
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void sendInterrupt(keyInput);
+              setKeyInput('');
+            }}
+            aria-label="割り込んで送信"
+            title="実行中でも Esc で中断してから送信する"
+            className="flex h-11 min-w-11 shrink-0 items-center justify-center rounded border border-active/50 bg-active-bg px-2 text-xs text-active active:bg-surface-3"
+          >
+            割込
           </button>
           <button
             type="button"
