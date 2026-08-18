@@ -480,6 +480,13 @@ export default function Development() {
 
   // 進行中ジョブ（「作成中」として一覧に表示・離脱/リロードでも保持）。起動時に復元する。
   const [activeJobs, setActiveJobs] = useState<JobState[]>(loadJobs);
+  // activeJobs の最新値を読む ref。ポーリングのコールバックは起票時のクロージャに閉じるため、
+  // 途中でエディタ紐付けが変わっても（過去成果物の読込でデタッチ／作成中カードで再アタッチ）
+  // 最新の紐付けで判定できるようにする。
+  const activeJobsRef = useRef<JobState[]>(activeJobs);
+  useEffect(() => {
+    activeJobsRef.current = activeJobs;
+  }, [activeJobs]);
   // 既にポーリング中の jobId（多重ポーリング防止）。
   const pollingRef = useRef<Set<string>>(new Set());
   // 「作成中」カードの経過秒数表示用に 1 秒ごとに進む現在時刻。
@@ -614,25 +621,29 @@ export default function Development() {
       if (pollingRef.current.has(job.jobId)) continue;
       pollingRef.current.add(job.jobId);
       const fallback = job.mode === 'revise' ? '修正に失敗しました' : '生成に失敗しました';
+      // 紐付けはジョブ実行中にも変わる（過去成果物の読込でデタッチ／作成中カードで再アタッチ）ため、
+      // 起票時の job.attachToEditor でなく都度最新を見る。ジョブが配列から消えた後は起票時の値に従う。
+      const isAttached = () =>
+        activeJobsRef.current.find((j) => j.jobId === job.jobId)?.attachToEditor ??
+        job.attachToEditor;
       pollMockupJob(
         job.jobId,
         fallback,
         job.startedAt,
         // エディタに紐づくジョブだけ、進捗（段階/順番待ち/生成中・設計・ワイヤーフレーム）をライブ表示する。
-        job.attachToEditor
-          ? (live) => {
-              setStreamStatus(live.status);
-              setStreamCode(live.partial);
-              setStreamPlan(live.plan);
-              setStreamThinking(live.thinking);
-              setStage((live.stage as '' | 'design' | 'code' | 'review') ?? '');
-            }
-          : undefined,
+        (live) => {
+          if (!isAttached()) return; // デタッチ中は流さない（過去成果物のプレビューを邪魔しない）。
+          setStreamStatus(live.status);
+          setStreamCode(live.partial);
+          setStreamPlan(live.plan);
+          setStreamThinking(live.thinking);
+          setStage((live.stage as '' | 'design' | 'code' | 'review') ?? '');
+        },
       )
         .then((r) => {
           if (r.status === 'done') {
             // 完了時、そのジョブがエディタに紐づいているならエディタへ結果を反映する。
-            if (job.attachToEditor) {
+            if (isAttached()) {
               setHtml(r.html);
               setPreviewHtml(r.html);
               setCurrentId(r.mockupId ?? r.saved[0]?.id ?? null);
@@ -667,7 +678,7 @@ export default function Development() {
             );
           } else if (r.status === 'canceled') {
             // ユーザが中止した。エディタ紐付けなら生成表示を畳む（赤エラーにはしない）。
-            if (job.attachToEditor) {
+            if (isAttached()) {
               setStreamCode('');
               setStreamPlan('');
               setStreamThinking('');
@@ -695,7 +706,7 @@ export default function Development() {
           }
           // 404（サーバ再起動等でジョブ消失）でも完了済みなら一覧に自動保存されている。
           // attachToEditor のジョブのみ赤エラーを出し、デタッチ済み（新規作成後）は静かに一覧更新。
-          if (job.attachToEditor) {
+          if (isAttached()) {
             const msg = e instanceof Error ? e.message : fallback;
             // 失敗時も画面を空にせず「そこまでの思考・作り方・書きかけコード」を残す。
             const live = (e as JobError).live;
@@ -952,6 +963,18 @@ export default function Development() {
       };
       const m = data.mockup;
       if (!m) throw new Error('読み込みに失敗しました');
+      // 生成/修正の実行中でも過去の成果物を開けるようにする: エディタ紐付けを外し、ジョブは
+      // 一覧の「作成中」カードに退避して続行させる（完了時は自動保存・カード押下でライブ表示に戻れる）。
+      const wasGenerating = activeJobsRef.current.some((j) => j.attachToEditor);
+      if (wasGenerating) {
+        setActiveJobs((prev) => prev.map((j) => ({ ...j, attachToEditor: false })));
+        setStreamCode('');
+        setStreamPlan('');
+        setStreamThinking('');
+        setStreamStatus('');
+        setStage('');
+        setFailedRun(null);
+      }
       setCurrentId(m.id);
       // サーバから読んだ＝この時点でサーバと同期済み。以後の整合判定の基準にする。
       setSyncedAt(m.updatedAt ?? new Date().toISOString());
@@ -974,7 +997,11 @@ export default function Development() {
           : null,
       );
       setMobileTab('preview');
-      setNotice(`「${m.title}」を読み込みました。`);
+      setNotice(
+        wasGenerating
+          ? `「${m.title}」を読み込みました。作成中のものは下の「作成中」カードで続いています。`
+          : `「${m.title}」を読み込みました。`,
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込みに失敗しました');
     }
@@ -1215,6 +1242,32 @@ export default function Development() {
     setActiveJobs((prev) => prev.map((j) => ({ ...j, attachToEditor: false })));
     setNotice('新規作成にしました。作成中のものは下の一覧に「作成中」で表示され続けます。');
     setMobileTab('edit');
+  }, []);
+
+  // 「作成中」カード押下でライブ表示へ戻す（過去成果物のプレビュー中から進捗表示へ復帰する導線）。
+  // 開いていた成果物は畳むだけ（保存済みのため一覧からいつでも開き直せる）。
+  const handleShowJob = useCallback((jobId: string) => {
+    const job = activeJobsRef.current.find((j) => j.jobId === jobId);
+    if (!job || job.attachToEditor) return; // 消えた/既にライブ表示中なら何もしない。
+    setActiveJobs((prev) => prev.map((j) => ({ ...j, attachToEditor: j.jobId === jobId })));
+    setCurrentId(null);
+    setSyncedAt(null);
+    setTitle('');
+    setHtml('');
+    setPreviewHtml('');
+    setDesign(null);
+    setSpec(null);
+    setCodeLesson(null);
+    setVersions([]);
+    setError(null);
+    setNotice(null);
+    setFailedRun(null);
+    setStreamCode('');
+    setStreamPlan('');
+    setStreamThinking('');
+    setStreamStatus('');
+    setStage('');
+    setMobileTab('preview');
   }, []);
 
   // 修正中（targetId 付き）の既存モックアップは一覧から隠し、「作成中」カードに集約する（重複表示防止）。
@@ -1602,18 +1655,28 @@ export default function Development() {
                   return (
                     <li
                       key={job.jobId}
-                      className="flex items-center gap-2 rounded-lg border border-accent px-3 py-2"
+                      className="rounded-lg border border-accent"
                       style={{ background: 'var(--mc-active-bg)' }}
                     >
-                      <Spinner />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm text-text">
-                          {job.label || (job.mode === 'revise' ? '修正' : 'モックアップ')}
+                      {/* デタッチ中（過去成果物を開いている間）は押すとライブ進捗表示へ戻れる。 */}
+                      <button
+                        type="button"
+                        onClick={() => handleShowJob(job.jobId)}
+                        disabled={job.attachToEditor}
+                        title={job.attachToEditor ? undefined : '押すと作成中の進捗表示に戻ります'}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+                      >
+                        <Spinner />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm text-text">
+                            {job.label || (job.mode === 'revise' ? '修正' : 'モックアップ')}
+                          </div>
+                          <div className="text-[10px]" style={{ color: 'var(--mc-active)' }}>
+                            作成中… {sec}秒（完了すると自動でここに保存されます）
+                            {!job.attachToEditor && '・押すと進捗表示に戻ります'}
+                          </div>
                         </div>
-                        <div className="text-[10px]" style={{ color: 'var(--mc-active)' }}>
-                          作成中… {sec}秒（完了すると自動でここに保存されます）
-                        </div>
-                      </div>
+                      </button>
                     </li>
                   );
                 })}
