@@ -608,6 +608,22 @@ function splitPlanHtml(out: string): { plan: string; html: string } {
     if (lastMarker !== -1) html = html.slice(lastMarker + PLAN_MARKER.length);
     const lastDoc = html.toLowerCase().lastIndexOf('<!doctype');
     if (lastDoc > 0) html = html.slice(lastDoc);
+    // 出力リミット跨ぎの「継続」でコード中にフェンス＋口上が紛れ込むことがある
+    // （実測 2026-08-19: JS 途中で切れ→```javascript が行中に混入→</html> の後に
+    //  「貼り付ければ完成じゃ」等の説明文。JS が壊れタブ操作不能になった）。
+    // 完成文書なら </html> より後ろは説明文なので捨てる。さらに文書内へ紛れた
+    // フェンス印（```言語名）で分割し、継続側が直前の末尾を数文字重複して
+    // 再開するケース（実測: remove(' で切れ→継続が ' から再出力）は重なりを
+    // 検出して縫合する。素の HTML に ``` が出ることはまず無い。
+    const endTag = html.lastIndexOf('</html>');
+    if (endTag !== -1) html = html.slice(0, endTag + '</html>'.length);
+    if (html.includes('```')) {
+      html = html.split(/```[a-zA-Z]*\r?\n?/).reduce((acc, part) => {
+        let k = Math.min(200, part.length);
+        for (; k > 0; k--) if (acc.endsWith(part.slice(0, k))) break;
+        return acc + part.slice(k);
+      });
+    }
     return { plan: text.slice(0, idx).trim(), html };
   }
   // マーカー未到達: 既に HTML らしき出力が始まっているなら html、まだなら plan とみなす。
