@@ -4,7 +4,7 @@
 // 2ペイン（左=操作、右=プレビュー）。モバイルは縦積み。
 // プレビューは sandbox="allow-scripts"（allow-same-origin は付けない＝AI 生成 HTML を隔離）。
 // API: POST /api/dev/mockup/generate, GET/POST /api/dev/mockups, GET/DELETE /api/dev/mockups/:id。
-import { useState, useEffect, useRef, useCallback, type ReactElement } from 'react';
+import { useState, useEffect, useRef, useCallback, type ReactElement, type UIEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '../components/PageHeader';
 import { Spinner, EmptyState } from '../components/ui';
@@ -742,9 +742,16 @@ export default function Development() {
   }, [notice]);
 
   // ライブコードが伸びるたびに末尾へ自動スクロール（最新の行が見えるように）。
+  // ただしユーザが上へ戻って読んでいる間は追従しない（毎更新で末尾へ引き戻されると
+  // 実質スクロール不能になる: Keita 報告 2026-08-19）。末尾付近にいる時だけ追従する。
+  const stickToBottomRef = useRef(true);
+  const handleStreamScroll = useCallback((e: UIEvent<HTMLElement>) => {
+    const el = e.currentTarget;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+  }, []);
   useEffect(() => {
     const el = streamPreRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [streamCode, streamPlan, streamThinking]);
 
   // 新規生成。起票だけして「進行中ジョブ」に積む（完了はバックグラウンドのポーリングが捌く）。
@@ -1813,13 +1820,13 @@ export default function Development() {
                   {streamThinking && (
                     <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
                       <summary className="cursor-pointer font-semibold">🤔 AI の思考</summary>
-                      <div className="mt-1 whitespace-pre-wrap leading-relaxed">{streamThinking}</div>
+                      <div className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed">{streamThinking}</div>
                     </details>
                   )}
                   {streamPlan && (
                     <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
                       <summary className="cursor-pointer font-semibold">📐 設計書</summary>
-                      <div className="mt-1 whitespace-pre-wrap leading-relaxed">{streamPlan}</div>
+                      <div className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed">{streamPlan}</div>
                     </details>
                   )}
                   <p className="text-[10px] text-text-faint">
@@ -1827,6 +1834,7 @@ export default function Development() {
                   </p>
                   <pre
                     ref={streamPreRef}
+                    onScroll={handleStreamScroll}
                     className="min-h-0 w-full flex-1 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-surface px-3 py-2 font-mono text-[11px] leading-relaxed text-text"
                   >
                     {streamCode}
@@ -1846,7 +1854,7 @@ export default function Development() {
                   {streamThinking && (
                     <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
                       <summary className="cursor-pointer font-semibold">🤔 AI の思考</summary>
-                      <div className="mt-1 whitespace-pre-wrap leading-relaxed">{streamThinking}</div>
+                      <div className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed">{streamThinking}</div>
                     </details>
                   )}
                   <p className="text-[10px] text-text-faint">
@@ -1854,6 +1862,7 @@ export default function Development() {
                   </p>
                   <pre
                     ref={streamPreRef}
+                    onScroll={handleStreamScroll}
                     className="min-h-0 w-full flex-1 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-surface px-3 py-2 text-xs leading-relaxed text-text"
                   >
                     {streamPlan}
@@ -1876,6 +1885,7 @@ export default function Development() {
                   </p>
                   <pre
                     ref={streamPreRef}
+                    onScroll={handleStreamScroll}
                     className="min-h-0 w-full flex-1 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-surface px-3 py-2 text-xs leading-relaxed text-text-muted"
                   >
                     {streamThinking}
@@ -1920,7 +1930,7 @@ export default function Development() {
                 {failedRun.thinking && (
                   <details className="rounded-lg border border-border bg-surface px-3 py-2 text-[11px] text-text-muted">
                     <summary className="cursor-pointer font-semibold">🤔 AI の思考（ここまで）</summary>
-                    <div className="mt-1 whitespace-pre-wrap leading-relaxed">{failedRun.thinking}</div>
+                    <div className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed">{failedRun.thinking}</div>
                   </details>
                 )}
                 {failedRun.plan && (
