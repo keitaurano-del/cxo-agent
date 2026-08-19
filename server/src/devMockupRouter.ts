@@ -104,6 +104,15 @@ const HTML_RULES = [
  */
 const PLAN_MARKER = '---HTML---';
 
+/**
+ * runClaudeRaw がアシスタントメッセージの境界（message_start）に挿入する印。
+ * 出力リミットで切れた後の「継続」メッセージは先頭に口上（「以下が続きです…」）＋
+ * ```言語 フェンスを付けて再開することがあり、連結後の文字列からは口上とコードの
+ * 境目が判別できない（実測 2026-08-20: コード途中に日本語が密着し JS が壊れた）。
+ * ターン境界に印を残しておけば splitPlanHtml が決定的に除去できる。
+ */
+const TURN_BREAK = '\n<<<MC-TURN-BREAK>>>\n';
+
 /** インタラクティブな「動く試作品」を作らせるための共通指示。新規生成・修正の両方で結合する。 */
 const INTERACTIVE_RULES = [
   '作るのは「1 つの完結した、実際に動くインタラクティブな試作品」です。すべてを単一 HTML に収め、',
@@ -595,28 +604,83 @@ function stripFences(out: string): string {
  *   ただし旧仕様（メモ無しでいきなり HTML）との後方互換のため、本文が HTML タグで
  *   始まっているとみなせる時は html 側に倒す。
  */
+/** TURN_BREAK 印を表示用テキストから除去する（plan・素通し系の出口で使う）。 */
+function stripTurnBreaks(s: string): string {
+  return s.split(TURN_BREAK).join('\n');
+}
+
+/**
+ * TURN_BREAK 印で区切られた「継続」ターンを 1 本のコードに縫合する。
+ * 出力リミットで切れた後の継続ターンは、先頭に口上（「以下が続きです…」）＋
+ * ```言語 フェンスを付けて再開することがある（実測 2026-08-19/20 の 2 件）。
+ * 印があるので「継続の先頭からフェンスまで＝口上」と決定的に判別して捨てられる。
+ * さらに継続側が直前末尾の数文字を重複して再開するケース（実測: remove(' で
+ * 切れ→継続が ' から再出力）は重なりを検出して縫合する。
+ */
+function joinTurns(s: string): string {
+  if (!s.includes(TURN_BREAK)) return s;
+  const turns = s.split(TURN_BREAK);
+  let acc = turns[0];
+  for (let i = 1; i < turns.length; i++) {
+    let t = turns[i];
+    // 冒頭付近（口上ぶん）に開きフェンスがあればそこまでを口上として捨てる。
+    const open = t.match(/^[\s\S]{0,600}?```[a-zA-Z]*\r?\n/);
+    if (open) {
+      t = t.slice(open[0].length);
+      // フェンスで再開したターンは、対応する閉じフェンス以降（説明文含む）も捨てる。
+      const close = t.search(/\r?\n```/);
+      if (close !== -1) t = t.slice(0, close);
+    }
+    let k = Math.min(200, t.length);
+    for (; k > 0; k--) if (acc.endsWith(t.slice(0, k))) break;
+    acc += t.slice(k);
+  }
+  return acc;
+}
+
+/**
+ * <!doctype が複数あるとき、「書き直し再出力」の最後の 1 本だけを採用する。
+ * モデルはまれに途中で放棄して <!DOCTYPE から書き直す（実測 2026-08-19: CSS 書きかけ
+ * 放棄→再出力。先頭の未完 <style> が後続を飲み込み無スタイル画面が保存された）。
+ * ただし Word/PPT 書き出し機能などで JS テンプレートリテラル内に入れ子の
+ * <!DOCTYPE を持つ正当な文書もある（実測 2026-08-20: 入れ子を本文と誤認して
+ * 16KB の雛形だけが保存された）。区別は「その位置がテンプレートリテラルの外か」＝
+ * 文書先頭からのエスケープされていないバッククォートが偶数個かで行う。
+ */
+function pickRestartDocument(html: string): string {
+  const lower = html.toLowerCase();
+  const first = lower.indexOf('<!doctype');
+  if (first === -1) return html;
+  let restart = -1;
+  let pos = lower.indexOf('<!doctype', first + 1);
+  while (pos !== -1) {
+    const prefix = html.slice(first, pos);
+    let ticks = 0;
+    for (let i = 0; i < prefix.length; i++) {
+      if (prefix[i] === '`' && prefix[i - 1] !== '\\') ticks++;
+    }
+    if (ticks % 2 === 0) restart = pos; // 文字列外＝本当に書き直した
+    pos = lower.indexOf('<!doctype', pos + 1);
+  }
+  return restart > 0 ? html.slice(restart) : html;
+}
+
 function splitPlanHtml(out: string): { plan: string; html: string } {
   const text = out || '';
   const idx = text.indexOf(PLAN_MARKER);
   if (idx !== -1) {
     let html = text.slice(idx + PLAN_MARKER.length);
-    // モデルがまれに途中で書き直し、マーカーや <!DOCTYPE> をもう一度出すことがある
-    // （実測 2026-08-19: CSS を書きかけで放棄→---HTML---→完全版を再出力。先頭の未完
-    //  <style> が後続文書を丸ごと飲み込み、無スタイルの画面が保存された）。
-    // マーカー/文書開始が複数あるときは「最後の 1 本」だけを採用する。
+    // マーカーが複数あるとき（書き直しで ---HTML--- を再出力）は最後の 1 本を採用。
     const lastMarker = html.lastIndexOf(PLAN_MARKER);
     if (lastMarker !== -1) html = html.slice(lastMarker + PLAN_MARKER.length);
-    const lastDoc = html.toLowerCase().lastIndexOf('<!doctype');
-    if (lastDoc > 0) html = html.slice(lastDoc);
-    // 出力リミット跨ぎの「継続」でコード中にフェンス＋口上が紛れ込むことがある
-    // （実測 2026-08-19: JS 途中で切れ→```javascript が行中に混入→</html> の後に
-    //  「貼り付ければ完成じゃ」等の説明文。JS が壊れタブ操作不能になった）。
-    // 完成文書なら </html> より後ろは説明文なので捨てる。さらに文書内へ紛れた
-    // フェンス印（```言語名）で分割し、継続側が直前の末尾を数文字重複して
-    // 再開するケース（実測: remove(' で切れ→継続が ' から再出力）は重なりを
-    // 検出して縫合する。素の HTML に ``` が出ることはまず無い。
+    // 継続ターンの口上・フェンス除去と縫合（TURN_BREAK 印ベース＝決定的）。
+    html = joinTurns(html);
+    // 書き直し再出力の選別（テンプレートリテラル内の入れ子 <!DOCTYPE は誤爆しない）。
+    html = pickRestartDocument(html);
+    // 完成文書なら </html> より後ろは説明文なので捨てる。
     const endTag = html.lastIndexOf('</html>');
     if (endTag !== -1) html = html.slice(0, endTag + '</html>'.length);
+    // 印なしでフェンスが紛れた場合の後詰め（旧経路互換）: フェンスで分割し重なり縫合。
     if (html.includes('```')) {
       html = html.split(/```[a-zA-Z]*\r?\n?/).reduce((acc, part) => {
         let k = Math.min(200, part.length);
@@ -624,11 +688,11 @@ function splitPlanHtml(out: string): { plan: string; html: string } {
         return acc + part.slice(k);
       });
     }
-    return { plan: text.slice(0, idx).trim(), html };
+    return { plan: stripTurnBreaks(text.slice(0, idx)).trim(), html };
   }
   // マーカー未到達: 既に HTML らしき出力が始まっているなら html、まだなら plan とみなす。
-  if (/<!DOCTYPE|<html/i.test(text)) return { plan: '', html: text };
-  return { plan: text, html: '' };
+  if (/<!DOCTYPE|<html/i.test(text)) return { plan: '', html: stripTurnBreaks(text) };
+  return { plan: stripTurnBreaks(text), html: '' };
 }
 
 /** claude CLI 1 回ぶんの生実行結果（throw せずここに集約する）。 */
@@ -770,6 +834,11 @@ function runClaudeRaw(
           const type = o.type as string | undefined;
           if (type === 'stream_event') {
             const ev = (o.event ?? {}) as Record<string, unknown>;
+            // 新しいアシスタントメッセージの開始＝「継続」ターンの境界。印を挟んで
+            // おき、splitPlanHtml が継続先頭の口上・フェンスを決定的に除去できるようにする。
+            if (ev.type === 'message_start' && body.length > 0 && !body.endsWith(TURN_BREAK)) {
+              body += TURN_BREAK;
+            }
             if (ev.type === 'content_block_delta') {
               const delta = (ev.delta ?? {}) as Record<string, unknown>;
               const text = typeof delta.text === 'string' ? delta.text : '';
