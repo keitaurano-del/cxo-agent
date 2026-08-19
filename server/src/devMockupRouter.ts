@@ -910,7 +910,14 @@ function runClaudeRaw(
             return;
           }
           if (code !== 0) {
-            const detail = stderr ? ` | ${stderr.slice(0, 500)}` : '';
+            // stderr が空のまま code 1 で死ぬケースの調査用に、result エラーと本文末尾も添える
+            // （実測 2026-08-20: 91K 字出力後に code 1・stderr 空で 6 回連続失敗し原因が追えなかった）。
+            const parts = [
+              stderr ? `stderr: ${stderr.slice(0, 400)}` : '',
+              resultError ? `result: ${resultError.slice(0, 300)}` : '',
+              out ? `本文末尾: …${out.slice(-160).replace(/\s+/g, ' ')}` : '',
+            ].filter(Boolean);
+            const detail = parts.length ? ` | ${parts.join(' | ')}` : '';
             done({ stdout: out, timedOut: false, error: `claude 実行失敗（終了コード ${code}）${detail}` });
             return;
           }
@@ -1197,7 +1204,7 @@ async function runGenerateJob(
   // 生成途中の stdout をジョブへ反映＝クライアントがポーリングでライブにコードを見られる。
   const onChunk = (accumulated: string, thinking: string): void => {
     const job = jobs.get(jobId);
-    if (!job || job.status === 'done' || job.status === 'error') return;
+    if (!job || job.status === 'done' || job.status === 'error' || job.status === 'canceled') return;
     job.status = 'generating';
     // 「作り方メモ」と「HTML 本文」に分割して別々に持つ。クライアントは HTML が来るまで
     // メモを “作り方を考えています” のライブ表示に使い、HTML が始まったらコードに切り替える。
@@ -1274,7 +1281,7 @@ async function runDesignStage(
 ): Promise<{ designDoc: string; screens: ScreenSpec[] }> {
   const onChunk = (accumulated: string, thinking: string): void => {
     const job = jobs.get(jobId);
-    if (!job || job.status === 'done' || job.status === 'error') return;
+    if (!job || job.status === 'done' || job.status === 'error' || job.status === 'canceled') return;
     // SCREENS マーカー前までが設計書。マーカー未到達なら全文を設計書として表示する。
     const idx = accumulated.indexOf(SCREENS_MARKER);
     const doc = (idx === -1 ? accumulated : accumulated.slice(0, idx)).trim();
@@ -1335,7 +1342,7 @@ async function runCritiquePass(html: string, jobId?: string): Promise<string> {
 async function runReviewStage(jobId: string, html: string): Promise<string | null> {
   const setPartial = (accumulated: string): void => {
     const job = jobs.get(jobId);
-    if (!job || job.status === 'done' || job.status === 'error') return;
+    if (!job || job.status === 'done' || job.status === 'error' || job.status === 'canceled') return;
     job.partial = splitPlanHtml(accumulated).html;
   };
 
@@ -1426,7 +1433,7 @@ async function runSpecJob(
 ): Promise<void> {
   const onChunk = (accumulated: string): void => {
     const job = jobs.get(jobId);
-    if (!job || job.status === 'done' || job.status === 'error') return;
+    if (!job || job.status === 'done' || job.status === 'error' || job.status === 'canceled') return;
     job.status = 'generating';
     job.spec = accumulated || undefined;
   };
@@ -1557,7 +1564,7 @@ async function runCodeLessonJob(
 
   const onChunk = (accumulated: string): void => {
     const job = jobs.get(jobId);
-    if (!job || job.status === 'done' || job.status === 'error') return;
+    if (!job || job.status === 'done' || job.status === 'error' || job.status === 'canceled') return;
     job.status = 'generating';
     job.codeLesson = accumulated ? toMarkdown(accumulated) : undefined;
   };
@@ -1700,7 +1707,7 @@ async function runDesignFirstJob(
     );
     const onCodeChunk = (accumulated: string, thinking: string): void => {
       const job = jobs.get(jobId);
-      if (!job || job.status === 'done' || job.status === 'error') return;
+      if (!job || job.status === 'done' || job.status === 'error' || job.status === 'canceled') return;
       // 設計は済んでいるので本文はそのまま HTML。フェンス前提の splitPlanHtml で安全に取り出す。
       job.partial = splitPlanHtml(accumulated).html;
       if (thinking) job.thinking = thinking;
