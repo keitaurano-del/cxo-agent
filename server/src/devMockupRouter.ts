@@ -770,9 +770,12 @@ function runClaudeRaw(
           child = spawn(
             NOTEBOOK_CLAUDE_BIN,
             args,
+            // CLAUDE_CODE_MAX_OUTPUT_TOKENS: CLI 既定の 32K だと大きくなったモックの
+            // 全文書き直しが上限超過で code 1 死する（実測 2026-08-20: 91K 字の文書の修正で
+            // 「response exceeded the 32000 output token maximum」）。Sonnet の上限 64K へ。
             opts?.fast
               ? { cwd: tmpdir(), env: { ...process.env, MAX_THINKING_TOKENS: '0' } }
-              : { env: process.env },
+              : { env: { ...process.env, CLAUDE_CODE_MAX_OUTPUT_TOKENS: '64000' } },
           );
         } catch (e) {
           resolve({ stdout: '', timedOut: false, error: `claude 起動失敗: ${(e as Error).message}` });
@@ -1041,10 +1044,10 @@ const JOB_TTL_MS = 15 * 60_000;
 
 /**
  * 実行中（pending/generating）ジョブの絶対上限（万一スタックした時の安全弁）。
- * 多段フロー1本の最大実行時間（設計＋Figma 最大10分＋コード最大8分）に順番待ちを足しても
- * 収まる長さにする。これ未満は TTL で消さない＝「順番待ち/長い Figma 工程の最中に消えて
- * 404 になる」事故を防ぐ。 */
-const JOB_ACTIVE_MAX_MS = 60 * 60_000;
+ * 大きくなったモックの修正は 1 試行 30 分級 × 最大 3 試行になり得る（実測 2026-08-20）。
+ * 60 分だと試行中に掃除され「実行中なのに 404」になるため、リトライ全部＋順番待ちが
+ * 収まる 3 時間にする。これ未満は TTL で消さない。 */
+const JOB_ACTIVE_MAX_MS = 3 * 60 * 60_000;
 
 /**
  * サーバ側リトライ: 最大試行回数と試行間バックオフ。エッジ上限から外れたので安全に複数回試せる。
