@@ -67,6 +67,115 @@ function byRecent(a: AgentSummary, b: AgentSummary): number {
   return Date.parse(b.lastActivity || '') - Date.parse(a.lastActivity || '');
 }
 
+// ── ラボ生成ジョブ（MC-378）──────────────────────────────────────────────
+// 「③の進捗は実装状況から見れるようにして」（Keita 2026-08-19）。
+// ラボ（開発タブ）のモックアップ生成はサーバ側の非同期ジョブで走るため、依頼した端末以外
+// （例: サーバから再投入したジョブ）からは進捗が見えなかった。GET /api/dev/mockup/jobs で
+// 全ジョブを横断表示し、どの端末からでもこのタブでライブに追えるようにする。
+// ジョブはインメモリ・終了後 15 分で消えるため、一覧は自然に「いま」の内容だけになる。
+
+interface LabJob {
+  jobId: string;
+  status: 'pending' | 'generating' | 'done' | 'error' | 'canceled';
+  stage?: 'design' | 'wireframe' | 'code' | 'review';
+  mode?: string;
+  label?: string;
+  createdAt: number;
+  finishedAt?: number;
+  partialChars: number;
+  thinkingChars: number;
+  tail?: string;
+  error?: string;
+  mockupId?: string;
+}
+
+const LAB_STATUS_LABEL: Record<LabJob['status'], string> = {
+  pending: '順番待ち',
+  generating: '生成中',
+  done: '完了',
+  error: '失敗',
+  canceled: '中止',
+};
+
+const LAB_STAGE_LABEL: Record<NonNullable<LabJob['stage']>, string> = {
+  design: '設計',
+  wireframe: 'ワイヤーフレーム',
+  code: 'コーディング',
+  review: '仕上げ',
+};
+
+const LAB_MODE_LABEL: Record<string, string> = {
+  generate: '新規生成',
+  revise: '修正',
+  spec: '実装仕様書',
+  codeLesson: 'コード学習',
+  idea: 'アイデア',
+};
+
+/** 経過時間の短縮表示（例: 4分32秒）。 */
+function elapsedLabel(fromMs: number, toMs: number): string {
+  const s = Math.max(0, Math.floor((toMs - fromMs) / 1000));
+  const m = Math.floor(s / 60);
+  return m > 0 ? `${m}分${s % 60}秒` : `${s}秒`;
+}
+
+/** ラボ生成ジョブのライブ一覧。ジョブが 1 件も無ければ何も描画しない（従来表示に非破壊）。 */
+function LabJobsSection({ tick }: { tick: number }): JSX.Element | null {
+  const jobsRes = useLiveResource<{ jobs: LabJob[] }>('/api/dev/mockup/jobs', tick);
+  const jobs = jobsRes.data?.jobs ?? [];
+  if (jobs.length === 0) return null;
+  const now = Date.now();
+  return (
+    <div className="mb-5">
+      <div className="mb-2 flex items-center gap-2">
+        <h2 className="text-sm font-bold text-text">🧪 ラボ生成ジョブ</h2>
+        {jobs.some((j) => j.status === 'generating' || j.status === 'pending') && (
+          <span className="inline-block h-2 w-2 rounded-full mc-pulse" style={{ background: 'var(--mc-active)' }} aria-hidden />
+        )}
+        <span className="text-[11px] text-text-faint">開発タブ（ラボ）で走っている生成の生の進捗</span>
+      </div>
+      <div className="flex flex-col gap-2">
+        {jobs.map((j) => {
+          const live = j.status === 'generating' || j.status === 'pending';
+          return (
+            <div
+              key={j.jobId}
+              className="rounded-xl border bg-surface px-3 py-2 text-xs"
+              style={{ borderColor: live ? 'var(--mc-active)' : 'var(--mc-border)' }}
+            >
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span
+                  className="font-semibold"
+                  style={{ color: j.status === 'error' ? '#e5534b' : live ? 'var(--mc-active)' : 'var(--mc-text-muted)' }}
+                >
+                  {LAB_STATUS_LABEL[j.status]}
+                </span>
+                {j.mode && <Badge>{LAB_MODE_LABEL[j.mode] ?? j.mode}</Badge>}
+                <span className="font-medium text-text">{j.label ?? j.jobId.slice(0, 8)}</span>
+                {j.stage && live && <span className="text-text-faint">／{LAB_STAGE_LABEL[j.stage]}中</span>}
+                <span className="ml-auto whitespace-nowrap tabular-nums text-text-faint">
+                  {elapsedLabel(j.createdAt, j.finishedAt ?? now)}
+                  {j.partialChars > 0
+                    ? ` ・コード ${j.partialChars.toLocaleString()} 字`
+                    : j.thinkingChars > 0
+                      ? ` ・思考 ${j.thinkingChars.toLocaleString()} 字`
+                      : ''}
+                </span>
+              </div>
+              {j.error && <div className="mt-1" style={{ color: '#e5534b' }}>{j.error}</div>}
+              {j.tail && (
+                <pre className="mt-1.5 max-h-24 overflow-hidden whitespace-pre-wrap break-all rounded-lg bg-surface-2 px-2 py-1.5 font-mono text-[10px] leading-snug text-text-muted">
+                  {j.tail}
+                </pre>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function BuildProgress(): JSX.Element {
   // 表示モード。既定は「稼働中」（従来どおりのライブ表示）。
   const [mode, setMode] = useState<ViewMode>('active');
@@ -172,6 +281,8 @@ export default function BuildProgress(): JSX.Element {
       />
 
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
+        {/* ラボ生成ジョブ（MC-378）。走っているものがある時だけ最上部に出す（エージェント表示と独立）。 */}
+        <LabJobsSection tick={tick} />
         <ResourceState loading={loading} error={error} hasData={hasData}>
           {agents.length === 0 ? (
             mode === 'all' ? (

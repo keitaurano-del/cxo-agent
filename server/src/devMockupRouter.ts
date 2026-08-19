@@ -57,12 +57,19 @@ import { withClaudeSlot } from './lib/notebookClaude.js';
 // ─── claude CLI（HTML 生成）──────────────────────────────────
 
 /** コード生成 1 回あたりのタイムアウト（ミリ秒）。非同期ジョブ化済みでエッジ上限から外れている。
- *  以前は 420s で打ち切っていたが、検索＋一覧＋生成のように機能を複数積んだ要望だと書き切る前に
- *  時間切れ→未保存になり「作り終わりませんでした」になっていた（Keita 指摘 2026-06-20）。
- *  非同期ジョブなので長く待っても害は無い＝完成を最優先し、実質ほぼ打ち切らない 20 分に広げる。
- *  ここまで来て終わらないのは本当に重すぎる時だけ。タイムアウト時はリトライしない
- *  （再試行してもまた長く待たせるだけ）ので、これが「コード段で諦めるまでの最大待ち時間」になる。 */
-const GENERATE_TIMEOUT_MS = 1_200_000;
+ *  以前は 420s → 20 分と広げてきたが、API 混雑時は「書けているのに遅い」ランが 20 分の壁で
+ *  殺される事故が起きた（MC-378 実測 2026-08-19: 68KB 書いた修正ジョブが壁で中断）。
+ *  ハング（完全無応答）は下の STREAM_STALL_MS ウォッチドッグが早期に検知してリトライへ回すため、
+ *  この壁は「進んでいるのに終わらない異常ラン」の最後の砦だけを担えばよい＝60 分に広げる。
+ *  タイムアウト時はリトライしない（再試行してもまた長く待たせるだけ）。 */
+const GENERATE_TIMEOUT_MS = 3_600_000;
+
+/** ストリーム完全無応答の打ち切り閾値（MC-378）。API 混雑時、thinking の途中でストリームが
+ *  数分以上完全に止まることがある（実測 2026-08-19: 差分が 7 分間隔でしか届かず、コードを
+ *  書き始める前に 20 分の壁で全滅 ×2 回）。健全時は first token 込みでも 30〜90s で何かしら
+ *  届くため、3 分の完全無応答は「詰まった」とみなして早期に打ち切り、呼び出し側のリトライへ
+ *  回す（作り直しリクエストの方が健全な経路に乗りやすい）。タイムアウトと違いリトライ対象。 */
+const STREAM_STALL_MS = 180_000;
 
 /** デザイン昇格・critique パス（弱点の洗い出し）専用のタイムアウト。指摘だけなので短くてよい。
  *  失敗しても refine パスはチェックリスト基準で磨けるため、詰まらせない短さにする。 */
@@ -691,6 +698,7 @@ function runClaudeRaw(
         let limitError = ''; // 利用上限を示すイベントを拾ったら入れる（isLimitFailure 用）。
         let resultError = ''; // result イベントが is_error のときの詳細。
         let timedOut = false;
+        let stalled = false; // 完全無応答での早期打ち切り（リトライ対象。timedOut とは区別する）。
         let settled = false;
         const done = (r: RawRun): void => {
           if (settled) return;
@@ -703,6 +711,16 @@ function runClaudeRaw(
           timedOut = true;
           child.kill('SIGTERM');
         }, timeoutMs);
+
+        // ストリーム停滞ウォッチドッグ（MC-378）: stdout が STREAM_STALL_MS の間 1 バイトも
+        // 届かなければ「詰まった」として打ち切る。20 分の壁まで待たせず、リトライで作り直す。
+        let lastActivity = Date.now();
+        const stallTimer = setInterval(() => {
+          if (Date.now() - lastActivity > STREAM_STALL_MS) {
+            stalled = true;
+            child.kill('SIGTERM');
+          }
+        }, 15_000);
 
         try {
           child.stdin?.end();
@@ -752,6 +770,7 @@ function runClaudeRaw(
         };
 
         child.stdout?.on('data', (chunk: Buffer) => {
+          lastActivity = Date.now(); // 何かしら届いている間は停滞とみなさない。
           lineBuf += chunk.toString();
           let nl: number;
           while ((nl = lineBuf.indexOf('\n')) !== -1) {
@@ -766,8 +785,19 @@ function runClaudeRaw(
 
         child.on('close', (code) => {
           clearTimeout(timer);
+          clearInterval(stallTimer);
           if (lineBuf.trim()) handleLine(lineBuf); // 残りの最終行。
           const out = body || resultText;
+          // 停滞打ち切りは timedOut と区別する（timedOut は呼び出し側で即諦めるが、停滞は
+          // 一般エラー扱い＝generateHtmlWithRetry のリトライに乗せて作り直す）。
+          if (stalled && !timedOut) {
+            done({
+              stdout: out,
+              timedOut: false,
+              error: `claude 応答停滞（${Math.round(STREAM_STALL_MS / 1000)}s 完全無応答で打ち切り→リトライ）`,
+            });
+            return;
+          }
           if (timedOut) {
             done({
               stdout: out,
@@ -794,6 +824,7 @@ function runClaudeRaw(
         });
         child.on('error', (err) => {
           clearTimeout(timer);
+          clearInterval(stallTimer);
           done({ stdout: body || resultText, timedOut: false, error: `claude 実行失敗: ${err.message}` });
         });
       }),
@@ -854,6 +885,10 @@ interface Job {
   /** アイデア（1〜2文の説明文）。idea 生成ジョブが書き込む（MC-288）。done になったら確定。 */
   idea?: string;
   error?: string;
+  /** 一覧表示用のラベル（タイトル or 指示の要約）。実装進捗タブのジョブ一覧で使う（MC-378）。 */
+  label?: string;
+  /** ジョブ種別。実装進捗タブでの出し分け用（MC-378）。 */
+  mode?: 'generate' | 'revise' | 'spec' | 'codeLesson' | 'idea';
   /** 保存先 id（クライアントが currentId に反映できる）。 */
   mockupId?: string;
   /** 自動保存できた結果（単一画面でも [{id,title}] 1 件を入れて後方互換を保つ）。 */
@@ -1644,8 +1679,20 @@ function handleGenerate(req: Request, res: Response): void {
     return;
   }
 
+  const oneLine = (s: string): string => s.replace(/\s+/g, ' ').trim().slice(0, 40);
+  const explicitTitle = typeof body.title === 'string' ? body.title.trim() : '';
+  const explicitId = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : undefined;
+
   const jobId = randomUUID();
-  jobs.set(jobId, { status: 'pending', createdAt: Date.now() });
+  // label/mode は実装進捗タブのジョブ一覧（GET /mockup/jobs）で「何のジョブか」を示す（MC-378）。
+  jobs.set(jobId, {
+    status: 'pending',
+    createdAt: Date.now(),
+    mode: isRevise ? 'revise' : 'generate',
+    label: isRevise
+      ? (explicitTitle || (instruction.trim() ? `修正: ${oneLine(instruction)}` : '修正'))
+      : (explicitTitle || oneLine(prompt) || 'モックアップ'),
+  });
 
   const onFatal = (): void => {
     const job = jobs.get(jobId);
@@ -1654,10 +1701,6 @@ function handleGenerate(req: Request, res: Response): void {
       job.error = GENERATE_FAILURE_MESSAGE;
     }
   };
-
-  const oneLine = (s: string): string => s.replace(/\s+/g, ' ').trim().slice(0, 40);
-  const explicitTitle = typeof body.title === 'string' ? body.title.trim() : '';
-  const explicitId = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : undefined;
 
   if (isGenerate) {
     // 新規生成: 設計→Figmaワイヤーフレーム→コーディングの多段フローで進め、完成 HTML を自動保存。
@@ -1726,6 +1769,41 @@ function handleJob(req: Request, res: Response): void {
     error: job.error,
     saved: job.saved,
   });
+}
+
+/**
+ * GET /api/dev/mockup/jobs — ラボの全ジョブ一覧（新しい順）を返す（MC-378）。
+ * 実装進捗タブが「いまサーバで走っているラボ生成」を横断的にライブ表示するために使う。
+ * 端末を跨いだ再投入ジョブ（クライアントの localStorage が知らない jobId）もここで見える。
+ * 本文（partial/thinking）は末尾だけを返し、一覧のペイロードを軽く保つ。
+ */
+function handleJobsList(_req: Request, res: Response): void {
+  sweepExpiredJobs();
+  const list = [...jobs.entries()]
+    .map(([id, job]) => {
+      const live = job.status === 'generating' || job.status === 'pending';
+      const tailVisible = live || job.status === 'error';
+      return {
+        jobId: id,
+        status: job.status,
+        stage: job.stage,
+        mode: job.mode,
+        label: job.label,
+        createdAt: job.createdAt,
+        finishedAt: job.finishedAt,
+        // 進捗量の目安（コード文字数・思考文字数）。ライブでは伸び続ける。
+        partialChars: job.partial ? stripFences(job.partial).length : 0,
+        thinkingChars: job.thinking?.length ?? 0,
+        // ライブ表示用の末尾（生成中 or 失敗直後のみ）。コード優先・無ければ思考。
+        tail: tailVisible
+          ? (job.partial ? stripFences(job.partial).slice(-400) : job.thinking?.slice(-400)) || job.wireframeProgress
+          : undefined,
+        error: job.error,
+        mockupId: job.mockupId,
+      };
+    })
+    .sort((a, b) => b.createdAt - a.createdAt);
+  res.json({ jobs: list });
 }
 
 /**
@@ -1903,7 +1981,7 @@ function handleImplSpec(req: Request, res: Response): void {
     return;
   }
   const jobId = randomUUID();
-  jobs.set(jobId, { status: 'pending', createdAt: Date.now() });
+  jobs.set(jobId, { status: 'pending', createdAt: Date.now(), mode: 'spec', label: `実装仕様書: ${mockup.title}` });
   void runSpecJob(
     jobId,
     id,
@@ -1935,7 +2013,7 @@ function handleCodeLesson(req: Request, res: Response): void {
     return;
   }
   const jobId = randomUUID();
-  jobs.set(jobId, { status: 'pending', createdAt: Date.now() });
+  jobs.set(jobId, { status: 'pending', createdAt: Date.now(), mode: 'codeLesson', label: `コード学習: ${mockup.title}` });
   void runCodeLessonJob(
     jobId,
     id,
@@ -2291,7 +2369,7 @@ async function runIdeaJob(jobId: string): Promise<void> {
 function handleIdea(_req: Request, res: Response): void {
   sweepExpiredJobs();
   const jobId = randomUUID();
-  jobs.set(jobId, { status: 'pending', createdAt: Date.now() });
+  jobs.set(jobId, { status: 'pending', createdAt: Date.now(), mode: 'idea', label: 'アイデア生成' });
   void runIdeaJob(jobId).catch((e) => {
     console.error('[dev-idea] failed:', e);
     const job = jobs.get(jobId);
@@ -2323,6 +2401,7 @@ export function devMockupRouter(): Router {
   router.post('/idea', handleIdea);
   router.get('/idea/job/:jobId', handleIdeaJob);
   router.post('/mockup/generate', handleGenerate);
+  router.get('/mockup/jobs', handleJobsList);
   router.get('/mockup/job/:jobId', handleJob);
   router.post('/mockup/job/:jobId/cancel', handleCancelJob);
   router.get('/wireframe/:dir/:file', handleWireframeImage);
