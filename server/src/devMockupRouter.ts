@@ -2091,7 +2091,8 @@ function handleImplSpec(req: Request, res: Response): void {
     return;
   }
   const jobId = randomUUID();
-  jobs.set(jobId, { status: 'pending', createdAt: Date.now(), mode: 'spec', label: `実装仕様書: ${mockup.title}` });
+  // mockupId を持たせ、実装進捗タブの完了カードから保存済み仕様書（store の implSpec）を開けるようにする。
+  jobs.set(jobId, { status: 'pending', createdAt: Date.now(), mode: 'spec', label: `実装仕様書: ${mockup.title}`, mockupId: id });
   void runSpecJob(
     jobId,
     id,
@@ -2123,7 +2124,7 @@ function handleCodeLesson(req: Request, res: Response): void {
     return;
   }
   const jobId = randomUUID();
-  jobs.set(jobId, { status: 'pending', createdAt: Date.now(), mode: 'codeLesson', label: `コード学習: ${mockup.title}` });
+  jobs.set(jobId, { status: 'pending', createdAt: Date.now(), mode: 'codeLesson', label: `コード学習: ${mockup.title}`, mockupId: id });
   void runCodeLessonJob(
     jobId,
     id,

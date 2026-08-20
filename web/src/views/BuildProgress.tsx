@@ -119,6 +119,67 @@ function elapsedLabel(fromMs: number, toMs: number): string {
   return m > 0 ? `${m}分${s % 60}秒` : `${s}秒`;
 }
 
+/**
+ * 完了した実装仕様書／コード学習ジョブの本文ビューア（2026-08-20 Keita「実装仕様書もできたものを見れるようにして」）。
+ * ボタンで開閉し、開いたときに保存済み本文を取得する。取得元は保存先 store（mockups/:id の
+ * implSpec / codeLesson）を優先し、無ければジョブ詳細（job/:jobId の spec / codeLesson）に落とす。
+ * ジョブ一覧は終了後 15 分で消えるが、本文自体はモックに保存済みなので開発タブでも常時見られる。
+ */
+function LabJobDoc({ job }: { job: LabJob }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const docLabel = job.mode === 'spec' ? '仕様書' : '解説';
+  const load = async () => {
+    if (text || busy) { setOpen((v) => !v); return; }
+    setBusy(true);
+    setErr(null);
+    try {
+      let body: string | undefined;
+      if (job.mockupId) {
+        const res = await fetch(`/api/dev/mockups/${encodeURIComponent(job.mockupId)}`);
+        if (res.ok) {
+          const d = (await res.json()) as { mockup?: { implSpec?: string; codeLesson?: string } };
+          body = job.mode === 'spec' ? d.mockup?.implSpec : d.mockup?.codeLesson;
+        }
+      }
+      if (!body) {
+        const res = await fetch(`/api/dev/mockup/job/${encodeURIComponent(job.jobId)}`);
+        if (res.ok) {
+          const d = (await res.json()) as { spec?: string; codeLesson?: string };
+          body = job.mode === 'spec' ? d.spec : d.codeLesson;
+        }
+      }
+      if (!body) throw new Error('本文が見つかりませんでした');
+      setText(body);
+      setOpen(true);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '読み込みに失敗しました');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-1.5">
+      <button
+        type="button"
+        onClick={() => void load()}
+        className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-text transition-colors hover:bg-surface-2 disabled:opacity-50"
+        disabled={busy}
+      >
+        {busy ? '読み込み中…' : open ? `${docLabel}を閉じる` : `${docLabel}を開く`}
+      </button>
+      {err && <span className="ml-2 text-[11px]" style={{ color: '#e5534b' }}>{err}</span>}
+      {open && text && (
+        <pre className="mt-1.5 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-[11px] leading-relaxed text-text">
+          {text}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 /** ラボ生成ジョブのライブ一覧。ジョブが 1 件も無ければ何も描画しない（従来表示に非破壊）。 */
 function LabJobsSection({ tick }: { tick: number }): JSX.Element | null {
   const jobsRes = useLiveResource<{ jobs: LabJob[] }>('/api/dev/mockup/jobs', tick);
@@ -163,6 +224,7 @@ function LabJobsSection({ tick }: { tick: number }): JSX.Element | null {
                 </span>
               </div>
               {j.error && <div className="mt-1" style={{ color: '#e5534b' }}>{j.error}</div>}
+              {j.status === 'done' && (j.mode === 'spec' || j.mode === 'codeLesson') && <LabJobDoc job={j} />}
               {j.tail && (
                 <pre className="mt-1.5 max-h-24 overflow-hidden whitespace-pre-wrap break-all rounded-lg bg-surface-2 px-2 py-1.5 font-mono text-[10px] leading-snug text-text-muted">
                   {j.tail}
