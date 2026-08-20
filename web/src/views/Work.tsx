@@ -1719,8 +1719,41 @@ function WorkLboTab() {
   );
 }
 
+// Laundry.jp 事業計画タブ（2026-08-21 Keita「仕事メニューの別タブに専用ページ作って、需要分析、
+// 収益プラン、集客プラン等など考えて記載して」・MC-384）。静的ページ /laundry-plan.html を
+// LBOモデラーと同じ iframe 方式で表示し、実働プロトタイプへのリンクも並べる。
+function WorkLaundryTab() {
+  return (
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex items-center justify-end gap-2">
+        <a
+          href="https://laundry.apollomansion.com"
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+        >
+          プロトタイプを開く ↗
+        </a>
+        <a
+          href="/laundry-plan.html"
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+        >
+          別タブで開く ↗
+        </a>
+      </div>
+      <iframe
+        src="/laundry-plan.html"
+        title="Laundry.jp 事業計画"
+        className="min-h-0 w-full flex-1 rounded-lg border border-border bg-white"
+      />
+    </div>
+  );
+}
+
 // ─── タブ統括 ────────────────────────────────────────────────────────
-type WorkTab = 'chat' | 'knowledge' | 'glossary' | 'airrent' | 'lbo';
+type WorkTab = 'chat' | 'knowledge' | 'glossary' | 'airrent' | 'lbo' | 'laundry';
 
 function resolveInitialTab(): WorkTab {
   if (typeof window !== 'undefined') {
@@ -1728,7 +1761,7 @@ function resolveInitialTab(): WorkTab {
     // 概要/動画DL/状況解析タブは削除（2026-07-20 Keita・MC-319）。旧 URL はナレッジへ寄せる。
     // AirRent（MC-370）と LBOモデラー（MC-367）は仕事タブへ集約（2026-08-08 Keita）。
     // 旧 tab=blueair も AirRent タブへ寄せる。
-    if (t === 'chat' || t === 'knowledge' || t === 'glossary' || t === 'airrent' || t === 'lbo') return t;
+    if (t === 'chat' || t === 'knowledge' || t === 'glossary' || t === 'airrent' || t === 'lbo' || t === 'laundry') return t;
     if (t === 'blueair') return 'airrent';
   }
   return 'knowledge';
@@ -1771,6 +1804,16 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
         <>
           <span aria-hidden><LboIcon width={16} height={16} /></span>
           LBOモデラー
+        </>
+      ),
+    },
+    // Laundry.jp 事業計画（2026-08-21 Keita 指示・MC-384）。
+    {
+      key: 'laundry',
+      label: (
+        <>
+          <span aria-hidden><SearchIcon width={16} height={16} /></span>
+          Laundry.jp
         </>
       ),
     },
@@ -1837,7 +1880,7 @@ export default function Work() {
         fetchedAt={undefined}
       />
       <WorkTabBar tab={tab} onChange={changeTab} />
-      <div className={tab === 'lbo' ? 'flex-1 overflow-hidden px-4 py-4 md:px-6' : 'flex-1 overflow-y-auto px-4 py-4 md:px-6'}>
+      <div className={tab === 'lbo' || tab === 'laundry' ? 'flex-1 overflow-hidden px-4 py-4 md:px-6' : 'flex-1 overflow-y-auto px-4 py-4 md:px-6'}>
         {/* 概要/動画DL/状況解析は削除（MC-319）。既定＝ナレッジ。AirRent/LBO は独立ナビから移設（2026-08-08）。 */}
         {tab === 'glossary' ? (
           <WorkGlossaryTab onSeedChat={seedChat} />
@@ -1845,6 +1888,8 @@ export default function Work() {
           <AirRentContent />
         ) : tab === 'lbo' ? (
           <WorkLboTab />
+        ) : tab === 'laundry' ? (
+          <WorkLaundryTab />
         ) : (
           <WorkKnowledgeTab />
         )}

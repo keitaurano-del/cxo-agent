@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laundry.jp 事業計画</title>
+<style>
+/* Laundry.jp本体と同じ清潔感トーン（白＋淡ブルー＋濃紺）。帳票的な落ち着いた体裁 */
+:root{
+  --navy:#16324f; --blue:#2a6db0; --blue-soft:#e8f1f9; --blue-line:#c7dcef;
+  --text:#23303c; --muted:#6b7a89; --bg:#f6f9fc; --white:#fff;
+  --green:#1d8a4e; --red:#c0392b; --amber:#9a6b15;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Hiragino Sans",Meiryo,"Segoe UI",sans-serif;color:var(--text);background:var(--bg);font-size:14px;line-height:1.75}
+.wrap{max-width:860px;margin:0 auto;padding:20px 16px 64px}
+header.doc{background:var(--navy);color:#fff;padding:22px 20px;border-radius:8px 8px 0 0}
+header.doc h1{font-size:20px;letter-spacing:.02em}
+header.doc .sub{font-size:12px;color:#bcd0e4;margin-top:6px}
+header.doc .meta{font-size:11px;color:#8fa9c4;margin-top:10px;display:flex;gap:16px;flex-wrap:wrap}
+.paper{background:var(--white);border:1px solid var(--blue-line);border-top:none;border-radius:0 0 8px 8px;padding:8px 20px 28px}
+nav.toc{background:var(--blue-soft);border:1px solid var(--blue-line);border-radius:6px;padding:12px 16px;margin:18px 0 6px;font-size:12.5px}
+nav.toc a{color:var(--blue);text-decoration:none;margin-right:14px;display:inline-block;padding:2px 0}
+section{margin-top:34px}
+h2{font-size:16px;color:var(--navy);border-left:4px solid var(--blue);padding-left:10px;margin-bottom:14px;letter-spacing:.02em}
+h3{font-size:13.5px;color:var(--navy);margin:18px 0 8px}
+p{margin:8px 0}
+ul,ol{margin:8px 0 8px 1.4em}
+li{margin:4px 0}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+th{background:var(--blue-soft);color:var(--navy);text-align:left;font-weight:600}
+th,td{border:1px solid var(--blue-line);padding:7px 10px;vertical-align:top}
+td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.note{font-size:11.5px;color:var(--muted)}
+.callout{border:1px solid var(--blue-line);border-left:4px solid var(--blue);background:var(--blue-soft);border-radius:4px;padding:10px 14px;margin:12px 0;font-size:13px}
+.callout.warn{border-left-color:var(--amber);background:#fbf5e8;border-color:#e8d9b8}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.kpi .box{border:1px solid var(--blue-line);border-radius:6px;padding:10px 12px;background:#fbfdff}
+.kpi .box .l{font-size:11px;color:var(--muted)}
+.kpi .box .v{font-size:17px;font-weight:700;color:var(--navy);margin-top:2px}
+.kpi .box .s{font-size:11px;color:var(--muted)}
+.tag{display:inline-block;border:1px solid var(--blue-line);background:var(--blue-soft);color:var(--navy);border-radius:3px;padding:1px 7px;font-size:11px;margin:0 4px 4px 0}
+.pos{color:var(--green);font-weight:600}
+.neg{color:var(--red)}
+footer{margin-top:36px;font-size:11px;color:var(--muted);border-top:1px solid var(--blue-line);padding-top:12px}
+@media (max-width:480px){ .paper{padding:6px 12px 22px} th,td{padding:6px 6px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <h1>Laundry.jp 事業計画（ドラフト v1）</h1>
+  <div class="sub">コインランドリー横断検索プラットフォーム — 需要分析・収益プラン・集客プラン</div>
+  <div class="meta">
+    <span>作成: 2026-08-21</span>
+    <span>作成者: Son（Apollo）</span>
+    <span>プロトタイプ: laundry.apollomansion.com</span>
+  </div>
+</header>
+
+<div class="paper">
+
+<nav class="toc">
+  <a href="#summary">サマリー</a>
+  <a href="#demand">1. 需要分析</a>
+  <a href="#competition">2. 競合と勝ち筋</a>
+  <a href="#revenue">3. 収益プラン</a>
+  <a href="#marketing">4. 集客プラン</a>
+  <a href="#roadmap">5. ロードマップ</a>
+  <a href="#risk">6. リスクと論点</a>
+</nav>
+
+<section id="summary">
+  <h2>サマリー</h2>
+  <p>コインランドリー店舗は全国で増え続けているのに、<strong>全店舗を横断して「近くて・安くて・空いている」店を探せる中立サイトが存在しない</strong>。店舗情報はメーカー系アプリ（LAUNDRICH、Smart Laundry等）に自社系列分しか載らず、ユーザーは結局Googleマップで探している。Laundry.jpはこの隙間を取りに行く「コインランドリー版スーモ」。</p>
+  <div class="kpi">
+    <div class="box"><div class="l">全国店舗数（推計）</div><div class="v">約27,000店</div><div class="s">増加傾向が継続</div></div>
+    <div class="box"><div class="l">市場規模（推計）</div><div class="v">1,300〜1,500億円</div><div class="s">機器・出店投資は別途</div></div>
+    <div class="box"><div class="l">中立横断サイト</div><div class="v">不在</div><div class="s">= ポジション空白</div></div>
+    <div class="box"><div class="l">初期コスト</div><div class="v">小</div><div class="s">自宅サーバ+API従量</div></div>
+  </div>
+  <p class="note">※市場数値は公知情報からの推計。正式な計画化の際は厚労省「コインオペレーションクリーニング営業施設」統計・業界レポートで裏取りする。</p>
+</section>
+
+<section id="demand">
+  <h2>1. 需要分析</h2>
+
+  <h3>1-1. 市場の追い風</h3>
+  <ul>
+    <li><strong>店舗数の継続増加:</strong> 共働き世帯の増加・時短ニーズを背景に、コインランドリーは過去10年でほぼ倍増ペースで増加。土地活用・フランチャイズ投資商品としても人気で、新規参入が絶えない。</li>
+    <li><strong>「洗濯の外部化」の定着:</strong> 布団・毛布・スニーカー・大物洗いは家庭用洗濯機では処理できず、ガス乾燥機の仕上がり需要も強い。花粉・梅雨・黄砂の季節要因で検索需要が跳ねる。</li>
+    <li><strong>供給過多による店舗側の集客難:</strong> 増えすぎて1店舗あたりの稼働率が下がっており、<strong>オーナー側に「集客したい」という切実な広告需要</strong>が生まれている（=収益源1の追い風）。</li>
+    <li><strong>インバウンド:</strong> 訪日客の中長期滞在・民泊利用でランドリー検索の英語需要が増加。英語で機器・料金・場所まで分かるサイトはほぼ無い。</li>
+  </ul>
+
+  <h3>1-2. ユーザーの困りごと（検索の実態）</h3>
+  <table>
+    <tr><th>困りごと</th><th>現状の手段</th><th>Laundry.jpの解決</th></tr>
+    <tr><td>近くで一番安い店はどこか</td><td>Googleマップ→1軒ずつ料金を見に行く（載っていないことが多い）</td><td>地図に最安価格ピンを一覧表示</td></tr>
+    <tr><td>布団・スニーカーが洗えるか</td><td>行ってみないと分からない</td><td>設備タグで絞り込み</td></tr>
+    <tr><td>今行って空いているか</td><td>分からない（並び直しが発生）</td><td>空き状況表示（対応店から段階導入）</td></tr>
+    <tr><td>系列アプリが乱立して面倒</td><td>店舗ごとに別アプリ</td><td>1サイトで横断・アプリ不要</td></tr>
+    <tr><td>日本語が読めない（訪日客）</td><td>ほぼ手段なし</td><td>日英切替</td></tr>
+  </table>
+
+  <h3>1-3. 検索ボリュームの当たり</h3>
+  <ul>
+    <li>「コインランドリー 近く」「コインランドリー 料金」「コインランドリー 布団」系は月間数十万規模の検索群（SEOの主戦場）。</li>
+    <li>「地名×コインランドリー」のロングテールが厚い = <strong>店舗詳細ページ1万枚超を自動生成できる本サービスと相性が良い</strong>。</li>
+    <li>英語「laundromat near me tokyo」「coin laundry japan」はインバウンド向けの空白キーワード。</li>
+  </ul>
+  <p class="note">※正確な検索ボリュームはキーワードプランナーで実測してから広告・SEO計画を確定する。</p>
+</section>
+
+<section id="competition">
+  <h2>2. 競合と勝ち筋</h2>
+  <table>
+    <tr><th>プレイヤー</th><th>カバー範囲</th><th>弱点</th></tr>
+    <tr><td>LAUNDRICH / Smart Laundry 等メーカー系</td><td>自社系列のみ（数百〜数千店）</td><td>横断不可・中立でない・アプリ導線</td></tr>
+    <tr><td>Googleマップ</td><td>ほぼ全店</td><td>料金・機器・空き・布団可否が載らない</td></tr>
+    <tr><td>個人ブログ・まとめ記事</td><td>点在</td><td>更新されない・網羅性なし</td></tr>
+    <tr><td>コインランドリー総合サイト（過去の類似例）</td><td>一部</td><td>データ鮮度が保てず失速しがち</td></tr>
+  </table>
+  <h3>勝ち筋</h3>
+  <ol>
+    <li><strong>網羅×比較の一点突破:</strong> Google Places APIで「全店の位置・営業時間」をまず網羅し、料金・機器はメーカー提携＋オーナー入力で段階的に厚くする。最初から完璧を狙わず「出典と更新時刻を明示」して信頼を担保。</li>
+    <li><strong>スーモ型の情報設計:</strong> 「最安価格ピン地図」という分かりやすい一枚絵。ユーザー体験の差別化はここ。</li>
+    <li><strong>オーナーを味方に:</strong> 無料掲載→自分で情報を直せる→クーポン/広告で課金、の段階設計。データ鮮度問題を「オーナー自身が更新する」構造で解く（食べログ/エキテンと同じ構造）。</li>
+  </ol>
+  <div class="callout warn"><strong>過去の類似サービスが失速した主因はデータ鮮度。</strong>「取ってくる」だけのモデルは必ず陳腐化する。オーナー編集＋出典明示＋更新時刻表示を最初から中核に置くことが本計画の背骨。</div>
+</section>
+
+<section id="revenue">
+  <h2>3. 収益プラン</h2>
+
+  <h3>3-1. 収益源の全体像</h3>
+  <table>
+    <tr><th>収益源</th><th>モデル</th><th>単価（想定）</th><th>立ち上がり</th></tr>
+    <tr><td>① オーナー課金</td><td>クーポン配信プラン / 上位表示・広告プラン（月額）</td><td class="num">3,000円 / 10,000円 月</td><td>店舗網羅とアクセスができてから（Phase 2〜）</td></tr>
+    <tr><td>② 開業送客</td><td>独立希望者の一括資料請求 → 機器メーカー・開業支援会社へ送客（1件あたり）</td><td class="num">5,000〜15,000円/件</td><td>比較的早期に立つ（開業検討層は常時存在）</td></tr>
+    <tr><td>③ 広告収益</td><td>AdSense等の運用型 + インバウンド面の広告</td><td class="num">RPM 300〜800円</td><td>PV連動・SEO成長とともに</td></tr>
+  </table>
+
+  <h3>3-2. 収益シミュレーション（保守〜標準）</h3>
+  <table>
+    <tr><th></th><th>6ヶ月後</th><th>12ヶ月後</th><th>24ヶ月後</th></tr>
+    <tr><td>月間PV</td><td class="num">3万</td><td class="num">15万</td><td class="num">60万</td></tr>
+    <tr><td>① 課金オーナー数（有料転換）</td><td class="num">0店</td><td class="num">30店</td><td class="num">200店</td></tr>
+    <tr><td>① オーナー課金収益</td><td class="num">—</td><td class="num">12万円/月</td><td class="num">90万円/月</td></tr>
+    <tr><td>② 資料請求送客（月間）</td><td class="num">5件</td><td class="num">20件</td><td class="num">60件</td></tr>
+    <tr><td>② 送客収益</td><td class="num">4万円/月</td><td class="num">16万円/月</td><td class="num">48万円/月</td></tr>
+    <tr><td>③ 広告収益</td><td class="num">1万円/月</td><td class="num">7万円/月</td><td class="num">30万円/月</td></tr>
+    <tr><td><strong>月商合計</strong></td><td class="num"><strong>約5万円</strong></td><td class="num"><strong>約35万円</strong></td><td class="num"><strong>約168万円</strong></td></tr>
+  </table>
+  <p class="note">前提: 有料転換は掲載2.7万店のうち0.1〜0.7%。送客単価1万円・成約率は資料請求ベース。RPM500円で計算。すべて要検証の仮置き。</p>
+
+  <h3>3-3. コスト構造</h3>
+  <ul>
+    <li>サーバ: 自宅サーバ常駐＋Cloudflare Tunnel（既存インフラ・追加費ほぼゼロ）</li>
+    <li>Google Places API: 従量課金。<strong>結果をローカルにキャッシュして呼び出しを抑える設計が必須</strong>（無料枠$200/月内に収める運用から開始）</li>
+    <li>開発・運用: AI（Apollo/dev系）で内製 = 人件費ゼロ</li>
+    <li>ドメイン laundry.jp: 取得可否・価格の確認が必要（.jpプレミアム価格の可能性）</li>
+  </ul>
+</section>
+
+<section id="marketing">
+  <h2>4. 集客プラン</h2>
+
+  <h3>4-1. SEO（主軸・無料）</h3>
+  <ul>
+    <li><strong>店舗詳細ページの大量自動生成:</strong> 「〔駅名〕のコインランドリー」「〔市区町村〕のコインランドリー 料金比較」ページをデータから自動生成。2.7万店×地名でロングテールを面で取る。</li>
+    <li><strong>構造化データ:</strong> LocalBusiness / LaundryOrDryCleaner のschema.orgマークアップでリッチリザルト獲得。</li>
+    <li><strong>比較・ガイド記事:</strong> 「布団 コインランドリー 料金相場」「乾燥機 何分」等のハウツーをwriting-factoryの記事工場レーンで量産。</li>
+  </ul>
+
+  <h3>4-2. MEO・地図面</h3>
+  <ul>
+    <li>Googleビジネスプロフィールとの連携はオーナー向け管理機能の一部として提供（オーナーの店のMEO改善を手伝う→課金理由になる）。</li>
+  </ul>
+
+  <h3>4-3. インバウンド（英語面）</h3>
+  <ul>
+    <li>英語版ページを同一データから自動生成（/en/）。「laundromat tokyo」系の空白キーワードを先取り。</li>
+    <li>民泊ホスト・ゲストハウス向けに「部屋に貼れるQRカード（近隣ランドリー地図）」を無料配布 → 被リンクと実利用の両取り。</li>
+  </ul>
+
+  <h3>4-4. オーナー獲得（B2B・収益に直結）</h3>
+  <ul>
+    <li>掲載店舗に「この店舗のオーナーですか？」導線を常設（プロトタイプ実装済み）。</li>
+    <li>無料掲載の段階で「あなたの店がこう見えています」を郵送DM/フォームで通知 → 情報を直したい心理で登録させる（食べログ型）。</li>
+    <li>機器メーカー・FC本部との提携交渉: 系列店データの提供と引き換えに、送客レポートを返す。</li>
+  </ul>
+
+  <h3>4-5. SNS・その他</h3>
+  <ul>
+    <li>X運用は既存の @optimalist_jp 基盤を流用し「今日の布団洗い日和」等の季節ネタ×地域ページ誘導。</li>
+    <li>花粉・梅雨・大掃除の季節波に合わせた特集ページ（「梅雨の乾燥機フル活用」等）を事前仕込み。</li>
+  </ul>
+</section>
+
+<section id="roadmap">
+  <h2>5. ロードマップ</h2>
+  <table>
+    <tr><th>フェーズ</th><th>期間</th><th>やること</th><th>ゴール</th></tr>
+    <tr><td><strong>Phase 0（済）</strong></td><td>—</td><td>実働プロトタイプ公開（laundry.apollomansion.com）</td><td class="pos">完了</td></tr>
+    <tr><td><strong>Phase 1: データ網羅</strong></td><td>1〜2ヶ月</td><td>laundry.jpドメイン取得 / Places APIで首都圏→全国の店舗データ取り込み＋キャッシュ設計 / 名寄せ処理 / 店舗ページ自動生成＋SEO基盤</td><td>1万店掲載・検索流入の初速</td></tr>
+    <tr><td><strong>Phase 2: オーナー機能</strong></td><td>3〜6ヶ月</td><td>オーナー登録・所有権確認の本実装 / 料金・機器のオーナー入力 / クーポン配信 / 無料→有料プラン開放</td><td>登録オーナー100店・初課金</td></tr>
+    <tr><td><strong>Phase 3: 収益拡大</strong></td><td>6〜12ヶ月</td><td>開業一括資料請求の提携先開拓（機器メーカー・開業支援） / 英語版公開 / 空き状況連携の提携交渉</td><td>月商35万円ライン</td></tr>
+  </table>
+  <div class="callout">最初の分岐判断: <strong>Phase 1終了時に検索流入の実数を見る。</strong>流入が立たなければSEO戦術を見直してからPhase 2に進む（オーナー営業はアクセス実績が武器になるため順序を守る）。</div>
+</section>
+
+<section id="risk">
+  <h2>6. リスクと論点</h2>
+  <table>
+    <tr><th>リスク / 論点</th><th>影響</th><th>手当て</th></tr>
+    <tr><td>Google Places APIの料金・規約（データの保存/表示条件）</td><td>コスト増・規約抵触</td><td>キャッシュ設計と規約確認を Phase 1 の最初に実施。位置・名称以外は自前データ化を急ぐ</td></tr>
+    <tr><td>データ鮮度の劣化（料金改定・閉店）</td><td>信頼喪失</td><td>出典＋更新時刻の明示 / オーナー編集 / 閉店報告ボタン</td></tr>
+    <tr><td>メーカー提携が進まない</td><td>詳細データ不足</td><td>オーナー直接入力を主経路に設計（提携はブースト扱い）</td></tr>
+    <tr><td>laundry.jp ドメインが取れない/高額</td><td>ブランド変更</td><td>取得可否を先に確認。代替: laundrymap.jp / coinlaundry.jp 等</td></tr>
+    <tr><td>大手（リクルート等）の参入</td><td>競争激化</td><td>ニッチゆえ大手の優先度は低い読み。先行でオーナー基盤を握る</td></tr>
+    <tr><td>無断スクレイピングをしない方針の維持</td><td>データ範囲の制約</td><td>提携＋オーナー入力＋公開API。方針自体が信頼の売りになる</td></tr>
+  </table>
+
+  <h3>Keitaに確認したい判断ポイント</h3>
+  <ol>
+    <li>ドメイン laundry.jp の取得を進めるか（価格次第。まず可否と価格を調査）</li>
+    <li>Google Places API の課金設定（無料枠$200/月内で開始する前提でよいか）</li>
+    <li>Phase 1 の対象エリア（首都圏から開始 → 全国、の順でよいか）</li>
+  </ol>
+</section>
+
+<footer>
+  Laundry.jp 事業計画 ドラフト v1 ｜ 2026-08-21 Son 作成 ｜ 数値は公知情報からの推計・仮置きを含む（確定計画化の際に個別裏取り）
+</footer>
+
+</div>
+</div>
+</body>
+</html>
