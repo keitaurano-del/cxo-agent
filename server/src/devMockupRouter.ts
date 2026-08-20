@@ -1388,7 +1388,9 @@ const SPEC_TIMEOUT_MS = 240_000;
 /**
  * モック（要望＋設計書＋HTML）から「実装仕様書」を書かせるプロンプト。
  * フロントだけの試作を、バックエンド込みの本番アプリにするための設計を Markdown で出させる。
- * 既存スタック（React+Vite+Tailwind / Supabase or Node+Express / Render+GitHub Actions）を前提に推奨する。
+ * 既存スタック（React+Vite+Tailwind / Node+Express＋自宅サーバ）を前提に推奨する。
+ * Supabase / Render は 2026-08-20 に解約済みのため提案禁止（Keita 指示）。円茶会と同じ
+ * 自宅サーバ常駐（systemd＋Cloudflare Tunnel）＋ローカル JSON/SQLite を既定の本番構成とする。
  */
 function buildImplSpecPrompt(appTitle: string, prompt: string, designDoc: string, html: string): string {
   return [
@@ -1408,13 +1410,13 @@ function buildImplSpecPrompt(appTitle: string, prompt: string, designDoc: string
     '2. 画面と主な機能 — モックにある画面・操作を箇条書きで',
     '3. データモデル — 必要なエンティティと項目（名前・型・必須/任意・関係）を表で。永続化が要るデータを明確に',
     '4. バックエンドの要否と構成 — 保存/認証/共有・同期/外部API/課金/通知 の要否を判断し、推奨構成を選ぶ:',
-    '   - 推奨A: Supabase 中心（Postgres＋認証〔マジックリンク〕＋ストレージ＋行レベル権限、重い処理だけ Edge Functions）。多くのアプリはこれで足りる。',
-    '   - 推奨B: 自前 Node+Express＋DB（複雑なサーバ処理・バッチ・LLM 呼び出しが要る時）。',
-    '   どちらが適切かを理由つきで選ぶ。',
-    '5. API / テーブル設計 — 主要なエンドポイント（または Supabase テーブル＋RLS 方針）の一覧。リクエスト/レスポンスの要点',
+    '   - 推奨A: 自前 Node+Express＋ローカル JSON ストア（JSONL 追記・last-wins）。小〜中規模はこれで足りる。',
+    '   - 推奨B: 自前 Node+Express＋SQLite（件数が多い・検索/集計が要る時）。',
+    '   どちらが適切かを理由つきで選ぶ。Supabase・Render・Vercel 等の外部 BaaS/PaaS は解約済みのため使わないこと（提案にも出さない）。',
+    '5. API / テーブル設計 — 主要なエンドポイントの一覧。リクエスト/レスポンスの要点',
     '6. 認証・権限 — ログイン方式とデータの見える範囲',
     '7. 実装ステップ — フロント / バックエンド / リリース の順で、着手できる粒度のチェックリスト',
-    '8. 推奨スタックとリリース — フロント=React+Vite+Tailwind、バック=上の選択、ホスティング=Render/Vercel＋Supabase、CI/CD=GitHub Actions（main push で自動デプロイ）。モバイル中心なら PWA 化も触れる',
+    '8. 推奨スタックとリリース — フロント=React+Vite+Tailwind、バック=上の選択、ホスティング=自宅サーバ常駐（systemd サービス＋Cloudflare Tunnel で独自ドメイン公開。円茶会 enchakai.com と同方式）、CI/CD=main push 後にサーバで pull＋ビルド＋再起動。モバイル中心なら PWA 化も触れる',
     '9. 留意点 / 未確定事項 — 課金・法規・スケール・要確認の論点',
     '',
     'コードは書かない（仕様書のみ）。冗長にせず、判断と具体値を重視すること。日本語で書くこと。',

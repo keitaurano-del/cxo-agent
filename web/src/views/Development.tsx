@@ -199,6 +199,31 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** クリップボードへコピー（Deliverables と同パターン。非セキュア文脈は textarea フォールバック）。 */
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* フォールバックへ。 */
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 /** 自動保存できた結果（id+title）。 */
 interface SavedScreen {
   id: string;
@@ -514,6 +539,8 @@ export default function Development() {
   const [spec, setSpec] = useState<string | null>(bootDraft?.spec ?? null);
   // 実装仕様書の生成中フラグ。
   const [specBusy, setSpecBusy] = useState(false);
+  // 仕様書コピーの完了フィードバック（2026-08-20 Keita「仕様書をコピーできるようにして」）。
+  const [specCopied, setSpecCopied] = useState(false);
   // コード学習（TS実装＋①始まり②各部の役割③ルールの構造化解説。MC-256）。生成/読込で入る。
   const [codeLesson, setCodeLesson] = useState<string | null>(bootDraft?.codeLesson ?? null);
   // コード学習の生成中フラグ。
@@ -1596,6 +1623,20 @@ export default function Development() {
             <section className="flex flex-col gap-2 border-t border-border pt-4">
               <div className="flex items-center justify-between gap-2">
                 <label className="text-xs font-semibold text-text-muted">実装仕様書（本番化の設計）</label>
+                {spec && !specBusy && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void copyToClipboard(spec).then((ok) => {
+                        setSpecCopied(ok);
+                        if (ok) window.setTimeout(() => setSpecCopied(false), 2000);
+                      });
+                    }}
+                    className="ml-auto inline-flex shrink-0 items-center justify-center rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-surface-2"
+                  >
+                    {specCopied ? 'コピーしました' : 'コピー'}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleMakeSpec}

@@ -119,6 +119,31 @@ function elapsedLabel(fromMs: number, toMs: number): string {
   return m > 0 ? `${m}分${s % 60}秒` : `${s}秒`;
 }
 
+/** クリップボードへコピー（Deliverables と同パターン。非セキュア文脈は textarea フォールバック）。 */
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* フォールバックへ。 */
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * 完了した実装仕様書／コード学習ジョブの本文ビューア（2026-08-20 Keita「実装仕様書もできたものを見れるようにして」）。
  * ボタンで開閉し、開いたときに保存済み本文を取得する。取得元は保存先 store（mockups/:id の
@@ -130,7 +155,14 @@ function LabJobDoc({ job }: { job: LabJob }): JSX.Element {
   const [text, setText] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
   const docLabel = job.mode === 'spec' ? '仕様書' : '解説';
+  const handleCopy = async () => {
+    if (!text) return;
+    const ok = await copyToClipboard(text);
+    setCopied(ok);
+    if (ok) window.setTimeout(() => setCopied(false), 2000);
+  };
   const load = async () => {
     if (text || busy) { setOpen((v) => !v); return; }
     setBusy(true);
@@ -170,6 +202,15 @@ function LabJobDoc({ job }: { job: LabJob }): JSX.Element {
       >
         {busy ? '読み込み中…' : open ? `${docLabel}を閉じる` : `${docLabel}を開く`}
       </button>
+      {text && (
+        <button
+          type="button"
+          onClick={() => void handleCopy()}
+          className="ml-2 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-text transition-colors hover:bg-surface-2"
+        >
+          {copied ? 'コピーしました' : 'コピー'}
+        </button>
+      )}
       {err && <span className="ml-2 text-[11px]" style={{ color: '#e5534b' }}>{err}</span>}
       {open && text && (
         <pre className="mt-1.5 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-[11px] leading-relaxed text-text">
