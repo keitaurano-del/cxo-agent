@@ -1749,7 +1749,7 @@ function WorkLaundryTab() {
         </div>
         <div className="ml-auto flex items-center gap-2">
           <a
-            href="https://laundry.apollomansion.com"
+            href="https://coinlaundry.tokyo"
             target="_blank"
             rel="noreferrer"
             className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
