@@ -54,6 +54,7 @@ export default function DocumentsTabs({ initialTab }: { initialTab?: DocTab } = 
         onChange={(key) => changeTab(key as DocTab)}
         ariaLabel="ドキュメント領域"
         className="shrink-0 items-center gap-1 bg-bg px-4 md:px-6"
+        reorderKey="documents"
       />
       <div className="min-h-0 flex-1">
         <Suspense fallback={<div className="p-6 text-sm text-text-muted">読み込み中…</div>}>

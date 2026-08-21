@@ -900,6 +900,7 @@ function ChajiTabBar({ tab, onChange }: { tab: ChajiTab; onChange: (t: ChajiTab)
       onChange={(key) => onChange(key as ChajiTab)}
       ariaLabel="茶事ページのタブ"
       className="px-4 md:px-6"
+      reorderKey="chaji"
     />
   );
 }

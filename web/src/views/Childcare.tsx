@@ -1968,6 +1968,7 @@ function ChildcareTabBar({ tab, onChange }: { tab: ChildcareTab; onChange: (t: C
       onChange={(key) => onChange(key as ChildcareTab)}
       ariaLabel="育児ページのタブ"
       className="px-4 md:px-6"
+      reorderKey="childcare"
     />
   );
 }

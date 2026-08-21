@@ -1825,6 +1825,7 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
       onChange={(key) => onChange(key as WorkTab)}
       ariaLabel="仕事ページのタブ"
       className="px-4 md:px-6"
+      reorderKey="work"
     />
   );
 }

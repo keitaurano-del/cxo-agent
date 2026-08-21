@@ -76,6 +76,7 @@ export default function TasksTabs({ initialTab }: { initialTab?: TaskTab } = {})
         onChange={(key) => changeTab(key as TaskTab)}
         ariaLabel="タスクボード領域"
         className="no-scrollbar shrink-0 items-center gap-1 overflow-x-auto bg-bg px-4 md:px-6"
+        reorderKey="tasks"
       />
       {/* 承認/エージェントは本体がルート <div>（自前スクロール無し）のため、ここでスクロール容器にする。
           タスク/実装進捗は本体が h-full 内部スクロールを持つので overflow は付けない（二重スクロール回避）。 */}
