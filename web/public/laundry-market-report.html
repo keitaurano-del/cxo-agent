@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>東京のコインランドリー事情 調査レポート</title>
+<style>
+/* laundry-plan.html と同じ帳票トーン（白＋淡ブルー＋濃紺） */
+:root{
+  --navy:#16324f; --blue:#2a6db0; --blue-soft:#e8f1f9; --blue-line:#c7dcef;
+  --text:#23303c; --muted:#6b7a89; --bg:#f6f9fc; --white:#fff;
+  --green:#1d8a4e; --red:#c0392b; --amber:#9a6b15;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Hiragino Sans",Meiryo,"Segoe UI",sans-serif;color:var(--text);background:var(--bg);font-size:14px;line-height:1.75}
+.wrap{max-width:860px;margin:0 auto;padding:20px 16px 64px}
+header.doc{background:var(--navy);color:#fff;padding:22px 20px;border-radius:8px 8px 0 0}
+header.doc h1{font-size:20px;letter-spacing:.02em}
+header.doc .sub{font-size:12px;color:#bcd0e4;margin-top:6px}
+header.doc .meta{font-size:11px;color:#8fa9c4;margin-top:10px;display:flex;gap:16px;flex-wrap:wrap}
+.paper{background:var(--white);border:1px solid var(--blue-line);border-top:none;border-radius:0 0 8px 8px;padding:8px 20px 28px}
+nav.toc{background:var(--blue-soft);border:1px solid var(--blue-line);border-radius:6px;padding:12px 16px;margin:18px 0 6px;font-size:12.5px}
+nav.toc a{color:var(--blue);text-decoration:none;margin-right:14px;display:inline-block;padding:2px 0}
+section{margin-top:34px}
+h2{font-size:16px;color:var(--navy);border-left:4px solid var(--blue);padding-left:10px;margin-bottom:14px;letter-spacing:.02em}
+h3{font-size:13.5px;color:var(--navy);margin:18px 0 8px}
+p{margin:8px 0}
+ul,ol{margin:8px 0 8px 1.4em}
+li{margin:4px 0}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+th{background:var(--blue-soft);color:var(--navy);text-align:left;font-weight:600}
+th,td{border:1px solid var(--blue-line);padding:7px 10px;vertical-align:top}
+td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.note{font-size:11.5px;color:var(--muted)}
+.callout{border:1px solid var(--blue-line);border-left:4px solid var(--blue);background:var(--blue-soft);border-radius:4px;padding:10px 14px;margin:12px 0;font-size:13px}
+.callout.warn{border-left-color:var(--amber);background:#fbf5e8;border-color:#e8d9b8}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.kpi .box{border:1px solid var(--blue-line);border-radius:6px;padding:10px 12px;background:#fbfdff}
+.kpi .box .l{font-size:11px;color:var(--muted)}
+.kpi .box .v{font-size:17px;font-weight:700;color:var(--navy);margin-top:2px}
+.kpi .box .s{font-size:11px;color:var(--muted)}
+.tag{display:inline-block;border:1px solid var(--blue-line);background:var(--blue-soft);color:var(--navy);border-radius:3px;padding:1px 7px;font-size:11px;margin:0 4px 4px 0}
+.conf{display:inline-block;border-radius:3px;padding:1px 7px;font-size:11px;font-weight:600;margin-left:6px}
+.conf.high{background:#e4f3ea;color:var(--green);border:1px solid #bfe0cc}
+.conf.med{background:#fbf5e8;color:var(--amber);border:1px solid #e8d9b8}
+.conf.inf{background:#f0eaf7;color:#6b3fa0;border:1px solid #d8c8ec}
+.pos{color:var(--green);font-weight:600}
+.neg{color:var(--red)}
+footer{margin-top:36px;font-size:11px;color:var(--muted);border-top:1px solid var(--blue-line);padding-top:12px}
+@media (max-width:480px){ .paper{padding:6px 12px 22px} th,td{padding:6px 6px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <h1>東京のコインランドリー事情 調査レポート</h1>
+  <div class="sub">店舗数・IT化の実態・需給動向・今後5〜10年の見通し — 出典検証つき</div>
+  <div class="meta">
+    <span>作成: 2026-08-21</span>
+    <span>作成者: Son（Apollo）</span>
+    <span>手法: マルチエージェント調査（検索5系統→出典15件精読→クレーム3票検証、通過21件）</span>
+  </div>
+</header>
+
+<div class="paper">
+
+<nav class="toc">
+  <a href="#summary">サマリー</a>
+  <a href="#stores">店舗数と推移</a>
+  <a href="#tokyo">東京都の店舗数</a>
+  <a href="#it">IT化・キャッシュレスの実態</a>
+  <a href="#demand">需要と供給</a>
+  <a href="#outlook">今後3〜5年・10年</a>
+  <a href="#limits">データの限界</a>
+  <a href="#sources">出典</a>
+</nav>
+
+<div class="callout">
+  <strong>確度ラベルについて:</strong>
+  <span class="conf high">公式統計</span> 政府一次統計で確認済 ／
+  <span class="conf med">業界推計</span> 業界誌・調査会社等の推計（複数出典で検証済） ／
+  <span class="conf inf">推論</span> 検証済み事実からの当方の推論（そのまま事実として扱わないこと）
+</div>
+
+<section id="summary">
+<h2>1. サマリー</h2>
+<div class="kpi">
+  <div class="box"><div class="l">全国店舗数（2024年推計）</div><div class="v">約2.5万店</div><div class="s">業界誌推計・1996年比2倍超</div></div>
+  <div class="box"><div class="l">東京都の店舗数（2021年）</div><div class="v">820店〜</div><div class="s">タウンページ掲載ベース＝下限値</div></div>
+  <div class="box"><div class="l">市場規模（2022年）</div><div class="v">約1,000億円</div><div class="s">矢野経済研究所 自社推計</div></div>
+  <div class="box"><div class="l">参入企業数（2021年度）</div><div class="v">1,047社</div><div class="s">J-Net21（中小機構）</div></div>
+</div>
+<ul>
+  <li>店舗数は<strong>約30年間ほぼ一貫して増加</strong>。公式統計（厚労省）で1996年度10,228→2013年度16,693施設、以降は業界推計で2017年度2万店超→2024年約2.5万店。<span class="conf high">公式統計</span><span class="conf med">業界推計</span></li>
+  <li>ただし<strong>「何店舗がIT化されていて、何店舗が現金のみか」を示す定量データは公表されていない</strong>。定性的には「IoT・アプリ・キャッシュレス対応が普及しつつある」（矢野・J-Net21）が確認できる上限。<span class="conf med">業界推計</span></li>
+  <li>需要は共働き増・布団など大物洗い・タイパ志向が牽引。供給は異業種参入で競争が激化し、<strong>今後は既存店間の淘汰が鮮明になる</strong>と予測されている（矢野・2022）。<span class="conf med">業界推計</span></li>
+  <li><strong>Laundry.tokyoへの示唆:</strong> 全店横断の「IT化状況・決済手段・空き状況」データは誰も定量把握していない空白地帯。Places API＋オーナー登録で自前整備すれば、それ自体が業界唯一のデータ資産になる。<span class="conf inf">推論</span></li>
+</ul>
+</section>
+
+<section id="stores">
+<h2>2. 店舗数と推移（全国）</h2>
+<h3>2-1. 公式統計期（1996〜2013年度）<span class="conf high">公式統計</span></h3>
+<p>厚生労働省「コインオペレーションクリーニング営業施設に関する調査」（隔年）より。約17年で<strong>1.6倍</strong>に増加。</p>
+<table>
+  <tr><th>年度</th><td class="num">1996</td><td class="num">2001</td><td class="num">2005</td><td class="num">2009</td><td class="num">2011</td><td class="num">2013</td></tr>
+  <tr><th>施設数</th><td class="num">10,228</td><td class="num">12,502</td><td class="num">13,746</td><td class="num">15,426</td><td class="num">15,985</td><td class="num">16,693</td></tr>
+</table>
+<p class="note">2013年度内訳: ランドリーのみ16,454／ドライ機設置239。2001年度は島根県データを含まない。<strong>この公式調査は2013年度を最後に打ち切られており</strong>、以降の全国数は公的に存在しない。</p>
+
+<h3>2-2. 業界推計期（2014年〜現在）<span class="conf med">業界推計</span></h3>
+<ul>
+  <li>2017年度: <strong>2万店超</strong>（ランドリービジネスマガジン推計、東洋経済2018も同旨）</li>
+  <li>2024年: <strong>約2万5,000店</strong>（同誌編集長推計・時事通信2024年6月報道）</li>
+  <li>日経報道（2024）: 店舗数は10年で約4割増。実際に洗濯を行う一般クリーニング所（2023年度 21,299施設）を上回った</li>
+</ul>
+<div class="callout warn">
+  <strong>混同注意:</strong> 「クリーニング所 74,083施設（東京都8,696）」という衛生行政報告例の数字はクリーニング店の統計で、<strong>無人コインランドリーは届出対象外＝含まれない</strong>。ネット上にはこの2つを混同した記事が多い（今回の検証でも「厚労省統計で2.5万店」等の誤帰属クレームを棄却済み）。
+</div>
+</section>
+
+<section id="tokyo">
+<h2>3. 東京都の店舗数</h2>
+<ul>
+  <li>都道府県別では<strong>東京都が最多の820店</strong>（2021年・NTTタウンページ掲載ベース）。大阪府・兵庫県・神奈川県・福岡県が続く。<span class="conf med">業界推計</span></li>
+  <li>ただし電話帳登録ベースのため<strong>実数はこれを上回る可能性が高い</strong>（無人店は電話を引かないケースが多い）。全国2.5万店に対する東京の人口シェア（約11%）から機械的に按分すると2,000店台後半という試算もできるが、都心は住戸に洗濯機保有率が高く単純按分は過大になりうる。実勢は<strong>1,000〜2,000店程度のレンジ</strong>とみるのが妥当。<span class="conf inf">推論</span></li>
+  <li><strong>23区／市部の内訳を示す検証済みデータは存在しない。</strong>東京都の営業施設データやタウンページ生データの突合が必要（未解決の問い参照）。</li>
+</ul>
+<div class="callout">
+  <strong>事業機会:</strong> 「東京に何店あるか」すら確定値がないのが実情。Laundry.tokyoが Places API＋実地・オーナー登録で名寄せ済みの店舗台帳を作れば、<strong>それ自体が業界で最も正確な統計</strong>になり、メディア引用・自治体・メーカー営業の入口になる。<span class="conf inf">推論</span>
+</div>
+</section>
+
+<section id="it">
+<h2>4. IT化・キャッシュレスの実態</h2>
+<h3>4-1. 検証済みでいえること<span class="conf med">業界推計</span></h3>
+<ul>
+  <li>IoT技術やスマホと組み合わせて利便性を高めた設備機器が<strong>「普及しつつある」</strong>（矢野経済研究所・2022年時点の業界認識）</li>
+  <li>専用アプリで空き状況確認・洗濯終了通知を受けられる店舗が存在し、<strong>「現金のほかさまざまなキャッシュレス決済に対応しているところが多い」</strong>（J-Net21・2025年4月更新）</li>
+  <li>IoT・スマホ連携機器の普及は<strong>競争軸の変化要因</strong>とされる（矢野）</li>
+</ul>
+<h3>4-2. いえないこと（定量データの空白）</h3>
+<ul>
+  <li><strong>アプリ対応・空き状況オンライン確認・キャッシュレス対応店舗の「割合」や「店舗数」を示す調査は、検証を通過したものが1件もなかった。</strong></li>
+  <li><strong>「現金のみ」店舗の比率も同様に公表データなし。</strong>小規模事業者にはキャッシュレス導入コストが障壁という傍証（決済機器ベンダー等）から、現金のみ店舗が相当数残存すると推測されるが、比率は不明。</li>
+  <li>参考の肌感（推論）: 大手チェーン（WASHハウス、Baluko、mammaciao等）はほぼIT対応済みの一方、店舗の多数派は個人経営の旧来型。<strong>体感では「IT対応は少数派、現金のみが過半」の可能性が高い</strong>が、これは検証されていない当方の推論。<span class="conf inf">推論</span></li>
+</ul>
+<div class="callout">
+  <strong>事業機会:</strong> この空白は Laundry.tokyo の絞り込み軸（キャッシュレス/アプリ対応/空き状況）と完全に一致する。全店調査を最初にやったプレイヤーが「業界のIT化率」を定義できる。<span class="conf inf">推論</span>
+</div>
+</section>
+
+<section id="demand">
+<h2>5. 需要と供給</h2>
+<h3>5-1. 需要側<span class="conf med">業界推計</span></h3>
+<table>
+  <tr><th>ドライバー</th><th>内容</th></tr>
+  <tr><td>共働き世帯の増加</td><td>家庭で洗濯に割ける時間の不足。週末まとめ洗い・大容量ニーズへ</td></tr>
+  <tr><td>大物洗い需要</td><td>布団・毛布・シーツの丸洗い需要が伸長。家庭用洗濯機では不可能な領域</td></tr>
+  <tr><td>タイパ志向</td><td>「時間をお金で解決する」消費行動の定着。洗濯＋乾燥60分完結の価値</td></tr>
+  <tr><td>（参考）在宅勤務</td><td>スーツ利用減はクリーニング店衰退の要因。コインランドリーへの直接効果ではない点に注意</td></tr>
+</table>
+<p class="note">インバウンド（訪日客）需要は今回の検証を通過したデータなし。定性的には有望だが数値の裏取りは未了。</p>
+<h3>5-2. 供給側<span class="conf med">業界推計</span></h3>
+<ul>
+  <li>参入企業数は増加を続け<strong>2021年度 1,047社</strong>（J-Net21）。異業種からの新規参入が増え競争が激化</li>
+  <li>矢野経済研究所（2022）: <strong>「今後は既存事業者間での競争の優劣（淘汰）が鮮明になっていく可能性」</strong></li>
+  <li>大手チェーンと個人経営の比率・閉店数の公表データはなし（未解決の問い）</li>
+</ul>
+</section>
+
+<section id="outlook">
+<h2>6. 今後3〜5年・10年の見通し</h2>
+<p>検証済みの将来予測は矢野の定性見解（淘汰の進行・IoTが競争軸）のみで、<strong>定量的な市場予測の公開データは存在しない</strong>。以下のシナリオは検証済み事実からの当方の推論。<span class="conf inf">推論</span></p>
+<h3>3〜5年（〜2031年頃）</h3>
+<ul>
+  <li><strong>総店舗数は微増〜横ばいで頭打ちへ。</strong>出店ペース鈍化と淘汰進行が同時に起き、「増えるが入れ替わる」市場に</li>
+  <li><strong>IT化が生存条件化。</strong>キャッシュレス・遠隔監視・アプリ通知が大手標準になり、現金のみ旧来店は立地依存でジリ貧に。決済端末の低価格化で中小にも波及</li>
+  <li><strong>代行・宅配との融合。</strong>店舗網を持つチェーンが集荷代行（wash&fold）を上乗せし「店舗＝物流拠点」化。単独の宅配クリーニングとの境界が薄れる</li>
+  <li>横断検索・比較の分野は<strong>依然として空白</strong>（メーカー系アプリは自社系列のみ）。先行者が事実上の標準になりうる</li>
+</ul>
+<h3>10年（〜2036年頃）</h3>
+<ul>
+  <li><strong>総数は緩やかな減少に転じる可能性。</strong>人口減の一方、単身・共働き比率上昇と洗濯外部化で1店あたり需要は維持〜増</li>
+  <li><strong>完全無人×遠隔運営が標準化。</strong>IoT機器の世代交代が一巡し、「IT化率」という論点自体が消滅（＝現金のみ店は例外的存在に）</li>
+  <li><strong>業界再編。</strong>FC大手への集約と、個人店の廃業・チェーン転換が進む。データ（稼働率・需要予測）を持つプレイヤーが出店判断の元締めになる</li>
+  <li>家事外部化の一部として、洗濯は「自宅でやるか、外に出すか」の二択化。中間にあるコインランドリーは<strong>代行接点＋大物特化</strong>へ寄る</li>
+</ul>
+</section>
+
+<section id="limits">
+<h2>7. データの限界と留意点</h2>
+<ol>
+  <li><strong>IT化率・現金のみ比率の定量データは不存在</strong>（本調査最大の欠落。質問の核心だが、業界の誰も公表していない）</li>
+  <li><strong>23区/市部の内訳は検証済みソースになし。</strong>東京都820店は電話帳ベースの下限値</li>
+  <li><strong>公式統計は2013年度で断絶。</strong>以降の店舗数はすべて業界誌推計で、精度は不明</li>
+  <li><strong>市場規模は出典で大きく異なる。</strong>矢野の約1,000億円は検証通過。一方「約3,533億円」説は検証で棄却（3票全否決）。定義（機器売上/店舗売上/潜在市場）の違いに注意</li>
+  <li><strong>将来予測の定量データなし。</strong>第6章のシナリオは推論であり、有料レポート（矢野等）の本体確認で精度を上げられる</li>
+  <li>主要数値は2024年報道ベースで、現時点（2026年8月）から1〜2年古い</li>
+</ol>
+<h3>未解決の問い（次の調査候補）</h3>
+<ul>
+  <li>23区/市部別の店舗数 → 東京都の営業施設データ・タウンページ生データ・Places API全件取得で自前算出可能</li>
+  <li>IT化・キャッシュレス対応率 → 矢野の有料レポート本体、機器メーカーの導入台数データ</li>
+  <li>閉店数・チェーン/個人比率・FC動向（WASHハウス、mammaciao、Baluko等の公開資料）</li>
+  <li>宅配クリーニング・洗濯代行の市場規模と、コインランドリー需要の代替/補完関係</li>
+</ul>
+</section>
+
+<section id="sources">
+<h2>8. 主要出典</h2>
+<table>
+  <tr><th>出典</th><th>種別</th><th>使用箇所</th></tr>
+  <tr><td>厚生労働省「コインオペレーションクリーニング営業施設に関する調査」</td><td>政府一次統計</td><td>1996〜2013年度の店舗数推移</td></tr>
+  <tr><td>e-Stat 衛生行政報告例（令和4年度）</td><td>政府一次統計</td><td>クリーニング所数（区別のための参照）</td></tr>
+  <tr><td>時事通信 データジャーナリズム（2024年6月）</td><td>報道</td><td>2024年約2.5万店（ランドリービジネスマガジン推計）・需要4要因</td></tr>
+  <tr><td>日本経済新聞（2024年8月）</td><td>報道</td><td>10年で4割増・クリーニング所超え</td></tr>
+  <tr><td>矢野経済研究所 調査企画ページ（2022）</td><td>調査会社</td><td>市場規模約1,000億円・IoT普及・淘汰予測</td></tr>
+  <tr><td>J-Net21（中小機構、2025年4月更新）</td><td>公的支援機関</td><td>参入1,047社・キャッシュレス対応の定性記述</td></tr>
+  <tr><td>幻冬舎ゴールドオンライン（2021）</td><td>二次記事</td><td>東京都820店（タウンページベース）</td></tr>
+</table>
+<p class="note">検証プロセス: 収集した各クレームを独立3エージェントが反証を試み、2票以上の反証で棄却。棄却例:「厚労省統計で2.5万店」（誤帰属）、「市場規模3,533億円」（出典裏取り不可）等4件。</p>
+</section>
+
+<footer>
+  東京のコインランドリー事情 調査レポート ｜ 2026-08-21 Son 作成（マルチエージェント深掘り調査・検証通過21クレーム） ｜ <span class="conf inf">推論</span> 表記の箇所は検証済み事実からの当方の推論です
+</footer>
+
+</div>
+</div>
+</body>
+</html>

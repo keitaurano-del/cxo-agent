@@ -1723,29 +1723,53 @@ function WorkLboTab() {
 // 収益プラン、集客プラン等など考えて記載して」・MC-384）。静的ページ /laundry-plan.html を
 // LBOモデラーと同じ iframe 方式で表示し、実働プロトタイプへのリンクも並べる。
 function WorkLaundryTab() {
+  // 事業計画と市場調査レポート（2026-08-21 Keita「東京のコインランドリー事情を調べてLaundryタブに」）の切替。
+  const [doc, setDoc] = useState<'plan' | 'market'>('plan');
+  const src = doc === 'plan' ? '/laundry-plan.html' : '/laundry-market-report.html';
+  const title = doc === 'plan' ? 'Laundry.tokyo 事業計画' : '東京のコインランドリー事情 調査レポート';
   return (
     <div className="flex h-full flex-col gap-2">
-      <div className="flex items-center justify-end gap-2">
-        <a
-          href="https://laundry.apollomansion.com"
-          target="_blank"
-          rel="noreferrer"
-          className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
-        >
-          プロトタイプを開く ↗
-        </a>
-        <a
-          href="/laundry-plan.html"
-          target="_blank"
-          rel="noreferrer"
-          className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
-        >
-          別タブで開く ↗
-        </a>
+      <div className="flex items-center gap-2">
+        <div className="flex rounded-md border border-border p-0.5">
+          {([
+            ['plan', '事業計画'],
+            ['market', '市場調査'],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setDoc(key)}
+              className={`rounded px-2.5 py-1 text-[11px] transition-colors ${
+                doc === key ? 'bg-accent font-semibold text-bg' : 'text-text-muted hover:text-text'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <a
+            href="https://laundry.apollomansion.com"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+          >
+            プロトタイプを開く ↗
+          </a>
+          <a
+            href={src}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+          >
+            別タブで開く ↗
+          </a>
+        </div>
       </div>
       <iframe
-        src="/laundry-plan.html"
-        title="Laundry.tokyo 事業計画"
+        key={src}
+        src={src}
+        title={title}
         className="min-h-0 w-full flex-1 rounded-lg border border-border bg-white"
       />
     </div>
