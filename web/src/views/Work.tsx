@@ -1719,7 +1719,7 @@ function WorkLboTab() {
   );
 }
 
-// Laundry.jp 事業計画タブ（2026-08-21 Keita「仕事メニューの別タブに専用ページ作って、需要分析、
+// Laundry.tokyo（旧 Laundry.jp、2026-08-21 14:37 Keita 指示で改称）事業計画タブ（2026-08-21 Keita「仕事メニューの別タブに専用ページ作って、需要分析、
 // 収益プラン、集客プラン等など考えて記載して」・MC-384）。静的ページ /laundry-plan.html を
 // LBOモデラーと同じ iframe 方式で表示し、実働プロトタイプへのリンクも並べる。
 function WorkLaundryTab() {
@@ -1745,7 +1745,7 @@ function WorkLaundryTab() {
       </div>
       <iframe
         src="/laundry-plan.html"
-        title="Laundry.jp 事業計画"
+        title="Laundry.tokyo 事業計画"
         className="min-h-0 w-full flex-1 rounded-lg border border-border bg-white"
       />
     </div>
@@ -1807,13 +1807,13 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
         </>
       ),
     },
-    // Laundry.jp 事業計画（2026-08-21 Keita 指示・MC-384）。
+    // Laundry.tokyo 事業計画（2026-08-21 Keita 指示・MC-384）。
     {
       key: 'laundry',
       label: (
         <>
           <span aria-hidden><SearchIcon width={16} height={16} /></span>
-          Laundry.jp
+          Laundry.tokyo
         </>
       ),
     },

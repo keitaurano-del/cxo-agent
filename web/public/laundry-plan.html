@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Laundry.jp 事業計画</title>
+<title>Laundry.tokyo 事業計画</title>
 <style>
-/* Laundry.jp本体と同じ清潔感トーン（白＋淡ブルー＋濃紺）。帳票的な落ち着いた体裁 */
+/* Laundry.tokyo本体と同じ清潔感トーン（白＋淡ブルー＋濃紺）。帳票的な落ち着いた体裁 */
 :root{
   --navy:#16324f; --blue:#2a6db0; --blue-soft:#e8f1f9; --blue-line:#c7dcef;
   --text:#23303c; --muted:#6b7a89; --bg:#f6f9fc; --white:#fff;
@@ -50,7 +50,7 @@ footer{margin-top:36px;font-size:11px;color:var(--muted);border-top:1px solid va
 <div class="wrap">
 
 <header class="doc">
-  <h1>Laundry.jp 事業計画（ドラフト v1）</h1>
+  <h1>Laundry.tokyo 事業計画（ドラフト v1.1）</h1>
   <div class="sub">コインランドリー横断検索プラットフォーム — 需要分析・収益プラン・集客プラン</div>
   <div class="meta">
     <span>作成: 2026-08-21</span>
@@ -73,7 +73,7 @@ footer{margin-top:36px;font-size:11px;color:var(--muted);border-top:1px solid va
 
 <section id="summary">
   <h2>サマリー</h2>
-  <p>コインランドリー店舗は全国で増え続けているのに、<strong>全店舗を横断して「近くて・安くて・空いている」店を探せる中立サイトが存在しない</strong>。店舗情報はメーカー系アプリ（LAUNDRICH、Smart Laundry等）に自社系列分しか載らず、ユーザーは結局Googleマップで探している。Laundry.jpはこの隙間を取りに行く「コインランドリー版スーモ」。</p>
+  <p>コインランドリー店舗は全国で増え続けているのに、<strong>全店舗を横断して「近くて・安くて・空いている」店を探せる中立サイトが存在しない</strong>。店舗情報はメーカー系アプリ（LAUNDRICH、Smart Laundry等）に自社系列分しか載らず、ユーザーは結局Googleマップで探している。Laundry.tokyoはこの隙間を取りに行く「コインランドリー版スーモ」。</p>
   <div class="kpi">
     <div class="box"><div class="l">全国店舗数（推計）</div><div class="v">約27,000店</div><div class="s">増加傾向が継続</div></div>
     <div class="box"><div class="l">市場規模（推計）</div><div class="v">1,300〜1,500億円</div><div class="s">機器・出店投資は別途</div></div>
@@ -96,7 +96,7 @@ footer{margin-top:36px;font-size:11px;color:var(--muted);border-top:1px solid va
 
   <h3>1-2. ユーザーの困りごと（検索の実態）</h3>
   <table>
-    <tr><th>困りごと</th><th>現状の手段</th><th>Laundry.jpの解決</th></tr>
+    <tr><th>困りごと</th><th>現状の手段</th><th>Laundry.tokyoの解決</th></tr>
     <tr><td>近くで一番安い店はどこか</td><td>Googleマップ→1軒ずつ料金を見に行く（載っていないことが多い）</td><td>地図に最安価格ピンを一覧表示</td></tr>
     <tr><td>布団・スニーカーが洗えるか</td><td>行ってみないと分からない</td><td>設備タグで絞り込み</td></tr>
     <tr><td>今行って空いているか</td><td>分からない（並び直しが発生）</td><td>空き状況表示（対応店から段階導入）</td></tr>
@@ -160,7 +160,7 @@ footer{margin-top:36px;font-size:11px;color:var(--muted);border-top:1px solid va
     <li>サーバ: 自宅サーバ常駐＋Cloudflare Tunnel（既存インフラ・追加費ほぼゼロ）</li>
     <li>Google Places API: 従量課金。<strong>結果をローカルにキャッシュして呼び出しを抑える設計が必須</strong>（無料枠$200/月内に収める運用から開始）</li>
     <li>開発・運用: AI（Apollo/dev系）で内製 = 人件費ゼロ</li>
-    <li>ドメイン laundry.jp: 取得可否・価格の確認が必要（.jpプレミアム価格の可能性）</li>
+    <li>ドメイン laundry.tokyo: 取得可否・価格の確認が必要（.tokyoは通常価格で取得しやすい見込み）</li>
   </ul>
 </section>
 
@@ -204,7 +204,7 @@ footer{margin-top:36px;font-size:11px;color:var(--muted);border-top:1px solid va
   <table>
     <tr><th>フェーズ</th><th>期間</th><th>やること</th><th>ゴール</th></tr>
     <tr><td><strong>Phase 0（済）</strong></td><td>—</td><td>実働プロトタイプ公開（laundry.apollomansion.com）</td><td class="pos">完了</td></tr>
-    <tr><td><strong>Phase 1: データ網羅</strong></td><td>1〜2ヶ月</td><td>laundry.jpドメイン取得 / Places APIで首都圏→全国の店舗データ取り込み＋キャッシュ設計 / 名寄せ処理 / 店舗ページ自動生成＋SEO基盤</td><td>1万店掲載・検索流入の初速</td></tr>
+    <tr><td><strong>Phase 1: データ網羅</strong></td><td>1〜2ヶ月</td><td>laundry.tokyoドメイン取得 / Places APIで首都圏→全国の店舗データ取り込み＋キャッシュ設計 / 名寄せ処理 / 店舗ページ自動生成＋SEO基盤</td><td>1万店掲載・検索流入の初速</td></tr>
     <tr><td><strong>Phase 2: オーナー機能</strong></td><td>3〜6ヶ月</td><td>オーナー登録・所有権確認の本実装 / 料金・機器のオーナー入力 / クーポン配信 / 無料→有料プラン開放</td><td>登録オーナー100店・初課金</td></tr>
     <tr><td><strong>Phase 3: 収益拡大</strong></td><td>6〜12ヶ月</td><td>開業一括資料請求の提携先開拓（機器メーカー・開業支援） / 英語版公開 / 空き状況連携の提携交渉</td><td>月商35万円ライン</td></tr>
   </table>
@@ -218,21 +218,21 @@ footer{margin-top:36px;font-size:11px;color:var(--muted);border-top:1px solid va
     <tr><td>Google Places APIの料金・規約（データの保存/表示条件）</td><td>コスト増・規約抵触</td><td>キャッシュ設計と規約確認を Phase 1 の最初に実施。位置・名称以外は自前データ化を急ぐ</td></tr>
     <tr><td>データ鮮度の劣化（料金改定・閉店）</td><td>信頼喪失</td><td>出典＋更新時刻の明示 / オーナー編集 / 閉店報告ボタン</td></tr>
     <tr><td>メーカー提携が進まない</td><td>詳細データ不足</td><td>オーナー直接入力を主経路に設計（提携はブースト扱い）</td></tr>
-    <tr><td>laundry.jp ドメインが取れない/高額</td><td>ブランド変更</td><td>取得可否を先に確認。代替: laundrymap.jp / coinlaundry.jp 等</td></tr>
+    <tr><td>laundry.tokyo ドメインが取れない/高額</td><td>ブランド変更</td><td>取得可否を先に確認。代替: laundrymap.tokyo / coinlaundry.tokyo 等</td></tr>
     <tr><td>大手（リクルート等）の参入</td><td>競争激化</td><td>ニッチゆえ大手の優先度は低い読み。先行でオーナー基盤を握る</td></tr>
     <tr><td>無断スクレイピングをしない方針の維持</td><td>データ範囲の制約</td><td>提携＋オーナー入力＋公開API。方針自体が信頼の売りになる</td></tr>
   </table>
 
   <h3>Keitaに確認したい判断ポイント</h3>
   <ol>
-    <li>ドメイン laundry.jp の取得を進めるか（価格次第。まず可否と価格を調査）</li>
+    <li>ドメイン laundry.tokyo の取得を進めるか（価格次第。まず可否と価格を調査）</li>
     <li>Google Places API の課金設定（無料枠$200/月内で開始する前提でよいか）</li>
     <li>Phase 1 の対象エリア（首都圏から開始 → 全国、の順でよいか）</li>
   </ol>
 </section>
 
 <footer>
-  Laundry.jp 事業計画 ドラフト v1 ｜ 2026-08-21 Son 作成 ｜ 数値は公知情報からの推計・仮置きを含む（確定計画化の際に個別裏取り）
+  Laundry.tokyo 事業計画 ドラフト v1.1 ｜ 2026-08-21 Son 作成 ｜ 数値は公知情報からの推計・仮置きを含む（確定計画化の際に個別裏取り）
 </footer>
 
 </div>
