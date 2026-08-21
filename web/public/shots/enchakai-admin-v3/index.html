@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>円茶会 管理画面 v3（ダーク磨き込み案・2026-08-12）</title>
+<style>
+  body { margin: 0; padding: 16px; background: #1c1a17; color: #e8e2d8; font-family: "Noto Sans JP", sans-serif; }
+  h1 { font-size: 18px; font-weight: 600; }
+  p { color: #a89f92; font-size: 13px; }
+  h2 { font-size: 15px; margin-top: 28px; border-bottom: 1px solid #3a352e; padding-bottom: 6px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 16px; }
+  figure { margin: 0; }
+  figcaption { font-size: 12px; color: #a89f92; margin: 6px 0; }
+  .grid.mobile img { width: 260px; }
+  .grid.pc img { width: 480px; max-width: 100%; }
+  img { border-radius: 8px; border: 1px solid #3a352e; display: block; }
+</style>
+</head>
+<body>
+<h1>円茶会 管理画面 v3 — ダーク基調の磨き込み案（未反映・worktree実装）</h1>
+<p>優良管理画面（Stripe / Linear / Vercel / OpenTable系）の調査に基づき、現行ダークテーマを磨き込んだ案。
+サーフェス4段の明度階段・Stripe型ドットピル・tabular-nums・セグメントフィルタ・下タブぼかし等。
+実装: /home/dev/projects/tmp/enchakai-v3（2026-08-12 撮影、build通過済・本番未反映）。</p>
+
+<h2>スマホ表示（390×844）</h2>
+<div class="grid mobile">
+  <figure><img src="mobile-0-login.png" alt=""><figcaption>ログイン</figcaption></figure>
+  <figure><img src="mobile-1-home.png" alt=""><figcaption>ホーム（今日ビュー）</figcaption></figure>
+  <figure><img src="mobile-2-カレンダー.png" alt=""><figcaption>カレンダー</figcaption></figure>
+  <figure><img src="mobile-3-予約.png" alt=""><figcaption>予約</figcaption></figure>
+  <figure><img src="mobile-4-設定.png" alt=""><figcaption>設定</figcaption></figure>
+</div>
+
+<h2>PC表示（1280×800）</h2>
+<div class="grid pc">
+  <figure><img src="pc-0-login.png" alt=""><figcaption>ログイン</figcaption></figure>
+  <figure><img src="pc-1-home.png" alt=""><figcaption>ホーム（今日ビュー）</figcaption></figure>
+  <figure><img src="pc-2-カレンダー.png" alt=""><figcaption>カレンダー</figcaption></figure>
+  <figure><img src="pc-3-予約.png" alt=""><figcaption>予約</figcaption></figure>
+  <figure><img src="pc-4-設定.png" alt=""><figcaption>設定</figcaption></figure>
+</div>
+</body>
+</html>
