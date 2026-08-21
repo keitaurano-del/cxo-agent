@@ -66,7 +66,9 @@ export function TabStrip({
 }) {
   const sizeClass = size === 'sm' ? 'px-2 py-2.5 text-xs' : 'px-3 py-2.5 text-sm';
   return (
-    <div role="tablist" aria-label={ariaLabel} className={`flex border-b border-border ${className}`}>
+    // タブ数が画面幅を超えても横スクロールで届くようにする（2026-08-21 Keita「タブスクロールできない」。
+    // Work の Laundry.jp タブ追加でスマホ幅から溢れた）。共通側で直し、TabStrip 利用の全ページに効かせる。
+    <div role="tablist" aria-label={ariaLabel} className={`no-scrollbar flex overflow-x-auto border-b border-border ${className}`}>
       {tabs.map((t) => {
         const isActive = t.key === active;
         return (
