@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>コインランドリー事業 コンサルティングナレッジ（MC-424）</title>
+<style>
+/* laundry-plan.html / laundry-market-report.html / laundry-business-analysis.html と同じ帳票トーン（白＋淡ブルー＋濃紺） */
+:root{
+  --navy:#16324f; --blue:#2a6db0; --blue-soft:#e8f1f9; --blue-line:#c7dcef;
+  --text:#23303c; --muted:#6b7a89; --bg:#f6f9fc; --white:#fff;
+  --green:#1d8a4e; --red:#c0392b; --amber:#9a6b15;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Hiragino Sans",Meiryo,"Segoe UI",sans-serif;color:var(--text);background:var(--bg);font-size:14px;line-height:1.75}
+.wrap{max-width:860px;margin:0 auto;padding:20px 16px 64px}
+header.doc{background:var(--navy);color:#fff;padding:22px 20px;border-radius:8px 8px 0 0}
+header.doc h1{font-size:20px;letter-spacing:.02em}
+header.doc .sub{font-size:12px;color:#bcd0e4;margin-top:6px}
+header.doc .meta{font-size:11px;color:#8fa9c4;margin-top:10px;display:flex;gap:16px;flex-wrap:wrap}
+.paper{background:var(--white);border:1px solid var(--blue-line);border-top:none;border-radius:0 0 8px 8px;padding:8px 20px 28px}
+nav.toc{background:var(--blue-soft);border:1px solid var(--blue-line);border-radius:6px;padding:12px 16px;margin:18px 0 6px;font-size:12.5px}
+nav.toc a{color:var(--blue);text-decoration:none;margin-right:14px;display:inline-block;padding:2px 0}
+section{margin-top:34px}
+h2{font-size:16px;color:var(--navy);border-left:4px solid var(--blue);padding-left:10px;margin-bottom:14px;letter-spacing:.02em}
+h3{font-size:13.5px;color:var(--navy);margin:18px 0 8px}
+p{margin:8px 0}
+ul,ol{margin:8px 0 8px 1.4em}
+li{margin:4px 0}
+a{color:var(--blue)}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+th{background:var(--blue-soft);color:var(--navy);text-align:left;font-weight:600}
+th,td{border:1px solid var(--blue-line);padding:7px 10px;vertical-align:top}
+td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.note{font-size:11.5px;color:var(--muted)}
+.callout{border:1px solid var(--blue-line);border-left:4px solid var(--blue);background:var(--blue-soft);border-radius:4px;padding:10px 14px;margin:12px 0;font-size:13px}
+.callout.warn{border-left-color:var(--amber);background:#fbf5e8;border-color:#e8d9b8}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.kpi .box{border:1px solid var(--blue-line);border-radius:6px;padding:10px 12px;background:#fbfdff}
+.kpi .box .l{font-size:11px;color:var(--muted)}
+.kpi .box .v{font-size:17px;font-weight:700;color:var(--navy);margin-top:2px}
+.kpi .box .s{font-size:11px;color:var(--muted)}
+.tag{display:inline-block;border:1px solid var(--blue-line);background:var(--blue-soft);color:var(--navy);border-radius:3px;padding:1px 7px;font-size:11px;margin:0 4px 4px 0}
+.conf{display:inline-block;border-radius:3px;padding:1px 7px;font-size:11px;font-weight:600;margin-left:6px}
+.conf.high{background:#e4f3ea;color:var(--green);border:1px solid #bfe0cc}
+.conf.med{background:#fbf5e8;color:var(--amber);border:1px solid #e8d9b8}
+.conf.inf{background:#f0eaf7;color:#6b3fa0;border:1px solid #d8c8ec}
+.conf.low{background:#f9e8e5;color:var(--red);border:1px solid #ecc8c2}
+.pos{color:var(--green);font-weight:600}
+.neg{color:var(--red)}
+.chk{list-style:none;margin-left:.2em}
+.chk li{padding-left:1.5em;position:relative}
+.chk li::before{content:"☐";position:absolute;left:0;color:var(--blue)}
+footer{margin-top:36px;font-size:11px;color:var(--muted);border-top:1px solid var(--blue-line);padding-top:12px}
+@media (max-width:480px){ .paper{padding:6px 12px 22px} th,td{padding:6px 6px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <h1>コインランドリー事業 コンサルティングナレッジ</h1>
+  <div class="sub">機器選定・出店実務・法規制・資金調達・税務・保険・運営・販促・出口・事例 — 開業実務の各論10章（第2弾）</div>
+  <div class="meta">
+    <span>作成: 2026-08-22</span>
+    <span>出典: MC-424調査</span>
+    <span>手法: Web公開情報の収集・突合（出典URLを各所に明記）</span>
+  </div>
+</header>
+
+<div class="paper">
+
+<nav class="toc">
+  <a href="#equip">1. 機器選定</a>
+  <a href="#site">2. 出店実務</a>
+  <a href="#law">3. 法規制</a>
+  <a href="#fund">4. 資金調達</a>
+  <a href="#tax">5. 税務・会計</a>
+  <a href="#insurance">6. 保険</a>
+  <a href="#ops">7. 運営</a>
+  <a href="#promo">8. 販促</a>
+  <a href="#exit">9. 撤退・出口</a>
+  <a href="#case">10. ケーススタディ</a>
+  <a href="#apxA">付録A: チェックリスト</a>
+  <a href="#apxB">付録B: パラメータ提案</a>
+  <a href="#apxC">付録C: 要追加検証</a>
+</nav>
+
+<div class="callout">
+  <strong>前提:</strong> 第1弾 収益分析レポート（business-analysis.md / MC-409。市場・収益・初期投資・FC・立地・リスク・トレンド）の続編。本書は「開業実務をコンサルできるレベル」の各論。<br>
+  <strong>確度ラベル:</strong>
+  <span class="conf high">実データ</span> 法令・公的機関・一次資料 ／
+  <span class="conf med">業界相場</span> メーカー・FC・専門業者の公表目安 ／
+  <span class="conf inf">推測</span> 本レポートでの推定
+</div>
+
+<section id="equip">
+<h2>1. 機器選定</h2>
+
+<h3>1-1. 主要メーカーの特徴 <span class="conf med">業界相場</span></h3>
+<table>
+  <tr><th>メーカー</th><th>特徴</th><th>保守・サポート</th><th>価格感</th></tr>
+  <tr><td><strong>TOSEI（トーセイ）</strong></td><td>大型コインランドリー機器で国内トップシェア。価格と品質のバランス型</td><td>サポート対応は遅めとの評あり。全国網あり</td><td>中</td></tr>
+  <tr><td><strong>AQUA（アクア）</strong></td><td>旧三洋電機の洗濯機部門承継。デザインが洗練、業務用実績（病院・ホテル）豊富</td><td>対応が迅速（当日対応例も）。ただしICカード決済には高額な「マルチ端末」両替機が必須</td><td>高（国産で最高値帯）</td></tr>
+  <tr><td><strong>山本製作所</strong></td><td>広島・尾道の独立系。クリーニング専門工場への導入実績が豊富</td><td>情報が少なく導入前の確認必須</td><td>国産最安</td></tr>
+  <tr><td><strong>Electrolux Professional</strong></td><td>スウェーデン。欧州医療現場水準の洗濯品質を訴求</td><td>故障は少ないとされるが、故障時の部品代が高い</td><td>本体は国産より安い傾向</td></tr>
+</table>
+<ul>
+  <li>国産の価格序列は <strong>AQUA ＞ TOSEI ＞ 山本製作所</strong>、海外勢は本体安・部品高。</li>
+  <li class="note">出典: <a href="https://laundry-ma.com/?p=55" target="_blank" rel="noreferrer">日本コインランドリーM&amp;A推進会 メーカー比較</a>, <a href="https://metoree.com/categories/8902/" target="_blank" rel="noreferrer">Metoree コインランドリー洗濯機メーカー</a>, <a href="https://coinlaundry-keiei.com/machine/" target="_blank" rel="noreferrer">コインランドリーの窓口 メーカー一覧</a>, <a href="https://www.tosei-corporation.co.jp/product-coin/" target="_blank" rel="noreferrer">TOSEI 製品一覧</a></li>
+</ul>
+
+<h3>1-2. 機器価格の目安 <span class="conf med">業界相場</span></h3>
+<table>
+  <tr><th>機器</th><th>単価目安</th></tr>
+  <tr><td>洗濯機（縦型・小型）</td><td class="num">15〜30万円</td></tr>
+  <tr><td>洗濯機（ドラム式・業務用）</td><td class="num">50〜200万円</td></tr>
+  <tr><td>ガス乾燥機</td><td class="num">50〜100万円</td></tr>
+  <tr><td>洗濯乾燥機（大型）</td><td class="num">200〜300万円</td></tr>
+</table>
+<ul>
+  <li>標準20坪・14台前後の機器総額は <strong>1,800〜2,500万円</strong> とする出典（<a href="https://biz.moneyforward.com/establish/basic/54349/" target="_blank" rel="noreferrer">マネーフォワード</a>）と <strong>1,000〜1,500万円</strong> とする出典（第1弾参照）でブレが大きい。構成（洗濯乾燥機の比率）と両替機・IoT端末の有無で1,000万円単位で変わるため、<strong>見積は必ず複数メーカー相見積</strong>。<span class="conf inf">推測</span></li>
+  <li>両替機（50〜150万円）・監視カメラ・POS/IoT端末・給水軟水器は機器費に含まれ忘れやすい。<span class="conf inf">推測</span></li>
+</ul>
+
+<h3>1-3. リース vs 購入 <span class="conf med">業界相場</span></h3>
+<table>
+  <tr><th>観点</th><th>購入（借入含む）</th><th>リース</th></tr>
+  <tr><td>初期資金</td><td>機器費全額（初期費用の60%超を占める）</td><td>大幅圧縮。初期2,000〜2,500万円→1,500万円台まで下がる例</td></tr>
+  <tr><td>総支払額</td><td>最小</td><td>料率（利息相当）が乗り割高</td></tr>
+  <tr><td>会計</td><td>資産計上・減価償却13年（→5章）</td><td>リース料を経費処理（オペレーティング型の場合）。経費化が早い</td></tr>
+  <tr><td>中途解約</td><td>売却可（中古市場あり→9章）</td><td><strong>不可。残債は満了まで支払い義務</strong></td></tr>
+  <tr><td>満了後</td><td>資産として残る</td><td>再リース・買取・新機種入替を選択</td></tr>
+  <tr><td>税制優遇</td><td>中小企業経営強化税制の即時償却が使える（所有権移転外リースは税額控除のみ・即時償却不可）<span class="conf inf">推測含む・要税理士確認</span></td><td></td></tr>
+</table>
+<ul>
+  <li class="note">出典: <a href="https://ieul.jp/column/articles/43587/" target="_blank" rel="noreferrer">イエウール リース解説</a>, <a href="https://www.electroluxprofessional.com/jp/blog0009/" target="_blank" rel="noreferrer">Electrolux リースのメリット</a>, <a href="https://www.coinlaundry-miwa.com/10outsourcing/1050rental_lease_1/post_10.html" target="_blank" rel="noreferrer">MIWAランドリテック レンタル・リース・購入比較</a></li>
+</ul>
+<div class="callout">
+  <strong>コンサル所見</strong> <span class="conf inf">推測</span>: 自己資金潤沢＋節税目的なら購入＋即時償却、自己資金薄＋撤退可能性を残すなら「機器の一部リース」が定石。ただしリースは撤退時も残債が付いてくるため「撤退しやすい」わけではない点を必ず説明する。
+</div>
+</section>
+
+<section id="site">
+<h2>2. 出店実務</h2>
+
+<h3>2-1. 物件選定チェックリスト <span class="conf med">業界相場</span><span class="conf inf">一部推測</span></h3>
+<table>
+  <tr><th>項目</th><th>基準・確認方法</th></tr>
+  <tr><td>用途地域</td><td>一低層・二低層は原則不可（→3章）。自治体都市計画図で確認</td></tr>
+  <tr><td>面積</td><td>都市型10坪〜／標準15〜25坪。天井高（大型機の搬入・ダクト）</td></tr>
+  <tr><td>間口・搬入</td><td>大型洗濯乾燥機（幅1m超・数百kg）が搬入できる開口・前面道路。間口が広い＝視認性にも直結</td></tr>
+  <tr><td>給水</td><td>口径の確認（複数台同時給水に耐えるか）。増径が必要な場合、水道局への給水装置工事＋加入金・負担金が発生 <span class="conf inf">推測</span></td></tr>
+  <tr><td>排水</td><td>排水管の径・勾配・位置。床上げ（機器下配管）の要否で工事費が大きく変わる <span class="conf inf">推測</span></td></tr>
+  <tr><td>電気</td><td>動力（三相200V）の引込有無と容量。電気容量は電力会社・メーター表示で契約前に確認可能</td></tr>
+  <tr><td>ガス</td><td>ガス乾燥機用の都市ガス/LPの供給能力。敷地までインフラが来ていない場合、公道からの新設で高額</td></tr>
+  <tr><td>排気</td><td>乾燥機ダクトの屋外排気経路が確保できるか（テナントビルはここで不可になる例が多い）<span class="conf inf">推測</span>。隣地への排気・臭気クレームリスク</td></tr>
+  <tr><td>駐車場</td><td>郊外は2〜4台以上が必須（布団・まとめ洗いは車来店）。都市部駅近は不要</td></tr>
+  <tr><td>商圏</td><td>半径2km内の世帯数・ファミリー比率・競合（第1弾5章参照）。「利用者は半径2km以内」が目安</td></tr>
+  <tr><td>契約</td><td>原状回復条項（スケルトン戻しか）・24時間営業可否・看板/のぼり設置可否 <span class="conf inf">推測</span></td></tr>
+</table>
+<ul>
+  <li class="note">出典: <a href="https://biz.moneyforward.com/establish/basic/54349/" target="_blank" rel="noreferrer">マネーフォワード 開業手順</a>, <a href="https://www.abc-tenpo.com/contents/blog/48502" target="_blank" rel="noreferrer">居抜き店舗ABC インフラチェック</a>, <a href="https://www.fine-laundry.jp/column/detail.php?id=16" target="_blank" rel="noreferrer">Fujitaka 開業完全ガイド</a>, <a href="https://www.tosei-corporation.co.jp/special/cl_31/" target="_blank" rel="noreferrer">TOSEI 成功のコツ</a></li>
+</ul>
+
+<h3>2-2. 坪数別レイアウトの定石 <span class="conf med">業界相場</span></h3>
+<ul>
+  <li><strong>20坪標準</strong>: 洗濯機5〜10台＋乾燥機を同数かやや多め＋洗濯乾燥機2〜3台。機器間隔は最低80cm、「洗濯→乾燥→畳み台」の動線を一直線に。</li>
+  <li>単身者エリア=小型洗濯機・短時間乾燥中心、ファミリーエリア=大型洗濯乾燥機・布団対応機を厚く。</li>
+  <li>待合スペース（ベンチ・畳み台・Wi-Fi）は滞在快適性＝リピートに直結。建築基準法上は機器設置室が「作業場」扱いになる点に注意（→3章）。</li>
+  <li class="note">モデルプラン例: <a href="https://www.fine-laundry.jp/model/tosei20.html" target="_blank" rel="noreferrer">Fujitaka TOSEI 20坪プラン</a>, <a href="https://www.coinlaundry-miwa.com/20business/2030modelplan/2030modelplan02.html" target="_blank" rel="noreferrer">MIWA 郊外型20坪プラン</a>, <a href="https://www.touwakaden.co.jp/model/" target="_blank" rel="noreferrer">東和コインシステム モデルレイアウト</a></li>
+  <li class="note">出典: <a href="https://www.tenpodesign.com/style/223" target="_blank" rel="noreferrer">店舗デザイン.COM 20坪設備</a></li>
+</ul>
+
+<h3>2-3. 工事費の内訳 <span class="conf med">業界相場</span></h3>
+<table>
+  <tr><th>工事</th><th>内容</th><th>目安</th></tr>
+  <tr><td>電気工事</td><td>動力引込・分電盤・照明</td><td rowspan="4">工事費合計で <strong>500〜1,000万円</strong>（4項目込み）</td></tr>
+  <tr><td>給排水工事</td><td>給水増径・排水管・床上げ</td></tr>
+  <tr><td>ダクト工事</td><td>乾燥機排気・給気</td></tr>
+  <tr><td>内装・外装・看板</td><td>床（防水）・壁・サイン</td></tr>
+</table>
+<ul>
+  <li>スケルトン物件の内装込みでは <strong>1,000〜2,000万円</strong> に達するという出典もあり（<a href="https://ideal-shop.jp/news/shopdesign/61941/" target="_blank" rel="noreferrer">IDEAL</a>）。<strong>居抜き（特に元コインランドリー・元コンビニ）はこの工事費を数百万円単位で圧縮できるのが最大の妙味</strong>。<span class="conf inf">推測</span></li>
+  <li class="note">出典: <a href="https://biz.moneyforward.com/establish/basic/54349/" target="_blank" rel="noreferrer">マネーフォワード</a>, <a href="https://ieul.jp/column/articles/1923/" target="_blank" rel="noreferrer">イエウール 開業資金</a>, <a href="https://land.home4u.jp/guide/landry-7-2822" target="_blank" rel="noreferrer">HOME4U 初期投資</a></li>
+</ul>
+</section>
+
+<section id="law">
+<h2>3. 法規制</h2>
+
+<h3>3-1. 建築基準法・用途地域 <span class="conf high">実データ</span></h3>
+<ul>
+  <li>コインランドリーの建築基準法上の用途は <strong>「洋服店、畳屋、建具屋、自転車店、家庭電気器具店その他これらに類するサービス業を営む店舗」</strong> として取り扱う（茨城県 建築基準法取扱い、H30建指第1154-1号）。<strong>洗濯機等を設置している室は「作業場」として扱う</strong>（待合と間仕切りの有無で作業場範囲が変わる）。</li>
+  <li>根拠法令: 法48条・法別表第2、令130条の3・130条の5の2・130条の5の3。</li>
+  <li>実務結論: <strong>第一種・第二種低層住居専用地域では床面積・原動機出力の制限により原則出店不可</strong>（第一種中高層も制限あり）。それ以外の用途地域は概ね可。物件契約前に自治体建築指導課へ用途確認が必須。</li>
+  <li class="note">出典: <a href="https://www.pref.ibaraki.jp/doboku/kenshi/kenchiku/kenchiku/documents/300227.pdf" target="_blank" rel="noreferrer">茨城県 建築基準法の取扱い PDF</a>（一次資料）, <a href="https://www.fine-laundry.jp/column/detail.php?id=19" target="_blank" rel="noreferrer">Fujitaka 用途地域</a></li>
+  <li class="note">注: 制限の具体数値（兼用住宅50㎡・原動機0.75kW等）は自治体運用差があるため個別確認。<span class="conf inf">推測</span></li>
+</ul>
+
+<h3>3-2. クリーニング業法との関係 <span class="conf high">実データ</span></h3>
+<ul>
+  <li>クリーニング業法の「クリーニング業」は<strong>営業者が他人の洗濯物を処理する営業</strong>。コインランドリーは<strong>利用者自身が機械を操作して洗う</strong>ためクリーニング業法の適用対象外＝クリーニング師・営業許可は不要。これが<strong>無人営業が適法である根拠</strong>。</li>
+  <li>ただし各自治体は<strong>「コインオペレーションクリーニング営業施設 衛生指導要綱」</strong>を定めており、保健所への<strong>開設届</strong>（事前の図面チェック→開設届→施設検査）、<strong>衛生管理責任者（業務管理者）の配置</strong>、利用方法の掲示が求められる（例: 千代田区、川崎市）。法的許可ではなく要綱ベースの指導だが、実務上は必須手続として扱う。</li>
+  <li><strong>落とし穴</strong>: 店内でスタッフが洗濯物を預かる「洗濯代行」を始めると<strong>クリーニング業法の適用対象になり得る</strong>（取次所・クリーニング所の届出が必要）。無人＋セルフの範囲を超えるサービス設計時は保健所に事前相談。</li>
+  <li class="note">出典: <a href="https://www.city.chiyoda.lg.jp/koho/kurashi/kankyoese/egyo/coinlaundry.html" target="_blank" rel="noreferrer">千代田区 コインオペレーションクリーニングの手続き</a>, <a href="https://www.city.kawasaki.jp/350/page/0000035621.html" target="_blank" rel="noreferrer">川崎市 開設・変更・廃止</a>, <a href="https://www.shugiin.go.jp/internet/itdb_housei.nsf/html/houritsu/00719500527207.htm" target="_blank" rel="noreferrer">クリーニング業法 原文</a>, <a href="https://laundromat-kamishichiken.com/ihou/" target="_blank" rel="noreferrer">マンマチャオ 洗濯代行の違法営業注意</a></li>
+</ul>
+
+<h3>3-3. 消防 <span class="conf high">実データ</span></h3>
+<ul>
+  <li>ガス乾燥機・洗濯乾燥機は「<strong>火を使用する設備等</strong>」に該当し、消防法9条＋市町村火災予防条例により<strong>設置届</strong>が必要になる場合がある。</li>
+  <li>東京都の例（火災予防条例57条）: <strong>入力17kW未満・据付面積1㎡未満・シリンダー容積1㎥未満のすべてに該当すれば届出不要</strong>。1台でも超えれば「火を使用する設備等の設置届」を管轄消防署へ。</li>
+  <li>運営面: 乾燥機のリント（糸くず）＋ダクト内堆積が火災原因の定番。フィルター日次清掃＋ダクト定期清掃（年1回目安）を防火計画に組み込む。<span class="conf med">業界相場</span></li>
+  <li class="note">出典: <a href="https://www.coinlaundry-miwa.com/45yorozu/post_71.html" target="_blank" rel="noreferrer">MIWA 消防届出</a>, <a href="https://senkaq.com/cleanness/blog/fire-prevention/" target="_blank" rel="noreferrer">センカク 火災防止</a></li>
+</ul>
+
+<h3>3-4. 水道・下水道 <span class="conf med">業界相場</span><span class="conf inf">推測</span></h3>
+<ul>
+  <li>給水管の増径・給水装置工事は<strong>水道局指定給水装置工事事業者</strong>経由で申請。自治体により<strong>加入金・口径変更負担金</strong>が発生（数十万円規模になり得る）。<span class="conf inf">推測</span></li>
+  <li>下水道は使用開始（用途変更・大量排水）の届出が必要な自治体がある。大量排水として<strong>除害・水量申告</strong>を求める自治体もあるため、工事業者経由で水道局・下水道局に事前確認。<span class="conf inf">推測</span></li>
+  <li>ここは自治体差が大きく一般化できない。<strong>チェックリスト項目としては「指定工事店に給排水申請一式を見積時に含めさせる」が実務解</strong>。</li>
+</ul>
+
+<h3>3-5. 騒音・営業時間 <span class="conf med">業界相場</span></h3>
+<ul>
+  <li>営業時間を直接制限する業法はなく、<strong>約9割が24時間営業</strong>（残りは5時〜24時など時間設定）。</li>
+  <li>ただし住居系地域では騒音規制法・自治体条例の規制基準（夜間の敷地境界騒音）と近隣クレームが実質的制約。乾燥機・ダクト・深夜の車のドア音が典型。対策: 防振ゴム・ダクト消音・出入口の向き・深夜帯の一部機器停止。<span class="conf inf">推測</span></li>
+  <li class="note">出典: <a href="https://laundry.senkaq.com/column/eigyou-jikan/" target="_blank" rel="noreferrer">ピエロ 営業時間</a>, <a href="https://www.s-usagi.co.jp/promotion/2/blog_detail.html?key=entry&amp;value=34" target="_blank" rel="noreferrer">うさぎ 騒音トラブル対策</a></li>
+</ul>
+</section>
+
+<section id="fund">
+<h2>4. 資金調達・支援制度</h2>
+
+<h3>4-1. 融資 <span class="conf med">業界相場・制度は改定頻繁</span></h3>
+<ul>
+  <li><strong>日本政策金融公庫</strong>: 創業融資の定番。融資限度3,000万円（うち運転資金1,500万円）・自己資金1/10以上という記載が流通するが、<strong>2024年に新創業融資制度が「新規開業・スタートアップ支援資金」へ再編されるなど制度改定が頻繁</strong>なため、申込時点の公庫サイトで要確認。<span class="conf med">確度中</span></li>
+  <li><strong>経営革新計画</strong>の承認を得ると公庫融資の特別金利（最大▲0.65%）等の優遇。</li>
+  <li><strong>制度融資</strong>（都道府県・市区町村＋信用保証協会）: 利子補給・保証料補助がある自治体多数。<span class="conf med">業界相場</span></li>
+  <li><strong>審査の勘所</strong> <span class="conf inf">推測</span>: コインランドリーは「実績ゼロ・無人・立地勝負」の事業計画になるため、商圏調査データ（世帯数・競合マップ）と悲観シナリオ（稼働率5%）付き資金繰り表が説得材料。機器メーカー・FCの売上予測をそのまま貼るのは金融機関に見抜かれる。</li>
+  <li class="note">出典: <a href="https://www.tosei-corporation.co.jp/special/cl_07/" target="_blank" rel="noreferrer">TOSEI 補助金・融資</a>, <a href="https://www.nidlasystem.co.jp/column/financing/" target="_blank" rel="noreferrer">ニド 融資制度</a>, <a href="https://v-spirits.com/%E4%BC%9A%E7%A4%BE%E8%A8%AD%E7%AB%8B/coin-laundry-startup-cost-funding" target="_blank" rel="noreferrer">V-Spirits 資金調達</a></li>
+</ul>
+
+<h3>4-2. 補助金 <span class="conf med">業界相場</span></h3>
+<table>
+  <tr><th>制度</th><th>適用可否・使いどころ</th></tr>
+  <tr><td>小規模事業者持続化補助金</td><td>上限50〜200万円。広告宣伝・看板・チラシ・Web等の販路開拓費に。機器本体は対象外が原則</td></tr>
+  <tr><td>事業再構築補助金</td><td>「成長枠」でコインランドリーの採択事例あり（既存事業からの多角化文脈）。<strong>公募は終了し後継制度へ移行</strong></td></tr>
+  <tr><td>新事業進出補助金（後継）</td><td>コインランドリーは「<strong>雇用を生みにくく資産運用性が高い業種</strong>」として<strong>採択されにくい業種に明記</strong>。狙うなら既存事業の強み・地域連携・雇用創出を計画に織り込む必要</td></tr>
+  <tr><td>IT導入補助金</td><td>IoT・キャッシュレス端末で使える可能性 <span class="conf inf">推測</span></td></tr>
+</table>
+<ul>
+  <li class="note">出典: <a href="https://www.electroluxprofessional.com/jp/blog240119/" target="_blank" rel="noreferrer">Electrolux 事業再構築の採択傾向</a>, <a href="https://mono-support.com/shinshijo/shinzigyo-coin-laundry/" target="_blank" rel="noreferrer">ものづくり補助金情報中心 新事業進出とコインランドリー</a>, <a href="https://tsunagu-support.com/blog/%E6%96%B0%E4%BA%8B%E6%A5%AD%E9%80%B2%E5%87%BA%E8%A3%9C%E5%8A%A9%E9%87%91-%E6%8E%A1%E6%8A%9E%E3%81%95%E3%82%8C%E3%82%84%E3%81%99%E3%81%84%E6%A5%AD%E7%A8%AE/" target="_blank" rel="noreferrer">つなぐサポート 採択されやすい業種</a>, <a href="https://www.nidlasystem.co.jp/column/subsidy/" target="_blank" rel="noreferrer">ニド 補助金</a></li>
+</ul>
+<div class="callout">
+  <strong>コンサル所見</strong> <span class="conf inf">推測</span>: 補助金は「取れたら儲けもの」で事業計画の前提に入れない。確度が高いのは持続化補助金（販促費）のみ。
+</div>
+</section>
+
+<section id="tax">
+<h2>5. 税務・会計</h2>
+
+<h3>5-1. 減価償却 <span class="conf high">実データ</span></h3>
+<ul>
+  <li>コインランドリー機器（洗濯機・乾燥機）は「機械装置」で<strong>法定耐用年数13年</strong>。</li>
+  <li><strong>中古機器</strong>は残存耐用年数で償却。法定年数を全部経過した中古は「13年×20%＝2.6年→<strong>2年</strong>」で償却でき、経費化が速い（中古機投資の税務メリット）。</li>
+  <li class="note">出典: <a href="https://www.nidlasystem.co.jp/column/coin-laundry-depreciation/" target="_blank" rel="noreferrer">ニド 減価償却</a>, <a href="https://www.miyuki-k.co.jp/interest1/" target="_blank" rel="noreferrer">美幸工業 耐用年数</a>, <a href="https://laundry.senkaq.com/contents/kizai-taiyounensu/" target="_blank" rel="noreferrer">ピエロ 新品・中古の耐用年数</a></li>
+</ul>
+
+<h3>5-2. 中小企業経営強化税制（即時償却/税額控除） <span class="conf high">実データ</span></h3>
+<ul>
+  <li>認定を受ければ<strong>即時償却または税額控除</strong>を選択可。例: 6,000万円投資×実効税率35%＝約2,100万円の当期税負担圧縮（＝課税繰延）。</li>
+  <li><strong>2023年4月改正で「経営（管理）のおおむね全部を他者に委託する」パッケージ型は対象外</strong>に。FCの丸投げ運営スキームでの節税は封じられた。自ら運営に関与する形なら引き続き適用余地。適用期限は<strong>2027年3月31日</strong>（延長保証なし）。</li>
+  <li><strong>注意</strong>: 即時償却は課税の繰延であり免除ではない。売上未達＋借入返済で資金繰りが崩れる「節税目的開業」の失敗パターンが多い。</li>
+  <li class="note">出典: <a href="https://www.electroluxprofessional.com/jp/blog231206/" target="_blank" rel="noreferrer">Electrolux 2023年税制改正解説</a>, <a href="https://www.nidlasystem.co.jp/column/coin-laundry-tax-savings/" target="_blank" rel="noreferrer">ニド 節税の注意点</a>, <a href="https://www.kawa-sho.co.jp/blog_post_0000793.html" target="_blank" rel="noreferrer">川庄会計 コインランドリー節税規制</a></li>
+</ul>
+
+<h3>5-3. 消費税・インボイス <span class="conf med">業界相場</span><span class="conf inf">一部推測</span></h3>
+<ul>
+  <li>売上（機器利用料）は<strong>課税売上</strong>。基準期間課税売上高1,000万円超で課税事業者。</li>
+  <li>簡易課税: クリーニング店等と同様に日本標準産業分類上サービス業＝<strong>第5種（みなし仕入率50%）に該当する可能性が高い</strong>。<span class="conf inf">推測・要税理士確認</span> 水道光熱費・ガス代など課税仕入が売上の3〜4割ある業態なので、簡易(50%控除)と本則の有利判定は毎期試算する価値あり。</li>
+  <li>インボイス: 顧客はほぼ一般消費者のため<strong>登録は必須ではない</strong>。ただし民泊・美容院等の<strong>法人・事業者利用を取り込むなら適格請求書（領収書）発行が営業ツールになる</strong>ため、法人需要戦略（→8章）とセットで判断。</li>
+  <li class="note">出典: <a href="https://www.nta.go.jp/taxes/shiraberu/taxanswer/shohi/6509.htm" target="_blank" rel="noreferrer">国税庁 簡易課税の事業区分</a>, <a href="http://sigma-tax.or.jp/blog/1502/" target="_blank" rel="noreferrer">シグマパートナーズ クリーニング店の簡易課税</a>, <a href="https://www.tosei-corporation.co.jp/column/column13.html" target="_blank" rel="noreferrer">TOSEI 勘定科目</a></li>
+</ul>
+
+<h3>5-4. 現金管理 <span class="conf med">業界相場</span><span class="conf inf">推測</span></h3>
+<ul>
+  <li>現金商売のため税務調査では売上計上の網羅性が論点。<strong>集金日ごとの機器別カウント記録（IoTカウンタや集金伝票）を残す</strong>のが防衛策。キャッシュレス・IoT化は売上の客観記録が残る点でも税務に有利。<span class="conf inf">推測</span></li>
+</ul>
+</section>
+
+<section id="insurance">
+<h2>6. 保険 <span class="conf med">業界相場</span></h2>
+<table>
+  <tr><th>保険</th><th>カバーするリスク</th></tr>
+  <tr><td><strong>施設賠償責任保険</strong></td><td>施設の不備による利用者のケガ、<strong>漏水・放水による階下・隣接への水濡れ賠償</strong>（テナント出店では必須級）</td></tr>
+  <tr><td><strong>動産総合保険</strong></td><td>機器自体の火災・破裂・爆発等の損害（機器1,000万円超の資産防衛）</td></tr>
+  <tr><td>借家人賠償責任保険</td><td>借用物件自体への損害（火災保険特約）</td></tr>
+  <tr><td>休業補償</td><td>火災・水漏れ等での営業停止期間の逸失利益</td></tr>
+  <tr><td><strong>事業活動総合保険</strong></td><td>上記を包括（機器・設備破損、利用者のケガ、洗濯物への損害まで一本化）</td></tr>
+</table>
+<ul>
+  <li>無人で不特定多数が出入りするため、有人店より賠償リスクの裾野が広い（転倒・子どもの機器への閉じ込め・洗濯物損害クレーム）。<strong>「施設賠償＋動産総合」を最低ライン、可能なら事業活動総合保険で包括</strong>が推奨されている。</li>
+  <li>保険料相場の公開情報は乏しい。施設賠償は年数万円〜が一般相場だが、店舗条件次第。<span class="conf low">確度低</span></li>
+  <li class="note">出典: <a href="https://www.coinlaundry-miwa.com/20business/2075hoken/post_26.html" target="_blank" rel="noreferrer">MIWA コインランドリー保険</a>, <a href="https://www.torio-fc.com/info/columns/1077/" target="_blank" rel="noreferrer">トリオマネジメント 保険で備える</a>, <a href="https://www.s-usagi.co.jp/promotion/2/blog_detail.html?key=entry&amp;value=40" target="_blank" rel="noreferrer">うさぎ 保険活用</a>, <a href="https://money-career.com/article/2762" target="_blank" rel="noreferrer">マネーキャリア 施設賠償の相場</a></li>
+</ul>
+</section>
+
+<section id="ops">
+<h2>7. 運営オペレーション</h2>
+
+<h3>7-1. 定常業務 <span class="conf med">業界相場</span></h3>
+<table>
+  <tr><th>頻度</th><th>業務</th></tr>
+  <tr><td>日次</td><td>床清掃・ゴミ回収・<strong>乾燥機フィルター清掃（防火・乾燥効率に直結）</strong>・機器/両替機の稼働確認（遠隔でも可）</td></tr>
+  <tr><td>週次〜月4回</td><td><strong>集金</strong>・釣銭/両替機の補充（両替機のコイン切れは直接の機会損失）・洗剤/柔軟剤の補充（自動投入機）</td></tr>
+  <tr><td>月次</td><td>売上・稼働率分析（機器別・時間帯別）、機器まわり清掃、設備点検</td></tr>
+  <tr><td>年次</td><td><strong>排気ダクト清掃</strong>（火災予防）、機器オーバーホール検討、保険・リース契約見直し</td></tr>
+</table>
+<ul>
+  <li>清掃・集金は外注可能（日常清掃＋月4回集金＋釣銭補充＋洗剤交換のパッケージ例あり）。清掃品質はリピート率の最重要因子で、「清掃管理の欠如」は失敗原因の定番（第1弾6章）。</li>
+  <li class="note">出典: <a href="https://alive-seiso-jochu.jimdofree.com/%E3%81%94%E5%88%A9%E7%94%A8%E4%BE%8B/%E3%82%B3%E3%82%A4%E3%83%B3%E3%83%A9%E3%83%B3%E3%83%89%E3%83%AA%E3%83%BC2/" target="_blank" rel="noreferrer">ALIVE 清掃・集金サービス</a>, <a href="https://mammaciao.com/blog/55" target="_blank" rel="noreferrer">マンマチャオ 集金作業</a>, <a href="https://laundream.com/blog/2539/" target="_blank" rel="noreferrer">ラウンドリーム オーナーの仕事</a></li>
+</ul>
+
+<h3>7-2. 遠隔監視・外注 <span class="conf med">業界相場</span></h3>
+<ul>
+  <li>管理システムで「稼働状況のPC/スマホ監視」「<strong>両替機からの遠隔返金</strong>」「機器の遠隔操作（再起動・ドア解錠）」「24時間コールセンター」までアウトソース可能。オーナーの現地出動をほぼゼロにできる。</li>
+  <li class="note">出典: <a href="https://www.coinlaundry-miwa.com/2060managiment/" target="_blank" rel="noreferrer">MIWA 管理システム</a>, <a href="https://www.coinlaundry-miwa.com/20business/2060managiment/post.html" target="_blank" rel="noreferrer">MIWA コールセンター外注</a></li>
+</ul>
+
+<h3>7-3. トラブル対応の定石 <span class="conf med">業界相場</span><span class="conf inf">推測</span></h3>
+<ul>
+  <li><strong>忘れ物・放置洗濯物</strong>: 保管ルール（例: 名札付けて◯日保管→処分）を掲示で事前宣言。放置は機器稼働率を直接下げるため、長時間放置の取り出しルールも掲示。<span class="conf inf">推測含む</span></li>
+  <li><strong>故障・返金</strong>: コールセンター＋遠隔返金で即応。返金対応の遅さはGoogleレビュー低評価→集客毀損に直結。<span class="conf inf">推測</span></li>
+  <li><strong>クレーム</strong>: 「クレーム対応の放置」は失敗原因10選の常連。連絡先掲示＋24h窓口が標準装備。</li>
+  <li><strong>防犯</strong>: 両替機の破壊・現金盗難が最大リスク。防犯カメラ（録画告知掲示）・夜間照明・機械警備（ALSOK等はコインランドリー向けプランを公表）・<strong>両替機内の現金を最小限にする集金頻度設計</strong>。</li>
+  <li class="note">出典: <a href="https://www.alsok.co.jp/corporate/recommend/coin-laundry.html" target="_blank" rel="noreferrer">ALSOK コインランドリー防犯</a>, <a href="https://www.electroluxprofessional.com/jp/blog0001/" target="_blank" rel="noreferrer">Electrolux 失敗原因</a></li>
+</ul>
+</section>
+
+<section id="promo">
+<h2>8. 販促・稼働平準化</h2>
+
+<h3>8-1. オープン施策 <span class="conf med">業界相場</span></h3>
+<ul>
+  <li>開業直後1〜2ヶ月は<strong>オーナー在店</strong>が推奨（使い方案内＝初回体験の質がリピートを決める。第1弾6章の失敗原因の裏返し）。</li>
+  <li>定番: 新聞折込・ポスティングチラシ（商圏2km）、無料/半額オープンイベント、のぼり・看板、<strong>Googleビジネスプロフィール（MEO）整備</strong>。「売上の8割はリピーター」なので、開業期は採算度外視で初回利用数を最大化する。</li>
+  <li class="note">出典: <a href="https://www.tosei-corporation.co.jp/special/cl_31/" target="_blank" rel="noreferrer">TOSEI 成功のコツ</a>, <a href="https://www.fine-laundry.jp/column/detail.php?id=23" target="_blank" rel="noreferrer">Fujitaka 集客方法</a>, <a href="https://laundry.senkaq.com/contents/keiei-shukyaku/" target="_blank" rel="noreferrer">ピエロ 集客</a></li>
+</ul>
+
+<h3>8-2. 会員・アプリ <span class="conf med">業界相場</span></h3>
+<ul>
+  <li>アプリで「空き状況確認・終了通知・ポイント/クーポン」を提供（wash-plus「smart laundry」がアプリ45万DL・400店。第1弾7章）。プリペイド/会員ポイントは囲い込み＋前受金化の効果。</li>
+  <li>稼働データ分析による<strong>時間帯・天候別の価格変動制</strong>を導入する店も出現。</li>
+</ul>
+
+<h3>8-3. 稼働平準化 <span class="conf med">業界相場</span><span class="conf inf">推測</span></h3>
+<ul>
+  <li>稼働は天候依存: <strong>雨天・花粉期は乾燥需要で稼働増、晴天続きは低下</strong>。閑散対策の実例として「平日午後の時間限定割引」で長期利益を改善した事例。</li>
+  <li>平準化の定石 <span class="conf inf">推測</span>: 平日昼割・深夜割、雨の日クーポン（アプリPush）、閑散時間帯の法人利用誘導（→8-4）。</li>
+  <li class="note">出典: <a href="https://www.tosei-corporation.co.jp/column/column16.html" target="_blank" rel="noreferrer">TOSEI 稼働率と売上</a>, <a href="https://www.guidance-landusage.com/coin_laundry/mistakecoin_laundry.html" target="_blank" rel="noreferrer">guidance-landusage 失敗事例</a></li>
+</ul>
+
+<h3>8-4. 法人需要 <span class="conf inf">推測が中心</span></h3>
+<ul>
+  <li>候補: <strong>民泊（シーツ・タオル）、美容院（タオル）、飲食店（おしぼり・ナプキン）、整骨院・ジム、介護施設</strong>。これらの業種はクリーニング外注を「衛生費/外注費」で常時計上しており、近隣コインランドリーの法人契約（月極・回数券・閑散時間帯指定）は外注費削減の提案が刺さる。<span class="conf inf">推測</span></li>
+  <li>実務: 適格請求書（インボイス）発行・月末締め請求対応・大型機の優先利用枠がセールスポイント。ただし本格的に「預かって洗う」とクリーニング業法に触れるため、<strong>あくまでセルフ利用の法人契約</strong>に留める（→3-2）。<span class="conf inf">推測</span></li>
+  <li class="note">出典（法人側の経理慣行）: <a href="https://www.tosei-corporation.co.jp/column/column13.html" target="_blank" rel="noreferrer">TOSEI 勘定科目</a>, <a href="https://go.invoy.jp/how-to-invoice/%E3%82%AF%E3%83%AA%E3%83%BC%E3%83%8B%E3%83%B3%E3%82%B0%E4%BB%A3%E3%81%AE%E5%8B%98%E5%AE%9A%E7%A7%91%E7%9B%AE%E3%81%AF5%E3%81%A4%EF%BC%81%E7%8A%B6%E6%B3%81%E5%88%A5%E3%81%AE%E4%BB%95%E8%A8%B3%E3%81%A8/" target="_blank" rel="noreferrer">INVOY クリーニング代の勘定科目</a></li>
+</ul>
+</section>
+
+<section id="exit">
+<h2>9. 撤退・出口</h2>
+
+<h3>9-1. 出口の3ルートと優先順位 <span class="conf med">業界相場</span><span class="conf inf">推測</span></h3>
+<ol>
+  <li><strong>営業中の事業譲渡（居抜き売却）</strong> — 回収率最高。売上実績・立地・機器年式で値が付く</li>
+  <li><strong>機器の中古売却＋物件返却</strong> — 機器は専門業者が全国買取（開店市場等）。ただし撤去・搬出費と相殺</li>
+  <li><strong>廃業＋原状回復</strong> — 最も持ち出しが大きい</li>
+</ol>
+<ul>
+  <li class="note">出典: <a href="https://ma.funaisoken.co.jp/column/overview_of_coin_laundry_m-a" target="_blank" rel="noreferrer">船井総研 コインランドリーM&amp;A</a>, <a href="https://www.kaitenichiba.jp/025-coinlaundry/" target="_blank" rel="noreferrer">開店市場 中古買取</a>, <a href="https://www.kikawa.net/laundryforce/" target="_blank" rel="noreferrer">ランドリーフォース</a></li>
+</ul>
+
+<h3>9-2. 売却相場 <span class="conf med">業界相場</span></h3>
+<ul>
+  <li>コインランドリーM&amp;Aの成約価格は<strong>300万〜1,500万円が中心、2,000万円超も</strong>（立地・設備年式・収益力次第）。初期投資2,000〜3,000万円に対し大きく毀損するのが通常＝<strong>出口前提でも投資回収は営業キャッシュフローが主</strong>という前提を崩さない。</li>
+  <li>マーケットは厚い: バトンズで関連売却案件500件超、TRANBI にも常時掲載（300万円以下の案件カテゴリすらある）。<strong>売り案件の多さ自体が、参入時の「居抜き取得」機会でもある</strong>。</li>
+  <li class="note">出典: <a href="https://sfs-inc.jp/ma/1172/" target="_blank" rel="noreferrer">M&amp;A HACK 売却相場</a>, <a href="https://batonz.jp/sell_cases/?q=%E3%82%B3%E3%82%A4%E3%83%B3%E3%83%A9%E3%83%B3%E3%83%89%E3%83%AA%E3%83%BC" target="_blank" rel="noreferrer">バトンズ 売却案件一覧</a>, <a href="https://www.tranbi.com/buy/list/division/58/" target="_blank" rel="noreferrer">TRANBI</a></li>
+</ul>
+
+<h3>9-3. 原状回復 <span class="conf med">業界相場</span></h3>
+<ul>
+  <li>賃貸借契約の原状回復条項次第（スケルトン戻しか否か）。一般相場: 内装解体1.5〜4万円/坪、給排水・ダクト等の特殊設備が多い業態は<strong>10万円/坪超</strong>もあり、コインランドリーは設備撤去（ダクト・床上げ配管・動力）で高くなりやすい。20坪なら<strong>100〜300万円規模を撤退引当として見込む</strong>。<span class="conf inf">推測</span></li>
+  <li>リース残債・借入残高は譲渡時に承継または一括清算の交渉事項。<strong>リース機は勝手に売却できない</strong>点に注意。<span class="conf inf">推測</span></li>
+  <li class="note">出典: <a href="https://rehome-navi.com/articles/3539" target="_blank" rel="noreferrer">リショップナビ スケルトン工事</a>, <a href="https://allmake.co.jp/blog/tenant-genjokaifuku-dokomade/" target="_blank" rel="noreferrer">オールメイク 原状回復の範囲</a></li>
+</ul>
+</section>
+
+<section id="case">
+<h2>10. ケーススタディ</h2>
+
+<h3>成功事例 <span class="conf med">業界相場（メーカー発表ベース＝楽観バイアス注意）</span></h3>
+<ol>
+  <li><strong>都市部・ファミリー住宅地×スーパー近接×駅近</strong>: 開業3年目で月商80〜100万円、利回り10%以上（TOSEI紹介事例）。</li>
+  <li><strong>地方・コンビニ跡地の居抜き活用</strong>: 初年度赤字→2年目以降月商70〜100万円、約10年で初期費用回収（TOSEI紹介事例）。居抜きで工事費を圧縮し駐車場付きという郊外の定石形。</li>
+  <li><strong>閑散時間帯の時間限定割引</strong>: 「平日午後の料金割引」導入で長期的な利益向上を実現。オーナーの言「コインランドリー投資は投資ではなく経営だ」（guidance-landusage紹介事例）。</li>
+  <li>（参考・企業例）<strong>wash-plus</strong>: IoT化・キャッシュレスで導入400店/アプリ45万DLまで成長（第1弾7章参照）。差別化軸がFC拡大の推進力になった例。</li>
+</ol>
+<ul>
+  <li class="note">出典: <a href="https://www.tosei-corporation.co.jp/special/cl_31/" target="_blank" rel="noreferrer">TOSEI 成功事例</a>, <a href="https://www.guidance-landusage.com/coin_laundry/mistakecoin_laundry.html" target="_blank" rel="noreferrer">guidance-landusage</a></li>
+</ul>
+
+<h3>失敗事例 <span class="conf med">業界相場</span><span class="conf low">確度低（実名・実数付き失敗例の公開はほぼ皆無）</span></h3>
+<ol>
+  <li><strong>初期高利益期待×フルローン型</strong>: 初期費用2,000〜4,000万円の大半をローンに依存→開業初期の低稼働期（軌道化まで1〜2年）に返済が先行し資金繰り破綻。失敗の最頻パターンとして複数ソースが一致。</li>
+  <li><strong>立地ミスマッチ型</strong>: オフィス街・商圏世帯不足・駐車場なしで開業→リピーターが積み上がらず稼働率が5%未満に張り付き撤退。<span class="conf inf">推測含む</span></li>
+  <li><strong>競合出現・差別化不能型</strong>: 近隣に新店（大型・IoT・カフェ併設）が出店。洗濯・乾燥の基本機能では差別化できず、価格・ポイント等の対抗策を打てない旧型店が客を奪われる。</li>
+  <li><strong>節税目的・丸投げ型</strong>: 即時償却目当てでパッケージ購入→2023年税制改正で丸投げ型は優遇対象外に。節税メリット前提の収支が崩れ、売上も未達で二重に苦しむ。<span class="conf inf">推測含む</span></li>
+</ol>
+<ul>
+  <li>数字付きの失敗実例（投資額→撤退損失）は公開情報にほぼ存在しない。<strong>M&amp;A市場の成約価格（投資2,000万超→売却300万〜1,500万）が実質的な「失敗の数字」の代理指標</strong>。<span class="conf inf">推測</span></li>
+  <li class="note">出典: <a href="https://ieul.jp/column/articles/15379/" target="_blank" rel="noreferrer">イエウール 失敗要因</a>, <a href="https://www.electroluxprofessional.com/jp/blog0005/" target="_blank" rel="noreferrer">Electrolux 厳しいと言われる理由</a>, <a href="https://www.electroluxprofessional.com/jp/blog11534/" target="_blank" rel="noreferrer">Electrolux 儲からない？</a>, <a href="https://www.guidance-landusage.com/coin_laundry/mistakecoin_laundry.html" target="_blank" rel="noreferrer">guidance-landusage</a></li>
+</ul>
+</section>
+
+<section id="apxA">
+<h2>付録A: 開業実務チェックリスト（時系列）</h2>
+
+<h3>T-6〜4ヶ月（物件・計画）</h3>
+<ul class="chk">
+  <li>用途地域確認（一低・二低は不可、建築指導課へ用途照会）</li>
+  <li>物件インフラ確認: 動力200V容量／給水口径／排水経路／ガス供給／排気ダクト経路／搬入間口</li>
+  <li>商圏調査: 半径2km世帯数・ファミリー比率・競合マップ・駐車場要否</li>
+  <li>賃貸借契約の確認: 24時間営業可否・看板・原状回復範囲（スケルトン条項）</li>
+  <li>機器相見積（TOSEI/AQUA/山本/海外系）＋リースvs購入の資金計画</li>
+  <li>事業計画書（悲観シナリオ稼働率5%併記）→公庫・制度融資申込</li>
+  <li>税理士相談: 経営強化税制（即時償却）の適用可否・簡易課税有利判定</li>
+</ul>
+
+<h3>T-3〜1ヶ月（工事・届出）</h3>
+<ul class="chk">
+  <li>電気・給排水・ダクト・内装工事（指定工事店経由で水道局申請含む）</li>
+  <li>消防: 乾燥機の「火を使用する設備等の設置届」要否を管轄消防署に確認</li>
+  <li>保健所: コインオペレーションクリーニング開設届（事前図面チェック→届出→施設検査）＋衛生管理責任者</li>
+  <li>保険加入: 施設賠償＋動産総合（または事業活動総合保険）</li>
+  <li>防犯: カメラ・照明・機械警備・両替機の現金最小化ルール</li>
+  <li>遠隔監視・コールセンター・清掃/集金外注の契約</li>
+  <li>持続化補助金（販促費）申請検討</li>
+</ul>
+
+<h3>開業〜3ヶ月</h3>
+<ul class="chk">
+  <li>チラシ2km圏ポスティング＋オープンイベント＋MEO整備</li>
+  <li>初期1〜2ヶ月はオーナー在店（使い方案内・改善点収集）</li>
+  <li>機器別・時間帯別稼働データの記録開始（集金記録＝税務防衛も兼ねる）</li>
+  <li>忘れ物・返金・クレーム対応ルールの掲示</li>
+</ul>
+
+<h3>運営期（毎年）</h3>
+<ul class="chk">
+  <li>ダクト清掃（防火）・保険/リース見直し・簡易課税有利判定</li>
+  <li>稼働平準化施策（平日昼割・雨の日クーポン・法人契約開拓）</li>
+  <li>出口価値の定点観測（バトンズ等の類似案件相場）</li>
+</ul>
+</section>
+
+<section id="apxB">
+<h2>付録B: biz-params追加提案</h2>
+<p class="note">data/biz-params.json は本タスクでは未編集。以下を実装側でパラメータ化する価値あり。いずれも <code>source</code>/<code>confidence</code> 付きで。</p>
+<table>
+  <tr><th>キー案</th><th>値・レンジ</th><th>根拠</th></tr>
+  <tr><td><code>equipment.depreciationYears</code></td><td>13（新品）/ 2（耐用年数超過中古）</td><td>法定耐用年数 <span class="conf high">実データ</span></td></tr>
+  <tr><td><code>equipment.leaseInitialCostReduction</code></td><td>初期費用を約2,000-2,500万→1,500万台に圧縮</td><td>イエウール <span class="conf med">業界相場</span></td></tr>
+  <tr><td><code>construction.costRange</code></td><td>500〜1,000万円（スケルトンは1,000〜2,000万）</td><td>マネーフォワード/IDEAL <span class="conf med">業界相場</span></td></tr>
+  <tr><td><code>tax.simplifiedTaxBusinessType</code></td><td>第5種・みなし仕入率50%（要税理士確認）</td><td>国税庁分類からの推定 <span class="conf inf">推測</span></td></tr>
+  <tr><td><code>insurance.annualCost</code></td><td>数万〜十数万円/年</td><td><span class="conf low">確度低・推測</span></td></tr>
+  <tr><td><code>exit.resalePriceRange</code></td><td>300万〜1,500万円（中心帯）</td><td>M&amp;A HACK <span class="conf med">業界相場</span></td></tr>
+  <tr><td><code>exit.restorationCostPerTsubo</code></td><td>1.5〜10万円/坪（設備撤去次第）</td><td>原状回復一般相場 <span class="conf med">業界相場</span></td></tr>
+  <tr><td><code>ops.outsourcingMonthlyCost</code></td><td>清掃・集金・コールセンター外注の月額（要見積）</td><td><span class="conf inf">推測</span></td></tr>
+  <tr><td><code>promo.repeaterSalesRatio</code></td><td>0.8（売上の8割がリピーター）</td><td>TOSEI <span class="conf med">業界相場</span></td></tr>
+  <tr><td><code>promo.rampUpYears</code></td><td>1〜2年（軌道化まで）</td><td>TOSEI <span class="conf med">業界相場</span></td></tr>
+</table>
+</section>
+
+<section id="apxC">
+<h2>付録C: 本書の確度が低い箇所（要追加検証）</h2>
+<ol>
+  <li>給排水の届出・負担金の具体額 — 自治体差が大きく一般化不能（3-4）</li>
+  <li>簡易課税の事業区分（第5種） — クリーニング店からの類推であり税理士確認必須（5-3）</li>
+  <li>保険料の相場 — 公開情報が乏しい（6章）</li>
+  <li>法人需要の獲得手法・単価 — 公開事例がなくロジック推定（8-4）</li>
+  <li>公庫の融資条件 — 2024年制度再編後の最新条件は申込時点で要確認（4-1）</li>
+  <li>失敗事例の具体数字 — 公開実例が存在せず、M&amp;A成約価格を代理指標とした（10章）</li>
+</ol>
+</section>
+
+<footer>
+  MC-424 コインランドリー事業 コンサルティングナレッジ（第2弾）／ 作成: 2026-08-22 ／ 原本: laundry-jp/docs/consulting-knowledge.md ／ 第1弾: 収益分析レポート（MC-409）。数値は出典時点の公開情報であり、契約・申請時は必ず一次情報を確認のこと。
+</footer>
+
+</div>
+</div>
+</body>
+</html>
