@@ -1723,10 +1723,21 @@ function WorkLboTab() {
 // 収益プラン、集客プラン等など考えて記載して」・MC-384）。静的ページ /laundry-plan.html を
 // LBOモデラーと同じ iframe 方式で表示し、実働プロトタイプへのリンクも並べる。
 function WorkLaundryTab() {
-  // 事業計画と市場調査レポート（2026-08-21 Keita「東京のコインランドリー事情を調べてLaundryタブに」）の切替。
-  const [doc, setDoc] = useState<'plan' | 'market'>('plan');
-  const src = doc === 'plan' ? '/laundry-plan.html' : '/laundry-market-report.html';
-  const title = doc === 'plan' ? 'CoinLaundry.Tokyo 事業計画' : '東京のコインランドリー事情 調査レポート';
+  // 事業計画・市場調査（2026-08-21 Keita「東京のコインランドリー事情を調べてLaundryタブに」）・
+  // 収益分析（MC-409 事業ビジネス分析レポート）の切替。
+  const [doc, setDoc] = useState<'plan' | 'market' | 'biz'>('plan');
+  const src =
+    doc === 'plan'
+      ? '/laundry-plan.html'
+      : doc === 'market'
+        ? '/laundry-market-report.html'
+        : '/laundry-business-analysis.html';
+  const title =
+    doc === 'plan'
+      ? 'CoinLaundry.Tokyo 事業計画'
+      : doc === 'market'
+        ? '東京のコインランドリー事情 調査レポート'
+        : 'コインランドリー事業 収益分析レポート';
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex items-center gap-2">
@@ -1734,6 +1745,7 @@ function WorkLaundryTab() {
           {([
             ['plan', '事業計画'],
             ['market', '市場調査'],
+            ['biz', '収益分析'],
           ] as const).map(([key, label]) => (
             <button
               key={key}

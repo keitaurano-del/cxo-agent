@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>コインランドリー事業 収益分析レポート（MC-409）</title>
+<style>
+/* laundry-plan.html / laundry-market-report.html と同じ帳票トーン（白＋淡ブルー＋濃紺） */
+:root{
+  --navy:#16324f; --blue:#2a6db0; --blue-soft:#e8f1f9; --blue-line:#c7dcef;
+  --text:#23303c; --muted:#6b7a89; --bg:#f6f9fc; --white:#fff;
+  --green:#1d8a4e; --red:#c0392b; --amber:#9a6b15;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Hiragino Sans",Meiryo,"Segoe UI",sans-serif;color:var(--text);background:var(--bg);font-size:14px;line-height:1.75}
+.wrap{max-width:860px;margin:0 auto;padding:20px 16px 64px}
+header.doc{background:var(--navy);color:#fff;padding:22px 20px;border-radius:8px 8px 0 0}
+header.doc h1{font-size:20px;letter-spacing:.02em}
+header.doc .sub{font-size:12px;color:#bcd0e4;margin-top:6px}
+header.doc .meta{font-size:11px;color:#8fa9c4;margin-top:10px;display:flex;gap:16px;flex-wrap:wrap}
+.paper{background:var(--white);border:1px solid var(--blue-line);border-top:none;border-radius:0 0 8px 8px;padding:8px 20px 28px}
+nav.toc{background:var(--blue-soft);border:1px solid var(--blue-line);border-radius:6px;padding:12px 16px;margin:18px 0 6px;font-size:12.5px}
+nav.toc a{color:var(--blue);text-decoration:none;margin-right:14px;display:inline-block;padding:2px 0}
+section{margin-top:34px}
+h2{font-size:16px;color:var(--navy);border-left:4px solid var(--blue);padding-left:10px;margin-bottom:14px;letter-spacing:.02em}
+h3{font-size:13.5px;color:var(--navy);margin:18px 0 8px}
+p{margin:8px 0}
+ul,ol{margin:8px 0 8px 1.4em}
+li{margin:4px 0}
+a{color:var(--blue)}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+th{background:var(--blue-soft);color:var(--navy);text-align:left;font-weight:600}
+th,td{border:1px solid var(--blue-line);padding:7px 10px;vertical-align:top}
+td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.note{font-size:11.5px;color:var(--muted)}
+.callout{border:1px solid var(--blue-line);border-left:4px solid var(--blue);background:var(--blue-soft);border-radius:4px;padding:10px 14px;margin:12px 0;font-size:13px}
+.callout.warn{border-left-color:var(--amber);background:#fbf5e8;border-color:#e8d9b8}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.kpi .box{border:1px solid var(--blue-line);border-radius:6px;padding:10px 12px;background:#fbfdff}
+.kpi .box .l{font-size:11px;color:var(--muted)}
+.kpi .box .v{font-size:17px;font-weight:700;color:var(--navy);margin-top:2px}
+.kpi .box .s{font-size:11px;color:var(--muted)}
+.tag{display:inline-block;border:1px solid var(--blue-line);background:var(--blue-soft);color:var(--navy);border-radius:3px;padding:1px 7px;font-size:11px;margin:0 4px 4px 0}
+.conf{display:inline-block;border-radius:3px;padding:1px 7px;font-size:11px;font-weight:600;margin-left:6px}
+.conf.high{background:#e4f3ea;color:var(--green);border:1px solid #bfe0cc}
+.conf.med{background:#fbf5e8;color:var(--amber);border:1px solid #e8d9b8}
+.conf.inf{background:#f0eaf7;color:#6b3fa0;border:1px solid #d8c8ec}
+.pos{color:var(--green);font-weight:600}
+.neg{color:var(--red)}
+footer{margin-top:36px;font-size:11px;color:var(--muted);border-top:1px solid var(--blue-line);padding-top:12px}
+@media (max-width:480px){ .paper{padding:6px 12px 22px} th,td{padding:6px 6px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <h1>コインランドリー事業 収益分析レポート</h1>
+  <div class="sub">市場規模・収益構造・初期投資・FC比較・立地・成功/失敗要因・業界トレンド — 出典URL付き</div>
+  <div class="meta">
+    <span>作成: 2026-08-22</span>
+    <span>出典: MC-409調査</span>
+    <span>手法: Web公開情報の収集・突合（出典URLを各所に明記）</span>
+  </div>
+</header>
+
+<div class="paper">
+
+<nav class="toc">
+  <a href="#market">市場規模・店舗数</a>
+  <a href="#revenue">収益構造</a>
+  <a href="#capex">初期投資</a>
+  <a href="#fc">主要FC比較</a>
+  <a href="#location">立地条件</a>
+  <a href="#risk">成功/失敗・回収</a>
+  <a href="#trend">業界トレンド</a>
+  <a href="#handoff">MC-408引き渡し</a>
+</nav>
+
+<div class="callout">
+  <strong>目的:</strong> CoinLaundry.Tokyo の開業分析・売上シミュレーション機能（MC-407/408）の数値根拠。<br>
+  <strong>確度ラベル:</strong>
+  <span class="conf high">実データ</span> 公的統計・上場企業開示・業界統計に基づく数字 ／
+  <span class="conf med">業界相場</span> 機器メーカー・FC本部・比較サイト等が公表する目安値（一次統計ではない） ／
+  <span class="conf inf">推測</span> 本レポートでの推定
+</div>
+
+<section id="market">
+<h2>1. 市場規模・店舗数推移</h2>
+<h3>店舗数</h3>
+<ul>
+  <li>国内コインランドリー店舗数は <strong>2009年 約15,400店 → 2021年 約24,500店</strong> と、約12年で1万店近く増加。年率5%前後の増加ペースで、<strong>現在は約25,000店前後</strong>と推定されている。<span class="conf med">業界相場</span>（元データは厚生労働省「コインオペレーションクリーニング営業施設に関する調査」だが、全国調査は2013年度が最後で、以降は業界推計値）
+    <ul>
+      <li class="note">出典: <a href="https://www.fine-laundry.jp/column/detail.php?id=56" target="_blank" rel="noreferrer">Fujitaka コラム</a>, <a href="https://www.electroluxprofessional.com/jp/blog9290/" target="_blank" rel="noreferrer">Electrolux Professional ブログ</a></li>
+      <li class="note">公式統計の一次ソース: <a href="https://www.mhlw.go.jp/toukei/saikin/hw/eisei_houkoku/24/" target="_blank" rel="noreferrer">厚労省 衛生行政報告例</a>, <a href="https://www.e-stat.go.jp/stat-search/files?page=1&amp;toukei=00450027&amp;tstat=000001031469" target="_blank" rel="noreferrer">e-Stat</a>（クリーニング所統計。コインオペ施設の年次系列は要別途集計）</li>
+    </ul>
+  </li>
+  <li>参考: コンビニ約5.6万店の半分弱の店舗網に達しており、飽和が指摘され始めている。<span class="conf inf">推測</span></li>
+</ul>
+<h3>市場規模</h3>
+<div class="kpi">
+  <div class="box"><div class="l">矢野経済研究所（2022年）</div><div class="v">約1,000億円</div><div class="s">実データ寄り・調査会社推計</div></div>
+  <div class="box"><div class="l">経産省系資料の引用（2021年度）</div><div class="v">約3,533億円</div><div class="s">クリーニング関連を広く含む可能性・確度低</div></div>
+  <div class="box"><div class="l">別の業界推計（2023年）</div><div class="v">約2,000億円超</div><div class="s">出典によりブレ大</div></div>
+</div>
+<ul>
+  <li><strong>矢野経済研究所: 約1,000億円程度（2022年）</strong> <span class="conf high">実データ寄り・調査会社推計</span></li>
+  <li>経済産業省系資料の引用では<strong>約3,533億円（2021年度）</strong>という数字もあるが、これはクリーニング関連を広く含む可能性が高く、コインランドリー単体の市場規模としては矢野の1,000億円台を採用するのが安全。<span class="conf inf">推測を含む・確度低</span>
+    <ul><li class="note">出典: <a href="https://j-net21.smrj.go.jp/startup/guide/service/service02.html" target="_blank" rel="noreferrer">J-Net21（中小機構）業種別開業ガイド</a>, <a href="https://www.fine-laundry.jp/column/detail.php?id=56" target="_blank" rel="noreferrer">Fujitaka</a></li></ul>
+  </li>
+  <li>別の業界推計では「2023年に約2,000億円超」という記述もあり、<strong>市場規模は出典により1,000億〜3,500億円と大きくブレる</strong>。シミュレーションでは市場規模そのものより「1店舗あたり月商」を使うべき。
+    <ul><li class="note">出典: <a href="https://laundry-soken.com/guide/why-laundry/" target="_blank" rel="noreferrer">ランドリー総研</a></li></ul>
+  </li>
+</ul>
+<h3>首都圏</h3>
+<p>首都圏単独の公式統計は見つからず。本プロジェクトの <code>data/stores-*.json</code>（Google Places/OSM収集済みデータ）から東京都内の実店舗密度を出す方が精度が高い。<span class="conf inf">推測</span></p>
+</section>
+
+<section id="revenue">
+<h2>2. 収益構造</h2>
+<h3>平均月商 <span class="conf med">業界相場</span></h3>
+<table>
+  <tr><th>店舗規模</th><th>月商目安</th><th>出典</th></tr>
+  <tr><td>10坪（都市型小型）</td><td class="num">30〜40万円</td><td><a href="https://www.tosei-corporation.co.jp/column/column16.html" target="_blank" rel="noreferrer">TOSEI column16</a></td></tr>
+  <tr><td>20坪（標準）</td><td class="num">60〜80万円</td><td>同上</td></tr>
+  <tr><td>好立地・大型</td><td class="num">80〜120万円</td><td><a href="https://www.tosei-corporation.co.jp/column/column05.html" target="_blank" rel="noreferrer">TOSEI column05</a></td></tr>
+</table>
+<div class="callout">
+  <strong>売上式（TOSEIの標準モデル）:</strong> 客単価 × 台数 × 24h × 30日 × 稼働率<br>
+  例: 客単価700円 × 14台 × 24h × 30日 × 稼働率10% ≒ <strong>月70.6万円</strong>
+</div>
+<ul>
+  <li><strong>稼働率の相場: 平均約10%、15%超で繁盛店</strong> <span class="conf med">業界相場</span></li>
+  <li>客単価: 600〜1,000円/回が目安（洗濯乾燥機利用で1,000〜1,500円、乾燥のみ100円/8〜10分）</li>
+</ul>
+
+<h3>費用内訳（月額、20坪標準店）<span class="conf med">業界相場</span></h3>
+<table>
+  <tr><th>費目</th><th>目安</th><th>備考</th></tr>
+  <tr><td>維持費合計</td><td class="num">30〜40万円</td><td><a href="https://www.tosei-corporation.co.jp/column/column05.html" target="_blank" rel="noreferrer">TOSEI column05</a></td></tr>
+  <tr><td>水道光熱費（電気・ガス・水道）</td><td class="num"><strong>売上の約20%</strong></td><td>乾燥機のガス代が最大要素</td></tr>
+  <tr><td>家賃</td><td class="num">10〜20万円（立地依存）</td><td>都市部はこれより高い</td></tr>
+  <tr><td>人件費</td><td class="num">ほぼゼロ（無人運営）</td><td>清掃委託・集金で月数万円</td></tr>
+  <tr><td>その他</td><td class="num">—</td><td>洗剤・保守・保険・通信・FC月会費等</td></tr>
+</table>
+
+<h3>営業利益率 <span class="conf med">業界相場</span></h3>
+<ul>
+  <li>経費差引後の利益は<strong>売上の20〜35%程度</strong>が多いとされる。
+    <ul><li class="note">出典: <a href="https://philpark.jp/magazines/s_8a04/" target="_blank" rel="noreferrer">フィル・パークマガジン</a>, <a href="https://www.tosei-corporation.co.jp/column/column05.html" target="_blank" rel="noreferrer">TOSEI</a></li></ul>
+  </li>
+  <li>具体例: 月商60万円 − 経費30万円 = <strong>月利益25〜35万円（年300〜400万円）</strong>が典型モデル。
+    <ul><li class="note">出典: <a href="https://www.electroluxprofessional.com/jp/blog0001/" target="_blank" rel="noreferrer">Electrolux 失敗原因記事</a></li></ul>
+  </li>
+  <li>投資利回り: 表面で20%前後、不動産投資比較の文脈では実質8〜10%という記述も。<strong>出典間でブレ大・確度低。</strong>
+    <ul><li class="note">出典: <a href="https://sumaity.com/land_usage/press/253/" target="_blank" rel="noreferrer">sumaity 土地活用</a>, <a href="https://philpark.jp/magazines/s_7b15/" target="_blank" rel="noreferrer">フィル・パーク</a></li></ul>
+  </li>
+</ul>
+</section>
+
+<section id="capex">
+<h2>3. 初期投資（出店方法別）<span class="conf med">業界相場</span></h2>
+<table>
+  <tr><th>出店方法</th><th>初期費用目安</th><th>内訳・特徴</th></tr>
+  <tr><td>独立開業（標準20坪）</td><td class="num"><strong>2,000〜3,000万円</strong></td><td>機器1,000〜1,500万円＋内装・工事400〜700万円＋物件取得（保証金・礼金）＋看板・什器</td></tr>
+  <tr><td>独立開業（都市型10坪）</td><td class="num">約2,100万円</td><td>機器1,400万円〜＋改装700万円〜（<a href="https://www.electroluxprofessional.com/jp/blog0003/" target="_blank" rel="noreferrer">Electrolux</a>）</td></tr>
+  <tr><td>小型・物置型（3坪）</td><td class="num">約950万円</td><td>最小構成（<a href="https://kigyolog.com/article.php?id=1538" target="_blank" rel="noreferrer">起業ログ</a>）</td></tr>
+  <tr><td>FC加盟</td><td class="num">独立費用＋加盟金50〜550万円</td><td>ノウハウ・集客支援あり。ロイヤリティor月会費が別途</td></tr>
+  <tr><td>居抜き取得・中古機器</td><td class="num">大幅圧縮可（数百万円〜）</td><td>中古機器は故障リスク・保証切れに注意 <span class="conf inf">推測含む</span></td></tr>
+  <tr><td>土地オーナー型（一括借り上げ）</td><td class="num"><strong>初期費用ほぼゼロ</strong></td><td>専門企業に土地を貸し建設・運営を任せる。リスク小・収益も小（地代収入のみ）</td></tr>
+  <tr><td>大型・建物新築含む</td><td class="num">5,000万〜1億円</td><td>建設費400〜1,500万円超を含むケース（<a href="https://www.fine-laundry.jp/column/detail.php?id=15" target="_blank" rel="noreferrer">Fujitaka</a>）</td></tr>
+</table>
+<p class="note">出典: <a href="https://www.tosei-corporation.co.jp/special/cl_33/" target="_blank" rel="noreferrer">TOSEI 初期費用</a>, <a href="https://land.home4u.jp/guide/landry-7-2822" target="_blank" rel="noreferrer">HOME4U</a>, <a href="https://www.nidlasystem.co.jp/column/initial-cost/" target="_blank" rel="noreferrer">ニド</a>, <a href="https://www.kentaku.co.jp/estate/navi/column01/post_426.html" target="_blank" rel="noreferrer">大東建託</a></p>
+<p>機器単価の目安: 洗濯乾燥機（大型）1台200〜300万円、乾燥機50〜100万円 → 10〜14台で1,000〜1,500万円。<span class="conf med">業界相場</span></p>
+</section>
+
+<section id="fc">
+<h2>4. 主要FC比較 <span class="conf med">各社公表値・比較サイト集約</span></h2>
+<table>
+  <tr><th>ブランド</th><th>加盟金</th><th>ロイヤリティ等</th><th>備考</th></tr>
+  <tr><td><strong>WASHハウス</strong></td><td>50万円＋保証金100万円</td><td>ロイヤリティなし。代わりに「システム一式」月12.5〜13.7万円</td><td>標準店初期費用約2,060万円（2017年時点）。収益見込地のみ出店方針。上場企業</td></tr>
+  <tr><td><strong>mammaciao（マンマチャオ）</strong></td><td>550万円</td><td><strong>ロイヤリティ0円</strong></td><td>店舗数最大級</td></tr>
+  <tr><td><strong>Baluko Laundry Place</strong></td><td>非公開</td><td>非公開（運営代行「Balukoパック」: 清掃・売上管理・24hコールセンター・保守）</td><td>デザイン性・カフェ併設型で強い</td></tr>
+  <tr><td><strong>フトン巻きのジロー</strong></td><td>無料（期間限定キャンペーン）</td><td><strong>売上の7%</strong></td><td>布団洗い特化のニッチ。2台構成の小規模プラン約1,100万円</td></tr>
+  <tr><td>ブルースカイランドリー</td><td>0円</td><td>売上の20%</td><td>商業施設併設中心</td></tr>
+  <tr><td>wash-plus</td><td>非公開</td><td>売上の5%</td><td>IoT「smart laundry」自社開発</td></tr>
+  <tr><td>TOSEI / Laundry Press / ボーテ 等</td><td>0円</td><td>0円</td><td>機器メーカー系は機器販売が本業のためFC費用ゼロが多い</td></tr>
+</table>
+<ul>
+  <li>業界の相場観: 変動ロイヤリティは<strong>売上の5〜10%が標準レンジ</strong>、機器メーカー系は0円が多い。</li>
+  <li class="note">出典: <a href="https://andmedia.co.jp/itpark/33058/" target="_blank" rel="noreferrer">IT PARK FC比較（2026年2月）</a>, <a href="https://www.unmanned-fc.com/launderette-list/washhouse.html" target="_blank" rel="noreferrer">busicos WASHハウス解説</a>, <a href="https://entreland.com/washhouse-kaigyo/" target="_blank" rel="noreferrer">アントレランド WASHハウス</a>, <a href="https://web-repo.jp/articles/1559" target="_blank" rel="noreferrer">フランチャイズWEBリポート</a>, <a href="https://www.unmanned-fc.com/launderette-list/futonmaki.html" target="_blank" rel="noreferrer">フトン巻きのジロー解説</a></li>
+</ul>
+<div class="callout warn">
+  <strong>注意:</strong> 加盟条件は改定が頻繁。<strong>シミュレーション実装ではレンジ表示＋「要問い合わせ」注記が必須。</strong>
+</div>
+</section>
+
+<section id="location">
+<h2>5. 立地条件と売上の関係 <span class="conf med">業界相場</span></h2>
+<h3>商圏の目安</h3>
+<table>
+  <tr><th>立地タイプ</th><th>商圏半径</th></tr>
+  <tr><td>都市部（徒歩・自転車）</td><td class="num"><strong>300〜500m</strong></td></tr>
+  <tr><td>郊外・ロードサイド（車前提）</td><td class="num"><strong>1〜3km</strong></td></tr>
+</table>
+<h3>商圏内の必要世帯数（laundry-support.jp）</h3>
+<table>
+  <tr><th>店舗規模</th><th>商圏内目安世帯数</th></tr>
+  <tr><td>小規模（10坪）</td><td class="num">1,500世帯以上</td></tr>
+  <tr><td>中規模（20坪）</td><td class="num">3,000世帯以上</td></tr>
+  <tr><td>大型（30坪以上）</td><td class="num">5,000世帯以上</td></tr>
+</table>
+<p class="note">出典: <a href="https://www.laundry-support.jp/information/post-124/" target="_blank" rel="noreferrer">laundry-support.jp 商圏分析</a>, <a href="https://www.tosei-corporation.co.jp/special/cl_35/" target="_blank" rel="noreferrer">TOSEI 立地条件</a></p>
+
+<h3>世帯属性の影響</h3>
+<ul>
+  <li>主要ターゲットは<strong>ファミリー層（子育て世帯）</strong>。同じ3,000世帯でも単身中心とファミリー中心では想定売上が大きく異なる（布団・大物洗い需要の差）。</li>
+  <li><strong>共働き世帯・単身世帯が多いエリア</strong>は「時短・まとめ洗い」需要が高く、大容量洗濯乾燥機との相性が良い。</li>
+  <li>具体的な「単身率x%なら売上y円」という係数を公表する一次データは見当たらず。<strong>シミュレーションでは世帯タイプ別の補正係数を推測として設定する必要がある。</strong><span class="conf inf">推測</span></li>
+  <li class="note">出典: <a href="https://www.nidlasystem.co.jp/column/location-conditions/" target="_blank" rel="noreferrer">ニド 立地条件</a>, <a href="https://laundry.senkaq.com/contents/keiei-shuhenshisetsu/" target="_blank" rel="noreferrer">ピエロ 周辺施設</a></li>
+</ul>
+
+<h3>駐車場</h3>
+<ul>
+  <li>郊外・地方では<strong>駐車場2〜4台以上が集客の必須条件</strong>（布団・大量洗いは車で持ち込むため）。都市部駅近は不要。</li>
+  <li class="note">出典: <a href="https://www.laundry-support.jp/information/post-124/" target="_blank" rel="noreferrer">laundry-support.jp</a></li>
+</ul>
+
+<h3>売上/人口の粗い換算（本レポートの推定）<span class="conf inf">推測</span></h3>
+<div class="callout">
+  20坪店: 商圏3,000世帯（≒6,000人）で月商60〜80万円 → <strong>月商 約100〜130円/商圏人口1人</strong>、世帯あたり月200〜270円。MC-408 では商圏人口 × 100〜130円/月 を基準線とし、単身率・競合店数で補正するのが妥当。
+</div>
+</section>
+
+<section id="risk">
+<h2>6. 成功/失敗要因・廃業率・投資回収</h2>
+<h3>失敗要因（Electrolux Professional「失敗原因10選」より）</h3>
+<ol>
+  <li>立地選定の失敗（人口過小地・オフィス街）</li>
+  <li>需要分析不足（駐車場なし等）</li>
+  <li>クレーム対応の放置</li>
+  <li>開業初期から完全無人（開業後1〜2ヶ月はオーナー在店が推奨）</li>
+  <li>経営ノウハウ不足</li>
+  <li>資金管理の甘さ</li>
+  <li>清掃管理の欠如</li>
+  <li>洗濯物放置による稼働率低下</li>
+  <li>競合との差別化不足</li>
+  <li>集客活動未実施</li>
+</ol>
+<p class="note">出典: <a href="https://www.electroluxprofessional.com/jp/blog0001/" target="_blank" rel="noreferrer">Electrolux blog0001</a>, <a href="https://aqua-has.com/biz/column/coinlaundry-business-failure/" target="_blank" rel="noreferrer">アクア 失敗原因</a></p>
+
+<h3>廃業率</h3>
+<ul>
+  <li><strong>信頼できる公式の廃業率統計は存在しない。</strong>各社コラムは「廃業する店舗も一定数存在」と述べるにとどまる。店舗数純増（年5%前後）の裏で新設と廃業が両方起きている。<span class="conf inf">確度低</span></li>
+  <li class="note">出典: <a href="https://philpark.jp/magazines/s_7b15/" target="_blank" rel="noreferrer">フィル・パーク</a></li>
+</ul>
+
+<h3>投資回収期間 <span class="conf med">業界相場</span></h3>
+<div class="kpi">
+  <div class="box"><div class="l">標準モデル</div><div class="v">7〜10年</div><div class="s">初期2,000〜3,000万円・月CF25〜35万円想定</div></div>
+  <div class="box"><div class="l">好条件（居抜き・低初期・高稼働）</div><div class="v">3〜5年</div><div class="s">悪条件なら回収不能</div></div>
+</div>
+<ul>
+  <li>標準モデル: <strong>7〜10年</strong>（初期2,000〜3,000万円、月キャッシュフロー25〜35万円想定）
+    <ul><li class="note">出典: <a href="https://www.tosei-corporation.co.jp/column/column05.html" target="_blank" rel="noreferrer">TOSEI column05</a></li></ul>
+  </li>
+  <li>好条件（居抜き・低初期費用・高稼働）なら3〜5年、悪条件なら回収不能。J-Net21は「3〜5年で損益分岐」との記述もあるが、初期投資全額回収とは別概念なので注意。
+    <ul><li class="note">出典: <a href="https://j-net21.smrj.go.jp/startup/guide/service/service02.html" target="_blank" rel="noreferrer">J-Net21</a></li></ul>
+  </li>
+</ul>
+</section>
+
+<section id="trend">
+<h2>7. 業界トレンド</h2>
+<ul>
+  <li><strong>IoT・キャッシュレス化:</strong> wash-plus「smart laundry」がアプリ45万DL・導入400店舗到達（2024年11月）。遠隔での稼働状況確認・決済・ドアロックまで対応。キャッシュレス比率約40%（2025年）を背景に、現金オンリー店の忌避が進む。
+    <ul><li class="note">出典: <a href="https://prtimes.jp/main/html/rd/p/000000132.000053641.html" target="_blank" rel="noreferrer">wash-plus プレスリリース</a>, <a href="https://and-iot.jp/coin-operated-laundry/" target="_blank" rel="noreferrer">AdvaNceD IoT</a>, <a href="https://www.fine-laundry.jp/column/detail.php?id=25" target="_blank" rel="noreferrer">Fujitaka キャッシュレス</a>, <a href="https://gxo.co.jp/column/coin-laundry-dx-iot-management-cost-2026" target="_blank" rel="noreferrer">GXO DX導入ガイド</a></li></ul>
+  </li>
+  <li><strong>大型化・複合化:</strong> カフェ併設（Balukoが代表例）、リラクゼーション併設、大型駐車場付きロードサイド型が増加。「狭い・暗い・古い」からの脱却＝「洗濯のエンタメ化」。
+    <ul><li class="note">出典: <a href="https://www.tosei-corporation.co.jp/special/cl_32/" target="_blank" rel="noreferrer">TOSEI 併設業態</a>, <a href="https://www.itmedia.co.jp/business/articles/2412/23/news006_3.html" target="_blank" rel="noreferrer">ITmedia 進化系コインランドリー</a></li></ul>
+  </li>
+  <li><strong>需要の構造的追い風:</strong> 共働き世帯増・単身世帯増・高齢化・花粉/PM2.5による外干し回避・宅内乾燥機では処理できない布団需要。</li>
+  <li><strong>供給過剰リスク:</strong> 店舗数の急増により都市部では商圏の食い合いが発生。差別化（IoT・清潔感・特化型）の重要性が増している。<span class="conf inf">推測</span></li>
+</ul>
+</section>
+
+<section id="handoff">
+<h2>付記: MC-408 実装への引き渡し</h2>
+<ul>
+  <li>シミュレーション用パラメータは <code>laundry-jp/data/biz-params.json</code> に構造化済み。各値に <code>source</code> / <code>range</code> / <code>confidence</code> を付与。</li>
+</ul>
+<div class="callout warn">
+  <strong>最重要の注意点:</strong> 平均月商・利益率は<strong>機器メーカー（＝出店させたい側）発の目安値</strong>が中心で、楽観バイアスがかかっている可能性が高い。UI上は必ずレンジで見せ、悲観シナリオ（稼働率5%）を併記すべき。
+</div>
+</section>
+
+<footer>
+  コインランドリー事業 収益分析レポート ｜ 作成: 2026-08-22 ／ 出典: MC-409調査（Web公開情報の収集・突合） ｜ <span class="conf inf">推測</span> 表記の箇所は本レポートでの推定です
+</footer>
+
+</div>
+</div>
+</body>
+</html>
