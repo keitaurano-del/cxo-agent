@@ -1719,14 +1719,14 @@ function WorkLboTab() {
   );
 }
 
-// Laundry.tokyo（旧 Laundry.jp、2026-08-21 14:37 Keita 指示で改称）事業計画タブ（2026-08-21 Keita「仕事メニューの別タブに専用ページ作って、需要分析、
+// CoinLaundry.Tokyo（旧 Laundry.jp、2026-08-21 14:37 Keita 指示で改称）事業計画タブ（2026-08-21 Keita「仕事メニューの別タブに専用ページ作って、需要分析、
 // 収益プラン、集客プラン等など考えて記載して」・MC-384）。静的ページ /laundry-plan.html を
 // LBOモデラーと同じ iframe 方式で表示し、実働プロトタイプへのリンクも並べる。
 function WorkLaundryTab() {
   // 事業計画と市場調査レポート（2026-08-21 Keita「東京のコインランドリー事情を調べてLaundryタブに」）の切替。
   const [doc, setDoc] = useState<'plan' | 'market'>('plan');
   const src = doc === 'plan' ? '/laundry-plan.html' : '/laundry-market-report.html';
-  const title = doc === 'plan' ? 'Laundry.tokyo 事業計画' : '東京のコインランドリー事情 調査レポート';
+  const title = doc === 'plan' ? 'CoinLaundry.Tokyo 事業計画' : '東京のコインランドリー事情 調査レポート';
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex items-center gap-2">
@@ -1831,13 +1831,13 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
         </>
       ),
     },
-    // Laundry.tokyo 事業計画（2026-08-21 Keita 指示・MC-384）。
+    // CoinLaundry.Tokyo 事業計画（2026-08-21 Keita 指示・MC-384）。
     {
       key: 'laundry',
       label: (
         <>
           <span aria-hidden><SearchIcon width={16} height={16} /></span>
-          Laundry.tokyo
+          CoinLaundry.Tokyo
         </>
       ),
     },
