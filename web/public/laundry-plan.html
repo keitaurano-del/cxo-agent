@@ -50,10 +50,10 @@ footer{margin-top:36px;font-size:11px;color:var(--muted);border-top:1px solid va
 <div class="wrap">
 
 <header class="doc">
-  <h1>CoinLaundry.Tokyo 事業計画（ドラフト v1.2）</h1>
+  <h1>CoinLaundry.Tokyo 事業計画（ドラフト v1.3・保守版）</h1>
   <div class="sub">コインランドリー横断検索プラットフォーム — 需要分析・収益プラン・集客プラン</div>
   <div class="meta">
-    <span>作成: 2026-08-21 / 更新: 2026-08-22</span>
+    <span>作成: 2026-08-21 / 更新: 2026-08-24（収益をかなり保守的に改訂）</span>
     <span>作成者: Son（Apollo）</span>
     <span>プロトタイプ: coinlaundry.tokyo</span>
   </div>
@@ -76,7 +76,7 @@ footer{margin-top:36px;font-size:11px;color:var(--muted);border-top:1px solid va
   <p>コインランドリー店舗は全国で増え続けているのに、<strong>全店舗を横断して「近くて・安くて・空いている」店を探せる中立サイトが存在しない</strong>。店舗情報はメーカー系アプリ（LAUNDRICH、Smart Laundry等）に自社系列分しか載らず、ユーザーは結局Googleマップで探している。CoinLaundry.Tokyoはこの隙間を取りに行く「コインランドリー版スーモ」。</p>
   <div class="kpi">
     <div class="box"><div class="l">全国店舗数（推計）</div><div class="v">約27,000店</div><div class="s">増加傾向が継続</div></div>
-    <div class="box"><div class="l">市場規模（推計）</div><div class="v">1,300〜1,500億円</div><div class="s">機器・出店投資は別途</div></div>
+    <div class="box"><div class="l">市場規模（推計）</div><div class="v">約1,000億円</div><div class="s">矢野2022・保守採用（出典によりブレ大）</div></div>
     <div class="box"><div class="l">中立横断サイト</div><div class="v">不在</div><div class="s">= ポジション空白</div></div>
     <div class="box"><div class="l">初期コスト</div><div class="v">小</div><div class="s">自宅サーバ+API従量</div></div>
   </div>
@@ -136,31 +136,34 @@ footer{margin-top:36px;font-size:11px;color:var(--muted);border-top:1px solid va
 
   <h3>3-1. 収益源の全体像</h3>
   <table>
-    <tr><th>収益源</th><th>モデル</th><th>単価（想定）</th><th>立ち上がり</th></tr>
-    <tr><td>① オーナー課金</td><td>クーポン配信プラン / 上位表示・広告プラン（月額）</td><td class="num">3,000円 / 10,000円 月</td><td>店舗網羅とアクセスができてから（Phase 2〜）</td></tr>
-    <tr><td>② 開業送客</td><td>独立希望者の一括資料請求 → 機器メーカー・開業支援会社へ送客（1件あたり）</td><td class="num">5,000〜15,000円/件</td><td>比較的早期に立つ（開業検討層は常時存在）</td></tr>
-    <tr><td>③ 広告収益</td><td>AdSense等の運用型 + インバウンド面の広告</td><td class="num">RPM 300〜800円</td><td>PV連動・SEO成長とともに</td></tr>
+    <tr><th>収益源</th><th>モデル</th><th>単価（実装済み）</th><th>立ち上がり</th></tr>
+    <tr><td>① オーナー課金</td><td>スタンダード / PR掲載 / プレミアム（ブランド掲載）の月額プラン</td><td class="num">3,300 / 9,800 / 19,800円 月</td><td>アクセスが付いてから（Phase 2〜）。転換は遅い前提</td></tr>
+    <tr><td>② FC本部・メーカー広告</td><td>開業面のリード獲得枠 / 機器タイアップ（月額＋成果報酬）</td><td class="num">33,000 / 55,000円 月</td><td>個別営業が必要。早期は0前提</td></tr>
+    <tr><td>③ 開業送客</td><td>独立希望者の資料請求 → 機器メーカー・開業支援へ送客（成果報酬）</td><td class="num">3,300円/件（想定）</td><td>PVと開業検討層が付いてから</td></tr>
+    <tr><td>④ ディスプレイ広告</td><td>AdSense等の運用型（PV連動）</td><td class="num">RPM 200〜400円</td><td>SEO成長に連動・単価は日本のニッチ実勢</td></tr>
   </table>
 
-  <h3>3-2. 収益シミュレーション（保守〜標準）</h3>
+  <h3>3-2. 収益シミュレーション（かなり保守的・悲観寄り）</h3>
+  <p class="note" style="margin-top:0">前提を意図的に厳しく置いた版。新規ドメインで<strong>現状アクセスはほぼ0</strong>（2026-08 にGoogle Search Console登録・sitemap送信・IndexNow通知を実施した直後）。SEOの立ち上がりは遅く、コインランドリーのオーナーは高齢・不在・FC運営が多く<strong>有料転換は非常に鈍い</strong>と想定。</p>
   <table>
     <tr><th></th><th>6ヶ月後</th><th>12ヶ月後</th><th>24ヶ月後</th></tr>
-    <tr><td>月間PV</td><td class="num">3万</td><td class="num">15万</td><td class="num">60万</td></tr>
-    <tr><td>① 課金オーナー数（有料転換）</td><td class="num">0店</td><td class="num">30店</td><td class="num">200店</td></tr>
-    <tr><td>① オーナー課金収益</td><td class="num">—</td><td class="num">12万円/月</td><td class="num">90万円/月</td></tr>
-    <tr><td>② 資料請求送客（月間）</td><td class="num">5件</td><td class="num">20件</td><td class="num">60件</td></tr>
-    <tr><td>② 送客収益</td><td class="num">4万円/月</td><td class="num">16万円/月</td><td class="num">48万円/月</td></tr>
-    <tr><td>③ 広告収益</td><td class="num">1万円/月</td><td class="num">7万円/月</td><td class="num">30万円/月</td></tr>
-    <tr><td><strong>月商合計</strong></td><td class="num"><strong>約5万円</strong></td><td class="num"><strong>約35万円</strong></td><td class="num"><strong>約168万円</strong></td></tr>
+    <tr><td>月間PV</td><td class="num">3千</td><td class="num">1.5万</td><td class="num">5万</td></tr>
+    <tr><td>① 課金オーナー数（有料転換）</td><td class="num">0店</td><td class="num">3店</td><td class="num">20店</td></tr>
+    <tr><td>① オーナー課金収益（平均¥4,500/店）</td><td class="num">—</td><td class="num">約1.4万円/月</td><td class="num">約9万円/月</td></tr>
+    <tr><td>② FC・メーカー広告</td><td class="num">0</td><td class="num">0</td><td class="num">0〜1社（〜3万円/月）</td></tr>
+    <tr><td>③ 資料請求送客</td><td class="num">0件</td><td class="num">2件（0.6万円）</td><td class="num">8件（2.4万円）</td></tr>
+    <tr><td>④ ディスプレイ広告（RPM¥250）</td><td class="num">〜0円</td><td class="num">約0.4万円/月</td><td class="num">約1.3万円/月</td></tr>
+    <tr><td><strong>月商合計</strong></td><td class="num"><strong>ほぼ0</strong></td><td class="num"><strong>約2〜3万円</strong></td><td class="num"><strong>約13〜15万円</strong></td></tr>
   </table>
-  <p class="note">前提: 有料転換は掲載2.7万店のうち0.1〜0.7%。送客単価1万円・成約率は資料請求ベース。RPM500円で計算。すべて要検証の仮置き。</p>
+  <p class="note">前提: 有料転換は掲載約1.6万店のうち<strong>24ヶ月で0.1%（20店）</strong>という非常に低い水準。ARPUは¥3,300スタンダード中心の¥4,500。送客成果報酬¥3,300/件、AdSense RPMは日本のニッチ下限¥250。FC広告は営業が要るため悲観的に0〜1社。<strong>上振れ余地</strong>: SEOが当たれば送客・広告が伸び、プレミアム/PR比率が上がればARPUは¥7,000〜1万に。数字はすべて仮置きで、実アクセス（/api/hits・GSC）で四半期ごとに更新する。</p>
+  <p class="note"><strong>位置づけ（重要）:</strong> 現金コストはほぼゼロ（自宅サーバ＋Cloudflare無料枠＋API無料枠）なので<strong>キャッシュの赤字リスクは小さい</strong>が、保守前提では単体で大きく稼ぐ事業ではない。実体は「低コストで回す資産（SEO・店舗DB）＋当たれば伸びるオプション」。判断は月商そのものより<strong>アクセス成長と有料転換の初動</strong>で見る。</p>
 
   <h3>3-3. コスト構造</h3>
   <ul>
     <li>サーバ: 自宅サーバ常駐＋Cloudflare Tunnel（既存インフラ・追加費ほぼゼロ）</li>
     <li>Google Places API: 従量課金。<strong>結果をローカルにキャッシュして呼び出しを抑える設計が必須</strong>（無料枠$200/月内に収める運用から開始）</li>
     <li>開発・運用: AI（Apollo/dev系）で内製 = 人件費ゼロ</li>
-    <li>ドメイン laundry.tokyo: 取得可否・価格の確認が必要（.tokyoは通常価格で取得しやすい見込み）</li>
+    <li>ドメイン coinlaundry.tokyo: 取得済み（お名前.com・年額数千円）</li>
   </ul>
 </section>
 
@@ -204,9 +207,9 @@ footer{margin-top:36px;font-size:11px;color:var(--muted);border-top:1px solid va
   <table>
     <tr><th>フェーズ</th><th>期間</th><th>やること</th><th>ゴール</th></tr>
     <tr><td><strong>Phase 0（済）</strong></td><td>—</td><td>実働プロトタイプ公開（coinlaundry.tokyo）。2026-08-22時点: 首都圏1都3県 <strong>8,264店収録</strong>（東京4,374／神奈川1,818／埼玉1,591／千葉1,318。OSM＋Google Places 複数キーワード＋カテゴリタグ判定・クリーニング店除外済）、Googleマップ表示・Google評価・口コミAI要約（都度取得・規約遵守）、独自スコアの<strong>店舗ランキング</strong>（価格/サービス/設備/IT化 × 全体/都県/市区町村/表示範囲）、<strong>出店余地分析</strong>（人口×競合・出店方式別の初期費用/回収比較）、<strong>地点指定の売上シミュレーション</strong>、料金データ451店、密度ヒートマップ</td><td class="pos">完了</td></tr>
-    <tr><td><strong>Phase 1: データ網羅</strong></td><td>1〜2ヶ月</td><td>laundry.tokyoドメイン取得 / Places APIで首都圏→全国の店舗データ取り込み＋キャッシュ設計 / 名寄せ処理 / 店舗ページ自動生成＋SEO基盤</td><td>1万店掲載・検索流入の初速</td></tr>
+    <tr><td><strong>Phase 1: データ網羅</strong></td><td>1〜2ヶ月</td><td>coinlaundry.tokyo（取得済み） / Places APIで首都圏→全国の店舗データ取り込み＋キャッシュ設計 / 名寄せ処理 / 店舗ページ自動生成＋SEO基盤</td><td>1万店掲載・検索流入の初速</td></tr>
     <tr><td><strong>Phase 2: オーナー機能</strong></td><td>3〜6ヶ月</td><td>オーナー登録・所有権確認の本実装 / 料金・機器のオーナー入力 / クーポン配信 / 無料→有料プラン開放</td><td>登録オーナー100店・初課金</td></tr>
-    <tr><td><strong>Phase 3: 収益拡大</strong></td><td>6〜12ヶ月</td><td>開業一括資料請求の提携先開拓（機器メーカー・開業支援） / 英語版公開 / 空き状況連携の提携交渉</td><td>月商35万円ライン</td></tr>
+    <tr><td><strong>Phase 3: 収益拡大</strong></td><td>6〜12ヶ月</td><td>開業一括資料請求の提携先開拓（機器メーカー・開業支援） / 英語版公開 / 空き状況連携の提携交渉</td><td>月商10万円ライン（保守目標）</td></tr>
   </table>
   <div class="callout">最初の分岐判断: <strong>Phase 1終了時に検索流入の実数を見る。</strong>流入が立たなければSEO戦術を見直してからPhase 2に進む（オーナー営業はアクセス実績が武器になるため順序を守る）。</div>
 </section>
