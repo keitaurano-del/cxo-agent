@@ -7,11 +7,46 @@
 //   JSONL を全走査して id ごとの最新レコードを採用する。
 //   論理削除は deleted:true のレコードを追記し、読み出し時に除外する。
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 
-import { DEV_MOCKUPS_FILE } from '../config.js';
+import { DEV_MOCKUPS_FILE, INBOX_DATA_DIR } from '../config.js';
+
+// ─── アイデア生成の👍/👎フィードバック（MC-479）───────────────────────
+// 生成されたアイデア本文に対する Keita の評価を貯め、次回以降の生成プロンプトに
+// 「良い例＝寄せる／悪い例＝避ける」として差し込み、アイデアの質を継続的に上げる。
+const IDEA_FEEDBACK_FILE = join(INBOX_DATA_DIR, 'idea-feedback.json');
+export interface IdeaFeedback {
+  good: string[];
+  bad: string[];
+}
+export function loadIdeaFeedback(): IdeaFeedback {
+  try {
+    const j = JSON.parse(readFileSync(IDEA_FEEDBACK_FILE, 'utf8')) as Partial<IdeaFeedback>;
+    return { good: Array.isArray(j.good) ? j.good : [], bad: Array.isArray(j.bad) ? j.bad : [] };
+  } catch {
+    return { good: [], bad: [] };
+  }
+}
+export function addIdeaFeedback(idea: string, rating: 'good' | 'bad'): IdeaFeedback {
+  const fb = loadIdeaFeedback();
+  const s = String(idea || '').trim().slice(0, 220);
+  if (!s) return fb;
+  const keep = (arr: string[]) => arr.filter((x) => x !== s);
+  fb.good = keep(fb.good);
+  fb.bad = keep(fb.bad);
+  const arr = rating === 'good' ? fb.good : fb.bad;
+  arr.unshift(s); // 新しい評価ほど強く効かせる
+  if (arr.length > 15) arr.length = 15;
+  try {
+    mkdirSync(dirname(IDEA_FEEDBACK_FILE), { recursive: true });
+    writeFileSync(IDEA_FEEDBACK_FILE, JSON.stringify(fb, null, 2));
+  } catch {
+    /* 保存失敗は握りつぶす（評価は次善で機能）*/
+  }
+  return fb;
+}
 
 /** 1 モックアップが保持する修正履歴（バージョン）の最大件数（超えたら古いものから切り詰める）。 */
 const MOCKUP_VERSIONS_MAX = 30;

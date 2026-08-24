@@ -500,6 +500,9 @@ export default function Development() {
   const [notice, setNotice] = useState<string | null>(null);
   // 「💡 アイデアを生成」実行中フラグ（ジョブ起票〜完了まで true）。離脱/リロード復元時も立てる。
   const [ideaBusy, setIdeaBusy] = useState(() => loadIdeaJob() !== null);
+  // 直近に生成したアイデア本文と、その👍/👎評価（MC-479: 評価で次回以降のアイデア質を上げる）。
+  const [lastIdea, setLastIdea] = useState<string | null>(null);
+  const [ideaRating, setIdeaRating] = useState<'good' | 'bad' | null>(null);
   // 進行中アイデアジョブ（起動時に復元してポーリング再開）。多重ポーリング防止に ref で追跡する。
   const ideaPollingRef = useRef<string | null>(null);
 
@@ -793,7 +796,9 @@ export default function Development() {
       const r = await pollIdeaJob(jobId, startedAt);
       if (r.status === 'done' && r.idea) {
         setPrompt(r.idea);
-        setNotice('アイデアを入れました。必要なら直してから「生成」を押してください。');
+        setLastIdea(r.idea);
+        setIdeaRating(null);
+        setNotice('アイデアを入れました。👍/👎 で評価すると次のアイデアの質が上がります。必要なら直してから「生成」を押してください。');
       } else if (r.status === 'done') {
         setError('アイデアの生成に失敗しました。少し待ってもう一度お試しください。');
       } else if (r.status === 'error') {
@@ -844,6 +849,30 @@ export default function Development() {
     setNotice('アイデアを考えています。ページを離れても大丈夫です（戻ると結果を反映します）。');
     void driveIdeaJob(jobId, startedAt);
   }, [ideaBusy, generating, driveIdeaJob]);
+
+  // 👍/👎 でアイデアを評価（MC-479）。サーバに送って良い例/悪い例として学習させる。
+  const rateIdea = useCallback(
+    async (rating: 'good' | 'bad') => {
+      if (!lastIdea) return;
+      setIdeaRating(rating); // 楽観更新（ボタンの見た目を即反映）
+      try {
+        await fetch('/api/dev/idea/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idea: lastIdea, rating }),
+        });
+        setNotice(
+          rating === 'good'
+            ? '👍 学習しました。次からこの方向に寄せます。'
+            : '👎 学習しました。次からこの手のアイデアは避けます。',
+        );
+      } catch {
+        setIdeaRating(null);
+        setError('評価の保存に失敗しました。もう一度お試しください。');
+      }
+    },
+    [lastIdea],
+  );
 
   // 起動時: 前回の進行中アイデアジョブがあればポーリングを再開する（離脱/リロード復元）。
   useEffect(() => {
@@ -1427,6 +1456,46 @@ export default function Development() {
                   rows={4}
                   className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
                 />
+                {/* 生成アイデアの👍/👎評価（MC-479）。評価は次回以降のアイデア質向上に学習される。
+                    プロンプトを大きく書き換えたら（=別物になったら）評価行は隠す。 */}
+                {lastIdea && prompt.trim() === lastIdea.trim() && (
+                  <div className="flex items-center gap-2 text-xs text-text-muted">
+                    <span>このアイデアどう？</span>
+                    <button
+                      type="button"
+                      onClick={() => rateIdea('good')}
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 transition-colors ${
+                        ideaRating === 'good'
+                          ? 'border-emerald-500 bg-emerald-500/15 text-emerald-600'
+                          : 'border-border hover:bg-surface-2 hover:text-text'
+                      }`}
+                      title="良い → 次からこの方向に寄せる"
+                    >
+                      <span aria-hidden>👍</span> いいね
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => rateIdea('bad')}
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 transition-colors ${
+                        ideaRating === 'bad'
+                          ? 'border-rose-500 bg-rose-500/15 text-rose-600'
+                          : 'border-border hover:bg-surface-2 hover:text-text'
+                      }`}
+                      title="いまいち → 次からこの手は避ける"
+                    >
+                      <span aria-hidden>👎</span> いまいち
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGenerateIdea}
+                      disabled={ideaBusy || generating}
+                      className="ml-auto inline-flex items-center gap-1 rounded px-2 py-1 text-text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+                      title="別のアイデアを出す"
+                    >
+                      {ideaBusy ? <Spinner /> : <span aria-hidden>🔄</span>} 別のアイデア
+                    </button>
+                  </div>
+                )}
                 {/* 生成は「設計 → コード → デザイン昇格（2パス仕上げ）」の高品質 1 フローで作る。
                     以前あった Figma ワイヤーフレーム工程は不要になったためトグルは撤去した
                     （HTML がそのまま成果物・サーバ側 DEV_ENABLE_FIGMA で可逆的に復活可）。 */}
