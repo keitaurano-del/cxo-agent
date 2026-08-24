@@ -885,6 +885,27 @@ export default function Development() {
     [lastIdea],
   );
 
+  // 出典を調べる検索リンク（MC-481）。生成後（html があるエディタ画面）でも残すため
+  // 共通の JSX として切り出し、要望入力欄と修正セクションの両方で描画する（MC-482）。
+  const sourcesBar =
+    ideaSources.length > 0 ? (
+      <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+        <span>🔗 出典を調べる:</span>
+        {ideaSources.map((s) => (
+          <a
+            key={s.url}
+            href={s.url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 transition-colors hover:bg-surface-2"
+            style={{ color: 'var(--mc-accent)' }}
+          >
+            {s.label} ↗
+          </a>
+        ))}
+      </div>
+    ) : null;
+
   // 起動時: 前回の進行中アイデアジョブがあればポーリングを再開する（離脱/リロード復元）。
   useEffect(() => {
     const saved = loadIdeaJob();
@@ -1312,6 +1333,9 @@ export default function Development() {
     setCodeLesson(null);
     setVersions([]);
     setFailedRun(null);
+    setLastIdea(null);
+    setIdeaRating(null);
+    setIdeaSources([]); // 出典リンクも白紙に戻す（MC-482）
     // 進行中ジョブは消さない。エディタ紐付けだけ外し、一覧に「作成中」で見え続けるようにする。
     setActiveJobs((prev) => prev.map((j) => ({ ...j, attachToEditor: false })));
     setNotice('新規作成にしました。作成中のものは下の一覧に「作成中」で表示され続けます。');
@@ -1507,26 +1531,10 @@ export default function Development() {
                       {ideaBusy ? <Spinner /> : <span aria-hidden>🔄</span>} 別のアイデア
                     </button>
                   </div>
-                  {/* 出典を調べる検索リンク（MC-481）。捏造URLではなく確実に飛べる検索リンク。 */}
-                  {ideaSources.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                      <span>🔗 出典を調べる:</span>
-                      {ideaSources.map((s) => (
-                        <a
-                          key={s.url}
-                          href={s.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 transition-colors hover:bg-surface-2"
-                          style={{ color: 'var(--mc-accent)' }}
-                        >
-                          {s.label} ↗
-                        </a>
-                      ))}
-                    </div>
-                  )}
                   </>
                 )}
+                {/* 出典リンクは評価行と独立に描画（プロンプトを編集しても残る・MC-482）。 */}
+                {sourcesBar}
                 {/* 生成は「設計 → コード → デザイン昇格（2パス仕上げ）」の高品質 1 フローで作る。
                     以前あった Figma ワイヤーフレーム工程は不要になったためトグルは撤去した
                     （HTML がそのまま成果物・サーバ側 DEV_ENABLE_FIGMA で可逆的に復活可）。 */}
@@ -1570,6 +1578,11 @@ export default function Development() {
               </div>
             )}
           </section>
+
+          {/* 生成後も出典リンクを残す（MC-482）。html があるエディタ画面の先頭に表示。 */}
+          {html.trim() && sourcesBar && (
+            <section className="border-t border-border pt-4">{sourcesBar}</section>
+          )}
 
           {/* 反復修正（html がある時のみ） */}
           {html.trim() && (
