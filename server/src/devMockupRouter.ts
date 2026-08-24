@@ -999,6 +999,8 @@ interface Job {
   codeLesson?: string;
   /** アイデア（1〜2文の説明文）。idea 生成ジョブが書き込む（MC-288）。done になったら確定。 */
   idea?: string;
+  /** アイデアの出典を調べる検索リンク（MC-481）。捏造URLを避け、確実に飛べる検索URLで組む。 */
+  ideaSources?: IdeaSource[];
   error?: string;
   /** 一覧表示用のラベル（タイトル or 指示の要約）。実装進捗タブのジョブ一覧で使う（MC-378）。 */
   label?: string;
@@ -2479,7 +2481,8 @@ function buildIdeaPromptOverseas(): string {
     '- 事実に忠実に。誇張した数字や存在しない固有名詞をでっち上げない。固有名詞を出すなら実在の広く知られたものだけ。規模・相場は「目安」と分かる書き方にする。',
     '- シンプルに。1つのビジネスを、小学生でも分かる言葉で。専門用語・横文字の重ね掛けは避ける。',
     '- 毎回まったく違う業種・地域にする。同じ型（査定SaaS・マッチングアプリ等）に寄せない。',
-    '- 出力は日本語・前置き/箇条書き/見出し/引用符なし・計220文字以内。自然な文で次を順に: ①何が流行っているか（どんなビジネスか・どこで）②なぜ稼げるか/客が払う理由 ③「日本で試すなら」を一言。最後に「収益性: 」で単価×件数のざっくり月商だけ添える。接頭辞は付けない。',
+    '- 本体は日本語・前置き/箇条書き/見出し/引用符なし・計220文字以内。自然な文で次を順に: ①何が流行っているか（どんなビジネスか・どこで）②なぜ稼げるか/客が払う理由 ③「日本で試すなら」を一言。続けて「収益性: 」で単価×件数のざっくり月商だけ添える。接頭辞は付けない。',
+    '- 本体の後に改行し、最後の行に「検索: <この事業の実例にたどり着く英語の検索キーワード2〜5語>」を1行だけ付ける（この行は本文の文字数に含めない）。実在の記事・動画・事例に当たれる、具体的で一般的な語にすること。',
     '',
     `（内部識別子: ${salt} — 出力には含めない）`,
   ].join('\n');
@@ -2504,6 +2507,40 @@ function cleanIdea(text: string): string {
   return (joined || s).slice(0, 800);
 }
 
+/** アイデアの出典リンク（MC-481）。捏造されがちな直接URLは使わず、確実に飛べる検索URLで組む。 */
+interface IdeaSource {
+  label: string;
+  url: string;
+}
+function buildSearchSources(query: string): IdeaSource[] {
+  const q = encodeURIComponent(query.trim());
+  if (!q) return [];
+  return [
+    { label: 'Googleで調べる', url: `https://www.google.com/search?q=${q}` },
+    { label: 'ニュースで探す', url: `https://news.google.com/search?q=${q}&hl=en-US&gl=US` },
+  ];
+}
+/** 生成本文から「検索: <キーワード>」行を分離し、表示用アイデア本体と出典検索リンクに分ける。 */
+function parseIdeaOutput(rawStdout: string): { idea: string; sources: IdeaSource[] } {
+  const stripped = stripFences(rawStdout);
+  let query = '';
+  const kept: string[] = [];
+  for (const ln of stripped.split(/\n+/)) {
+    const m = ln.match(/^\s*(?:検索|出典|ソース|search)\s*[:：]\s*(.+)$/i);
+    if (m) {
+      if (!query) query = m[1].trim().replace(/^["'「『]|["'」』]$/g, '').trim();
+      continue;
+    }
+    kept.push(ln);
+  }
+  const idea = cleanIdea(kept.join('\n'));
+  if (!query) {
+    // フォールバック: 本体の最初の一文（収益性より前）を検索語にする。
+    query = idea.replace(/収益性\s*[:：].*$/, '').split(/[。.！!？?]/)[0].slice(0, 40).trim();
+  }
+  return { idea, sources: buildSearchSources(query) };
+}
+
 /**
  * バックグラウンドで claude CLI を呼んでアイデアを 1 つ生成し、結果をジョブに格納する（MC-288）。
  * await しない前提。例外でサーバを落とさない。生成本体は旧・同期版 handleIdea の中身と同じ
@@ -2516,20 +2553,20 @@ function cleanIdea(text: string): string {
  * 生成が継続し完了結果を取り直せる。
  */
 async function runIdeaJob(jobId: string): Promise<void> {
-  const idea = await serializeDevGen(async () => {
+  const result = await serializeDevGen<{ idea: string; sources: IdeaSource[] } | null>(async () => {
     const job = jobs.get(jobId);
     if (job) job.status = 'generating';
     let model = NOTEBOOK_CLAUDE_MODEL;
     for (let attempt = 1; attempt <= 2; attempt += 1) {
-      if (isCanceled(jobId)) return '';
+      if (isCanceled(jobId)) return null;
       // fast: 短文シングルショットなのでツール無効・中立 cwd・拡張思考オフで起動する（MC-359）。
       // 素起動だと first token まで 30〜40s かかり IDEA_TIMEOUT_MS 内に収まらず毎回失敗していた。
       const raw = await runClaudeRaw(buildIdeaPrompt(), model, undefined, IDEA_TIMEOUT_MS, jobId, {
         fast: true,
       });
       if (!raw.error) {
-        const cleaned = cleanIdea(raw.stdout);
-        if (cleaned) return cleaned;
+        const parsed = parseIdeaOutput(raw.stdout); // 本体と出典検索リンクに分ける（MC-481）
+        if (parsed.idea) return parsed;
       } else if (isLimitFailure(raw) && attempt === 1) {
         model = DEV_MOCKUP_FALLBACK_MODEL;
         console.warn(`[dev-idea] sonnet limit → fallback to ${DEV_MOCKUP_FALLBACK_MODEL}`);
@@ -2538,15 +2575,16 @@ async function runIdeaJob(jobId: string): Promise<void> {
       console.warn(`[dev-idea] attempt ${attempt} failed: ${raw.error ?? 'empty'}`);
       if (attempt < 2) await sleep(GENERATE_RETRY_BACKOFF_MS);
     }
-    return '';
+    return null;
   });
 
   const job = jobs.get(jobId);
   if (!job || job.status === 'canceled') return;
-  if (idea) {
-    job.idea = idea;
+  if (result && result.idea) {
+    job.idea = result.idea;
+    job.ideaSources = result.sources;
     job.status = 'done';
-    rememberIdea(idea); // 次回以降の反復回避に使う（MC-360）。
+    rememberIdea(result.idea); // 次回以降の反復回避に使う（MC-360）。
   } else {
     job.status = 'error';
     job.error = 'アイデアの生成に失敗しました。少し待ってもう一度お試しください。';
@@ -2584,7 +2622,7 @@ function handleIdeaJob(req: Request, res: Response): void {
     res.status(404).json({ error: 'job not found' });
     return;
   }
-  res.json({ status: job.status, idea: job.idea, error: job.error });
+  res.json({ status: job.status, idea: job.idea, sources: job.ideaSources ?? [], error: job.error });
 }
 
 /** POST /idea/feedback — { idea, rating: 'good'|'bad' } で生成アイデアを評価（MC-479）。

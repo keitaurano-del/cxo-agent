@@ -393,8 +393,12 @@ async function pollMockupJob(
 }
 
 /** アイデア生成ジョブのポーリング結果（MC-288）。 */
+interface IdeaSource {
+  label: string;
+  url: string;
+}
 type IdeaJobResult =
-  | { status: 'done'; idea: string }
+  | { status: 'done'; idea: string; sources: IdeaSource[] }
   | { status: 'error'; message: string }
   | { status: 'notfound' }
   | { status: 'timeout' };
@@ -419,14 +423,18 @@ async function pollIdeaJob(
     }
     if (res.status === 404) return { status: 'notfound' };
     if (!res.ok) continue;
-    let data: { status?: string; idea?: string; error?: string };
+    let data: { status?: string; idea?: string; sources?: IdeaSource[]; error?: string };
     try {
       data = (await res.json()) as typeof data;
     } catch {
       continue;
     }
     if (data.status === 'done') {
-      return { status: 'done', idea: (data.idea ?? '').trim() };
+      return {
+        status: 'done',
+        idea: (data.idea ?? '').trim(),
+        sources: Array.isArray(data.sources) ? data.sources : [],
+      };
     }
     if (data.status === 'error') {
       return { status: 'error', message: data.error || 'アイデアの生成に失敗しました。' };
@@ -503,6 +511,8 @@ export default function Development() {
   // 直近に生成したアイデア本文と、その👍/👎評価（MC-479: 評価で次回以降のアイデア質を上げる）。
   const [lastIdea, setLastIdea] = useState<string | null>(null);
   const [ideaRating, setIdeaRating] = useState<'good' | 'bad' | null>(null);
+  // 出典を調べる検索リンク（MC-481）。生成のたびに差し替える。
+  const [ideaSources, setIdeaSources] = useState<IdeaSource[]>([]);
   // 進行中アイデアジョブ（起動時に復元してポーリング再開）。多重ポーリング防止に ref で追跡する。
   const ideaPollingRef = useRef<string | null>(null);
 
@@ -798,6 +808,7 @@ export default function Development() {
         setPrompt(r.idea);
         setLastIdea(r.idea);
         setIdeaRating(null);
+        setIdeaSources(r.sources);
         setNotice('海外で流行っているビジネスです。👍/👎 で評価すると次の精度が上がります。試作するなら直してから「生成」を押してください。');
       } else if (r.status === 'done') {
         setError('アイデアの生成に失敗しました。少し待ってもう一度お試しください。');
@@ -1459,6 +1470,7 @@ export default function Development() {
                 {/* 生成アイデアの👍/👎評価（MC-479）。評価は次回以降のアイデア質向上に学習される。
                     プロンプトを大きく書き換えたら（=別物になったら）評価行は隠す。 */}
                 {lastIdea && prompt.trim() === lastIdea.trim() && (
+                  <>
                   <div className="flex items-center gap-2 text-xs text-text-muted">
                     <span>このビジネスどう？</span>
                     <button
@@ -1495,6 +1507,25 @@ export default function Development() {
                       {ideaBusy ? <Spinner /> : <span aria-hidden>🔄</span>} 別のアイデア
                     </button>
                   </div>
+                  {/* 出典を調べる検索リンク（MC-481）。捏造URLではなく確実に飛べる検索リンク。 */}
+                  {ideaSources.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                      <span>🔗 出典を調べる:</span>
+                      {ideaSources.map((s) => (
+                        <a
+                          key={s.url}
+                          href={s.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 transition-colors hover:bg-surface-2"
+                          style={{ color: 'var(--mc-accent)' }}
+                        >
+                          {s.label} ↗
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  </>
                 )}
                 {/* 生成は「設計 → コード → デザイン昇格（2パス仕上げ）」の高品質 1 フローで作る。
                     以前あった Figma ワイヤーフレーム工程は不要になったためトグルは撤去した
