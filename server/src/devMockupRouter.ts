@@ -865,8 +865,11 @@ function runClaudeRaw(
             }
           } else if (type === 'rate_limit_event') {
             const info = (o.rate_limit_info ?? {}) as Record<string, unknown>;
-            // status が allowed 以外（rejected/blocked 等）なら利用上限とみなす。
-            if (typeof info.status === 'string' && info.status !== 'allowed') {
+            // status が allowed 系（allowed / allowed_warning）はリクエスト自体は通っている＝
+            // 生成結果は使えるので上限失敗にしない。rejected/blocked 等の非 allowed のみ上限扱い。
+            // （2026-08-25: allowed_warning を上限誤判定して成功生成を捨て、アイデア生成が
+            //  毎回失敗していた不具合を修正・MC-478）
+            if (typeof info.status === 'string' && !info.status.startsWith('allowed')) {
               limitError = `rate limit: ${info.status}`;
             }
           }
