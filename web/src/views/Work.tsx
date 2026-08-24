@@ -1723,7 +1723,7 @@ function WorkLboTab() {
 function WorkLaundryTab() {
   // 事業計画・市場調査（2026-08-21 Keita「東京のコインランドリー事情を調べてLaundryタブに」）・
   // 収益分析（MC-409 事業ビジネス分析レポート）・開業ナレッジ（MC-424 コンサルナレッジ第2弾）の切替。
-  const [doc, setDoc] = useState<'plan' | 'market' | 'biz' | 'consult'>('plan');
+  const [doc, setDoc] = useState<'plan' | 'market' | 'biz' | 'cases' | 'consult'>('plan');
   const src =
     doc === 'plan'
       ? '/laundry-plan.html'
@@ -1731,7 +1731,9 @@ function WorkLaundryTab() {
         ? '/laundry-market-report.html'
         : doc === 'biz'
           ? '/laundry-business-analysis.html'
-          : '/laundry-consulting.html';
+          : doc === 'cases'
+            ? '/laundry-cases.html'
+            : '/laundry-consulting.html';
   const title =
     doc === 'plan'
       ? 'CoinLaundry.Tokyo 事業計画'
@@ -1739,7 +1741,9 @@ function WorkLaundryTab() {
         ? '東京のコインランドリー事情 調査レポート'
         : doc === 'biz'
           ? 'コインランドリー事業 収益分析レポート'
-          : 'コインランドリー事業 コンサルティングナレッジ';
+          : doc === 'cases'
+            ? 'コインランドリー事業 成功・失敗事例レポート'
+            : 'コインランドリー事業 コンサルティングナレッジ';
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex items-center gap-2">
@@ -1748,6 +1752,7 @@ function WorkLaundryTab() {
             ['plan', '事業計画'],
             ['market', '市場調査'],
             ['biz', '収益分析'],
+            ['cases', '事例分析'],
             ['consult', '開業ナレッジ'],
           ] as const).map(([key, label]) => (
             <button

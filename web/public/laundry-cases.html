@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>コインランドリー事業 成功・失敗事例レポート</title>
+<style>
+/* laundry-plan.html と同じ帳票トーン（白＋淡ブルー＋濃紺） */
+:root{
+  --navy:#16324f; --blue:#2a6db0; --blue-soft:#e8f1f9; --blue-line:#c7dcef;
+  --text:#23303c; --muted:#6b7a89; --bg:#f6f9fc; --white:#fff;
+  --green:#1d8a4e; --red:#c0392b; --amber:#9a6b15;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Hiragino Sans",Meiryo,"Segoe UI",sans-serif;color:var(--text);background:var(--bg);font-size:14px;line-height:1.75}
+.wrap{max-width:860px;margin:0 auto;padding:20px 16px 64px}
+header.doc{background:var(--navy);color:#fff;padding:22px 20px;border-radius:8px 8px 0 0}
+header.doc h1{font-size:20px;letter-spacing:.02em}
+header.doc .sub{font-size:12px;color:#bcd0e4;margin-top:6px}
+header.doc .meta{font-size:11px;color:#8fa9c4;margin-top:10px;display:flex;gap:16px;flex-wrap:wrap}
+.paper{background:var(--white);border:1px solid var(--blue-line);border-top:none;border-radius:0 0 8px 8px;padding:8px 20px 28px}
+nav.toc{background:var(--blue-soft);border:1px solid var(--blue-line);border-radius:6px;padding:12px 16px;margin:18px 0 6px;font-size:12.5px}
+nav.toc a{color:var(--blue);text-decoration:none;margin-right:14px;display:inline-block;padding:2px 0}
+section{margin-top:34px}
+h2{font-size:16px;color:var(--navy);border-left:4px solid var(--blue);padding-left:10px;margin-bottom:14px;letter-spacing:.02em}
+h3{font-size:13.5px;color:var(--navy);margin:18px 0 8px}
+p{margin:8px 0}
+ul,ol{margin:8px 0 8px 1.4em}
+li{margin:4px 0}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+th{background:var(--blue-soft);color:var(--navy);text-align:left;font-weight:600}
+th,td{border:1px solid var(--blue-line);padding:7px 10px;vertical-align:top}
+td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.note{font-size:11.5px;color:var(--muted)}
+.callout{border:1px solid var(--blue-line);border-left:4px solid var(--blue);background:var(--blue-soft);border-radius:4px;padding:10px 14px;margin:12px 0;font-size:13px}
+.callout.warn{border-left-color:var(--amber);background:#fbf5e8;border-color:#e8d9b8}
+.callout.good{border-left-color:var(--green);background:#eef7f1;border-color:#bfe0cc}
+.callout.bad{border-left-color:var(--red);background:#fbeeec;border-color:#eccac5}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.kpi .box{border:1px solid var(--blue-line);border-radius:6px;padding:10px 12px;background:#fbfdff}
+.kpi .box .l{font-size:11px;color:var(--muted)}
+.kpi .box .v{font-size:17px;font-weight:700;color:var(--navy);margin-top:2px}
+.kpi .box .s{font-size:11px;color:var(--muted)}
+.tag{display:inline-block;border:1px solid var(--blue-line);background:var(--blue-soft);color:var(--navy);border-radius:3px;padding:1px 7px;font-size:11px;margin:0 4px 4px 0}
+.case{border:1px solid var(--blue-line);border-radius:6px;padding:12px 15px;margin:12px 0;background:#fbfdff}
+.case .h{font-weight:700;color:var(--navy);font-size:13.5px;margin-bottom:4px}
+.case.win{border-left:4px solid var(--green)}
+.case.lose{border-left:4px solid var(--red)}
+.case .label{display:inline-block;font-size:10.5px;font-weight:700;border-radius:3px;padding:1px 7px;margin-right:6px;vertical-align:middle}
+.case.win .label{background:#e4f3ea;color:var(--green);border:1px solid #bfe0cc}
+.case.lose .label{background:#fbeeec;color:var(--red);border:1px solid #eccac5}
+.pos{color:var(--green);font-weight:600}
+.neg{color:var(--red);font-weight:600}
+sup a{color:var(--blue);text-decoration:none;font-size:10px}
+footer{margin-top:36px;font-size:11px;color:var(--muted);border-top:1px solid var(--blue-line);padding-top:12px}
+footer ol{margin-left:1.4em}
+footer li{margin:3px 0;word-break:break-all}
+@media (max-width:480px){ .paper{padding:6px 12px 22px} th,td{padding:6px 6px} .kpi{grid-template-columns:repeat(2,1fr)} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <h1>コインランドリー事業 成功・失敗事例レポート</h1>
+  <div class="sub">チェーン店／個人店それぞれの成功・失敗を実例ベースで分析</div>
+  <div class="meta">
+    <span>作成: 2026-08-24</span>
+    <span>作成者: Son（Apollo）</span>
+    <span>手法: 業界メディア・企業IR・調査会社の公開情報を横断収集（出典末尾）</span>
+  </div>
+</header>
+
+<div class="paper">
+
+<nav class="toc">
+  <a href="#summary">1. サマリー</a>
+  <a href="#market">2. 市場の前提</a>
+  <a href="#chain">3. チェーン店の分析</a>
+  <a href="#solo">4. 個人店の分析</a>
+  <a href="#compare">5. 成功パターン総括</a>
+  <a href="#fail">6. 失敗パターン総括</a>
+  <a href="#implication">7. 自社への示唆</a>
+  <a href="#sources">出典</a>
+</nav>
+
+<section id="summary">
+<h2>1. サマリー</h2>
+<p>コインランドリーは「立地が9割」の装置産業です。無資格・無人で参入でき、生活必需の安定需要があるため<strong>店舗数はクリーニング店を上回りました</strong><sup><a href="#s6">[6]</a></sup>が、その裏で参入過多による過当競争と、立地を外した店の採算割れが同時に進んでいます。成功・失敗は「チェーンか個人か」よりも、<strong>①立地の質 ②回収を見込んだ資金設計 ③差別化と継続的な運営（清掃・メンテ・集客）</strong>の3点で決まります。</p>
+<div class="kpi">
+  <div class="box"><div class="l">市場規模(2025)</div><div class="v">1,155億円</div><div class="s">前年比 100.9%<sup><a href="#s1">[1]</a></sup></div></div>
+  <div class="box"><div class="l">個人店の月商目安</div><div class="v">60〜160万円</div><div class="s">立地で3倍近い差<sup><a href="#s3">[3]</a><a href="#s5">[5]</a></sup></div></div>
+  <div class="box"><div class="l">初期投資</div><div class="v">2,000〜3,500万円</div><div class="s">機器＋内装＋物件<sup><a href="#s3">[3]</a></sup></div></div>
+  <div class="box"><div class="l">最大手の店舗推移</div><div class="v">633→584店</div><div class="s">WASHハウス 2020→2024<sup><a href="#s4">[4]</a></sup></div></div>
+</div>
+<div class="callout"><strong>要点：</strong> チェーンは「出店数＝収益」の拡大依存モデルが飽和で逆回転しやすい。個人店は自由度が高い反面、立地とニーズを外すと即赤字。どちらも勝ち筋は<strong>「良立地 × 差別化 × 運営継続」</strong>で共通する。</div>
+</section>
+
+<section id="market">
+<h2>2. 市場の前提</h2>
+<p>2025年のコインランドリー市場は事業者売上高ベースで<strong>1,155.4億円（前年比100.9%）</strong>。クリーニング関連市場全体（約2,799.7億円）の約41%を占めます<sup><a href="#s1">[1]</a></sup>。一般店舗型クリーニングが前年比98.7%と縮小するなか、コインランドリーは微増ながら堅調で、<strong>店舗数ではクリーニング店を超えました</strong><sup><a href="#s6">[6]</a></sup>。</p>
+<h3>需要の追い風</h3>
+<ul>
+  <li>共働き・単身世帯の増加と住宅事情（乾燥スペース不足）による家事時短ニーズ</li>
+  <li>花粉・ダニ対策など衛生意識の定着（布団・大物の高温乾燥需要）</li>
+  <li>大型ガス乾燥機など「家庭でできない機能」への支払い意欲</li>
+</ul>
+<h3>逆風・構造リスク</h3>
+<ul>
+  <li><span class="neg">参入過多</span>：無資格で始められるため商圏内に店舗が乱立し、売上を食い合う<sup><a href="#s2">[2]</a></sup></li>
+  <li><span class="neg">コスト上昇</span>：燃料費・洗剤資材の高騰、人件費の上昇が収益を圧迫<sup><a href="#s1">[1]</a></sup></li>
+  <li><span class="neg">節税需要の消滅</span>：2023年の税制変更で運営委託型の即時償却が廃止。投資マネーが冷え込んだ<sup><a href="#s4">[4]</a></sup></li>
+</ul>
+</section>
+
+<section id="chain">
+<h2>3. チェーン店の分析</h2>
+
+<h3>3-1. 主要チェーン 店舗数（2025年冬）</h3>
+<table>
+  <tr><th>順位</th><th>ブランド</th><th class="num">店舗数</th><th>創業</th><th>タイプ</th></tr>
+  <tr><td>1</td><td>コインランドリー ピエロ</td><td class="num">670</td><td>2016</td><td>FC・郊外中心</td></tr>
+  <tr><td>2</td><td>WASHハウス</td><td class="num">584</td><td>2001</td><td>FC＋直営・九州/西日本中心</td></tr>
+  <tr><td>3</td><td>マンマチャオ</td><td class="num">580</td><td>2000</td><td>FC・首都圏中心</td></tr>
+  <tr><td>4</td><td>せんたくウサギ</td><td class="num">500</td><td>2012</td><td>FC</td></tr>
+  <tr><td>5</td><td>ランドリープレス</td><td class="num">450</td><td>2006</td><td>FC</td></tr>
+  <tr><td>—</td><td>Baluko Laundry Place</td><td class="num">約290</td><td>2016</td><td>FC・都市/デザイン型</td></tr>
+</table>
+<p class="note">出典<sup><a href="#s5">[5]</a><a href="#s7">[7]</a></sup>。順位・店舗数は集計時点で変動する。ピエロは近年急伸、Balukoは店舗数より単価・ブランド力を重視。</p>
+
+<h3>3-2. 成功しているチェーンの3類型</h3>
+<div class="callout good"><strong>A. データドリブン標準化型 ＝ WASHハウス</strong><br>人口構成・昼夜人口・男女比などのデータで出店を厳選し、遠隔管理でオーナー負担とトラブルを最小化。西日本を固めてから首都圏へ段階展開<sup><a href="#s8">[8]</a></sup>。「本部が管理を巻き取る」ことでFCを増やした。</div>
+<div class="callout good"><strong>B. 急拡大・手厚サポート型 ＝ マンマチャオ</strong><br>「2017年までにFC200店」を8ヶ月で達成、1年で400店超という速度で首都圏に集中出店<sup><a href="#s8">[8]</a></sup>。本部が店舗HPのSEOまで代行。電解水・天然由来洗剤の「エコランドリー」で差別化。</div>
+<div class="callout good"><strong>C. 都市型・体験デザイン型 ＝ Baluko（OKULAB）</strong><br>駅近・スタイリッシュな内装、待ち時間を心地よくするカフェ併設（たまプラーザ店 2020〜）<sup><a href="#s9">[9]</a></sup>。「洗濯＝作業」を「洗濯＝良い体験」に転換。約10年で290店、FC比率は実質99%（250店中249がFC・2024年1月時点）<sup><a href="#s10">[10]</a></sup>。</p></div>
+
+<h3>3-3. チェーンの成功要因</h3>
+<ul>
+  <li><strong>立地選定の科学化</strong>：素人が外しがちな立地を、データと出店実績で当てにいける</li>
+  <li><strong>遠隔管理・IoT</strong>：無人でも売上/故障を本部が監視。オーナーは兼業・遠隔所有が可能</li>
+  <li><strong>ブランドと集客</strong>：認知・アプリ・SEO・統一デザインで個人店より客を集めやすい</li>
+  <li><strong>調達スケール</strong>：機器・洗剤・保守を量でコストダウン</li>
+</ul>
+
+<h3>3-4. チェーンでも失敗する ── WASHハウスの苦戦（事例）</h3>
+<div class="case lose">
+  <div class="h"><span class="label">苦戦</span>最大手WASHハウス：8期連続の下方修正</div>
+  <p>店舗数はピークの<strong>2020年末633店 → 2023年末597店 → 2024年9月末584店</strong>と減少に転じ、FC店の撤退が加速<sup><a href="#s4">[4]</a></sup>。上場来<strong>8期連続で純利益予想を下方修正</strong>（2024年11月発表）。</p>
+  <p><strong>要因の分解：</strong></p>
+  <ul>
+    <li><span class="neg">過当競争</span>：「商品性で差がつけにくく、競争激化で稼ぎにくい」構造。参入増で商圏が飽和し多くのオーナーが採算割れ</li>
+    <li><span class="neg">好立地の枯渇</span>：経済正常化で他業種の出店が活発化し、良い物件を取り合いに</li>
+    <li><span class="neg">節税需要の蒸発</span>：2023年税制変更で即時償却が廃止され、投資目的の需要が激減</li>
+    <li><span class="neg">金融子会社の貸し倒れ</span>：採算の取れないオーナーの返済不能が増加</li>
+  </ul>
+  <div class="callout warn" style="margin-top:8px"><strong>教訓：</strong> 収益が「新規出店数」に依存する設計は、出店が鈍った瞬間に業績が逆回転する。<u>店舗を増やすこと自体を目的化すると、既存店の採算とオーナーの成功が置き去りになる。</u></div>
+</div>
+</section>
+
+<section id="solo">
+<h2>4. 個人店の分析</h2>
+
+<h3>4-1. 個人店の売上実例</h3>
+<table>
+  <tr><th>店舗</th><th>立地</th><th>規模</th><th class="num">月商</th><th class="num">年商</th><th>成功要因</th></tr>
+  <tr><td>A店</td><td>郊外住宅街</td><td>27坪・14台</td><td class="num pos">約157万円</td><td class="num">約1,980万円</td><td>大通り沿い／広い駐車場／屋根付き</td></tr>
+  <tr><td>B店</td><td>郊外住宅街</td><td>20坪・12台</td><td class="num">約77万円</td><td class="num">約930万円</td><td>視認性が高い立地（新店でも安定）</td></tr>
+</table>
+<p class="note">出典<sup><a href="#s5b">[5b]</a></sup>。同じ「郊外住宅街」でも月商は約2倍の差。差は<strong>視認性・駐車場・接道</strong>という“見つけやすさ／入りやすさ”に集約される。春秋に増え夏に落ち、12月がピークという季節変動あり。</p>
+
+<h3>4-2. 個人店の経済性（目安）</h3>
+<div class="kpi">
+  <div class="box"><div class="l">月商目安</div><div class="v">60万円〜</div><div class="s">好立地で150万円超も</div></div>
+  <div class="box"><div class="l">月間ランニング</div><div class="v">約30万円</div><div class="s">家賃13万〜/水光熱15万/雑費・人件6万</div></div>
+  <div class="box"><div class="l">初期投資</div><div class="v">2,000〜2,500万円</div><div class="s">機器・内装・物件<sup><a href="#s3">[3]</a></sup></div></div>
+  <div class="box"><div class="l">平均年収</div><div class="v">300〜400万円</div><div class="s">1店舗運営の目安<sup><a href="#s3">[3]</a></sup></div></div>
+</div>
+<p>粗い試算では、月商60万・経費30万なら手元に月30万前後が残る計算ですが、<strong>初期2,000万超を回収するには数年かかり、開業初期は売上が伸びにくい</strong>（認知が育つまで赤字期間がある）。ゆえに<strong>6〜12ヶ月の赤字に耐える運転資金</strong>が生死を分けます。</p>
+
+<h3>4-3. 成功する個人店の型 ── 「小さく・尖る」</h3>
+<p>チェーンにスケールで勝てない個人店は、<strong>低投資 or 差別化</strong>で勝ちにいくのが定石です。</p>
+<div class="case win">
+  <div class="h"><span class="label">成功型</span>物置型スモール店（MLB／東京・板橋）</div>
+  <p>約<strong>3坪に乾燥機4台</strong>だけの超小型店。商業施設・住宅に近い駐車場の空きスペースを活用し、低投資・低リスクで需要だけを刈り取る<sup><a href="#s2">[2]</a></sup>。「フルサイズ店を建てる」発想を捨てた好例。</p>
+</div>
+<div class="case win">
+  <div class="h"><span class="label">成功型</span>体験付加型（ECO WASH CAFE 東大和／カフェ併設・ペット洗濯機・ドッグラン等）</div>
+  <p>待ち時間をカフェで過ごせる、ペット用洗濯機やドッグランを併設するなど、<strong>「洗濯のついで」に来る理由を作る</strong>。単価と滞在価値、リピートを底上げする<sup><a href="#s2">[2]</a><a href="#s3">[3]</a></sup>。個人店でも立地の弱さを差別化で補える。</p>
+</div>
+
+<h3>4-4. 個人店の失敗事例</h3>
+<div class="case lose">
+  <div class="h"><span class="label">失敗</span>退職金3,500万円を投じた50代・元会社員</div>
+  <p>退職金<strong>3,500万円</strong>で開業したが、<strong>開業半年後に同じ商圏へ大手チェーンが2店舗を新規出店</strong>。月売上が予測の<strong>半分以下</strong>に落ち込んだ<sup><a href="#s2">[2]</a></sup>。<br><span class="note">→ 敗因：商圏の競合参入リスクを織り込まず、退職金一括という“後がない”資金設計で参入した。</span></p>
+</div>
+<div class="case lose">
+  <div class="h"><span class="label">失敗</span>メンテを後回しにした40代・自営業者</div>
+  <p>開業<strong>5年目から洗濯機の故障が増加</strong>。修理費を抑えようと対応を後回しにしたところ、<strong>「機械が古い・使えない」という評判</strong>が広がり利用客が離反<sup><a href="#s2">[2]</a></sup>。<br><span class="note">→ 敗因：装置産業なのに設備更新・保守を軽視。無人ゆえ不満が“口コミ”に直行することを見誤った。</span></p>
+</div>
+</section>
+
+<section id="compare">
+<h2>5. 成功パターン総括（チェーン vs 個人）</h2>
+<table>
+  <tr><th>観点</th><th>チェーン店</th><th>個人店</th></tr>
+  <tr><td>立地選定</td><td class="pos">データ・実績で精度が高い</td><td>自力調査。当たれば大、外すと即赤字</td></tr>
+  <tr><td>初期投資</td><td>加盟金・保証金が上乗せ</td><td class="pos">工夫次第で圧縮可（小型店）</td></tr>
+  <tr><td>集客・ブランド</td><td class="pos">認知・アプリ・SEOで有利</td><td>ゼロから。SNS・チラシ・口コミ勝負</td></tr>
+  <tr><td>差別化の自由度</td><td>本部仕様に縛られる</td><td class="pos">尖った特化（ペット・カフェ等）が自在</td></tr>
+  <tr><td>運営サポート</td><td class="pos">遠隔管理・保守・トラブル対応</td><td>すべて自己責任。だが小回りは効く</td></tr>
+  <tr><td>主なリスク</td><td>本部方針・ロイヤリティ・商圏保護の弱さ</td><td>孤立・ノウハウ不足・資金ショート</td></tr>
+</table>
+<div class="callout"><strong>結論：</strong> チェーンは「失敗しにくいが大きくは勝ちにくい」、個人は「振れ幅が大きい（当てれば高利回り／外せば全損）」。<u>資本と時間に余裕があり手堅く行くならチェーン、良立地・差別化アイデア・運営体力があるなら個人店が高リターン</u>という住み分け。</div>
+</section>
+
+<section id="fail">
+<h2>6. 失敗パターン総括（事例ベース）</h2>
+<p>チェーン・個人を問わず、失敗はほぼ以下の型に収れんします。</p>
+<table>
+  <tr><th>失敗要因</th><th>典型的な症状</th><th>対応する事例</th></tr>
+  <tr><td>①立地ミス</td><td>自己所有地に固執／人口少・オフィス街で開業。集客が伸びない</td><td>—（最頻の敗因）</td></tr>
+  <tr><td>②競合参入</td><td>後から商圏に大手が出店し客を食われる</td><td>退職金3,500万の事例</td></tr>
+  <tr><td>③資金設計の甘さ</td><td>回収見込みが甘く、初期赤字に耐えられず返済不能</td><td>WASH金融子会社の貸倒れ</td></tr>
+  <tr><td>④差別化不足</td><td>横並びでリピーターが付かず、価格・距離だけで負ける</td><td>WASH「商品性で差がつかない」</td></tr>
+  <tr><td>⑤運営・メンテ軽視</td><td>故障放置・清掃怠慢・クレーム放置 → 悪評で客離れ</td><td>機械故障放置の事例</td></tr>
+  <tr><td>⑥集客活動なし</td><td>「無人だから放置でOK」と考え、SNS・チラシ・口コミ対策をしない</td><td>—</td></tr>
+  <tr><td>⑦拡大の自己目的化</td><td>出店数を追い、既存店採算とオーナー成功が置き去り</td><td>WASH 8期連続下方修正</td></tr>
+</table>
+<div class="callout bad"><strong>共通の落とし穴：</strong> 「無資格・無人・安定需要」という参入の容易さが、<u>立地とニーズの精査を省かせ、運営を放置させる</u>。コインランドリーは“建てて終わり”ではなく“建ててから”の装置＋運営ビジネスである。</div>
+</section>
+
+<section id="implication">
+<h2>7. 自社（CoinLaundry.Tokyo）への示唆</h2>
+<p>本レポートの事例は、当社メディア／プラットフォームがどこで価値を出せるかを示しています。</p>
+<ul>
+  <li><strong>「立地が9割」を支援する</strong>：失敗の最頻要因は立地ミス。当社が持つ全国店舗データ・人口・競合密度は、<span class="pos">出店検討者向けの立地診断・商圏分析</span>として直接刺さる（開業したい人／既存オーナー双方）。</li>
+  <li><strong>差別化＝“見つけてもらう”を代替する</strong>：個人店の弱点は集客。当社の検索・ランキング・口コミ・お得情報（MC-468）は、<span class="pos">個人店がチェーンに対抗する集客チャネル</span>になりうる。プレミアム掲載（MC-458）の価値訴求と直結。</li>
+  <li><strong>運営の“放置による失敗”を可視化</strong>：口コミ分析（清潔さ・故障・オーナー返信）は、オーナーに改善点を示すダッシュボード事業へ発展余地。</li>
+  <li><strong>コンサバ計画との整合</strong>：市場は微増・過当競争という前提（MC-467の保守計画）と本レポートは一致。<span class="neg">「数を増やせば儲かる」チェーン依存モデルの逆回転</span>は、当社が“店舗を建てる”のではなく<u>“オーナーの成功を助ける”側に立つ</u>正しさを裏づける。</li>
+</ul>
+</section>
+
+<footer id="sources">
+<strong>出典</strong>
+<ol>
+  <li id="s1">矢野経済研究所「クリーニング関連市場に関する調査（2026年）」 https://www.yano.co.jp/press-release/show/press_id/4101</li>
+  <li id="s2">エレクトロラックス・プロフェッショナル「コインランドリー経営に失敗する原因10選」ほか失敗・成功事例 https://www.electroluxprofessional.com/jp/blog0001/ ／ https://www.electroluxprofessional.com/jp/blog11534/</li>
+  <li id="s3">同上（経済性の目安：月商・ランニング・初期投資・年収）／マネーフォワード クラウド「コインランドリー経営は儲かる？」 https://biz.moneyforward.com/establish/basic/84112/</li>
+  <li id="s4">楽待新聞「8年連続の下方修正、コインランドリーの『WASHハウス』はなぜ苦しんでいるのか」 https://www.rakumachi.jp/news/column/356504</li>
+  <li id="s5">フランチャイズ比較ネット「【2025年冬】コインランドリー店舗数ランキング」 https://www.fc-hikaku.net/dokuritsu_kaigyo/3143</li>
+  <li id="s5b">Fujitaka（ファインランドリー）「コインランドリーの売上実例を公開！」 https://www.fine-laundry.jp/column/detail.php?id=64</li>
+  <li id="s6">日本経済新聞「コインランドリー店数、クリーニング超え 次の『主洗場』」 https://www.nikkei.com/article/DGXZQOUC191XC0Z10C24A8000000/</li>
+  <li id="s7">Baluko Laundry Place / 株式会社OKULAB 公式・プレスリリース（店舗数・成長） https://baluko.jp/ ／ https://fc.okulab.co.jp/</li>
+  <li id="s8">事業構想オンライン「コインランドリー新勢力 WASHハウス vs. マンマチャオ」 https://www.projectdesign.jp/201802/rivals/004507.php</li>
+  <li id="s9">Baluko Laundry Place「複合型ランドリー＆カフェ たまプラーザ」 https://baluko.jp/news/8083</li>
+  <li id="s10">OKULAB プレスリリース／注目企業ナビ（FC比率・カフェ併設モデル） https://prtimes.jp/main/html/rd/p/000000061.000026908.html</li>
+</ol>
+<p class="note" style="margin-top:10px">※ 本レポートは公開情報の要約・分析であり、個別の投資判断・出店判断を保証するものではありません。数値は出典時点のもので変動します。事例は各媒体が紹介したケースに基づきます。</p>
+</footer>
+
+</div>
+</div>
+</body>
+</html>
