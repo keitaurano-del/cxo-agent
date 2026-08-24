@@ -798,7 +798,7 @@ export default function Development() {
         setPrompt(r.idea);
         setLastIdea(r.idea);
         setIdeaRating(null);
-        setNotice('アイデアを入れました。👍/👎 で評価すると次のアイデアの質が上がります。必要なら直してから「生成」を押してください。');
+        setNotice('海外で流行っているビジネスです。👍/👎 で評価すると次の精度が上がります。試作するなら直してから「生成」を押してください。');
       } else if (r.status === 'done') {
         setError('アイデアの生成に失敗しました。少し待ってもう一度お試しください。');
       } else if (r.status === 'error') {
@@ -846,7 +846,7 @@ export default function Development() {
     }
     const startedAt = Date.now();
     saveIdeaJob({ jobId, startedAt });
-    setNotice('アイデアを考えています。ページを離れても大丈夫です（戻ると結果を反映します）。');
+    setNotice('海外の流行ビジネスを探しています。ページを離れても大丈夫です（戻ると結果を反映します）。');
     void driveIdeaJob(jobId, startedAt);
   }, [ideaBusy, generating, driveIdeaJob]);
 
@@ -1441,10 +1441,10 @@ export default function Development() {
                       onClick={handleGenerateIdea}
                       disabled={ideaBusy || generating}
                       className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
-                      title="開発に使えるアイデアを 1 つ自動で出します"
+                      title="アメリカなど海外でいま流行っているスモールビジネスを 1 つ教えます"
                     >
-                      {ideaBusy ? <Spinner /> : <span aria-hidden>💡</span>}
-                      {ideaBusy ? '考え中…' : 'アイデアを生成'}
+                      {ideaBusy ? <Spinner /> : <span aria-hidden>🌎</span>}
+                      {ideaBusy ? '探し中…' : '海外の流行ビジネス'}
                     </button>
                   </div>
                 </div>
@@ -1460,7 +1460,7 @@ export default function Development() {
                     プロンプトを大きく書き換えたら（=別物になったら）評価行は隠す。 */}
                 {lastIdea && prompt.trim() === lastIdea.trim() && (
                   <div className="flex items-center gap-2 text-xs text-text-muted">
-                    <span>このアイデアどう？</span>
+                    <span>このビジネスどう？</span>
                     <button
                       type="button"
                       onClick={() => rateIdea('good')}
