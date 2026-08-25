@@ -878,11 +878,27 @@ export const SCROLL_KBD_FIX_BODY = `(function(){
     multi=false;moved=false;
     var tt=e.touches[0];sx=tt.clientX;sy=tt.clientY;st=Date.now();
   },{passive:true,capture:true});
+  // 既に focus 済みの helper textarea を blur してキーボードを引っ込める（モバイルは touchstart で
+  // 先に focus が走りキーボードが出るため、touchend 起点の抑止だけでは間に合わない）。
+  function blurHelperNow(){
+    try{
+      var ae=document.activeElement;
+      if(ae&&ae.classList&&ae.classList.contains('xterm-helper-textarea')){ae.blur();}
+    }catch(_e){}
+  }
   document.addEventListener('touchmove',function(e){
     if(multi){return;}
     var tt=(e.touches&&e.touches[0])||null;
     if(!tt){return;}
-    if(Math.abs(tt.clientX-sx)>MOVE_THRESHOLD||Math.abs(tt.clientY-sy)>MOVE_THRESHOLD){moved=true;}
+    if(Math.abs(tt.clientX-sx)>MOVE_THRESHOLD||Math.abs(tt.clientY-sy)>MOVE_THRESHOLD){
+      // 初めてスクロールと判定した瞬間に、その場で抑止窓を立て、既出のキーボードを即引っ込める。
+      // これで「touchstart で先に focus されキーボードが出る」ケースもスクロール開始で消える。
+      moved=true;
+      suppressUntil=Date.now()+SUPPRESS_MS;
+      blurHelperNow();
+    }else if(moved){
+      suppressUntil=Date.now()+SUPPRESS_MS; // 移動継続中は窓を延長し、慣性スクロール後の合成入力も抑止。
+    }
   },{passive:true,capture:true});
   document.addEventListener('touchend',function(_e){
     if(multi){return;}
