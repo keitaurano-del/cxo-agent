@@ -844,6 +844,74 @@ export const IME_FIX_BODY = `(function(){
 })();`;
 const IME_FIX_SCRIPT = `<script>${IME_FIX_BODY}</script>`;
 
+// ─── スクロールでソフトキーボードが出る問題（2026-08-26 Keita「スマホでスクロールするとキーボードが出る」）──
+// 根因: 通常 shell（mouseActive=false）では TAP_FIX が touchstart で早期 return（tracking=false）し
+//   一切介入しない＝ネイティブスクロールは温存されるが、スクロール/スワイプ後にブラウザが発火する
+//   合成 click を誰も抑止しない。xterm がその click を受けて .xterm-helper-textarea へ focus し、
+//   スマホのソフトキーボードが立ち上がってしまう。mouse mode 時は TAP_FIX の 439 行で scrolled 時の
+//   合成 click を preventDefault しているが、通常 shell では抑止していないのが本問題の本体。
+// 修正方針（最小・低リスク・可逆・TAP_FIX とは独立）:
+//   このスクリプトが自前で touch を観測し「スクロール/スワイプ（移動量 > 閾値）or 長押し」だった
+//   ジェスチャを検知する。そのジェスチャの直後（短い抑止ウィンドウ ~700ms）に発火する合成
+//   click / mousedown、および .xterm-helper-textarea への focus を capture フェーズで止める
+//   （COPY_FIX の Date.now()-lastTouch<600 と同型のウィンドウ判定）。clean tap（移動なし・短時間）
+//   では一切止めない＝従来どおりフォーカスしてキーボードを出せる＝入力は退行しない。
+//   「focus されたら即 blur」方式は clean tap まで殺すので採らない（必ずジェスチャ判定に紐づけて抑止）。
+// 非退行の担保:
+//   - listener は全て passive/capture の観測のみ。TAP_FIX の SGR 送出・長押し選択・wheel は触らない。
+//   - clean tap（moved なし・TAP_MAX_MS 未満）では suppressUntil を立てないので focus はそのまま通る。
+//   - 抑止は「直近ジェスチャがスクロール/長押しだった」場合の click/mousedown/focus のみ。
+//   - 二重インストール防止（window.__apolloScrollKbdFix）。
+// SCROLL_KBD_FIX_BODY はテストから eval 可能な素の JS。本番注入は SCROLL_KBD_FIX_SCRIPT。
+export const SCROLL_KBD_FIX_BODY = `(function(){
+  if(window.__apolloScrollKbdFix){return;}
+  window.__apolloScrollKbdFix=true;
+  var MOVE_THRESHOLD=10;   // px。これ超の移動＝スクロール/スワイプ扱い。
+  var TAP_MAX_MS=700;      // ms。これ超の接触＝長押し扱い（タップにしない）。
+  var SUPPRESS_MS=700;     // ms。ジェスチャ直後この間の合成 click/focus を抑止する。
+  var sx=0,sy=0,st=0,moved=false,multi=false;
+  var suppressUntil=0;     // このミリ秒までは合成 click/mousedown/focus を止める。
+  function active(){return Date.now()<suppressUntil;}
+  // touch は document 全体で capture して観測（xterm の viewport / screen / helper のどこに来ても拾う）。
+  document.addEventListener('touchstart',function(e){
+    if(!e.touches||e.touches.length!==1){multi=true;moved=false;return;}
+    multi=false;moved=false;
+    var tt=e.touches[0];sx=tt.clientX;sy=tt.clientY;st=Date.now();
+  },{passive:true,capture:true});
+  document.addEventListener('touchmove',function(e){
+    if(multi){return;}
+    var tt=(e.touches&&e.touches[0])||null;
+    if(!tt){return;}
+    if(Math.abs(tt.clientX-sx)>MOVE_THRESHOLD||Math.abs(tt.clientY-sy)>MOVE_THRESHOLD){moved=true;}
+  },{passive:true,capture:true});
+  document.addEventListener('touchend',function(_e){
+    if(multi){return;}
+    // スクロール/スワイプ（移動あり）or 長押し（接触が長い）＝タップではない → 直後の合成入力を抑止。
+    // clean tap（移動なし・短時間）は suppressUntil を立てない＝従来どおり focus してキーボードを出す。
+    if(moved||(Date.now()-st)>TAP_MAX_MS){suppressUntil=Date.now()+SUPPRESS_MS;}
+    else{suppressUntil=0;}
+  },{passive:true,capture:true});
+  // ジェスチャ直後に来る合成 click / mousedown を capture フェーズで握りつぶす。
+  function block(e){
+    if(!active()){return;}
+    if(typeof e.stopPropagation==='function'){e.stopPropagation();}
+    if(typeof e.preventDefault==='function'){e.preventDefault();}
+  }
+  document.addEventListener('mousedown',block,true);
+  document.addEventListener('click',block,true);
+  // 合成 focus が helper textarea に来たら（＝キーボード起動元）ジェスチャ直後だけ blur し直す。
+  // preventDefault は focus では効かないので、抑止ウィンドウ内のときだけ即 blur で追い返す。
+  // ※ clean tap 由来の focus は suppressUntil が立っていないので通る＝入力は退行しない。
+  document.addEventListener('focusin',function(e){
+    if(!active()){return;}
+    var el=e.target;
+    if(el&&el.classList&&el.classList.contains('xterm-helper-textarea')){
+      try{el.blur();}catch(_e){}
+    }
+  },true);
+})();`;
+const SCROLL_KBD_FIX_SCRIPT = `<script>${SCROLL_KBD_FIX_BODY}</script>`;
+
 // proxy 失敗時に Apollo 全体を落とさない。ttyd 停止中（林セッション無し等）でも 502 を返すだけ。
 proxy.on('error', (err, _req, resOrSocket) => {
   console.error('[terminal proxy error]', err?.message ?? err);
@@ -899,7 +967,7 @@ proxy.on('proxyRes', (proxyRes, _req, res) => {
   proxyRes.on('end', () => {
     let body = Buffer.concat(chunks).toString('utf8');
     if (body.includes('</body>') && !body.includes('__apolloPasteFix')) {
-      body = body.replace('</body>', `${PASTE_FIX_SCRIPT}${TAP_FIX_SCRIPT}${TERM_THEME_SCRIPT}${COPY_FIX_SCRIPT}${LINK_FIX_SCRIPT}${IME_FIX_SCRIPT}</body>`);
+      body = body.replace('</body>', `${PASTE_FIX_SCRIPT}${TAP_FIX_SCRIPT}${TERM_THEME_SCRIPT}${COPY_FIX_SCRIPT}${LINK_FIX_SCRIPT}${IME_FIX_SCRIPT}${SCROLL_KBD_FIX_SCRIPT}</body>`);
     }
     const buf = Buffer.from(body, 'utf8');
     headers['content-length'] = String(buf.byteLength);
