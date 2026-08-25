@@ -3,247 +3,215 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>デザイン案 — 和の漢字パターン（仮称）</title>
+<title>デザイン案 — 日常感（仮称）</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&family=Shippori+Mincho:wght@500;600;700;800&family=Zen+Old+Mincho:wght@400;600;700;900&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Klee+One:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Zen+Maru+Gothic:wght@500;700;900&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:"Zen Kaku Gothic New",system-ui,sans-serif;background:#eceae4;color:#1c1c1c;-webkit-font-smoothing:antialiased}
-  .page{max-width:1120px;margin:0 auto;padding:22px 20px 80px}
-  .lead{margin-bottom:8px}
-  .lead h1{font-family:"Zen Old Mincho",serif;font-size:22px;font-weight:900;letter-spacing:.04em}
-  .lead p{font-size:13px;color:#555;margin-top:6px;line-height:1.7}
-  .lead .note{font-size:12px;color:#8a7f6a;margin-top:4px}
+  body{font-family:"Zen Kaku Gothic New","Noto Sans JP",system-ui,sans-serif;background:#eef0f2;color:#20242b;-webkit-font-smoothing:antialiased;line-height:1.6}
+  .page{max-width:1080px;margin:0 auto;padding:22px 18px 80px}
+  .lead h1{font-size:21px;font-weight:900;letter-spacing:.02em}
+  .lead p{font-size:13px;color:#555;margin-top:7px;line-height:1.75}
+  .lead .re{margin-top:8px;font-size:12.5px;color:#b1541f;background:#fdf1e7;border:1px solid #f4d9c4;border-radius:9px;padding:9px 12px}
 
-  /* pattern card wrapper */
-  .pat{margin-top:26px;border-radius:20px;overflow:hidden;box-shadow:0 20px 50px -30px rgba(0,0,0,.5)}
-  .pcap{display:flex;align-items:baseline;gap:12px;padding:12px 18px;background:#1c1c1c;color:#fff}
-  .pcap .idx{font-family:"Yuji Syuku",serif;font-size:20px;color:#e5b769}
-  .pcap .nm{font-weight:900;font-size:15px;letter-spacing:.03em}
-  .pcap .desc{font-size:12px;color:#b9b4aa;margin-left:auto;text-align:right;line-height:1.5}
+  .pat{margin-top:24px;border-radius:20px;overflow:hidden;background:#fff;box-shadow:0 16px 40px -28px rgba(0,0,0,.4)}
+  .pcap{display:flex;align-items:baseline;gap:12px;padding:12px 18px;border-bottom:1px solid #eef0f2}
+  .pcap .idx{font-weight:900;font-size:13px;color:#fff;background:#20242b;width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center}
+  .pcap .nm{font-weight:900;font-size:14.5px}
+  .pcap .desc{font-size:12px;color:#8a8f98;margin-left:auto;text-align:right;line-height:1.5}
 
-  .hero{position:relative;min-height:340px;display:grid;grid-template-columns:1.05fr .95fr;overflow:hidden}
-  @media(max-width:760px){.hero{grid-template-columns:1fr;min-height:auto}}
-  .heroL{padding:38px 34px;display:flex;flex-direction:column;justify-content:center;gap:14px;position:relative;z-index:2}
-  .heroR{position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
-  .kanji{font-family:"Yuji Syuku",serif;line-height:.9;user-select:none}
-  .brand{font-size:13px;letter-spacing:.42em;font-weight:700;text-transform:uppercase}
-  .headline{font-family:"Zen Old Mincho",serif;font-weight:900;font-size:30px;line-height:1.35;letter-spacing:.02em}
-  .sub{font-size:13.5px;line-height:1.9;opacity:.86;max-width:34ch}
-  .pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
-  .pill{font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px}
-  .cta{align-self:flex-start;margin-top:6px;font-weight:800;font-size:14px;padding:12px 24px;border-radius:12px;border:0;cursor:pointer;letter-spacing:.04em}
-  /* mini products */
-  .mini{display:flex;gap:10px;padding:16px 22px;flex-wrap:wrap;align-items:stretch}
-  .mcard{flex:1;min-width:120px;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:4px}
-  .mcard .em{font-size:30px}
-  .mcard .t{font-size:12.5px;font-weight:700;line-height:1.3}
-  .mcard .s{font-size:10.5px;opacity:.6}
-  .mcard .p{margin-top:auto;font-size:11px;font-weight:800;padding-top:6px}
-  .tierstrip{display:flex;gap:8px;padding:0 22px 20px;flex-wrap:wrap}
-  .tchip{font-size:11.5px;font-weight:700;padding:8px 14px;border-radius:11px;display:flex;flex-direction:column;gap:1px}
-  .tchip b{font-family:"Shippori Mincho",serif;font-size:16px}
+  /* app-like mockup frame */
+  .app{padding:18px}
+  .topbar{display:flex;align-items:center;gap:12px;padding:0 4px 14px}
+  .logo{font-weight:900;font-size:19px;letter-spacing:.01em;display:flex;align-items:center;gap:7px}
+  .logo .mk{font-size:14px}
+  .grow{flex:1}
+  .loc{font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;display:flex;align-items:center;gap:6px}
+  .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;align-items:center;padding:6px 4px 16px}
+  @media(max-width:720px){.hero{grid-template-columns:1fr}}
+  .hl{font-size:27px;font-weight:900;line-height:1.4;letter-spacing:.01em}
+  .sub{font-size:13px;color:#5a616c;margin-top:8px;line-height:1.85;max-width:36ch}
+  .cta{margin-top:14px;font-weight:800;font-size:14px;padding:12px 22px;border-radius:12px;border:0;cursor:pointer}
+  .heroArt{border-radius:16px;min-height:150px;display:flex;align-items:center;justify-content:center;font-size:60px;gap:6px;flex-wrap:wrap;padding:16px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .chip{font-size:12px;font-weight:700;padding:7px 13px;border-radius:999px;white-space:nowrap}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:11px;padding:6px 4px 4px}
+  .c{border-radius:14px;overflow:hidden;background:#fff;display:flex;flex-direction:column}
+  .c .im{aspect-ratio:1/.8;display:flex;align-items:center;justify-content:center;font-size:38px}
+  .c .b{padding:9px 10px 11px}
+  .c .t{font-size:12.5px;font-weight:700;line-height:1.3}
+  .c .s{font-size:10.5px;color:#9098a2;margin-top:1px}
+  .c .row{display:flex;align-items:center;justify-content:space-between;margin-top:7px}
+  .c .p{font-size:11px;font-weight:800}
+  .c .plus{width:26px;height:26px;border-radius:8px;border:0;font-size:16px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .tiers{display:flex;gap:8px;padding:14px 4px 4px;flex-wrap:wrap}
+  .t{flex:1;min-width:120px;border-radius:12px;padding:11px 13px;display:flex;flex-direction:column;gap:1px}
+  .t .tn{font-size:12px;font-weight:700}
+  .t .tp{font-size:18px;font-weight:900}
 
-  /* =========================================================
-     A. 撰 / 藍 — Indigo Modern
-  ========================================================= */
-  .A .hero{background:linear-gradient(120deg,#12233f,#1c3358)}
-  .A .heroL{color:#eaf0fa}
-  .A .brand{color:#8fb0e6}
-  .A .headline{color:#fff}
-  .A .pill{background:rgba(255,255,255,.1);color:#cfe0f7}
-  .A .cta{background:#e5b769;color:#12233f}
-  .A .heroR{background:radial-gradient(circle at 60% 40%,#264673,#12233f)}
-  .A .kanji{font-size:230px;color:rgba(255,255,255,.09);position:absolute}
-  .A .kanjiMain{position:relative;font-size:180px;color:#e5b769;text-shadow:0 8px 30px rgba(0,0,0,.4)}
-  .A .mini{background:#16294a}
-  .A .mcard{background:#1e3357;color:#dce6f5}
-  .A .mcard .p{color:#e5b769}
-  .A .tierstrip{background:#16294a}
-  .A .tchip{background:#22406e;color:#cfe0f7}
-  .A .tchip b{color:#fff}
+  /* ============ A. すっきり（Clean White） ============ */
+  .A{--ac:#ff5a4d}
+  .A .loc{background:#f1f3f5;color:#3a3f47}
+  .A .logo{color:#20242b}.A .logo .mk{color:var(--ac)}
+  .A .hl{color:#20242b}
+  .A .cta{background:var(--ac);color:#fff}
+  .A .heroArt{background:linear-gradient(135deg,#fff2f0,#f4f6f8)}
+  .A .chip{background:#f1f3f5;color:#4a5058}
+  .A .c{border:1px solid #edeef1}
+  .A .c .im{background:#f7f8fa}
+  .A .c .p{color:#20242b}
+  .A .c .plus{background:var(--ac);color:#fff}
+  .A .t{background:#f7f8fa;border:1px solid #edeef1}
+  .A .t .tp{color:#20242b}
+  .A .t.on{background:#fff2f0;border-color:var(--ac)}
 
-  /* =========================================================
-     B. 箱 / 朱 — Vermilion Washi
-  ========================================================= */
-  .B .hero{background:#f7f1e4;background-image:radial-gradient(circle at 15% 20%,#fff,transparent 40%)}
-  .B .heroL{color:#3a2b20}
-  .B .brand{color:#c0492f}
-  .B .headline{color:#2a2018}
-  .B .pill{background:#efe3cd;color:#8a5a2b}
-  .B .cta{background:#c9452c;color:#fff}
-  .B .heroR{background:repeating-linear-gradient(45deg,#f2ead9,#f2ead9 22px,#efe6d2 22px,#efe6d2 44px)}
-  .B .kanjiMain{font-size:190px;color:#c9452c;position:relative}
-  .B .hanko{position:absolute;bottom:34px;right:40px;width:74px;height:74px;border:3px solid #c9452c;border-radius:12px;
-    display:flex;align-items:center;justify-content:center;font-family:"Yuji Syuku",serif;font-size:26px;color:#c9452c;transform:rotate(-6deg);opacity:.92}
-  .B .mini{background:#f2ead9}
-  .B .mcard{background:#fffdf8;color:#3a2b20;border:1px solid #e6dcc6}
-  .B .mcard .p{color:#c9452c}
-  .B .tierstrip{background:#f2ead9}
-  .B .tchip{background:#fffdf8;color:#6b4a2c;border:1px solid #e6dcc6}
-  .B .tchip b{color:#c9452c}
+  /* ============ B. コンビニ感（Pop Daily） ============ */
+  .B{--ac:#0a8a5f;--ac2:#1a7fd4}
+  .B .app{background:#f6faf8}
+  .B .loc{background:#e3f2ea;color:#0a6d4b}
+  .B .logo{color:#0a8a5f}.B .logo .mk{color:#1a7fd4}
+  .B .hl{color:#173a2c}
+  .B .cta{background:#0a8a5f;color:#fff}
+  .B .heroArt{background:repeating-linear-gradient(135deg,#eef7f2,#eef7f2 16px,#e6f2ec 16px,#e6f2ec 32px)}
+  .B .chip:nth-child(1){background:#e3f2ea;color:#0a6d4b}
+  .B .chip:nth-child(2){background:#e5f0fb;color:#1a6bbf}
+  .B .chip:nth-child(3){background:#fdeede;color:#c07a16}
+  .B .c{border:1px solid #e0ece6;box-shadow:0 3px 0 #e6efe9}
+  .B .c .im{background:#eef7f2}
+  .B .c .p{color:#0a8a5f}
+  .B .c .plus{background:#0a8a5f;color:#fff}
+  .B .t{background:#fff;border:1px solid #e0ece6}
+  .B .t .tp{color:#0a8a5f}
+  .B .t.on{background:#e3f2ea;border-color:#0a8a5f}
 
-  /* =========================================================
-     C. 粋 / 墨金 — Ink & Gold (縦書き)
-  ========================================================= */
-  .C .hero{background:#111}
-  .C .heroL{color:#efe7d4}
-  .C .brand{color:#c9a86a}
-  .C .headline{color:#f3ecdb;font-size:26px}
-  .C .pill{background:rgba(201,168,106,.14);color:#d8bd85;border:1px solid rgba(201,168,106,.3)}
-  .C .cta{background:linear-gradient(120deg,#d8bd85,#b8945a);color:#1a1a1a}
-  .C .heroR{background:radial-gradient(circle at 50% 30%,#1e1c17,#0c0c0c)}
-  .C .kanjiMain{writing-mode:vertical-rl;font-size:170px;
-    background:linear-gradient(160deg,#f0dca6,#b8945a);-webkit-background-clip:text;background-clip:text;color:transparent;
-    letter-spacing:.05em}
-  .C .seal{position:absolute;top:30px;left:50%;transform:translateX(-50%);font-family:"Yuji Syuku",serif;font-size:12px;letter-spacing:.5em;color:#8a7a52;writing-mode:vertical-rl}
-  .C .mini{background:#161616}
-  .C .mcard{background:#1c1a16;color:#e3d9c2;border:1px solid #2c2820}
-  .C .mcard .p{color:#c9a86a}
-  .C .tierstrip{background:#161616}
-  .C .tchip{background:#1c1a16;color:#cabd9a;border:1px solid #2c2820}
-  .C .tchip b{color:#d8bd85}
+  /* ============ C. やさしいベージュ（Warm Natural） ============ */
+  .C{--ac:#c9704b}
+  .C .app{background:#faf7f2}
+  .C .loc{background:#efe7db;color:#7a624c}
+  .C .logo{color:#4a3f34;font-family:"Zen Maru Gothic",sans-serif}.C .logo .mk{color:#c9704b}
+  .C .hl{color:#3f362c;font-family:"Zen Maru Gothic",sans-serif}
+  .C .cta{background:#c9704b;color:#fff;border-radius:14px}
+  .C .heroArt{background:linear-gradient(135deg,#f3ece1,#f7f2ea);border-radius:20px}
+  .C .chip{background:#efe7db;color:#7a624c}
+  .C .c{border:1px solid #ece3d5;border-radius:16px}
+  .C .c .im{background:#f5efe6}
+  .C .c .p{color:#a85b38}
+  .C .c .plus{background:#c9704b;color:#fff;border-radius:9px}
+  .C .t{background:#fff;border:1px solid #ece3d5;border-radius:14px}
+  .C .t .tp{color:#4a3f34}
+  .C .t.on{background:#f6ece2;border-color:#c9704b}
 
-  /* =========================================================
-     D. 和 / 白 — Muji White (minimal)
-  ========================================================= */
-  .D .hero{background:#fbfaf7}
-  .D .heroL{color:#33322e}
-  .D .brand{color:#9a9488;letter-spacing:.5em}
-  .D .headline{color:#2c2b27;font-weight:600;font-size:26px}
-  .D .sub{color:#6f6a60}
-  .D .pill{background:#f0eee8;color:#7a746a}
-  .D .cta{background:#33322e;color:#fbfaf7}
-  .D .heroR{background:#f4f2ec;border-left:1px solid #e8e4da}
-  .D .kanjiMain{font-family:"Shippori Mincho",serif;font-weight:500;font-size:200px;color:#2c2b27}
-  .D .dot{position:absolute;bottom:54px;right:54px;width:52px;height:52px;border-radius:50%;background:#c9452c;opacity:.9}
-  .D .mini{background:#fbfaf7;border-top:1px solid #eeece5}
-  .D .mcard{background:#fff;color:#3a3833;border:1px solid #eeece5}
-  .D .mcard .p{color:#33322e}
-  .D .tierstrip{background:#fbfaf7}
-  .D .tchip{background:#fff;color:#6f6a60;border:1px solid #eeece5}
-  .D .tchip b{color:#2c2b27}
-
-  .foot{margin-top:34px;padding:18px 20px;background:#fff;border:1px solid #e6e1d6;border-radius:16px;font-size:13px;color:#555;line-height:1.8}
-  .foot b{color:#1c1c1c}
-  .foot a{color:#28406b;font-weight:700}
+  .foot{margin-top:30px;padding:18px 20px;background:#fff;border:1px solid #e6e8ec;border-radius:16px;font-size:13px;color:#555;line-height:1.8}
+  .foot b{color:#20242b}.foot a{color:#1a6bbf;font-weight:700}
 </style>
 </head>
 <body>
 <div class="page">
   <div class="lead">
-    <h1>デザイン案 — 和の漢字パターン</h1>
-    <p>サービス名は<b>仮称</b>です（下記は候補）。「もっとスタイリッシュに、和の漢字を主役に」というご要望で、方向性の異なる<b>4案</b>を用意しました。ロゴ漢字・配色・世界観の"当たり"を選んでください。選んだ方向でビルダー本体（プロト）に適用します。</p>
-    <p class="note">各案は 漢字ロゴ ＋ キャッチ ＋ 商品カードの見え方 ＋ 料金チップ で「空気感」を表現しています。</p>
+    <h1>デザイン案 — 日本の"日常感"</h1>
+    <p>サービス名は<b>仮称</b>です。前回の「和を前面」は狙いすぎだったので方針転換。<b>気取らない・普通・日本の日常が伝わる</b>方向で3案にしました。コンビニやドラッグストアで手に取る、あの気軽さ・親しみの空気感です。</p>
+    <p class="re">↺ 方針：ブラシ書体や高級"和"演出はやめ、<b>クリーンで親しみやすい今どきのUI</b>に。日本らしさは色・言葉づかい・商品の見せ方でさりげなく。</p>
   </div>
 
-  <!-- ============ A ============ -->
+  <!-- ===== A ===== -->
   <section class="pat A">
-    <div class="pcap"><span class="idx">壱</span><span class="nm">撰 — 藍（Indigo Modern）</span><span class="desc">洗練・信頼・モダン。名候補「撰／SEN」<br>キャッチ：選ぶ、を贈る。</span></div>
-    <div class="hero">
-      <div class="heroL">
-        <span class="brand">Sen · 撰</span>
-        <div class="headline">選ぶ、を贈る。</div>
-        <p class="sub">好きな日本を、あなたの手で選んで。コンビニのおやつから百貨店の逸品まで、定額の枠内で自由に。</p>
-        <div class="pills"><span class="pill">自分で選ぶ</span><span class="pill">定額</span><span class="pill">日本直送</span></div>
-        <button class="cta">箱をつくる →</button>
+    <div class="pcap"><span class="idx">A</span><span class="nm">すっきり（Clean White）</span><span class="desc">白基調＋差し色1色・余白広め。<br>今どきのEC。万人向けで外さない。</span></div>
+    <div class="app">
+      <div class="topbar">
+        <span class="logo"><span class="mk">●</span>にっぽん箱<span style="font-size:11px;color:#9098a2;font-weight:500">（仮）</span></span>
+        <span class="grow"></span>
+        <span class="loc">🗾 お届け：アメリカ ▾</span>
       </div>
-      <div class="heroR"><span class="kanji">撰</span><span class="kanji kanjiMain">撰</span></div>
-    </div>
-    <div class="mini">
-      <div class="mcard"><span class="em">🍵</span><span class="t">キットカット 抹茶</span><span class="s">ネスレ</span><span class="p">150 pt</span></div>
-      <div class="mcard"><span class="em">🤍</span><span class="t">白い恋人 12枚</span><span class="s">石屋製菓</span><span class="p">260 pt</span></div>
-      <div class="mcard"><span class="em">🌸</span><span class="t">チーク</span><span class="s">キャンメイク</span><span class="p">150 pt</span></div>
-      <div class="mcard"><span class="em">🐹</span><span class="t">ちいかわ ぬいぐるみ</span><span class="s">character</span><span class="p">420 pt</span></div>
-    </div>
-    <div class="tierstrip">
-      <div class="tchip">コンビニ<b>$49</b></div>
-      <div class="tchip">定番<b>$69</b></div>
-      <div class="tchip">上<b>$109</b></div>
+      <div class="hero">
+        <div>
+          <div class="hl">毎月、日本の"ふつう"を<br>おすそわけ。</div>
+          <p class="sub">コンビニのおやつも、ドラッグストアのコスメも。定額の中から、好きなものだけ選んで。</p>
+          <div class="chips"><span class="chip">自分で選ぶ</span><span class="chip">定額でわかりやすい</span><span class="chip">日本から直送</span></div>
+          <button class="cta">箱をつくる →</button>
+        </div>
+        <div class="heroArt">🍙🍫🧴✏️🍵🐹</div>
+      </div>
+      <div class="cards">
+        <div class="c"><div class="im">🍫</div><div class="b"><div class="t">キットカット 抹茶</div><div class="s">ネスレ</div><div class="row"><span class="p">150pt</span><button class="plus">＋</button></div></div></div>
+        <div class="c"><div class="im">🍙</div><div class="b"><div class="t">おにぎり味 スナック</div><div class="s">コンビニ定番</div><div class="row"><span class="p">110pt</span><button class="plus">＋</button></div></div></div>
+        <div class="c"><div class="im">🧴</div><div class="b"><div class="t">ビオレ UV</div><div class="s">花王</div><div class="row"><span class="p">230pt</span><button class="plus">＋</button></div></div></div>
+        <div class="c"><div class="im">✏️</div><div class="b"><div class="t">サラサ 5色</div><div class="s">ゼブラ</div><div class="row"><span class="p">130pt</span><button class="plus">＋</button></div></div></div>
+      </div>
+      <div class="tiers">
+        <div class="t"><span class="tn">コンビニ</span><span class="tp">$49</span></div>
+        <div class="t on"><span class="tn">定番</span><span class="tp">$69</span></div>
+        <div class="t"><span class="tn">たっぷり</span><span class="tp">$109</span></div>
+      </div>
     </div>
   </section>
 
-  <!-- ============ B ============ -->
+  <!-- ===== B ===== -->
   <section class="pat B">
-    <div class="pcap"><span class="idx">弐</span><span class="nm">箱 — 朱（Vermilion Washi）</span><span class="desc">あたたかい・親しみ・和紙質感。名候補「手箱／TEBAKO」<br>キャッチ：あなたの箱で、日本を。</span></div>
-    <div class="hero">
-      <div class="heroL">
-        <span class="brand">Tebako · 手箱</span>
-        <div class="headline">あなたの箱で、<br>日本を。</div>
-        <p class="sub">毎月ひとつ、自分だけの日本便。何を入れるかは、あなた次第。和紙のようにやさしい手ざわりの体験を。</p>
-        <div class="pills"><span class="pill">🎁 自由に選ぶ</span><span class="pill">🇯🇵 常温直送</span><span class="pill">✨ おまかせも可</span></div>
-        <button class="cta">箱をひらく →</button>
+    <div class="pcap"><span class="idx">B</span><span class="nm">コンビニ感（Pop Daily）</span><span class="desc">明るく親しみ・元気な配色。<br>コンビニで選ぶ気軽さをそのまま。</span></div>
+    <div class="app">
+      <div class="topbar">
+        <span class="logo"><span class="mk">🏪</span>まいにち日本便<span style="font-size:11px;color:#9098a2;font-weight:500">（仮）</span></span>
+        <span class="grow"></span>
+        <span class="loc">🗾 アメリカ ▾</span>
       </div>
-      <div class="heroR"><span class="kanjiMain">箱</span><span class="hanko">手箱</span></div>
-    </div>
-    <div class="mini">
-      <div class="mcard"><span class="em">🍌</span><span class="t">東京ばな奈</span><span class="s">定番みやげ</span><span class="p">220 pt</span></div>
-      <div class="mcard"><span class="em">🍘</span><span class="t">ばかうけ 青のり</span><span class="s">栗山米菓</span><span class="p">110 pt</span></div>
-      <div class="mcard"><span class="em">😌</span><span class="t">蒸気アイマスク</span><span class="s">めぐりズム</span><span class="p">180 pt</span></div>
-      <div class="mcard"><span class="em">🎀</span><span class="t">マスキングテープ</span><span class="s">mt</span><span class="p">120 pt</span></div>
-    </div>
-    <div class="tierstrip">
-      <div class="tchip">コンビニ<b>$49</b></div>
-      <div class="tchip">定番<b>$69</b></div>
-      <div class="tchip">上<b>$109</b></div>
+      <div class="hero">
+        <div>
+          <div class="hl">コンビニみたいに、<br>気軽に選ぶ。</div>
+          <p class="sub">今月は何にする？ おやつ、飲みもの、コスメ、文具。日本の"いつもの"を、あなたのカゴに。</p>
+          <div class="chips"><span class="chip">🍫 おやつ</span><span class="chip">🧴 コスメ</span><span class="chip">✏️ 文具</span></div>
+          <button class="cta">カゴをひらく →</button>
+        </div>
+        <div class="heroArt">🏪🍜🥤🍡🍬🧃</div>
+      </div>
+      <div class="cards">
+        <div class="c"><div class="im">🍜</div><div class="b"><div class="t">カップ麺 ご当地</div><div class="s">日清</div><div class="row"><span class="p">140pt</span><button class="plus">＋</button></div></div></div>
+        <div class="c"><div class="im">🍡</div><div class="b"><div class="t">みたらし団子スナック</div><div class="s">コンビニ</div><div class="row"><span class="p">120pt</span><button class="plus">＋</button></div></div></div>
+        <div class="c"><div class="im">🥤</div><div class="b"><div class="t">ラムネ</div><div class="s">駄菓子</div><div class="row"><span class="p">90pt</span><button class="plus">＋</button></div></div></div>
+        <div class="c"><div class="im">😌</div><div class="b"><div class="t">蒸気アイマスク</div><div class="s">めぐりズム</div><div class="row"><span class="p">180pt</span><button class="plus">＋</button></div></div></div>
+      </div>
+      <div class="tiers">
+        <div class="t"><span class="tn">コンビニ</span><span class="tp">$49</span></div>
+        <div class="t on"><span class="tn">定番</span><span class="tp">$69</span></div>
+        <div class="t"><span class="tn">たっぷり</span><span class="tp">$109</span></div>
+      </div>
     </div>
   </section>
 
-  <!-- ============ C ============ -->
+  <!-- ===== C ===== -->
   <section class="pat C">
-    <div class="pcap"><span class="idx">参</span><span class="nm">粋 — 墨金（Ink &amp; Gold・縦書き）</span><span class="desc">高級・百貨店・大人。名候補「粋／IKI」<br>キャッチ：粋を、世界へ。</span></div>
-    <div class="hero">
-      <div class="heroL">
-        <span class="brand">Iki · 粋</span>
-        <div class="headline">粋を、世界へ。</div>
-        <p class="sub">日本の"いいもの"を、あなたの目利きで。百貨店の銘菓から名品の日用品まで、定額の中で選び抜く愉しみ。</p>
-        <div class="pills"><span class="pill">目利きで選ぶ</span><span class="pill">百貨店品質</span><span class="pill">世界へ直送</span></div>
-        <button class="cta">見立てを始める →</button>
+    <div class="pcap"><span class="idx">C</span><span class="nm">やさしいベージュ（Warm Natural）</span><span class="desc">やわらかい・暮らし系・落ち着き。<br>無印/北欧っぽい親しみ。丸ゴシック。</span></div>
+    <div class="app">
+      <div class="topbar">
+        <span class="logo"><span class="mk">🍃</span>にちにち<span style="font-size:11px;color:#a89a86;font-weight:500">（仮）</span></span>
+        <span class="grow"></span>
+        <span class="loc">🗾 アメリカ ▾</span>
       </div>
-      <div class="heroR"><span class="seal">粋 撰 品</span><span class="kanjiMain">粋</span></div>
-    </div>
-    <div class="mini">
-      <div class="mcard"><span class="em">🌈</span><span class="t">マカロン缶</span><span class="s">ピエール・エルメ</span><span class="p">340 pt</span></div>
-      <div class="mcard"><span class="em">🫘</span><span class="t">小形羊羹 5本</span><span class="s">とらや</span><span class="p">320 pt</span></div>
-      <div class="mcard"><span class="em">🥐</span><span class="t">シガール</span><span class="s">YOKU MOKU</span><span class="p">300 pt</span></div>
-      <div class="mcard"><span class="em">🧀</span><span class="t">チーズケーキ</span><span class="s">資生堂パーラー</span><span class="p">320 pt</span></div>
-    </div>
-    <div class="tierstrip">
-      <div class="tchip">撰 ・ konbini<b>$49</b></div>
-      <div class="tchip">粋 ・ standard<b>$69</b></div>
-      <div class="tchip">雅 ・ premium<b>$109</b></div>
-    </div>
-  </section>
-
-  <!-- ============ D ============ -->
-  <section class="pat D">
-    <div class="pcap"><span class="idx">肆</span><span class="nm">和 — 白（Muji White・ミニマル）</span><span class="desc">静けさ・無印的・洗練。名候補「和／nagomi」<br>キャッチ：しずかに、日本を選ぶ。</span></div>
-    <div class="hero">
-      <div class="heroL">
-        <span class="brand">Nagomi</span>
-        <div class="headline">しずかに、<br>日本を選ぶ。</div>
-        <p class="sub">余白のある、選ぶ時間。必要なだけ、好きなものを。飾らない日本の日用と味を、毎月ひと箱。</p>
-        <div class="pills"><span class="pill">選ぶ</span><span class="pill">定額</span><span class="pill">直送</span></div>
-        <button class="cta">はじめる</button>
+      <div class="hero">
+        <div>
+          <div class="hl">暮らしに、ちいさな<br>日本を。</div>
+          <p class="sub">背伸びしない、毎日の日本。好きなものを、好きなだけ。ひと箱に、暮らしのかけらを詰めて。</p>
+          <div class="chips"><span class="chip">えらぶ</span><span class="chip">定額</span><span class="chip">直送</span></div>
+          <button class="cta">はじめる</button>
+        </div>
+        <div class="heroArt">🍵🍘🧺🕯️🍮🧸</div>
       </div>
-      <div class="heroR"><span class="kanjiMain">和</span><span class="dot"></span></div>
-    </div>
-    <div class="mini">
-      <div class="mcard"><span class="em">✒️</span><span class="t">サラサ 5色</span><span class="s">ゼブラ</span><span class="p">130 pt</span></div>
-      <div class="mcard"><span class="em">🖊️</span><span class="t">ゲルインクペン 3本</span><span class="s">無印良品</span><span class="p">110 pt</span></div>
-      <div class="mcard"><span class="em">🧖</span><span class="t">フェイスマスク</span><span class="s">ルルルン</span><span class="p">170 pt</span></div>
-      <div class="mcard"><span class="em">🍵</span><span class="t">抹茶ラングドシャ</span><span class="s">京都</span><span class="p">230 pt</span></div>
-    </div>
-    <div class="tierstrip">
-      <div class="tchip">小<b>$49</b></div>
-      <div class="tchip">中<b>$69</b></div>
-      <div class="tchip">大<b>$109</b></div>
+      <div class="cards">
+        <div class="c"><div class="im">🍵</div><div class="b"><div class="t">抹茶ラングドシャ</div><div class="s">京都</div><div class="row"><span class="p">230pt</span><button class="plus">＋</button></div></div></div>
+        <div class="c"><div class="im">🍘</div><div class="b"><div class="t">ばかうけ 青のり</div><div class="s">栗山米菓</div><div class="row"><span class="p">110pt</span><button class="plus">＋</button></div></div></div>
+        <div class="c"><div class="im">🧴</div><div class="b"><div class="t">ハンドクリーム</div><div class="s">資生堂</div><div class="row"><span class="p">190pt</span><button class="plus">＋</button></div></div></div>
+        <div class="c"><div class="im">🖊️</div><div class="b"><div class="t">ゲルインクペン 3本</div><div class="s">無印良品</div><div class="row"><span class="p">110pt</span><button class="plus">＋</button></div></div></div>
+      </div>
+      <div class="tiers">
+        <div class="t"><span class="tn">小</span><span class="tp">$49</span></div>
+        <div class="t on"><span class="tn">中</span><span class="tp">$69</span></div>
+        <div class="t"><span class="tn">大</span><span class="tp">$109</span></div>
+      </div>
     </div>
   </section>
 
   <div class="foot">
-    <b>次のステップ：</b> 気に入った方向（A 撰/藍・B 箱/朱・C 粋/墨金・D 和/白）を教えてください。その世界観で<b>ビルダー本体（プロト）</b>を作り込みます。ロゴ漢字・サービス名も、この4案の候補から選ぶ／掛け合わせる形で詰められます。<br>
+    <b>次のステップ：</b> A（すっきり白）・B（コンビニ感）・C（やさしいベージュ）から方向を選んでください。ロゴ名は「にっぽん箱／まいにち日本便／にちにち」等すべて<b>仮</b>です。選んだ方向で<b>ビルダー本体（プロト）</b>を作り込みます。<br>
     現行プロト → <a href="/tebako-proto.html" target="_blank" rel="noreferrer">箱ビルダーを見る ↗</a>
   </div>
 </div>
