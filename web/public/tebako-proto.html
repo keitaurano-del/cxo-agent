@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>TEBAKO 手箱 — 自分で選ぶ、日本便</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Shippori+Mincho:wght@600;700;800&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --washi:#f7f3ec; --paper:#fffdf9; --ink:#22283b; --ink2:#4b5162;
+    --ai:#28406b; --ai-soft:#e7ecf5; --shu:#d5503b; --shu-d:#bb3f2c;
+    --gold:#c69a4c; --line:#e9e2d5; --ok:#3f8f5f; --shadow:rgba(34,40,59,.12);
+    --pane:#fbf8f2;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    font-family:"Zen Kaku Gothic New","Noto Sans JP",system-ui,sans-serif;
+    color:var(--ink); background:var(--washi);
+    background-image:
+      radial-gradient(circle at 12% 8%, #fff8ec 0, transparent 42%),
+      radial-gradient(circle at 88% 0%, #fdeee8 0, transparent 38%);
+    -webkit-font-smoothing:antialiased;
+  }
+  .serif{font-family:"Shippori Mincho",serif}
+  /* ---------- Top bar ---------- */
+  header{
+    position:sticky;top:0;z-index:40;background:rgba(247,243,236,.86);
+    backdrop-filter:blur(12px);border-bottom:1px solid var(--line);
+  }
+  .bar{max-width:1180px;margin:0 auto;padding:12px 18px;display:flex;align-items:center;gap:16px}
+  .brand{display:flex;align-items:baseline;gap:10px;flex-shrink:0}
+  .logo{font-family:"Shippori Mincho",serif;font-weight:800;font-size:25px;letter-spacing:.14em;color:var(--ai)}
+  .logo .jp{color:var(--shu)}
+  .tag{font-size:11px;color:var(--ink2);letter-spacing:.04em;display:none}
+  .grow{flex:1}
+  .ship{
+    display:flex;align-items:center;gap:7px;background:var(--paper);border:1px solid var(--line);
+    padding:7px 12px;border-radius:999px;font-size:13px;font-weight:700;cursor:pointer;color:var(--ink)
+  }
+  .ship select{border:0;background:transparent;font:inherit;color:inherit;outline:none}
+  /* ---------- Tier row ---------- */
+  .tiers{max-width:1180px;margin:0 auto;padding:10px 18px 0;display:flex;gap:10px;overflow-x:auto}
+  .tier{
+    flex:1;min-width:150px;border:1.5px solid var(--line);background:var(--paper);border-radius:16px;
+    padding:12px 14px;cursor:pointer;transition:.18s;position:relative;overflow:hidden
+  }
+  .tier:hover{border-color:#d8cdb6}
+  .tier.on{border-color:var(--ai);box-shadow:0 6px 18px -8px var(--ai)}
+  .tier.on::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,#fff,transparent 60%);opacity:.5;pointer-events:none}
+  .tier h3{font-size:15px;font-weight:900;letter-spacing:.02em;display:flex;align-items:center;gap:6px}
+  .tier .price{font-family:"Shippori Mincho",serif;font-weight:800;font-size:22px;margin-top:2px}
+  .tier .price small{font-size:12px;color:var(--ink2);font-weight:500}
+  .tier .desc{font-size:11.5px;color:var(--ink2);margin-top:4px;line-height:1.45}
+  .tier .pt{font-size:11px;color:var(--ai);font-weight:700;margin-top:6px}
+  .tier .badge{position:absolute;top:10px;right:10px;background:var(--shu);color:#fff;font-size:9.5px;font-weight:800;padding:2px 7px;border-radius:999px;letter-spacing:.05em}
+
+  /* ---------- Layout ---------- */
+  .wrap{max-width:1180px;margin:0 auto;padding:16px 18px 120px;display:grid;grid-template-columns:1fr 360px;gap:24px;align-items:start}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr;padding-bottom:150px}}
+
+  /* ---------- Catalog ---------- */
+  .cattop{display:flex;flex-direction:column;gap:12px;margin-bottom:14px}
+  .search{display:flex;align-items:center;gap:9px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:10px 13px}
+  .search input{border:0;background:transparent;font:inherit;font-size:14px;outline:none;width:100%;color:var(--ink)}
+  .cats{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+  .cats::-webkit-scrollbar{display:none}
+  .cat{white-space:nowrap;border:1px solid var(--line);background:var(--paper);color:var(--ink2);
+    padding:8px 14px;border-radius:999px;font-size:13px;font-weight:700;cursor:pointer;transition:.15s}
+  .cat.on{background:var(--ai);color:#fff;border-color:var(--ai)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:16px;overflow:hidden;
+    display:flex;flex-direction:column;transition:.16s;position:relative}
+  .card:hover{transform:translateY(-3px);box-shadow:0 12px 24px -14px var(--shadow)}
+  .thumb{aspect-ratio:1/.82;display:flex;align-items:center;justify-content:center;font-size:52px;
+    background:radial-gradient(circle at 50% 38%,#fff,#f1ece1);position:relative}
+  .ptag{position:absolute;top:8px;left:8px;font-size:10px;font-weight:800;color:#fff;background:var(--shu);
+    padding:2px 8px;border-radius:999px;letter-spacing:.04em}
+  .ptag.jp{background:var(--ai)}
+  .ptag.limited{background:var(--gold)}
+  .cbody{padding:10px 11px 12px;display:flex;flex-direction:column;gap:2px;flex:1}
+  .cbody .nm{font-size:13px;font-weight:700;line-height:1.3}
+  .cbody .sub{font-size:11px;color:var(--ink2)}
+  .cbody .meta{margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:8px}
+  .yen{font-size:12px;color:var(--ink2);font-weight:600}
+  .pts{font-size:12px;font-weight:800;color:var(--ai);background:var(--ai-soft);padding:2px 8px;border-radius:999px}
+  .add{margin-top:9px;border:0;background:var(--ink);color:#fff;font:inherit;font-size:12.5px;font-weight:800;
+    padding:9px;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:.15s}
+  .add:hover{background:var(--ai)}
+  .add.in{background:var(--ai-soft);color:var(--ai)}
+  .qty{display:flex;align-items:center;gap:0;margin-top:9px;border-radius:10px;overflow:hidden;border:1px solid var(--ai)}
+  .qty button{flex:0 0 34px;border:0;background:var(--ai-soft);color:var(--ai);font-size:17px;font-weight:800;padding:7px 0;cursor:pointer}
+  .qty span{flex:1;text-align:center;font-size:13px;font-weight:800;color:var(--ai)}
+
+  /* ---------- Box panel ---------- */
+  .box{position:sticky;top:88px}
+  .boxcard{background:var(--pane);border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:0 18px 40px -26px var(--shadow)}
+  .boxcard h2{font-family:"Shippori Mincho",serif;font-size:17px;font-weight:800;display:flex;align-items:center;gap:8px}
+  .boxcard h2 .cnt{margin-left:auto;font-family:"Zen Kaku Gothic New";font-size:12px;color:var(--ink2);font-weight:700}
+  /* the fillable box graphic */
+  .crate{position:relative;height:112px;margin:14px 0 6px;border-radius:14px;border:2px dashed #d8cdb6;
+    background:repeating-linear-gradient(45deg,#fbf7ee,#fbf7ee 10px,#f6f0e4 10px,#f6f0e4 20px);overflow:hidden}
+  .fill{position:absolute;left:0;right:0;bottom:0;height:0%;transition:height .5s cubic-bezier(.3,1.2,.4,1);
+    background:linear-gradient(180deg,#3a568c,#28406b);box-shadow:0 -2px 12px rgba(40,64,107,.4)}
+  .fill::before{content:"";position:absolute;top:-7px;left:0;right:0;height:12px;border-radius:50%;background:#4a67a0;opacity:.6}
+  .cratelabel{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:2;pointer-events:none}
+  .cratelabel .big{font-family:"Shippori Mincho",serif;font-weight:800;font-size:26px;color:var(--ink);transition:.3s}
+  .cratelabel.light .big,.cratelabel.light .sm{color:#fff}
+  .cratelabel .sm{font-size:11px;font-weight:700;color:var(--ink2)}
+  .meter{height:9px;border-radius:999px;background:#eadfce;overflow:hidden;margin-top:4px}
+  .meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,#3a568c,var(--shu));transition:width .45s cubic-bezier(.3,1,.4,1)}
+  .mrow{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink2);margin-top:7px;font-weight:600}
+  .mrow b{color:var(--ink)}
+  .omakase{width:100%;margin-top:12px;border:1px dashed var(--gold);background:#fff;color:var(--gold);
+    font:inherit;font-weight:800;font-size:12.5px;padding:9px;border-radius:11px;cursor:pointer;transition:.15s}
+  .omakase:hover{background:#fdf6e8}
+  .items{margin-top:14px;display:flex;flex-direction:column;gap:9px;max-height:230px;overflow-y:auto}
+  .li{display:flex;align-items:center;gap:10px;font-size:12.5px}
+  .li .em{font-size:22px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid var(--line);border-radius:9px;flex-shrink:0}
+  .li .nm{flex:1;font-weight:700;line-height:1.25}
+  .li .nm small{display:block;color:var(--ai);font-weight:800;font-size:11px}
+  .li .st{display:flex;align-items:center;gap:6px}
+  .li .st button{width:24px;height:24px;border:1px solid var(--line);background:#fff;border-radius:7px;font-size:14px;font-weight:800;cursor:pointer;color:var(--ink2)}
+  .li .st b{min-width:16px;text-align:center;font-size:12px}
+  .empty{font-size:12.5px;color:var(--ink2);text-align:center;padding:18px 6px;line-height:1.6}
+  .co{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
+  .co .tot{display:flex;align-items:baseline;justify-content:space-between}
+  .co .tot .lab{font-size:12px;color:var(--ink2);font-weight:700}
+  .co .tot .val{font-family:"Shippori Mincho",serif;font-size:26px;font-weight:800}
+  .co .tot .val small{font-size:12px;color:var(--ink2);font-weight:600;font-family:"Zen Kaku Gothic New"}
+  .co .note{font-size:11px;color:var(--ink2);margin-top:3px;line-height:1.5}
+  .cta{width:100%;margin-top:12px;border:0;background:var(--shu);color:#fff;font:inherit;font-weight:900;font-size:15px;
+    padding:14px;border-radius:13px;cursor:pointer;letter-spacing:.03em;transition:.15s;box-shadow:0 10px 20px -10px var(--shu)}
+  .cta:hover{background:var(--shu-d)}
+  .cta:disabled{background:#c9c1b2;box-shadow:none;cursor:not-allowed}
+
+  /* mobile bottom sheet */
+  .mobile-bar{display:none}
+  @media(max-width:900px){
+    .box{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:60;transform:translateY(calc(100% - 66px));
+      transition:transform .35s cubic-bezier(.3,1,.4,1)}
+    .box.open{transform:translateY(0)}
+    .boxcard{border-radius:20px 20px 0 0;max-height:82vh;overflow-y:auto;box-shadow:0 -14px 40px -18px var(--shadow)}
+    .handle{width:44px;height:5px;border-radius:999px;background:#d8cdb6;margin:0 auto 10px}
+    .peek{display:flex;align-items:center;gap:12px;cursor:pointer}
+    .peek .pv{font-family:"Shippori Mincho",serif;font-weight:800;font-size:19px;margin-left:auto}
+    .items{max-height:34vh}
+  }
+  @media(min-width:901px){.handle,.peek{display:none}}
+
+  /* toast + fly anim */
+  #toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%) translateY(20px);opacity:0;
+    background:var(--ink);color:#fff;font-size:13px;font-weight:700;padding:11px 18px;border-radius:12px;z-index:90;transition:.3s;pointer-events:none}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .fly{position:fixed;z-index:95;font-size:13px;font-weight:900;color:#fff;background:var(--ai);padding:3px 10px;border-radius:999px;pointer-events:none;transition:transform .6s cubic-bezier(.4,0,.5,1),opacity .6s}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <div class="brand">
+      <span class="logo">TEBAKO<span class="jp"> 手箱</span></span>
+      <span class="tag">自分で選ぶ、日本便</span>
+    </div>
+    <div class="grow"></div>
+    <label class="ship">🌍
+      <select id="dest">
+        <option value="us">アメリカ</option>
+        <option value="eu">ヨーロッパ</option>
+        <option value="au">オーストラリア</option>
+        <option value="asia">アジア</option>
+      </select>
+    </label>
+  </div>
+  <div class="tiers" id="tiers"></div>
+</header>
+
+<div class="wrap">
+  <!-- Catalog -->
+  <main>
+    <div class="cattop">
+      <div class="search">🔍<input id="q" placeholder="商品を検索（例：抹茶、ちいかわ、マスク）" /></div>
+      <div class="cats" id="cats"></div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </main>
+
+  <!-- Box -->
+  <aside class="box" id="box">
+    <div class="boxcard">
+      <div class="handle"></div>
+      <div class="peek" id="peek">
+        <span style="font-size:22px">📦</span>
+        <div>
+          <div style="font-family:'Shippori Mincho',serif;font-weight:800;font-size:15px">あなたの箱</div>
+          <div id="peekSub" style="font-size:11px;color:var(--ink2);font-weight:700">タップして中身を見る</div>
+        </div>
+        <span class="pv" id="peekPrice">$69</span>
+      </div>
+
+      <h2 style="margin-top:4px">📦 あなたの箱 <span class="cnt" id="cnt">0点</span></h2>
+
+      <div class="crate">
+        <div class="fill" id="fill"></div>
+        <div class="cratelabel" id="crateLabel">
+          <span class="big" id="pctBig">0%</span>
+          <span class="sm" id="pctSm">枠を埋めよう</span>
+        </div>
+      </div>
+      <div class="meter"><i id="meterBar"></i></div>
+      <div class="mrow"><span>使用 <b id="usedPt">0</b> pt</span><span>のこり <b id="leftPt">0</b> pt</span></div>
+
+      <button class="omakase" id="omakase">✨ のこりを「おまかせ」で埋める</button>
+
+      <div class="items" id="items">
+        <div class="empty" id="empty">まだ空っぽです。<br>左から好きな商品を入れてください 🇯🇵</div>
+      </div>
+
+      <div class="co">
+        <div class="tot">
+          <span class="lab">月額（送料・関税前払い込み）</span>
+          <span class="val" id="totPrice">$69<small>/月</small></span>
+        </div>
+        <div class="note" id="coNote">Standard ティア・毎月お届け・いつでも変更/停止OK</div>
+        <button class="cta" id="cta">この箱で申し込む →</button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ---------------- data ---------------- */
+const TIERS = {
+  konbini:{name:"Konbini",jp:"コンビニ",emoji:"🏪",price:49,budget:900,desc:"コンビニ菓子・飲料・日用小物。まずお試しに。"},
+  standard:{name:"Standard",jp:"定番",emoji:"🎁",price:69,budget:1500,desc:"百貨店スイーツ・コスメ・文具・キャラ物まで。",badge:"人気"},
+  premium:{name:"Premium",jp:"上",emoji:"🌸",price:109,budget:2600,desc:"百貨店の逸品・高単価品も。ボリューム重視。"},
+};
+const CATS = [
+  {id:"all",name:"すべて"},{id:"konbini",name:"コンビニ"},{id:"okashi",name:"お菓子"},
+  {id:"depa",name:"百貨店スイーツ"},{id:"cosme",name:"コスメ"},{id:"bun",name:"文具・雑貨"},{id:"chara",name:"キャラクター"},
+];
+const P = [
+  // konbini
+  ["k1","ポッキー 極細","グリコ",160,110,"konbini","🍫"],
+  ["k2","じゃがりこ サラダ","カルビー",160,120,"konbini","🥔"],
+  ["k3","亀田の柿の種","亀田製菓",150,120,"konbini","🌰"],
+  ["k4","キットカット 抹茶","ネスレ",300,150,"konbini","🍵","人気"],
+  ["k5","ハイチュウ グレープ","森永",120,90,"konbini","🍇"],
+  ["k6","コアラのマーチ","ロッテ",130,100,"konbini","🐨"],
+  ["k7","ポテチ のり塩","カルビー",160,130,"konbini","🥔"],
+  ["k8","午後の紅茶(缶)","キリン",140,260,"konbini","🥤","重い"],
+  ["k9","ぷっちょ ソーダ","UHA",120,90,"konbini","🍬"],
+  ["k10","おーいお茶(粉)","伊藤園",300,140,"konbini","🍵"],
+  // okashi
+  ["o1","東京ばな奈","定番みやげ",620,220,"okashi","🍌","定番"],
+  ["o2","白い恋人 12枚","石屋製菓",800,260,"okashi","🤍","人気"],
+  ["o3","抹茶ラングドシャ","京都",700,230,"okashi","🍵"],
+  ["o4","ヨックモック シガール","YOKU MOKU",1100,300,"okashi","🥐"],
+  ["o5","芋ようかん","舟和",600,240,"okashi","🍠"],
+  ["o6","ばかうけ 青のり","栗山米菓",130,110,"okashi","🍘"],
+  // depa
+  ["d1","マカロン缶","ピエール・エルメ",2000,340,"depa","🌈","限定"],
+  ["d2","小形羊羹 5本","とらや",1300,320,"depa","🫘"],
+  ["d3","焼き菓子詰合せ","ゴンチャロフ",1600,330,"depa","🎁"],
+  ["d4","チーズケーキ(常温)","資生堂パーラー",1500,320,"depa","🧀","限定"],
+  // cosme
+  ["c1","チーク","キャンメイク",650,150,"cosme","🌸","人気"],
+  ["c2","化粧下地","セザンヌ",720,160,"cosme","💧"],
+  ["c3","蒸気アイマスク 5枚","めぐりズム",600,180,"cosme","😌","人気"],
+  ["c4","フェイスマスク 7枚","ルルルン",500,170,"cosme","🧖"],
+  ["c5","ビオレ UV","花王",900,230,"cosme","🧴"],
+  ["c6","ハンドクリーム","資生堂",800,190,"cosme","🤲"],
+  // bun
+  ["b1","サラサ 5色","ゼブラ",500,130,"bun","✒️"],
+  ["b2","ゲルインクペン 3本","無印良品",300,110,"bun","🖊️"],
+  ["b3","MONO 消しゴム 3個","トンボ",300,100,"bun","▫️"],
+  ["b4","ほぼ日手帳カバー","ほぼ日",2500,300,"bun","📔","限定"],
+  ["b5","マスキングテープ 3巻","mt",600,120,"bun","🎀"],
+  ["b6","筆ペン","ぺんてる",350,110,"bun","🖌️"],
+  // chara
+  ["ch1","ちいかわ ぬいぐるみ","ちいかわ",1800,420,"chara","🐹","人気"],
+  ["ch2","文具セット","すみっコぐらし",1200,300,"chara","🐧"],
+  ["ch3","ガチャ 3回分","ポケモン",900,260,"chara","⚡"],
+  ["ch4","シナモロール ポーチ","サンリオ",1500,340,"chara","🩵"],
+  ["ch5","トトロ 手ぬぐい","ジブリ",1400,280,"chara","🌰"],
+].map(a=>({id:a[0],nm:a[1],sub:a[2],yen:a[3],pt:a[4],cat:a[5],em:a[6],tag:a[7]||null}));
+
+/* ---------------- state ---------------- */
+let tier="standard", cat="all", query="", cart={};
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
+
+/* ---------------- render tiers ---------------- */
+function renderTiers(){
+  $("#tiers").innerHTML = Object.entries(TIERS).map(([k,t])=>`
+    <div class="tier ${k===tier?'on':''}" data-t="${k}">
+      ${t.badge?`<span class="badge">${t.badge}</span>`:''}
+      <h3>${t.emoji} ${t.name} <span style="color:var(--ink2);font-weight:600;font-size:12px">${t.jp}</span></h3>
+      <div class="price">$${t.price}<small>/月</small></div>
+      <div class="desc">${t.desc}</div>
+      <div class="pt">枠 ${t.budget} pt</div>
+    </div>`).join("");
+  $$(".tier").forEach(el=>el.onclick=()=>{ tier=el.dataset.t; renderTiers(); update(); toast(`${TIERS[tier].name} に変更（枠 ${TIERS[tier].budget}pt）`); });
+}
+/* ---------------- render cats ---------------- */
+function renderCats(){
+  $("#cats").innerHTML = CATS.map(c=>`<button class="cat ${c.id===cat?'on':''}" data-c="${c.id}">${c.name}</button>`).join("");
+  $$(".cat").forEach(el=>el.onclick=()=>{ cat=el.dataset.c; renderCats(); renderGrid(); });
+}
+/* ---------------- render grid ---------------- */
+function renderGrid(){
+  const list = P.filter(p=>(cat==="all"||p.cat===cat) && (!query || (p.nm+p.sub).toLowerCase().includes(query.toLowerCase())));
+  $("#grid").innerHTML = list.map(p=>{
+    const q=cart[p.id]||0;
+    const tagCls = p.tag==="限定"?"limited":(["定番","人気"].includes(p.tag)?"jp":"");
+    return `<div class="card" data-id="${p.id}">
+      <div class="thumb">${p.tag?`<span class="ptag ${tagCls}">${p.tag}</span>`:''}${p.em}</div>
+      <div class="cbody">
+        <div class="nm">${p.nm}</div>
+        <div class="sub">${p.sub}</div>
+        <div class="meta"><span class="yen">¥${p.yen.toLocaleString()}相当</span><span class="pts">${p.pt}pt</span></div>
+        ${q>0
+          ? `<div class="qty"><button data-m="-1">−</button><span>${q}</span><button data-m="1">＋</button></div>`
+          : `<button class="add" data-add="1">＋ 箱に入れる</button>`}
+      </div></div>`;
+  }).join("");
+  $$(".card").forEach(card=>{
+    const id=card.dataset.id;
+    const addBtn=card.querySelector("[data-add]");
+    if(addBtn) addBtn.onclick=(e)=>addItem(id,1,e.currentTarget);
+    card.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>addItem(id,+b.dataset.m,b));
+  });
+}
+/* ---------------- cart ops ---------------- */
+function usedPt(){ return Object.entries(cart).reduce((s,[id,q])=>s+(P.find(p=>p.id===id).pt*q),0); }
+function count(){ return Object.values(cart).reduce((a,b)=>a+b,0); }
+function addItem(id,delta,srcEl){
+  const p=P.find(x=>x.id===id); const cur=cart[id]||0;
+  if(delta>0){
+    if(usedPt()+p.pt > TIERS[tier].budget){ toast("⚠️ 枠がいっぱい。ティアを上げるか、何か外してね"); shake(); return; }
+    cart[id]=cur+1; fly(srcEl,p.pt);
+  }else{
+    cart[id]=cur-1; if(cart[id]<=0) delete cart[id];
+  }
+  renderGrid(); update();
+}
+/* ---------------- omakase ---------------- */
+function omakase(){
+  const pop = P.filter(p=>["人気","定番"].includes(p.tag)).concat(P.filter(p=>!["人気","定番"].includes(p.tag)));
+  let guard=0;
+  while(guard++<200){
+    const left=TIERS[tier].budget-usedPt();
+    const pick=pop.find(p=>p.pt<=left && (cart[p.id]||0)<2);
+    if(!pick) break;
+    cart[pick.id]=(cart[pick.id]||0)+1;
+  }
+  renderGrid(); update(); toast("✨ おまかせで埋めました。気に入らない物は差し替えできます");
+}
+/* ---------------- box / totals ---------------- */
+function update(){
+  const b=TIERS[tier].budget, used=usedPt(), pct=Math.min(100,Math.round(used/b*100)), left=Math.max(0,b-used);
+  $("#fill").style.height=pct+"%";
+  $("#meterBar").style.width=pct+"%";
+  $("#pctBig").textContent=pct+"%";
+  $("#pctSm").textContent = pct===0?"枠を埋めよう": pct>=92?"ほぼ満タン！":"あと"+left+"pt入る";
+  $("#crateLabel").classList.toggle("light",pct>=52);
+  $("#usedPt").textContent=used; $("#leftPt").textContent=left;
+  $("#cnt").textContent=count()+"点";
+  $("#totPrice").innerHTML=`$${TIERS[tier].price}<small>/月</small>`;
+  $("#peekPrice").textContent=`$${TIERS[tier].price}`;
+  $("#peekSub").textContent = count()? `${count()}点・${pct}%` : "タップして中身を見る";
+  $("#coNote").textContent=`${TIERS[tier].name} ティア・毎月お届け・いつでも変更/停止OK`;
+  // items list
+  const ids=Object.keys(cart);
+  $("#empty").style.display = ids.length?"none":"block";
+  const listHtml = ids.map(id=>{const p=P.find(x=>x.id===id),q=cart[id];return `
+    <div class="li">
+      <span class="em">${p.em}</span>
+      <span class="nm">${p.nm}<small>${p.pt*q}pt</small></span>
+      <span class="st"><button data-d="${id}">−</button><b>${q}</b><button data-a="${id}">＋</button></span>
+    </div>`;}).join("");
+  $("#items").innerHTML = (ids.length?listHtml:"") + `<div class="empty" id="empty" style="display:${ids.length?'none':'block'}">まだ空っぽです。<br>左から好きな商品を入れてください 🇯🇵</div>`;
+  $$("#items [data-d]").forEach(b=>b.onclick=()=>addItem(b.dataset.d,-1));
+  $$("#items [data-a]").forEach(b=>b.onclick=()=>addItem(b.dataset.a,1));
+  $("#cta").disabled = count()===0;
+  $("#cta").textContent = count()===0 ? "商品を入れてください" : `この箱で申し込む →`;
+}
+/* ---------------- fx ---------------- */
+let toastT;
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),2200); }
+function shake(){ const c=$(".crate"); c.animate([{transform:"translateX(0)"},{transform:"translateX(-6px)"},{transform:"translateX(6px)"},{transform:"translateX(0)"}],{duration:260}); }
+function fly(srcEl,pt){
+  if(!srcEl) return;
+  const r=srcEl.getBoundingClientRect(); const target=$(".crate").getBoundingClientRect();
+  const el=document.createElement("div"); el.className="fly"; el.textContent="+"+pt+"pt";
+  el.style.left=r.left+r.width/2-16+"px"; el.style.top=r.top+"px"; document.body.appendChild(el);
+  requestAnimationFrame(()=>{ el.style.transform=`translate(${target.left+target.width/2-(r.left+r.width/2)}px,${target.top+target.height/2-r.top}px) scale(.6)`; el.style.opacity="0"; });
+  setTimeout(()=>el.remove(),650);
+}
+/* ---------------- events ---------------- */
+$("#q").oninput=e=>{ query=e.target.value; renderGrid(); };
+$("#omakase").onclick=omakase;
+$("#dest").onchange=e=>{ const m={us:"アメリカ",eu:"ヨーロッパ",au:"オーストラリア",asia:"アジア"}; toast(`配送先：${m[e.target.value]}（対応カタログに切替）`); };
+$("#peek").onclick=()=>$("#box").classList.toggle("open");
+$("#cta").onclick=()=>{ if(count()===0) return; toast("🎉 デモです：この内容で申し込み〜配送まで進みます"); };
+
+/* ---------------- init ---------------- */
+renderTiers(); renderCats(); renderGrid(); update();
+</script>
+</body>
+</html>
