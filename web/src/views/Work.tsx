@@ -1800,19 +1800,23 @@ function WorkLaundryTab() {
 // CoinLaundry.Tokyo タブと同じ iframe 方式。プロト（箱ビルダー）／デザイン案（和の漢字4パターン）／
 // 競合分析（売上・収益性・事業）を静的ページで切替表示する。サービス名は仮のため表示は「セレクト便」。
 function WorkTebakoTab() {
-  const [doc, setDoc] = useState<'proto' | 'styles' | 'analysis'>('proto');
+  const [doc, setDoc] = useState<'proto' | 'styles' | 'analysis' | 'sim'>('proto');
   const src =
     doc === 'proto'
       ? '/tebako-proto.html'
       : doc === 'styles'
         ? '/tebako-styles.html'
-        : '/tebako-analysis.html';
+        : doc === 'analysis'
+          ? '/tebako-analysis.html'
+          : '/tebako-sim.html';
   const title =
     doc === 'proto'
       ? '日本商品セレクト定額便 プロトタイプ'
       : doc === 'styles'
         ? 'デザイン案（和の漢字パターン）'
-        : '競合分析レポート';
+        : doc === 'analysis'
+          ? '競合分析レポート'
+          : '収益シミュレーター';
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex items-center gap-2">
@@ -1821,6 +1825,7 @@ function WorkTebakoTab() {
             ['proto', 'プロト'],
             ['styles', 'デザイン案'],
             ['analysis', '競合分析'],
+            ['sim', '収益シミュ'],
           ] as const).map(([key, label]) => (
             <button
               key={key}

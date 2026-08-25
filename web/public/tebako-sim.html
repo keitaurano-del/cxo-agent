@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>セレクト便（仮） 収益シミュレーター</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#20242b;--ink2:#5a616c;--ac:#ff5a4d;--soft:#f6f7f9;--line:#e9eaee;--ok:#1f9d63;--bad:#d5342a}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Zen Kaku Gothic New","Poppins",system-ui,sans-serif;color:var(--ink);background:#fff;line-height:1.55;padding:20px;max-width:1080px;margin:0 auto}
+  h1{font-size:20px;font-weight:900}
+  h1 .hl{color:var(--ac)}
+  .sub{font-size:12.5px;color:var(--ink2);margin-top:4px}
+  .grid{display:grid;grid-template-columns:300px 1fr;gap:18px;margin-top:16px;align-items:start}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .panel{border:1px solid var(--line);border-radius:14px;padding:16px;background:#fff}
+  .panel h2{font-size:12px;font-weight:800;color:var(--ac);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
+  .fld{margin-bottom:12px}
+  .fld label{display:block;font-size:12px;font-weight:700;margin-bottom:4px}
+  .fld .hint{font-size:10.5px;color:var(--ink2);font-weight:400}
+  .fld input[type=number],.fld select{width:100%;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font:inherit;font-size:13px}
+  .fld input:focus,.fld select:focus{outline:none;border-color:var(--ac)}
+  .row2{display:flex;gap:8px}
+  .row2>div{flex:1}
+  .rng{display:flex;align-items:center;gap:8px}
+  .rng input[type=range]{flex:1;accent-color:var(--ac)}
+  .rng b{font-size:13px;min-width:42px;text-align:right}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:2px}
+  th,td{text-align:right;padding:8px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  thead th{background:var(--soft);font-size:11px;color:var(--ink2);font-weight:700}
+  tbody tr:hover{background:#fafbfc}
+  .prof{font-weight:800}
+  .pos{color:var(--ok)}
+  .neg{color:var(--bad)}
+  .badge{display:inline-block;font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;margin-left:6px}
+  .b-ok{background:#e5f6ec;color:var(--ok)}
+  .b-bad{background:#fde8e6;color:var(--bad)}
+  .kpis{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  .kpi{border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:130px;flex:1}
+  .kpi .v{font-size:22px;font-weight:900}
+  .kpi .l{font-size:11px;color:var(--ink2)}
+  .note{font-size:11.5px;color:var(--ink2);margin-top:12px;border-top:1px dashed var(--line);padding-top:10px}
+  .note b{color:var(--ink)}
+  .sec{margin-top:18px}
+  .sec h3{font-size:13px;font-weight:800;margin-bottom:6px}
+</style>
+</head>
+<body>
+<h1>セレクト便（仮） <span class="hl">収益シミュレーター</span></h1>
+<div class="sub">現行価格・実勢送料で1箱いくら残るかを試算。前提を動かすと即再計算します。送料はJapan Post（2026年1月・対米）、為替はUSD/JPY実勢ベース。MC-485/486。</div>
+
+<div class="grid">
+  <!-- CONTROLS -->
+  <div class="panel">
+    <h2>前提（動かせます）</h2>
+    <div class="fld">
+      <label>為替 <span class="hint">¥ / $1</span></label>
+      <input id="fx" type="number" value="159" step="1" />
+    </div>
+    <div class="fld">
+      <label>送料方式</label>
+      <select id="method">
+        <option value="spkt">小型包装物・航空（安い／〜2kg・追跡は縮小）</option>
+        <option value="ems">EMS（速い・追跡あり・高い）</option>
+        <option value="auto">2kg以下は小型包装物・超過はEMS（推奨）</option>
+      </select>
+    </div>
+    <div class="fld">
+      <label>仕向地（関税/VATの負担）</label>
+      <select id="dest">
+        <option value="us">米国（免税枠$800→関税0）</option>
+        <option value="au">豪州（A$1000→関税0）</option>
+        <option value="ca">カナダ（GST等 約13%）</option>
+        <option value="uk">英国（VAT20%・免税枠£135）</option>
+        <option value="eu">EU（VAT約21%・免税枠なし）</option>
+      </select>
+    </div>
+    <div class="fld">
+      <label>商品原価率 <span class="hint">箱の中身（小売額）÷ 価格</span></label>
+      <div class="rng"><input id="cogs" type="range" min="20" max="60" value="35" /><b id="cogsV">35%</b></div>
+    </div>
+    <div class="fld">
+      <label>各種コスト</label>
+      <div class="row2">
+        <div><span class="hint">決済 %</span><input id="pay" type="number" value="3.6" step="0.1" /></div>
+        <div><span class="hint">梱包 ¥</span><input id="pack" type="number" value="350" step="10" /></div>
+        <div><span class="hint">梱包作業 ¥</span><input id="labor" type="number" value="600" step="50" /></div>
+      </div>
+    </div>
+    <div class="fld">
+      <label>固定費 <span class="hint">月・損益分岐用</span></label>
+      <input id="fixed" type="number" value="300000" step="10000" />
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="panel">
+    <h2>1箱あたり損益</h2>
+    <table id="tbl">
+      <thead><tr>
+        <th>プラン</th><th>売上</th><th>送料</th><th>決済</th><th>梱包+作業</th><th>関税/VAT</th><th>商品原価</th><th>1箱利益</th><th>粗利率</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="kpis" id="kpis"></div>
+    <div class="note" id="note"></div>
+
+    <div class="sec">
+      <h3>プラン別の重量・点数の目安（編集可）</h3>
+      <table id="cfg">
+        <thead><tr><th>プラン</th><th>価格 $</th><th>重量 kg</th><th>点数目安</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// 送料カーブ（対米・円）: Japan Post 2026-01 公式＋実勢
+const EMS_US  = [[0.5,3200],[1,5300],[1.5,6600],[2,7900],[3,10300]];
+const SPKT_US = [[0.5,1670],[1,2720],[1.5,3770],[2,4820]]; // 上限2kg
+function interp(pts,w){ if(w<=pts[0][0])return pts[0][1]; for(let i=1;i<pts.length;i++){if(w<=pts[i][0]){const[a,b]=pts[i-1],[c,d]=pts[i];return Math.round(b+(d-b)*(w-a)/(c-a));}} return pts[pts.length-1][1]; }
+// 仕向地係数: 送料の対米比（概算）と 関税/VAT率
+const DEST = {
+  us:{ship:1.00, name:'米国', vat:0,    dm:true},
+  au:{ship:1.05, name:'豪州', vat:0,    dm:true},
+  ca:{ship:1.05, name:'カナダ', vat:0.13, dm:false},
+  uk:{ship:1.10, name:'英国', vat:0.20, dm:false},
+  eu:{ship:1.10, name:'EU',  vat:0.21, dm:false},
+};
+let TIERS = [
+  {name:'Petit',     price:49,  weight:0.7, items:'4–6'},
+  {name:'Signature', price:75,  weight:1.3, items:'8–10'},
+  {name:'Grand',     price:115, weight:2.3, items:'14–16'},
+];
+const $=id=>document.getElementById(id);
+const yen=n=>'¥'+Math.round(n).toLocaleString();
+const usd=(n,fx)=>'$'+(n/fx).toFixed(0);
+
+function shipCost(method,w,dest){
+  const f=DEST[dest].ship;
+  if(method==='ems') return Math.round(interp(EMS_US,w)*f);
+  if(method==='spkt'){ if(w>2) return null; return Math.round(interp(SPKT_US,w)*f); }
+  // auto
+  return w>2 ? Math.round(interp(EMS_US,w)*f) : Math.round(interp(SPKT_US,w)*f);
+}
+
+function calc(){
+  const fx=+$('fx').value||159, method=$('method').value, dest=$('dest').value;
+  const cogsPct=(+$('cogs').value)/100, payPct=(+$('pay').value)/100;
+  const pack=+$('pack').value||0, labor=+$('labor').value||0, fixed=+$('fixed').value||0;
+  $('cogsV').textContent=Math.round(cogsPct*100)+'%';
+
+  const rows=TIERS.map(t=>{
+    const rev=t.price*fx;
+    let sh=shipCost(method,t.weight,dest);
+    const emsFallback = sh===null;
+    if(sh===null) sh=Math.round(interp(EMS_US,t.weight)*DEST[dest].ship); // spkt不可→EMS
+    const pay=Math.round(rev*payPct+50);
+    const cogs=Math.round(rev*cogsPct);
+    // 関税/VAT: 免税枠内なら0。VAT国は (商品価値+送料) に課税し当社負担。
+    const dutyBase=cogs+sh;
+    const duty = DEST[dest].vat>0 ? Math.round(dutyBase*DEST[dest].vat) : 0;
+    const profit=rev-sh-pay-pack-labor-duty-cogs;
+    const margin=profit/rev;
+    return {t,rev,sh,pay,fix:pack+labor,duty,cogs,profit,margin,fx,emsFallback};
+  });
+
+  const tb=$('tbl').querySelector('tbody');
+  tb.innerHTML=rows.map(r=>{
+    const pc=r.profit>=0?'pos':'neg';
+    const mb=r.margin>=0.20?'b-ok':(r.margin<0?'b-bad':'');
+    return `<tr>
+      <td>${r.t.name}${r.emsFallback?'<span class="badge b-bad">EMS強制</span>':''}</td>
+      <td>${yen(r.rev)}<br><span class="hint">$${r.t.price}</span></td>
+      <td>${yen(r.sh)}</td>
+      <td>${yen(r.pay)}</td>
+      <td>${yen(r.fix)}</td>
+      <td>${r.duty?yen(r.duty):'—'}</td>
+      <td>${yen(r.cogs)}</td>
+      <td class="prof ${pc}">${yen(r.profit)}<br><span class="hint">${usd(r.profit,r.fx)}</span></td>
+      <td><span class="badge ${mb}">${(r.margin*100).toFixed(0)}%</span></td>
+    </tr>`;
+  }).join('');
+
+  // KPIs: Signature を主力に
+  const sig=rows[1];
+  const beSig = sig.profit>0 ? Math.ceil(fixed/sig.profit) : null;
+  $('kpis').innerHTML=`
+    <div class="kpi"><div class="v ${sig.profit>=0?'pos':'neg'}">${yen(sig.profit)}</div><div class="l">Signature 1箱利益（${usd(sig.profit,fx)}）</div></div>
+    <div class="kpi"><div class="v">${(sig.margin*100).toFixed(0)}%</div><div class="l">Signature 粗利率</div></div>
+    <div class="kpi"><div class="v">${beSig?beSig+'人':'—'}</div><div class="l">損益分岐（固定費÷Signature利益）</div></div>`;
+
+  // 注記
+  const losers=rows.filter(r=>r.profit<0).map(r=>r.t.name);
+  let msg=`<b>読み方:</b> 送料方式＝<b>${method==='ems'?'EMS':method==='spkt'?'小型包装物':'自動（2kg超はEMS）'}</b>、仕向地＝<b>${DEST[dest].name}</b>、原価率＝<b>${Math.round(cogsPct*100)}%</b>。`;
+  if(DEST[dest].vat>0) msg+=` この国はVAT ${Math.round(DEST[dest].vat*100)}%を当社負担で計上（免税枠外）。`;
+  if(losers.length) msg+=` <span class="neg"><b>赤字プラン: ${losers.join('・')}</b></span> — 値上げ／重量・原価の締め、またはこの仕向地を対象外に。`;
+  else msg+=` 全プラン黒字。`;
+  msg+=`<br><span class="hint">※送料は対米カーブ×仕向地係数の概算。決済¥50固定。COGSは小売仕入れ（プロキシ型）想定。数値は要検証。</span>`;
+  $('note').innerHTML=msg;
+}
+
+function renderCfg(){
+  const tb=$('cfg').querySelector('tbody');
+  tb.innerHTML=TIERS.map((t,i)=>`<tr>
+    <td>${t.name}</td>
+    <td><input type="number" data-i="${i}" data-k="price" value="${t.price}" step="1" style="width:70px;text-align:right"></td>
+    <td><input type="number" data-i="${i}" data-k="weight" value="${t.weight}" step="0.1" style="width:70px;text-align:right"></td>
+    <td>${t.items}</td>
+  </tr>`).join('');
+  tb.querySelectorAll('input').forEach(inp=>inp.oninput=()=>{ TIERS[+inp.dataset.i][inp.dataset.k]=+inp.value; calc(); });
+}
+
+['fx','method','dest','cogs','pay','pack','labor','fixed'].forEach(id=>$(id).addEventListener('input',calc));
+renderCfg(); calc();
+</script>
+</body>
+</html>
