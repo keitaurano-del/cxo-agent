@@ -756,6 +756,94 @@ export const LINK_FIX_BODY = `(function(){
 })();`;
 const LINK_FIX_SCRIPT = `<script>${LINK_FIX_BODY}</script>`;
 
+// ─── モバイル日本語 IME で全角括弧（）等を打つと以降入力が壊れる（MC-IME）─────────────
+// 症状（Keita 実機・iPhone Safari の日本語 IME）: Apollo Web ターミナルで全角「（）」を打つと
+//   その文字が正しく送られないだけでなく、以降どの文字を打っても端末に何も届かなくなる
+//   （＝入力が固まる）。ハードリロードで復帰する。
+//
+// 根因（ttyd 1.7.4 同梱 xterm.js 4.x の CompositionHelper 実コード確定）:
+//   xterm 4.x は IME 変換確定を「.xterm-helper-textarea の value をオフセットで切り出して」送る:
+//     - compositionstart: _compositionPosition.start = textarea.value.length（＝累積 value 内の開始位置）
+//     - compositionupdate: setTimeout(0) で _compositionPosition.end = textarea.value.length
+//     - compositionend → _finalizeComposition(true): setTimeout(0) 後に
+//         textarea.value.substring(start, end) を PTY へ送る
+//   決定的な弱点: **compositionend の後に xterm は textarea.value を一切クリアしない**。次の変換の
+//   start は「その時点の value.length」＝前回までの残留分を含む累積長になる。全角（）のような
+//   IME がオートペアで括弧を補完しキャレットをペア内側へ戻すシーケンスや、compositionupdate を
+//   伴わず compositionend が来るケースでは、setTimeout レースで end が start より小さい/古い値の
+//   まま確定し、substring(start,end) が空文字を返す。以降 textarea には残留が積み上がり、
+//   毎回の substring が空/ズレになり続ける＝「一度（）を打つと以降の入力が全部死ぬ」恒久 desync。
+//   （素の bash readline・claude/openclaw の行エディタは無実＝send-keys 経由では再現しないという
+//   Masayoshi の切り分けと一致する。バグはこのフロント層＝xterm の helper textarea の状態管理。）
+//
+// 修正（最小・低リスク・可逆）:
+//   compositionend の「後」に helper textarea の残留 value をクリアし、xterm の
+//   _compositionHelper._compositionPosition を {start:0,end:0} にリセットして、次の変換が常に
+//   クリーンなオフセット 0 から始まるようにする＝累積ズレ（desync）を根絶する。これは upstream の
+//   のちの xterm が textarea を確定後クリアする挙動に合わせる形。
+//   重要な非退行担保:
+//     - クリアは xterm が既に確定データを送った「後」に行う。_finalizeComposition は setTimeout(0)
+//       で triggerDataEvent する。ここでは compositionend リスナ内で **さらに後ろの setTimeout(0)**
+//       （＝マイクロ→マクロタスク順で xterm の送信タイマの後）でクリアするので、送信中の
+//       substring 対象を奪わない＝正常なかな漢字変換の確定文字は必ず送られてからクリアされる。
+//     - textarea が空でないときだけ触る no-op ガード。フォーカスは維持（value='' 後に focus）。
+//     - 二重インストール防止（window.__apolloImeFix / textarea データ属性）。
+//   ＝現状正常な日本語かな漢字入力は一切壊さず、累積残留による固まりだけを解消する。
+//
+// IME_FIX_BODY はテストから eval 可能な素の JS。textarea 検出は window.term.textarea →
+//   .xterm-helper-textarea の順。本番注入は IME_FIX_SCRIPT。
+export const IME_FIX_BODY = `(function(){
+  function findTextarea(t){
+    try{
+      if(t&&t.textarea&&t.textarea.tagName==='TEXTAREA'){return t.textarea;}
+    }catch(_e){}
+    try{
+      if(t&&t.element&&t.element.querySelector){
+        var el=t.element.querySelector('.xterm-helper-textarea');
+        if(el){return el;}
+      }
+    }catch(_e){}
+    try{return document.querySelector('.xterm-helper-textarea');}catch(_e){}
+    return null;
+  }
+  function install(){
+    var t=window.term;
+    if(!t){return false;}
+    var ta=findTextarea(t);
+    if(!ta){return false;}
+    if(window.__apolloImeFix||ta.getAttribute('data-apollo-ime-fix')==='1'){return true;}
+    // 確定後に helper textarea の残留をクリアし、xterm の composition オフセットをリセットする。
+    // xterm 側の _finalizeComposition が setTimeout(0) で substring→triggerDataEvent した「後」に
+    // 走らせるため、ここでも setTimeout(0) で1段後ろに遅延させる（送信対象を奪わない）。
+    function clearResidual(){
+      setTimeout(function(){
+        try{
+          // まだ次の変換が始まっているなら触らない（走行中の composition を壊さない）。
+          var ch=t._core&&t._core._compositionHelper;
+          if(ch&&ch._isComposing){return;}
+          if(ta.value!==''){ta.value='';}
+          // xterm 内部のオフセット追跡を 0 に戻し、次の変換をクリーンな起点から始めさせる。
+          if(ch&&ch._compositionPosition){
+            ch._compositionPosition.start=0;
+            ch._compositionPosition.end=0;
+          }
+          if(ch){ch._dataAlreadySent='';}
+          // フォーカスは維持（クリアで IME/カーソルが外れないように）。
+          try{ta.focus();}catch(_e2){}
+        }catch(_e){}
+      },0);
+    }
+    ta.addEventListener('compositionend',clearResidual);
+    window.__apolloImeFix=true;
+    try{ta.setAttribute('data-apollo-ime-fix','1');}catch(_e){}
+    return true;
+  }
+  if(!install()){
+    var n=0,iv=setInterval(function(){if(install()||++n>100){clearInterval(iv);}},100);
+  }
+})();`;
+const IME_FIX_SCRIPT = `<script>${IME_FIX_BODY}</script>`;
+
 // proxy 失敗時に Apollo 全体を落とさない。ttyd 停止中（林セッション無し等）でも 502 を返すだけ。
 proxy.on('error', (err, _req, resOrSocket) => {
   console.error('[terminal proxy error]', err?.message ?? err);
@@ -811,7 +899,7 @@ proxy.on('proxyRes', (proxyRes, _req, res) => {
   proxyRes.on('end', () => {
     let body = Buffer.concat(chunks).toString('utf8');
     if (body.includes('</body>') && !body.includes('__apolloPasteFix')) {
-      body = body.replace('</body>', `${PASTE_FIX_SCRIPT}${TAP_FIX_SCRIPT}${TERM_THEME_SCRIPT}${COPY_FIX_SCRIPT}${LINK_FIX_SCRIPT}</body>`);
+      body = body.replace('</body>', `${PASTE_FIX_SCRIPT}${TAP_FIX_SCRIPT}${TERM_THEME_SCRIPT}${COPY_FIX_SCRIPT}${LINK_FIX_SCRIPT}${IME_FIX_SCRIPT}</body>`);
     }
     const buf = Buffer.from(body, 'utf8');
     headers['content-length'] = String(buf.byteLength);
