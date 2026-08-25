@@ -5,7 +5,6 @@
 // プレビューは sandbox="allow-scripts"（allow-same-origin は付けない＝AI 生成 HTML を隔離）。
 // API: POST /api/dev/mockup/generate, GET/POST /api/dev/mockups, GET/DELETE /api/dev/mockups/:id。
 import { useState, useEffect, useRef, useCallback, type ReactElement, type UIEvent } from 'react';
-import { Link } from 'react-router-dom';
 import { PageHeader } from '../components/PageHeader';
 import { Spinner, EmptyState } from '../components/ui';
 import { SparkIcon, TrashIcon } from '../components/icons';
@@ -1437,28 +1436,6 @@ export default function Development() {
             mobileTab === 'edit' ? 'flex' : 'hidden'
           } w-full min-h-0 flex-1 flex-col gap-4 overflow-y-auto border-b border-border p-4 md:flex md:w-[26rem] md:flex-none md:border-b-0 md:border-r`}
         >
-          {/* MC-363: ビジネスモデル図鑑への常設導線。 */}
-          <Link
-            to="/dev/business-models"
-            className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 transition-colors hover:border-accent hover:bg-surface-2"
-          >
-            <span
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base"
-              style={{ background: 'var(--mc-surface-2)' }}
-              aria-hidden
-            >
-              📖
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-xs font-bold text-text">ビジネスモデル図鑑</span>
-              <span className="block truncate text-[11px] text-text-muted">
-                優れたビジネスモデル 12 種を 1 枚図解で学ぶ
-              </span>
-            </span>
-            <span className="shrink-0 text-text-faint" aria-hidden>
-              ›
-            </span>
-          </Link>
 
           {/* 生成。まだ試作品が無いときだけ表示し、1 つ作ったら以降は「修正」だけの UI にする
               （Keita 指示 2026-07-03）。作り直したいときは修正セクションの「＋新規作成」で白紙に戻す。 */}
@@ -1476,7 +1453,7 @@ export default function Development() {
                       onClick={handleGenerateIdea}
                       disabled={ideaBusy || generating}
                       className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
-                      title="アメリカなど海外でいま流行っているスモールビジネスを 1 つ教えます"
+                      title="アメリカなど海外でいま流行っているビジネスを 1 つ教えます"
                     >
                       {ideaBusy ? <Spinner /> : <span aria-hidden>🌎</span>}
                       {ideaBusy ? '探し中…' : '海外の流行ビジネス'}
@@ -1494,44 +1471,36 @@ export default function Development() {
                 {/* 生成アイデアの👍/👎評価（MC-479）。評価は次回以降のアイデア質向上に学習される。
                     プロンプトを大きく書き換えたら（=別物になったら）評価行は隠す。 */}
                 {lastIdea && prompt.trim() === lastIdea.trim() && (
-                  <>
-                  <div className="flex items-center gap-2 text-xs text-text-muted">
-                    <span>このビジネスどう？</span>
-                    <button
-                      type="button"
-                      onClick={() => rateIdea('good')}
-                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 transition-colors ${
-                        ideaRating === 'good'
-                          ? 'border-emerald-500 bg-emerald-500/15 text-emerald-600'
-                          : 'border-border hover:bg-surface-2 hover:text-text'
-                      }`}
-                      title="良い → 次からこの方向に寄せる"
-                    >
-                      <span aria-hidden>👍</span> いいね
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => rateIdea('bad')}
-                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 transition-colors ${
-                        ideaRating === 'bad'
-                          ? 'border-rose-500 bg-rose-500/15 text-rose-600'
-                          : 'border-border hover:bg-surface-2 hover:text-text'
-                      }`}
-                      title="いまいち → 次からこの手は避ける"
-                    >
-                      <span aria-hidden>👎</span> いまいち
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleGenerateIdea}
-                      disabled={ideaBusy || generating}
-                      className="ml-auto inline-flex items-center gap-1 rounded px-2 py-1 text-text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
-                      title="別のアイデアを出す"
-                    >
-                      {ideaBusy ? <Spinner /> : <span aria-hidden>🔄</span>} 別のアイデア
-                    </button>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                    <span className="w-full sm:w-auto">このビジネスどう？</span>
+                    {/* 👍/👎 は押し間違い防止のため十分に離す（gap-4＋タップ領域を大きめに・MC-483）。 */}
+                    <div className="flex items-center gap-4">
+                      <button
+                        type="button"
+                        onClick={() => rateIdea('good')}
+                        className={`inline-flex items-center gap-1 rounded-full border px-4 py-1.5 transition-colors ${
+                          ideaRating === 'good'
+                            ? 'border-emerald-500 bg-emerald-500/15 text-emerald-600'
+                            : 'border-border hover:bg-surface-2 hover:text-text'
+                        }`}
+                        title="良い → 次からこの方向に寄せる"
+                      >
+                        <span aria-hidden>👍</span> いいね
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => rateIdea('bad')}
+                        className={`inline-flex items-center gap-1 rounded-full border px-4 py-1.5 transition-colors ${
+                          ideaRating === 'bad'
+                            ? 'border-rose-500 bg-rose-500/15 text-rose-600'
+                            : 'border-border hover:bg-surface-2 hover:text-text'
+                        }`}
+                        title="いまいち → 次からこの手は避ける"
+                      >
+                        <span aria-hidden>👎</span> いまいち
+                      </button>
+                    </div>
                   </div>
-                  </>
                 )}
                 {/* 出典リンクは評価行と独立に描画（プロンプトを編集しても残る・MC-482）。 */}
                 {sourcesBar}

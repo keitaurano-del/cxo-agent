@@ -2441,18 +2441,18 @@ const AXIS_REGION = [
 
 /** スモールビジネスのカテゴリ（個人〜数人・低資本で回る型）。 */
 const AXIS_SMALLBIZ = [
-  'ニッチなD2C・専門EC（特定の悩みや趣味に振り切った物販）',
-  'ローカルサービス（清掃・片付け・芝刈り・ペット・高齢者の御用聞き）',
-  'クリエイター/個人が売るデジタル商品（テンプレ・教材・有料コミュニティ）',
-  '食のスモール事業（ゴーストキッチン・専門屋台・サブスク食品）',
-  'サブスクボックス・定期便',
-  'リセール・中古・レンタル（特定カテゴリに特化）',
-  'コーチング・オンライン講座・少人数スクール',
-  '職人・ハンドメイド・クラフトの直販',
-  '移動型/出張型サービス（バン1台やキッチンカーで始める）',
-  '地域密着のイベント・体験・ポップアップ',
-  '個人が回せる規模のニッチB2B代行/ツール',
-  'サービスの生産性化（人がやる作業をパッケージ化して売る）',
+  'ニッチな専門EC・D2C',
+  'サブスク・定期便',
+  'ソフトウェア/アプリ・SaaS',
+  'マーケットプレイス・プラットフォーム',
+  '食・飲食の新業態',
+  'リセール・中古・レンタル',
+  '教育・オンライン講座・コミュニティ',
+  'ヘルスケア・ウェルネス・美容',
+  'フィンテック・お金まわりのサービス',
+  'クリエイター/メディア/コンテンツ',
+  '店舗・体験・エンタメの新しい形',
+  'B2B・業務向けの新しい道具やサービス',
 ];
 
 /** 海外の流行スモールビジネスを 1 つ教えるプロンプト（MC-480）。 */
@@ -2468,21 +2468,20 @@ function buildIdeaPromptOverseas(): string {
       ]
     : [];
   return [
-    'あなたは、世界のスモールビジネスの最新トレンドに詳しいリサーチャー兼事業プロデューサーです。',
-    'テーマは「アメリカを中心に海外でいま流行っている“個人〜数人でやれるスモールビジネス”を1つ、日本のオーナーに分かりやすく教える」ことです。',
-    '現地で本当にお金が回っている実在タイプの小商いを題材にすること（架空の突飛な発明ではない）。',
+    'あなたは、世界のビジネスの最新トレンドに詳しいリサーチャー兼事業プロデューサーです。',
+    'テーマは「アメリカを中心に海外でいま流行っているビジネスを1つ、日本のオーナーに分かりやすく教える」ことです。',
+    '規模は問わない（個人の小商いから急成長スタートアップまで何でもよい）。現地で実際に流行っている実在のビジネスを題材にすること（架空の突飛な発明ではない）。',
     '',
     `今回の切り口（無理なら崩してよい）: 地域=${region} / カテゴリ=${cat}`,
     ...avoid,
     ...feedbackGuidance(),
     '',
     '守ること:',
-    '- スモールビジネス限定。個人〜数人・低資本（目安100万円以下）で始められる規模。VC前提の大型スタートアップや、Uber/Airbnb級の巨大プラットフォームは扱わない。',
     '- 事実に忠実に。誇張した数字や存在しない固有名詞をでっち上げない。固有名詞を出すなら実在の広く知られたものだけ。規模・相場は「目安」と分かる書き方にする。',
     '- シンプルに。1つのビジネスを、小学生でも分かる言葉で。専門用語・横文字の重ね掛けは避ける。',
     '- 毎回まったく違う業種・地域にする。同じ型（査定SaaS・マッチングアプリ等）に寄せない。',
     '- 本体は日本語・前置き/箇条書き/見出し/引用符なし・計220文字以内。自然な文で次を順に: ①何が流行っているか（どんなビジネスか・どこで）②なぜ稼げるか/客が払う理由 ③「日本で試すなら」を一言。続けて「収益性: 」で単価×件数のざっくり月商だけ添える。接頭辞は付けない。',
-    '- 本体の後に改行し、最後の行に「検索: <この事業の実例にたどり着く英語の検索キーワード2〜5語>」を1行だけ付ける（この行は本文の文字数に含めない）。実在の記事・動画・事例に当たれる、具体的で一般的な語にすること。',
+    '- 本体の後に改行し、最後の行に「出典: <このビジネスを実際に紹介している実在の記事や公式サイトのURL>」を1行だけ付ける（この行は本文の文字数に含めない）。URLは実在し到達できるものだけ。確実なものが無ければ、その業界の有名メディアや代表企業の公式サイトのトップURLでよい。推測でそれらしいURLをでっち上げないこと。',
     '',
     `（内部識別子: ${salt} — 出力には含めない）`,
   ].join('\n');
@@ -2515,29 +2514,66 @@ interface IdeaSource {
 function buildSearchSources(query: string): IdeaSource[] {
   const q = encodeURIComponent(query.trim());
   if (!q) return [];
-  return [
-    { label: 'Googleで調べる', url: `https://www.google.com/search?q=${q}` },
-    { label: 'ニュースで探す', url: `https://news.google.com/search?q=${q}&hl=en-US&gl=US` },
-  ];
+  return [{ label: 'Googleで調べる', url: `https://www.google.com/search?q=${q}` }];
 }
-/** 生成本文から「検索: <キーワード>」行を分離し、表示用アイデア本体と出典検索リンクに分ける。 */
-function parseIdeaOutput(rawStdout: string): { idea: string; sources: IdeaSource[] } {
+/** URL のホスト名をラベルにする（www. を落とす）。 */
+function hostLabel(u: string): string {
+  try {
+    return new URL(u).hostname.replace(/^www\./, '');
+  } catch {
+    return '出典';
+  }
+}
+/** URL が実在・到達できるか軽く確認（死リンクの直リンクを出さないため・MC-483）。 */
+async function urlReachable(u: string): Promise<boolean> {
+  const tryOnce = async (method: 'HEAD' | 'GET') => {
+    try {
+      const res = await fetch(u, {
+        method,
+        redirect: 'follow',
+        signal: AbortSignal.timeout(5000),
+        headers: { 'user-agent': 'Mozilla/5.0 (compatible; CoinLaundryBot/1.0)' },
+      });
+      res.body?.cancel?.();
+      return res.status >= 200 && res.status < 400;
+    } catch {
+      return false;
+    }
+  };
+  // HEAD を弾くサーバもあるので GET でも確認する。
+  return (await tryOnce('HEAD')) || (await tryOnce('GET'));
+}
+/**
+ * 生成本文から「出典: <URL>」行を分離し、表示用アイデア本体と出典リンクに分ける（MC-481/483）。
+ * 直リンク（実在URL）を優先し、到達できないものは捨てる。1件も生きていなければ Google 検索へフォールバック。
+ */
+async function parseIdeaOutput(rawStdout: string): Promise<{ idea: string; sources: IdeaSource[] }> {
   const stripped = stripFences(rawStdout);
-  let query = '';
+  const urlRe = /https?:\/\/[^\s"'）)、，,]+/g;
+  const urls: string[] = [];
   const kept: string[] = [];
   for (const ln of stripped.split(/\n+/)) {
-    const m = ln.match(/^\s*(?:検索|出典|ソース|search)\s*[:：]\s*(.+)$/i);
-    if (m) {
-      if (!query) query = m[1].trim().replace(/^["'「『]|["'」』]$/g, '').trim();
-      continue;
-    }
-    kept.push(ln);
+    const found = ln.match(urlRe) || [];
+    urls.push(...found);
+    const isSourceLine = /^\s*(?:出典|ソース|source|url|参考|検索)\s*[:：]/i.test(ln);
+    if (isSourceLine) continue; // 出典/検索行は本文から落とす
+    const body = ln.replace(urlRe, '').trim();
+    if (body) kept.push(body);
   }
   const idea = cleanIdea(kept.join('\n'));
-  if (!query) {
-    // フォールバック: 本体の最初の一文（収益性より前）を検索語にする。
-    query = idea.replace(/収益性\s*[:：].*$/, '').split(/[。.！!？?]/)[0].slice(0, 40).trim();
+  // 直リンクを検証（到達できるものだけ・最大2件）。
+  const seen = new Set<string>();
+  const sources: IdeaSource[] = [];
+  for (const raw of urls) {
+    if (sources.length >= 2) break;
+    const u = raw.replace(/[.,。、]+$/, '');
+    if (seen.has(u)) continue;
+    seen.add(u);
+    if (await urlReachable(u)) sources.push({ label: hostLabel(u), url: u });
   }
+  if (sources.length > 0) return { idea, sources };
+  // 直リンクが無い/全滅 → 検索リンクにフォールバック（本文冒頭一文を検索語に）。
+  const query = idea.replace(/収益性\s*[:：].*$/, '').split(/[。.！!？?]/)[0].slice(0, 40).trim();
   return { idea, sources: buildSearchSources(query) };
 }
 
@@ -2565,7 +2601,7 @@ async function runIdeaJob(jobId: string): Promise<void> {
         fast: true,
       });
       if (!raw.error) {
-        const parsed = parseIdeaOutput(raw.stdout); // 本体と出典検索リンクに分ける（MC-481）
+        const parsed = await parseIdeaOutput(raw.stdout); // 本体と出典リンクに分ける（直リンク検証つき・MC-481/483）
         if (parsed.idea) return parsed;
       } else if (isLimitFailure(raw) && attempt === 1) {
         model = DEV_MOCKUP_FALLBACK_MODEL;
