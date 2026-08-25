@@ -1796,8 +1796,67 @@ function WorkLaundryTab() {
   );
 }
 
+// 新規事業「日本商品セレクト定額便」（仮称・MC-485、2026-08-25 Keita「アポロの仕事の別タブに作って」）。
+// CoinLaundry.Tokyo タブと同じ iframe 方式。プロト（箱ビルダー）／デザイン案（和の漢字4パターン）／
+// 競合分析（売上・収益性・事業）を静的ページで切替表示する。サービス名は仮のため表示は「セレクト便」。
+function WorkTebakoTab() {
+  const [doc, setDoc] = useState<'proto' | 'styles' | 'analysis'>('proto');
+  const src =
+    doc === 'proto'
+      ? '/tebako-proto.html'
+      : doc === 'styles'
+        ? '/tebako-styles.html'
+        : '/tebako-analysis.html';
+  const title =
+    doc === 'proto'
+      ? '日本商品セレクト定額便 プロトタイプ'
+      : doc === 'styles'
+        ? 'デザイン案（和の漢字パターン）'
+        : '競合分析レポート';
+  return (
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <div className="flex rounded-md border border-border p-0.5">
+          {([
+            ['proto', 'プロト'],
+            ['styles', 'デザイン案'],
+            ['analysis', '競合分析'],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setDoc(key)}
+              className={`rounded px-2.5 py-1 text-[11px] transition-colors ${
+                doc === key ? 'bg-accent font-semibold text-bg' : 'text-text-muted hover:text-text'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <a
+            href={src}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+          >
+            別タブで開く ↗
+          </a>
+        </div>
+      </div>
+      <iframe
+        key={src}
+        src={src}
+        title={title}
+        className="min-h-0 w-full flex-1 rounded-lg border border-border bg-white"
+      />
+    </div>
+  );
+}
+
 // ─── タブ統括 ────────────────────────────────────────────────────────
-type WorkTab = 'chat' | 'knowledge' | 'glossary' | 'lbo' | 'laundry';
+type WorkTab = 'chat' | 'knowledge' | 'glossary' | 'lbo' | 'laundry' | 'tebako';
 
 function resolveInitialTab(): WorkTab {
   if (typeof window !== 'undefined') {
@@ -1805,7 +1864,7 @@ function resolveInitialTab(): WorkTab {
     // 概要/動画DL/状況解析タブは削除（2026-07-20 Keita・MC-319）。旧 URL はナレッジへ寄せる。
     // LBOモデラー（MC-367）は仕事タブへ集約（2026-08-08 Keita）。
     // AirRent（MC-370）は事業クローズで撤去（2026-08-23 Keita）。旧 tab=airrent/blueair はナレッジへ寄せる。
-    if (t === 'chat' || t === 'knowledge' || t === 'glossary' || t === 'lbo' || t === 'laundry') return t;
+    if (t === 'chat' || t === 'knowledge' || t === 'glossary' || t === 'lbo' || t === 'laundry' || t === 'tebako') return t;
   }
   return 'knowledge';
 }
@@ -1849,6 +1908,16 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
         <>
           <span aria-hidden><SearchIcon width={16} height={16} /></span>
           CoinLaundry.Tokyo
+        </>
+      ),
+    },
+    // 新規事業「日本商品セレクト定額便」（仮称・MC-485・2026-08-25 Keita）。
+    {
+      key: 'tebako',
+      label: (
+        <>
+          <span aria-hidden><LboIcon width={16} height={16} /></span>
+          セレクト便（仮）
         </>
       ),
     },
@@ -1916,7 +1985,7 @@ export default function Work() {
         fetchedAt={undefined}
       />
       <WorkTabBar tab={tab} onChange={changeTab} />
-      <div className={tab === 'lbo' || tab === 'laundry' ? 'flex-1 overflow-hidden px-4 py-4 md:px-6' : 'flex-1 overflow-y-auto px-4 py-4 md:px-6'}>
+      <div className={tab === 'lbo' || tab === 'laundry' || tab === 'tebako' ? 'flex-1 overflow-hidden px-4 py-4 md:px-6' : 'flex-1 overflow-y-auto px-4 py-4 md:px-6'}>
         {/* 概要/動画DL/状況解析は削除（MC-319）。既定＝ナレッジ。AirRent/LBO は独立ナビから移設（2026-08-08）。 */}
         {tab === 'glossary' ? (
           <WorkGlossaryTab onSeedChat={seedChat} />
@@ -1924,6 +1993,8 @@ export default function Work() {
           <WorkLboTab />
         ) : tab === 'laundry' ? (
           <WorkLaundryTab />
+        ) : tab === 'tebako' ? (
+          <WorkTebakoTab />
         ) : (
           <WorkKnowledgeTab />
         )}

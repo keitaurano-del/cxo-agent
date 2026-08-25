@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>競合分析レポート — 日本商品×海外サブスク／越境EC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#22283b;--ink2:#555b6b;--ai:#28406b;--ai2:#3a568c;--shu:#c9452c;--gold:#c69a4c;
+    --ok:#3f8f5f;--warn:#c9452c;--line:#e7e1d5;--paper:#fffdf9;--wash:#f7f3ec;--soft:#eef2f8}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Zen Kaku Gothic New",system-ui,sans-serif;color:var(--ink);background:var(--wash);
+    -webkit-font-smoothing:antialiased;line-height:1.7}
+  .serif{font-family:"Shippori Mincho",serif}
+  .page{max-width:960px;margin:0 auto;padding:30px 22px 90px}
+  h1{font-family:"Shippori Mincho",serif;font-size:25px;font-weight:800;letter-spacing:.02em;line-height:1.4}
+  .meta{font-size:12px;color:var(--ink2);margin-top:8px}
+  .lede{margin-top:14px;padding:14px 16px;background:var(--paper);border:1px solid var(--line);border-radius:12px;font-size:13.5px;color:var(--ink2)}
+  .lede b{color:var(--ink)}
+  h2{font-family:"Shippori Mincho",serif;font-size:18px;font-weight:800;margin:34px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--ai);display:flex;align-items:center;gap:9px}
+  h2 .n{font-size:13px;color:#fff;background:var(--ai);width:26px;height:26px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+  h3{font-size:15px;font-weight:900;margin:18px 0 7px;color:var(--ai)}
+  p{font-size:13.5px;margin:7px 0}
+  ul{margin:8px 0 8px 2px;padding-left:18px}
+  li{font-size:13px;margin:5px 0}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0}
+  .kpi{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .kpi .v{font-family:"Shippori Mincho",serif;font-size:23px;font-weight:800;color:var(--ai)}
+  .kpi .l{font-size:11.5px;color:var(--ink2);margin-top:3px;line-height:1.5}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:12.5px;background:var(--paper);border-radius:12px;overflow:hidden;box-shadow:0 1px 0 var(--line)}
+  th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--soft);font-weight:800;color:var(--ai);font-size:12px}
+  tr:last-child td{border-bottom:0}
+  .tag{display:inline-block;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:999px}
+  .t-cur{background:#eef2f8;color:var(--ai)} .t-prx{background:#eaf4ee;color:var(--ok)} .t-cus{background:#fbeee9;color:var(--shu)}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin:12px 0}
+  .card h3{margin-top:0}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:680px){.row{grid-template-columns:1fr}}
+  .box{border-radius:14px;padding:14px 16px}
+  .opp{background:#eef6f0;border:1px solid #cfe6d8}
+  .thr{background:#fbf0ec;border:1px solid #f0d5cc}
+  .opp h3{color:var(--ok)} .thr h3{color:var(--shu)}
+  .yen{font-variant-numeric:tabular-nums}
+  .callout{background:linear-gradient(120deg,#12233f,#22406e);color:#eaf0fa;border-radius:16px;padding:18px 20px;margin:16px 0}
+  .callout .serif{color:#fff;font-size:16px;font-weight:800}
+  .callout p{color:#cfe0f7;font-size:13px}
+  .note{font-size:11.5px;color:var(--ink2)}
+  .src{font-size:11px;color:var(--ink2);word-break:break-all;margin:3px 0}
+  .src a{color:var(--ai2)}
+  details{margin-top:10px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:6px 14px}
+  summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--ai);padding:6px 0}
+  .flag{background:#fdf6e3;border:1px solid #ecd9a6;border-radius:10px;padding:10px 13px;font-size:12px;color:#7a6320;margin:10px 0}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>競合分析レポート<br>日本商品 × 海外向けサブスク／越境EC</h1>
+  <div class="meta">作成 2026-08-25 ／ 企画前提：海外在住者が「定額枠内で好きな日本商品（コンビニ〜百貨店の常温品）を自分で選んで送ってもらう」新規サブスク</div>
+
+  <div class="lede">
+    <b>結論：</b>「<b>定額サブスク × ユーザーが自由選択 × 常温品</b>」を正面から満たす主要プレイヤーは<b>現状いない（空白ポジション）</b>。既存は ①キュレーション型（選べない）②プロキシ型（自由だが非定額・高送料）③カスタムEC（都度課金）に分かれる。ただし<b>業界全体が薄利</b>で、最大手 Bokksu ですら2025年はダウンラウンド。<b>送料と物流の実装力</b>が勝敗を分ける。
+  </div>
+
+  <div class="flag">⚠️ 数値の扱い：非上場（Bokksu / ICHIGO / ZenGroup 等）は開示・二次情報ベースで「推定」を明記。上場は BEENOS（東証3328）のみ実数。なお「Ichigo Inc.（東証2337・不動産）」はスナックの ICHIGO とは<b>別会社</b>。</div>
+
+  <!-- 1 -->
+  <h2><span class="n">1</span>市場規模とトレンド</h2>
+  <div class="kpis">
+    <div class="kpi"><div class="v">約5億ドル</div><div class="l">日本スナックボックス市場（2025・推定）→ 2033年 約18億ドル、CAGR 約15%</div></div>
+    <div class="kpi"><div class="v">58.7→74.7億ドル</div><div class="l">日本の越境EC物流市場（2025→2030、CAGR 5.1%）</div></div>
+    <div class="kpi"><div class="v">99%</div><div class="l">顧客が日本国外在住（ICHIGO談）。筆頭市場は米国</div></div>
+    <div class="kpi"><div class="v">+45%/年</div><div class="l">TokyoTreat（ICHIGO）の直近5年 年成長率</div></div>
+  </div>
+  <ul>
+    <li>2024〜2025は<b>円安（一時1ドル160円超）＋インバウンド急増（訪日3,000万人超）</b>で「日本ブランド」への越境需要が拡大。追い風は継続中。</li>
+    <li>主要プレイヤーは Bokksu・TokyoTreat が二強、次いで Japan Crate・ZenPop。</li>
+  </ul>
+
+  <!-- 2 -->
+  <h2><span class="n">2</span>主要競合の事業・売上・収益性</h2>
+
+  <div class="card">
+    <h3>Bokksu <span class="tag t-cur">キュレーション＋小売＋市場</span></h3>
+    <ul>
+      <li>2015年創業（Danny Taing・米）。<b>累計売上1億ドル超・累計出荷200万箱超・小売5,000店超</b>（CVS, Hot Topic 等）。</li>
+      <li>資金：<b>創業3年はブートストラップ</b>（会員20人→売上300万ドルを自力）。<b>2022年 シリーズA $22M（バリュエーション$100M）</b>、リード Valor Siren Ventures。</li>
+      <li><b>2025年 Republic でCF調達＝バリュエーション$45M（＝$100Mからダウンラウンド、重要シグナル）</b>。目標「2026年 売上$42M・EBITDA 12%」＝<b>足元は薄利〜赤字（推定）</b>。LTV/CAC 3倍・回収3ヶ月。</li>
+      <li><b>2023年に Japan Crate を完全買収</b>（額非開示）→ 小売5,000拠点を獲得。<b>Sugoi Mart も現在は Bokksu 運営</b>。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>ICHIGO Inc.（TokyoTreat / Sakuraco / YumeTwins / nomakenolife / JapanHaul） <span class="tag t-cur">キュレーション（複数ブランド）</span></h3>
+    <ul>
+      <li>2015年創業（Ayumi Chikamoto・東京・自宅起業）。<b>累計200万件超の注文・150カ国・99%が国外</b>。コロナ期に<b>売上3倍・会員1.7倍</b>、直近5年<b>年45%成長</b>。</li>
+      <li>価格：3/6/12ヶ月プランで月$32.50〜、送料込<b>総額 月$43〜50</b>。</li>
+      <li>堀＝<b>地方の老舗・零細菓子店への直接仕入れ</b>（自治体・地銀ネット経由で「他では買えない」商品）。余剰は "snack rescue box" で処理。</li>
+      <li>資金：<b>VC調達の明確な記録なし＝実質ブートストラップ（推定）</b>。売上実数は非開示。</li>
+    </ul>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <h3>Japan Crate <span class="tag t-cur">Bokksu傘下</span></h3>
+      <ul>
+        <li>2014年創業・<b>ブートストラップ</b>。ゲーマー／若年男性寄り。</li>
+        <li><b>2023年 Bokksu が完全買収</b>（額非開示・当時「資金逼迫」）。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>ZenPop（ZenGroup・大阪） <span class="tag t-cur">小規模キュレーション</span></h3>
+      <ul>
+        <li>Snacks / Stationery / Ramen の箱。2人→6人規模、大阪に自社倉庫。</li>
+        <li>売上非開示・小規模。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Buyee（BEENOS・東証3328） <span class="tag t-prx">プロキシ（代理購入）・上場</span></h3>
+    <ul>
+      <li><b>Buyee GMV：2024年9月期に過去最高 774億円（前年比+12.5%）</b>。日本の越境EC流通No.1。筆頭国は米国。</li>
+      <li>BEENOS連結（FY2024）：売上254.3億円・営業利益24.0億円・<b>営業利益率9.4%</b>・粗利率46.9%。<b>プロキシ型は在庫リスクが無く収益が安定</b>。</li>
+      <li>モデル：代理購入手数料＋転送・国際送料。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>ZenMarket（ZenGroup・大阪） <span class="tag t-prx">プロキシ</span></h3>
+    <ul>
+      <li><b>登録200万人超・月間約13,000個出荷・170カ国・従業員200名超</b>。</li>
+      <li>手数料：<b>1商品あたり定額¥300</b>（主要転送業者中 最安）＋送料。45〜60日保管。</li>
+    </ul>
+  </div>
+
+  <details>
+    <summary>「自分で選べる」に近い既存プレイヤー（＝隣接する脅威）</summary>
+    <ul>
+      <li><b>Sugoi Mart Conbini Box</b>（Bokksu傘下）：自分でコンビニBoxを組める＝ただし<b>都度EC購入</b>（定額サブスクではない）。</li>
+      <li><b>JapanHaul</b>（ICHIGO傘下）："e-combini" ＝単品を選ぶ越境EC（非定額）。</li>
+      <li>Buyee / ZenMarket：完全自由だが<b>従量課金＋手数料＋高送料</b>。</li>
+    </ul>
+    <p class="note">＝ Bokksu も ICHIGO も「選べるEC」の資産を既に保有。<b>サブスク化して直接競合化するのは容易</b>（隣接参入リスク大）。</p>
+  </details>
+
+  <!-- 3 -->
+  <h2><span class="n">3</span>ビジネスモデル×価格帯 早見表</h2>
+  <table>
+    <tr><th>企業</th><th>型</th><th>価格帯</th><th>自由選択</th><th>定額</th><th>資金調達</th></tr>
+    <tr><td>Bokksu</td><td>キュレーション＋小売＋市場</td><td>箱$40前後＋送料</td><td>×（Sugoiは△）</td><td>○</td><td>VC（$22M→ダウンラウンド）</td></tr>
+    <tr><td>ICHIGO（TokyoTreat他）</td><td>キュレーション（複数）</td><td>月$43〜50（送料込）</td><td>×（JapanHaulは△）</td><td>○</td><td>ブートストラップ（推定）</td></tr>
+    <tr><td>Japan Crate</td><td>キュレーション（傘下）</td><td>箱型</td><td>×</td><td>○</td><td>元自己資金→被買収</td></tr>
+    <tr><td>ZenPop</td><td>小規模キュレーション</td><td>箱型</td><td>×</td><td>○</td><td>自己資金（推定）</td></tr>
+    <tr><td>Buyee / BEENOS</td><td>プロキシ</td><td>従量＋手数料＋送料</td><td>◎</td><td>×</td><td>上場</td></tr>
+    <tr><td>ZenMarket</td><td>プロキシ</td><td>従量＋¥300/品＋送料</td><td>◎</td><td>×</td><td>自己資金</td></tr>
+    <tr style="background:#fff3e0"><td><b>当社（企画）</b></td><td><b>定額×自由選択×常温</b></td><td><b>月$49/69/109</b></td><td><b>◎</b></td><td><b>○</b></td><td><b>—</b></td></tr>
+  </table>
+
+  <!-- 4 -->
+  <h2><span class="n">4</span>収益性・送料の構造</h2>
+  <ul>
+    <li><b>送料が最大の利益圧迫要因</b>。プレミアム箱でも送料$10〜12.5が上乗せ＝顧客総額の20〜25%。定額に送料を内包すると重量・容積で赤字化しやすい。</li>
+    <li><b>キャッシュフロー難</b>：Bokksu は初期、ベンダーへ前払い→会員急増時に日本側倉庫が処理不能に。<b>物流・出荷オペの実装力が参入障壁</b>。</li>
+    <li><b>黒字化のハードルは高い</b>：最大手 Bokksu ですら「2026年 EBITDA 12%」が目標。一方 <b>BEENOS（プロキシ）は営業利益率9.4%＝在庫レスの方が収益安定</b>。</li>
+  </ul>
+
+  <!-- 5 -->
+  <h2><span class="n">5</span>「定額×自由選択」から見た 機会と脅威</h2>
+  <div class="row">
+    <div class="box opp">
+      <h3>◎ 機会</h3>
+      <ul>
+        <li><b>明確な空白</b>。キュレーションの「選べない不満」とプロキシの「高送料・分かりにくさ」の中間需要。</li>
+        <li><b>常温×自己選択で在庫/廃棄リスクを顧客に寄せられる</b>（顧客が選ぶ＝需要予測が不要）。ICHIGO の廃棄問題を構造回避。</li>
+        <li>コンビニ〜百貨店の常温品は<b>独占仕入れ不要でSKUが広大</b>＝各社の「独占ソース堀」に正面衝突しない。</li>
+        <li>円安・インバウンド由来の日本ブランド需要が追い風（継続中）。</li>
+      </ul>
+    </div>
+    <div class="box thr">
+      <h3>△ 脅威</h3>
+      <ul>
+        <li><b>送料が生命線</b>。定額枠に内包＝重量/かさばりで赤字リスク → <b>重量上限・容積設計・pt制が必須</b>。</li>
+        <li><b>Bokksu / ICHIGO が「選べるEC」を既に保有</b>＝サブスク化で直接競合化が容易。</li>
+        <li>物流・前払いの<b>キャッシュフロー難</b>（最大手も苦戦）。倉庫・出荷の実装が無いと会員増で破綻。</li>
+        <li>業界全体が薄利。<b>VCバーンより黒字先行（ブートストラップ）が現実的</b>。</li>
+        <li>プロキシ大手（各200万登録超）が価格・品揃えの上限を規定＝「自由選択」だけでは差別化にならず、<b>定額の安心感・UX・キュレーション補助が勝負所</b>。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout">
+    <div class="serif">示唆：勝ち筋は「送料設計 × UX × 定額の安心感」</div>
+    <p>自由選択は差別化の入口に過ぎない（プロキシが既に提供）。当社の肝＝<b>pt（価格＋重量係数）制で送料リスクを内包しつつ、"選ぶ楽しさ"をUX化</b>し、プロキシの煩雑さとキュレーションの不自由の両方を解く点。収益は薄利前提で、<b>ブートストラップ＋黒字先行</b>・物流オペ内製が現実解。</p>
+  </div>
+
+  <!-- sources -->
+  <h2><span class="n">6</span>主要出典</h2>
+  <div class="src">Bokksu: <a href="https://republic.com/bokksu" target="_blank" rel="noreferrer">republic.com/bokksu</a> ／ <a href="https://kingscrowd.com/bokksu-on-republic-2025/" target="_blank" rel="noreferrer">kingscrowd（2025 CF）</a> ／ <a href="https://progressivegrocer.com/asian-e-grocer-bokksu-raises-22m-100m-valuation" target="_blank" rel="noreferrer">シリーズA $22M</a> ／ <a href="https://www.modernretail.co/retailers/i-was-laughed-out-of-the-room-how-bokksu-founder-danny-taing-bootstrapped-his-business-to-a-100m-valuation/" target="_blank" rel="noreferrer">Modern Retail（創業秘話）</a></div>
+  <div class="src">Japan Crate 買収: <a href="https://www.modernretail.co/operations/japanese-snack-startup-bokksu-acquires-competitor-japan-crate/" target="_blank" rel="noreferrer">Modern Retail</a> ／ <a href="https://en.wikipedia.org/wiki/Japan_Crate" target="_blank" rel="noreferrer">Wikipedia</a></div>
+  <div class="src">ICHIGO/TokyoTreat/Sakuraco: <a href="https://www.bakeryandsnacks.com/Article/2024/01/23/breaking-down-the-snacks-subscription-business-models-of-tokyotreat-and-sakuraco/" target="_blank" rel="noreferrer">Bakery&amp;Snacks</a> ／ <a href="https://www.chargebee.com/customers/tokyotreat/" target="_blank" rel="noreferrer">Chargebee（成長率）</a> ／ <a href="https://anorcadianabroad.com/2024/09/15/tokyotreat-sakuraco-a-review-of-two-japanese-subscription-boxes/" target="_blank" rel="noreferrer">価格レビュー</a></div>
+  <div class="src">ZenGroup/ZenMarket/ZenPop: <a href="https://careers.zen.group/en/aboutus/data/" target="_blank" rel="noreferrer">zen.group data</a> ／ <a href="https://japan-shop-helper.com/en/travel/features/zenmarket-review" target="_blank" rel="noreferrer">ZenMarket手数料</a> ／ <a href="https://store.zenpop.jp/pages/about-us" target="_blank" rel="noreferrer">ZenPop</a></div>
+  <div class="src">BEENOS/Buyee: <a href="https://gurafu.net/jpn/beenos" target="_blank" rel="noreferrer">連結業績</a> ／ <a href="https://beenos.com/news-center/detail/20241204_bns_pr/" target="_blank" rel="noreferrer">Buyee GMV 過去最高</a></div>
+  <div class="src">市場規模: <a href="https://www.datainsightsmarket.com/reports/japanese-snack-box-1340332" target="_blank" rel="noreferrer">スナックボックス市場</a> ／ <a href="https://www.mordorintelligence.com/industry-reports/japan-cross-border-e-commerce-logistics-market" target="_blank" rel="noreferrer">越境EC物流</a></div>
+
+  <p class="note" style="margin-top:16px">要検証（一次情報で未確定）：ICHIGO・ZenGroup の売上実数（非公開）、Japan Crate 買収額（非公開）、各社の現行アクティブ会員数。上記は「推定」または「非開示」と明記。</p>
+</div>
+</body>
+</html>
