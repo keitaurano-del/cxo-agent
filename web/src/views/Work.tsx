@@ -1798,7 +1798,7 @@ function WorkLaundryTab() {
 
 // 新規事業「日本商品セレクト定額便」（仮称・MC-485、2026-08-25 Keita「アポロの仕事の別タブに作って」）。
 // CoinLaundry.Tokyo タブと同じ iframe 方式。プロト（箱ビルダー）／デザイン案（和の漢字4パターン）／
-// 競合分析（売上・収益性・事業）を静的ページで切替表示する。サービス名は仮のため表示は「セレクト便」。
+// 競合分析（売上・収益性・事業）を静的ページで切替表示する。サービス名は Nippiki に確定・本番は https://nippiki.com（2026-08-26 公開）。
 function WorkTebakoTab() {
   const [doc, setDoc] = useState<'proto' | 'styles' | 'analysis' | 'sim'>('proto');
   const src =
@@ -1840,6 +1840,14 @@ function WorkTebakoTab() {
           ))}
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <a
+            href="https://nippiki.com/"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-accent bg-accent px-2.5 py-1 text-[11px] font-semibold text-bg hover:opacity-90"
+          >
+            本番サイト nippiki.com ↗
+          </a>
           <a
             href={src}
             target="_blank"
@@ -1916,13 +1924,13 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
         </>
       ),
     },
-    // 新規事業「日本商品セレクト定額便」（仮称・MC-485・2026-08-25 Keita）。
+    // 新規事業「日本商品セレクト定額便」。サービス名は Nippiki に確定・2026-08-26 nippiki.com 本番公開（MC-485/486・Keita）。
     {
       key: 'tebako',
       label: (
         <>
           <span aria-hidden><LboIcon width={16} height={16} /></span>
-          セレクト便（仮）
+          Nippiki
         </>
       ),
     },
