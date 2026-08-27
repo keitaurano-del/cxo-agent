@@ -58,13 +58,65 @@
 <body>
 <div class="page">
   <h1>競合分析レポート<br>日本商品 × 海外向けサブスク／越境EC</h1>
-  <div class="meta">作成 2026-08-25 ／ 企画前提：海外在住者が「定額枠内で好きな日本商品（コンビニ〜百貨店の常温品）を自分で選んで送ってもらう」新規サブスク</div>
+  <div class="meta">作成 2026-08-25 ／ <b>更新 2026-08-28（収益構造・プライシング確定を追加）</b> ／ 企画前提：海外在住者が「定額枠内で好きな日本商品（コンビニ〜百貨店の常温品）を自分で選んで送ってもらう」新規サブスク。サービス名 <b>Nippiki</b>（<a href="https://nippiki.com/" target="_blank" rel="noreferrer">nippiki.com</a>・2026-08-26 公開）</div>
 
   <div class="lede">
     <b>結論：</b>「<b>定額サブスク × ユーザーが自由選択 × 常温品</b>」を正面から満たす主要プレイヤーは<b>現状いない（空白ポジション）</b>。既存は ①キュレーション型（選べない）②プロキシ型（自由だが非定額・高送料）③カスタムEC（都度課金）に分かれる。ただし<b>業界全体が薄利</b>で、最大手 Bokksu ですら2025年はダウンラウンド。<b>送料と物流の実装力</b>が勝敗を分ける。
   </div>
 
   <div class="flag">⚠️ 数値の扱い：非上場（Bokksu / ICHIGO / ZenGroup 等）は開示・二次情報ベースで「推定」を明記。上場は BEENOS（東証3328）のみ実数。なお「Ichigo Inc.（東証2337・不動産）」はスナックの ICHIGO とは<b>別会社</b>。</div>
+
+  <!-- 0: 収益構造・プライシング確定（最新） -->
+  <h2><span class="n">◎</span>収益構造とプライシング決定（2026-08-28 確定）</h2>
+  <p>需要調査＋送料・関税の実レート裏取りを踏まえ価格を確定。数値は<b>米国＝最悪ケース・1箱・人件費前・$1≒¥155</b>。米国が成立すれば他地域は自動で黒字。</p>
+  <div class="kpis">
+    <div class="kpi"><div class="v">$99<span style="font-size:13px">/mo</span></div><div class="l">通常価格（launch後）。単一アンカー</div></div>
+    <div class="kpi"><div class="v">$89<span style="font-size:13px">/mo</span></div><div class="l">Founding 月額（生涯ロック）</div></div>
+    <div class="kpi"><div class="v">$79<span style="font-size:13px">/mo</span></div><div class="l">年払い（$948/年・最安）</div></div>
+    <div class="kpi"><div class="v">+¥3,000</div><div class="l">$99箱の目標粗利（原価¥5,000・3PL送料時）</div></div>
+  </div>
+
+  <h3>ユニットエコノミクス（米国・関税¥1,950反映）</h3>
+  <table>
+    <tr><th>コスト構成</th><th>$99箱</th><th>$89箱</th><th>$79箱</th></tr>
+    <tr><td>現状（エアパケット¥5,190・原価¥6,500）</td><td>+¥610</td><td>−¥840</td><td>−¥2,335</td></tr>
+    <tr><td>送料改善（3PL混載¥4,300・原価¥6,500）</td><td>+¥1,500</td><td>+¥50</td><td>−¥1,445</td></tr>
+    <tr style="background:#eef6f0"><td><b>両方改善（3PL¥4,300・原価¥5,000）</b></td><td><b>+¥3,000</b></td><td><b>+¥1,550</b></td><td><b>+¥55</b></td></tr>
+  </table>
+  <p class="note">固定内訳（両方改善時）：送料¥4,300／関税¥1,950／決済¥550／梱包¥500／原価¥5,000＝<b>¥12,300</b>。米国ブレークイーブン価格 ≒ <b>$79.4</b>。</p>
+
+  <h3>利益を動かすレバーは3つ</h3>
+  <table>
+    <tr><th>レバー</th><th>現状 → 目標</th><th>効果/箱</th><th>難度</th></tr>
+    <tr style="background:#eef6f0"><td><b>商品原価</b></td><td>¥6,500(小売) → <b>¥5,000</b>(卸/まとめ仕入)</td><td><b>+¥1,500</b></td><td>★最大の伸びしろ</td></tr>
+    <tr><td>送料</td><td>¥5,190(エアパケ) → ¥4,300(3PL混載)</td><td>+¥890</td><td>見積取得で確定</td></tr>
+    <tr><td>関税</td><td>¥1,950(15%×満額申告)・下げにくい</td><td>ほぼ固定</td><td>低申告は法的グレー＝当てにしない</td></tr>
+  </table>
+
+  <h3>地域差（送料・2kg）</h3>
+  <table>
+    <tr><th>仕向地</th><th>送料(2kg)</th><th>$99箱 粗利（目標原価¥5,000）</th></tr>
+    <tr><td>中国・韓国・台湾</td><td class="yen">¥2,620</td><td>+¥6,000超</td></tr>
+    <tr><td>アジア</td><td class="yen">¥3,030</td><td>+¥5,400</td></tr>
+    <tr><td>欧州・オセアニア</td><td class="yen">¥4,300</td><td>+¥3,000（現地VAT別）</td></tr>
+    <tr style="background:#fbf0ec"><td><b>米国（最悪ケース）</b></td><td class="yen">¥5,190→3PL¥4,300</td><td><b>+¥3,000</b></td></tr>
+  </table>
+  <p class="note">米国比率が高いほど平均粗利は薄い。立ち上げを「アジア＋米国以外の英語圏」寄りに振ると利益体質は一段良化。</p>
+
+  <h3>サブスクの採算＝1箱粗利 × 継続月数 − 広告(CAC)</h3>
+  <p class="note">サブスク箱の平均継続は業界的に4〜6ヶ月（ここでは5ヶ月想定）。</p>
+  <table>
+    <tr><th>状態</th><th>$99箱 粗利/月</th><th>×5ヶ月 LTV貢献</th><th>許容CAC(3:1)</th></tr>
+    <tr><td>現状（原価¥6,500）</td><td>+¥610</td><td>¥3,050</td><td><b>~¥1,000</b>（実質広告不可）</td></tr>
+    <tr style="background:#eef6f0"><td>目標（原価¥5,000＋3PL）</td><td>+¥3,000</td><td>¥15,000</td><td><b>~¥5,000</b>（広告が回る）</td></tr>
+  </table>
+
+  <div class="callout">
+    <div class="serif">決定：$99中心 ／ 割引は"入口"限定 ／ 原価と3PLが黒字化の前提</div>
+    <p>$79/$69を<b>常設プランにすると米国で構造赤字</b>。割引は入口（初回・年払い）に集約し、継続価格は黒字ライン（≒$79.4）の上に置く。<b>広告投下の前に「原価¥5,000＋3PL¥4,300」を先に取る</b>のが順序。これが揃うまで米国広告は赤字を垂れ流すだけ。価格＝<b>通常$99／Founding月額$89／年払い$79($948/年)</b>で LP 反映済み。</p>
+  </div>
+
+  <div class="flag">🔎 <b>DDPの裏取り（2026-08-28）：</b> ZenMarket は米国DDP（関税前払い）を実装し、公式に「<b>多くの品目で関税≒15%＋処理手数料</b>」と明示。DDPは"誰が・いつ払うか"の選択であって<b>関税額そのものは消えない</b>。「Nothing to pay on arrival」を守る＝当社が関税を持つ＝原価に<b>¥1,950</b>計上が正。※以前「UGX＝ヤマト」と記したのは誤りで、UGXは<b>日本郵便</b>のサービス（ヤマトの国際便は「国際宅急便」）と訂正。<span class="note">送料・関税の詳細＝推定は tebako-lp/docs/shipping-facts.md。ZenMarket計算機はCloudflare人間認証で機械取得不可、確定送料は人手セッションが必要。</span></div>
 
   <!-- 1 -->
   <h2><span class="n">1</span>市場規模とトレンド</h2>
@@ -156,7 +208,7 @@
     <tr><td>ZenPop</td><td>小規模キュレーション</td><td>箱型</td><td>×</td><td>○</td><td>自己資金（推定）</td></tr>
     <tr><td>Buyee / BEENOS</td><td>プロキシ</td><td>従量＋手数料＋送料</td><td>◎</td><td>×</td><td>上場</td></tr>
     <tr><td>ZenMarket</td><td>プロキシ</td><td>従量＋¥300/品＋送料</td><td>◎</td><td>×</td><td>自己資金</td></tr>
-    <tr style="background:#fff3e0"><td><b>当社（企画）</b></td><td><b>定額×自由選択×常温</b></td><td><b>月$49/69/109</b></td><td><b>◎</b></td><td><b>○</b></td><td><b>—</b></td></tr>
+    <tr style="background:#fff3e0"><td><b>当社 = Nippiki</b></td><td><b>定額×自由選択×常温</b></td><td><b>月$99（Founding $89／年払い $79）</b></td><td><b>◎</b></td><td><b>○</b></td><td><b>—</b></td></tr>
   </table>
 
   <!-- 4 -->
