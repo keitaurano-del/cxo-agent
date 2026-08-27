@@ -7,7 +7,10 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
 
 ## 未完
 
-（なし — 2026-08-15 10:11 Keita指示「347完了、それ以外はキャンセルでいいよ」で全消化。Keita待ちゼロ）
+- 2026-08-28 【認証分離】per-agent OAuth ログイン（各2分・ブラウザ必要）🔒[Keita]
+  `mkdir -p ~/.claude-agents/son && CLAUDE_CONFIG_DIR=~/.claude-agents/son claude /login` — son/yui/haru/main の順で任意（kimi は moonshot なので対象外）。dir 未作成のエージェントは従来どおり共有 ~/.claude で動き続けるので部分導入OK。背景=8/26-27のOAuth並行refreshレース根絶の本筋（wrapper実装済 `~/cron-scripts/claude-cli-agent-wrapper.sh`）
+- 2026-08-28 【認証分離】wrapper 配線の GO 判断（10秒）🔒[Keita]
+  openclaw.json の claude-cli command を wrapper 絶対パスに差替え＋gateway reload。稼働中 Son が一瞬止まるため実施タイミングだけ Keita 判断。GO が出れば差替え・reload・keepalive の複数dir監視対応は林が実施
 
 ## 完了ログ
 
