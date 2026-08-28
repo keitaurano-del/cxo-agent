@@ -244,7 +244,7 @@ export default function ClaudeBrowser() {
       <iframe
         ref={iframeRef}
         src={src}
-        title="Claude Cowork（埋め込みブラウザ）"
+        title="Dekiru（埋め込みブラウザ）"
         className="absolute inset-0 h-full w-full border-0"
         style={{
           transform: `translate(${tx}px, ${ty}px) scale(${scale})`,

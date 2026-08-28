@@ -214,7 +214,7 @@ const NAV: NavItem[] = [
   { to: '/terminal-view', label: 'ターミナル', shortLabel: '端末', icon: <TerminalIcon />, group: '開発' },
   // Cowork（MC-350）: claude.ai を noVNC ストリーミングで埋め込み表示（旧MC-314 の復活）。
   // サーバ proxy ルート /claude-browser と衝突させないため React ルートは /claude-browser-view。
-  { to: '/claude-browser-view', label: 'Cowork', shortLabel: 'Cowork', icon: <SparkIcon />, group: '開発' },
+  { to: '/claude-browser-view', label: 'Dekiru', shortLabel: 'Dekiru', icon: <SparkIcon />, group: '開発' },
 ];
 
 /** ナビ項目の件数バッジ（0 なら非表示）。要承認件数をタスクボード（/tasks）に出す。 */
