@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nippiki — 事業計画（月利益¥100万まで・コンサバ）</title>
+<style>
+  :root{--ac:#ff5a4d;--ink:#20242b;--ink2:#5a616c;--line:#edeef1;--soft:#f6f7f9;--bg:#fff;--ok:#1f9d59;--warn:#c0362a}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:var(--ink);background:var(--soft);line-height:1.72;font-size:15px}
+  .wrap{max-width:920px;margin:0 auto;padding:0 20px 80px}
+  header{background:linear-gradient(180deg,#fff,#fff8f7);border-bottom:1px solid var(--line);padding:34px 0 26px;margin-bottom:8px}
+  header .wrap{padding-bottom:0}
+  .kick{display:inline-block;font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--ac);background:#fff0ee;border:1px solid #ffd9d4;border-radius:999px;padding:4px 12px;margin-bottom:12px}
+  h1{font-size:29px;margin:.1em 0 .2em;letter-spacing:-.01em}
+  .sub{color:var(--ink2);font-size:14px;margin:0}
+  h2{font-size:21px;margin:38px 0 6px;padding-top:14px;border-top:2px solid var(--ink);display:inline-block}
+  h2 .n{color:var(--ac);font-weight:900;margin-right:8px}
+  h3{font-size:16px;margin:20px 0 4px}
+  p{margin:.5em 0}.lead{color:var(--ink2)}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:12px 0;box-shadow:0 1px 2px rgba(20,36,43,.03)}
+  .grid{display:grid;gap:12px}
+  @media(min-width:680px){.grid.c2{grid-template-columns:1fr 1fr}.grid.c3{grid-template-columns:1fr 1fr 1fr}}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13.5px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--soft);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink2)}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  .muted{color:var(--ink2);font-size:13px}
+  ul{margin:.4em 0;padding-left:1.2em}li{margin:.25em 0}
+  .big{font-size:15px}
+  .kpi{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0}
+  .kpi .b{flex:1;min-width:150px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .kpi .v{font-size:22px;font-weight:900}.kpi .l{font-size:11px;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
+  .warnbox{background:#fffdf5;border:1px solid #ead1a8;border-radius:12px;padding:16px 18px}
+  .okrow{color:var(--ok);font-weight:700}
+  .foot{margin-top:40px;color:var(--ink2);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+  b.ac{color:var(--ac)}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <span class="kick">BUSINESS PLAN · コンサバ版</span>
+    <h1>Nippiki — 月利益 ¥100万 までの事業計画</h1>
+    <p class="sub">目標＝<b>月次「利益」¥1,000,000</b>（売上ではない）。前提はすべて<b>保守的</b>に設定。需要分析→ユニットエコノミクス→到達条件→ロードマップ。作成 2026-08-29。</p>
+  </div>
+</header>
+<div class="wrap">
+
+  <!-- 0 -->
+  <h2><span class="n">0</span>結論（先出し）</h2>
+  <div class="kpi">
+    <div class="b"><div class="l">必要な有料会員数</div><div class="v">~700</div><div class="muted">感度で 510–800</div></div>
+    <div class="b"><div class="l">月利益 ¥100万 到達</div><div class="v">約18–21ヶ月</div><div class="muted">コンサバなramp</div></div>
+    <div class="b"><div class="l">単月黒字化</div><div class="v okrow">約6ヶ月目</div><div class="muted">会員~110で+¥10万</div></div>
+    <div class="b"><div class="l">その時の月商目安</div><div class="v">~¥920万</div><div class="muted">純利益率 ~11%</div></div>
+  </div>
+  <p class="lead">＝ カテゴリ首位(Bokksu=累計200万箱)の<b>1〜2%程度の会員規模</b>で到達可能。市場は十分大きく、数字の壁は「集客量」より<b>①卸仕入れ ②チャーン管理 ③堅実な集客チャネル(アフィリ/オーガニック)</b>を回せるか。すべて保守前提でこの数字。</p>
+
+  <!-- 1 需要分析 -->
+  <h2><span class="n">1</span>需要分析</h2>
+  <h3>市場規模（保守的に下限を採用）</h3>
+  <table>
+    <tr><th>指標</th><th>値</th><th>採用スタンス</th></tr>
+    <tr><td>日本スナック・サブスクボックス市場(2025)</td><td>$0.5B–$3.5B（推計に幅）・CAGR 12–15%</td><td><b>下限 $500M</b>で見る＝保守</td></tr>
+    <tr><td>参考: 日本スナック市場全体</td><td>~$55B</td><td>上位概念・非直接</td></tr>
+    <tr><td>Bokksu(首位)実績</td><td>累計 <b>200万箱・$100M超</b>／EC売上 2025 ~$4.8M（前年比 −50%超）</td><td>首位でも年商数M＝<b>過度な楽観を排除</b>。ニッチだが実在需要</td></tr>
+    <tr><td>競合構造</td><td>Bokksu(NY・上質)／TokyoTreat・Sakuraco(Ichigo Inc・日本)／Japan Crate 等</td><td>複数社が各<b>数万人規模</b>の会員で共存</td></tr>
+  </table>
+  <p class="muted">※ Bokksu の直近減収は「カテゴリは自動成長しない・実行力次第」という警告として保守側に織り込む。Nippiki の差別化＝<b>人によるキュレーション＋無料おまけ＋関税込み</b>で、価格競争でなく体験で獲る。</p>
+
+  <h3>Nippiki が獲るべきターゲット（現実的なSOM）</h3>
+  <ul>
+    <li><b>誰</b>: 海外の日本ファン(アニメ/食/文化)・在外邦人・ギフト需要。英語圏(US/UK/AU/CA)＋アジア先進地。</li>
+    <li><b>規模感</b>: 市場下限 $500M でも、我々の目標月商 ~$60k(≈¥920万) は<b>年 $0.72M＝市場の 0.15%</b>。競合1社の会員基盤の数%。＝<b>需要側の制約はほぼ無い</b>。</li>
+    <li><b>獲得の現実性</b>: 700会員維持に必要な新規は<b>月~84件</b>（チャーン12%×700）。日本/アニメ系クリエイターのアフィリ＋オーガニックで達成可能な水準。</li>
+  </ul>
+  <div class="warnbox"><b>需要分析の結論:</b> 「700会員」は市場規模・競合実績のどちらから見ても<b>控えめ</b>。ボトルネックは需要ではなく、<b>供給側の実行（仕入れ・梱包・チャーン低減・チャネル構築）</b>。よって本計画は集客を保守的に置き、実行前提を厳しめに縛る。</div>
+
+  <!-- 2 ユニットエコノミクス -->
+  <h2><span class="n">2</span>ユニットエコノミクス（保守）</h2>
+  <table>
+    <tr><th>項目</th><th class="n">保守値</th><th>根拠</th></tr>
+    <tr><td>貢献利益 / 会員 / 月（CM）</td><td class="n">¥2,000</td><td>価格改定後の地帯別(US~¥2,900/欧¥1,780/アジア¥2,156/中韓台¥1,919)を国ミックスで加重(~¥2,370)し、返金・年払い割・ミックス不確実性で<b>約15%減の¥2,000</b>に。※原価・送料・関税DDP・Stripe控除後の“純”貢献</td></tr>
+    <tr><td>月次チャーン</td><td class="n">12%</td><td>スナックボックス相場 10–15% の中央。年払い比率↑で改善余地</td></tr>
+    <tr><td>CAC（1会員獲得コスト）</td><td class="n">¥3,000 (~$20)</td><td>アフィリ($15バウンティ)＋オーガニック/ギフティング(ほぼ原価)を混ぜた保守値。コールド広告は不使用前提</td></tr>
+    <tr><td>固定費 / 月</td><td class="n">¥80,000</td><td>メール(Resend)・ドメイン・ツール・CS・返品・梱包基盤等の間接費（箱ごとの梱包/通関はCMに内包済）</td></tr>
+    <tr><td>会員LTV(貢献)</td><td class="n">~¥16,600</td><td>CM¥2,000 × 平均継続8.3ヶ月。LTV:CAC ≈ <b>5.5:1</b>（3:1基準を楽にクリア）</td></tr>
+  </table>
+  <p class="muted"><b>大前提（黒字の生命線）:</b> 仕入れが<b>卸 ¥4,000/箱</b>ラインに乗ること。小売¥6,500調達だと US/欧州が数量で赤字化し、CMが崩れる。＝<b>ソーシング交渉が最重要KPI</b>。</p>
+
+  <!-- 3 到達条件 -->
+  <h2><span class="n">3</span>¥100万/月 利益の到達条件</h2>
+  <div class="card">
+    <p class="big">月次純利益 = 会員数N × CM − (N × チャーン × CAC) − 固定費</p>
+    <p class="big">1,000,000 = N×2,000 − N×0.12×3,000 − 80,000 → <b>1,640N = 1,080,000 → N ≈ 660 会員</b></p>
+    <p class="muted">安全側に丸めて <b class="ac">~700 会員</b>を目標。この会員数を<b>維持</b>できれば毎月¥100万超の純利益が出る（新規は維持分だけで足りる＝月~84件）。</p>
+  </div>
+  <h3>感度分析（前提を振っても壁は 510–800 会員）</h3>
+  <table>
+    <tr><th>CM/会員/月</th><th>チャーン</th><th>CAC</th><th class="n">必要会員数</th></tr>
+    <tr><td>¥1,800（弱気）</td><td>15%</td><td>¥3,000</td><td class="n">800</td></tr>
+    <tr><td>¥2,000（基準）</td><td>12%</td><td>¥3,000</td><td class="n">659</td></tr>
+    <tr><td>¥2,400（US比率高）</td><td>10%</td><td>¥3,000</td><td class="n">514</td></tr>
+    <tr><td>¥2,000</td><td>12%</td><td>¥4,000（広告混在）</td><td class="n">711</td></tr>
+  </table>
+
+  <!-- 4 ロードマップ -->
+  <h2><span class="n">4</span>ロードマップ（保守的ramp・シミュレーション）</h2>
+  <p class="lead">新規獲得は「アフィリ＋オーガニックが立ち上がるほど増える」前提で保守的に置いた（月8件→24ヶ月で140件）。チャーン12%で会員を積み上げた実算。</p>
+  <table>
+    <tr><th>時点</th><th class="n">月間新規</th><th class="n">アクティブ会員</th><th class="n">月次純利益(¥)</th><th>フェーズ</th></tr>
+    <tr><td>M3</td><td class="n">18</td><td class="n">35</td><td class="n">−22,600</td><td>立上げ・検証</td></tr>
+    <tr><td>M6</td><td class="n">40</td><td class="n">111</td><td class="n okrow">+102,040</td><td>単月黒字化</td></tr>
+    <tr><td>M9</td><td class="n">62</td><td class="n">223</td><td class="n">+285,720</td><td>アフィリ拡大</td></tr>
+    <tr><td>M12</td><td class="n">80</td><td class="n">349</td><td class="n">+492,360</td><td>1年目着地</td></tr>
+    <tr><td>M15</td><td class="n">98</td><td class="n">483</td><td class="n">+712,120</td><td>スケール</td></tr>
+    <tr><td>M18</td><td class="n">115</td><td class="n">622</td><td class="n">+940,080</td><td>¥100万目前</td></tr>
+    <tr><td><b>M19–21</b></td><td class="n">~125</td><td class="n">~700</td><td class="n okrow"><b>¥1,000,000 到達</b></td><td>目標達成</td></tr>
+    <tr><td>M24</td><td class="n">140</td><td class="n">876</td><td class="n">+1,356,640</td><td>目標超過</td></tr>
+  </table>
+  <p class="muted">＝ <b>単月黒字は約6ヶ月目</b>、<b>月利益¥100万は約18–21ヶ月目</b>。より攻めれば前倒し可（新規を月100件超に乗せれば約12ヶ月で到達）。</p>
+
+  <h3>フェーズ別の打ち手</h3>
+  <div class="grid c2">
+    <div class="card"><h3>Phase 0（〜M1）: 供給を固める</h3><ul class="muted"><li>卸¥4,000ラインの仕入れ交渉・初回ロット確保</li><li>梱包/発送フロー・対米3箱以上の分割運用・差出人実住所</li><li>キュレーション基準の言語化（誰がどう選ぶか）</li></ul></div>
+    <div class="card"><h3>Phase 1（M1–3）: 立上げ・検証</h3><ul class="muted"><li>アフィリ立上げ($15/件・コード追跡MVP)</li><li>ギフティング20–50人→開封UGC</li><li>ウェイトリスト→ローンチ招待</li><li>勝ち訴求・勝ちチャネルを特定</li></ul></div>
+    <div class="card"><h3>Phase 2（M4–12）: 黒字で拡大</h3><ul class="muted"><li>アフィリのパートナー数を増やす（=新規の主エンジン）</li><li>勝ちUGCを少額有料で“増幅”（温かい層のみ）</li><li><b>年払い比率↑でチャーン低減</b>＝LTV拡張</li></ul></div>
+    <div class="card"><h3>Phase 3（M13–21）: ¥100万へ</h3><ul class="muted"><li>会員~700維持（新規~84件/月＋離脱抑制）</li><li>ランク特典・リクエストで継続率を上げる</li><li>CM改善（原価再交渉・US比率・複数箱AOV）</li></ul></div>
+  </div>
+
+  <!-- 5 リスク -->
+  <h2><span class="n">5</span>リスク & 前提（保守運用のための縛り）</h2>
+  <table>
+    <tr><th>リスク</th><th>影響</th><th>対策</th></tr>
+    <tr><td><b>仕入れが卸¥4,000に乗らない</b></td><td>CM崩壊・遠地赤字＝計画の土台が消える</td><td>最優先で交渉。乗るまで大規模集客しない</td></tr>
+    <tr><td><b>チャーン15%超</b></td><td>必要会員800超・維持コスト増</td><td>年払い誘導・ランク特典・リクエスト解禁で粘着</td></tr>
+    <tr><td>対米関税(15%係争中)・de minimis撤廃</td><td>US原価上振れ</td><td>USサーチャージ+$10で一部吸収済／流動時は割合再調整</td></tr>
+    <tr><td>梱包/発送のキャパ</td><td>会員増で手が回らない</td><td>M6以降に梱包の外部化/半自動化を固定費に織込済(¥80k)</td></tr>
+    <tr><td>CACが¥3,000超（広告依存）</td><td>必要会員711超・利益率低下</td><td>成果報酬(アフィリ)主軸を厳守・コールド広告は増幅のみ</td></tr>
+  </table>
+
+  <!-- 6 -->
+  <h2><span class="n">6</span>一番効くレバー（早く・安全に着けるには）</h2>
+  <ul>
+    <li><b>年払い比率を上げる</b>：チャーンを1桁台に落とせれば必要会員が514へ、到達も前倒し。現金前受けで資金繰りも改善。</li>
+    <li><b>複数箱・AOV</b>：平均1.3–1.5箱になればCMが跳ね、同じ会員数で¥100万を超える。</li>
+    <li><b>原価再交渉</b>：卸を¥4,000→¥3,500に下げられればCM+¥500/会員＝必要会員が約1割減。</li>
+    <li><b>アフィリのパートナー数</b>：新規の主エンジン。20→50パートナーで月間新規が線形に伸びる（CACは成果報酬で自動キャップ）。</li>
+  </ul>
+
+  <div class="foot">
+    Nippiki 事業計画（コンサバ版・Son 作成 2026-08-29）。数値はシミュレーション（CM¥2,000/churn12%/CAC¥3,000/固定¥80k・$1≒¥155）。
+    需要出所: Swell/DataInsights/IMARC(市場規模)、Grips/Owler/Kingscrowd(Bokksu実績)、docs/pricing-model.md(自社ユニットエコノミクス)。
+    前提=卸¥4,000仕入れ。実行(集客・出荷)は承認後。関連: マーケタブ(§0 費用対効果)・収益シミュ・競合分析。
+  </div>
+</div>
+</body>
+</html>
