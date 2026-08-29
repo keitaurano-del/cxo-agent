@@ -1800,23 +1800,20 @@ function WorkLaundryTab() {
 // CoinLaundry.Tokyo タブと同じ iframe 方式。プロト（箱ビルダー）／デザイン案（和の漢字4パターン）／
 // 競合分析（売上・収益性・事業）を静的ページで切替表示する。サービス名は Nippiki に確定・本番は https://nippiki.com（2026-08-26 公開）。
 function WorkTebakoTab() {
-  const [doc, setDoc] = useState<'proto' | 'styles' | 'analysis' | 'sim'>('proto');
-  const src =
-    doc === 'proto'
-      ? '/tebako-proto.html'
-      : doc === 'styles'
-        ? '/tebako-styles.html'
-        : doc === 'analysis'
-          ? '/tebako-analysis.html'
-          : '/tebako-sim.html';
-  const title =
-    doc === 'proto'
-      ? '日本商品セレクト定額便 プロトタイプ'
-      : doc === 'styles'
-        ? 'デザイン案（和の漢字パターン）'
-        : doc === 'analysis'
-          ? '競合分析レポート'
-          : '収益シミュレーター';
+  const NIPPIKI = 'https://nippiki.com';
+  const OPS_KEY = 'urano-tebako-2026'; // 内部用ダッシュボードの簡易鍵（社内Apolloのみ）
+  const [doc, setDoc] = useState<'proto' | 'styles' | 'analysis' | 'sim' | 'ops' | 'me' | 'brand'>('proto');
+  const DOCS: Record<string, { src: string; title: string }> = {
+    proto: { src: '/tebako-proto.html', title: '日本商品セレクト定額便 プロトタイプ' },
+    styles: { src: '/tebako-styles.html', title: 'デザイン案（和の漢字パターン）' },
+    analysis: { src: '/tebako-analysis.html', title: '競合分析レポート' },
+    sim: { src: '/tebako-sim.html', title: '収益シミュレーター' },
+    ops: { src: `${NIPPIKI}/ops?key=${OPS_KEY}`, title: '運用コンソール（顧客管理・配送処理）' },
+    me: { src: `${NIPPIKI}/me?demo=1`, title: 'マイページ（会員・ランク）プレビュー' },
+    brand: { src: `${NIPPIKI}/brand`, title: 'ブランドアイコン案' },
+  };
+  const src = DOCS[doc].src;
+  const title = DOCS[doc].title;
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex items-center gap-2">
@@ -1826,6 +1823,9 @@ function WorkTebakoTab() {
             ['styles', 'デザイン案'],
             ['analysis', '競合分析'],
             ['sim', '収益シミュ'],
+            ['ops', '運用'],
+            ['me', 'マイページ'],
+            ['brand', 'アイコン'],
           ] as const).map(([key, label]) => (
             <button
               key={key}
