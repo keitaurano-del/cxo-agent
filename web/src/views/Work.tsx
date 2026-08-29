@@ -1802,9 +1802,10 @@ function WorkLaundryTab() {
 function WorkTebakoTab() {
   const NIPPIKI = 'https://nippiki.com';
   const OPS_KEY = 'urano-tebako-2026'; // 内部用ダッシュボードの簡易鍵（社内Apolloのみ）
-  const [doc, setDoc] = useState<'proto' | 'styles' | 'analysis' | 'sim' | 'ops' | 'me' | 'brand'>('proto');
+  const [doc, setDoc] = useState<'site' | 'proto' | 'styles' | 'analysis' | 'sim' | 'ops' | 'me' | 'brand'>('site');
   const DOCS: Record<string, { src: string; title: string }> = {
-    proto: { src: '/tebako-proto.html', title: '日本商品セレクト定額便 プロトタイプ' },
+    site: { src: `${NIPPIKI}/`, title: '本番 LP（nippiki.com・最新）' },
+    proto: { src: '/tebako-proto.html', title: '日本商品セレクト定額便 プロトタイプ（初期案）' },
     styles: { src: '/tebako-styles.html', title: 'デザイン案（和の漢字パターン）' },
     analysis: { src: '/tebako-analysis.html', title: '競合分析レポート' },
     sim: { src: '/tebako-sim.html', title: '収益シミュレーター' },
@@ -1819,6 +1820,7 @@ function WorkTebakoTab() {
       <div className="flex items-center gap-2">
         <div className="flex rounded-md border border-border p-0.5">
           {([
+            ['site', 'サイト'],
             ['proto', 'プロト'],
             ['styles', 'デザイン案'],
             ['analysis', '競合分析'],
