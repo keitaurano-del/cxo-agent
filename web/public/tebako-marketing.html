@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nippiki — マーケティング設計 v1</title>
+<style>
+  :root{--ac:#ff5a4d;--ac2:#ff7a6e;--ink:#20242b;--ink2:#5a616c;--line:#edeef1;--soft:#f6f7f9;--bg:#fff;--ok:#1f9d59;--warn:#c0362a}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:var(--ink);background:var(--soft);line-height:1.72;font-size:15px}
+  .wrap{max-width:920px;margin:0 auto;padding:0 20px 80px}
+  header{background:linear-gradient(180deg,#fff,#fff8f7);border-bottom:1px solid var(--line);padding:34px 0 26px;margin-bottom:8px}
+  header .wrap{padding-bottom:0}
+  .kick{display:inline-block;font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--ac);background:#fff0ee;border:1px solid #ffd9d4;border-radius:999px;padding:4px 12px;margin-bottom:12px}
+  h1{font-size:30px;margin:.1em 0 .2em;letter-spacing:-.01em}
+  .sub{color:var(--ink2);font-size:14px;margin:0}
+  h2{font-size:21px;margin:40px 0 6px;padding-top:14px;border-top:2px solid var(--ink);display:inline-block}
+  h2 .n{color:var(--ac);font-weight:900;margin-right:8px}
+  h3{font-size:16px;margin:22px 0 4px}
+  p{margin:.5em 0}
+  .lead{color:var(--ink2)}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:12px 0;box-shadow:0 1px 2px rgba(20,36,43,.03)}
+  .grid{display:grid;gap:12px}
+  @media(min-width:680px){.grid.c2{grid-template-columns:1fr 1fr}.grid.c3{grid-template-columns:1fr 1fr 1fr}}
+  .tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--soft);color:var(--ink2);border:1px solid var(--line)}
+  .tag.ac{background:#fff0ee;color:var(--ac);border-color:#ffd9d4}
+  .tag.ok{background:#e9f7ef;color:var(--ok);border-color:#bfe8cf}
+  .tag.warn{background:#fff1ee;color:var(--warn);border-color:#ffc9bf}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13.5px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--soft);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink2)}
+  .copy{background:#0f1216;color:#e9edf2;border-radius:10px;padding:14px 16px;font-size:13.5px;margin:8px 0;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.62}
+  .copy .h{color:#ff9a90;font-weight:700}
+  .copy .cta{color:#8fe3ad}
+  .muted{color:var(--ink2);font-size:13px}
+  ul{margin:.4em 0;padding-left:1.25em}
+  li{margin:.25em 0}
+  .pill-row{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+  .step{display:flex;gap:12px;align-items:flex-start;margin:10px 0}
+  .step .num{flex:0 0 26px;height:26px;border-radius:50%;background:var(--ac);color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;margin-top:2px}
+  .decide{background:#fffdf5;border:1px solid #ead1a8;border-radius:12px;padding:16px 18px}
+  .foot{margin-top:40px;color:var(--ink2);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+  b.free{color:var(--ac)}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <span class="kick">MARKETING PLAN · v1</span>
+    <h1>Nippiki — マーケティング設計</h1>
+    <p class="sub">日本商品セレクト定額便 / <b>nippiki.com</b> ・ 作成 2026-08-29 ・ 費用ゼロ・外部投稿なしで着手できる素材と設計一式。Keita 判断待ちは §8。</p>
+  </div>
+</header>
+<div class="wrap">
+
+  <!-- 1 -->
+  <h2><span class="n">1</span>現状と前提</h2>
+  <p class="lead">プロダクトは「売れる状態」まで完成（LP・国別/数量/頻度の料金・Stripe決済・顧客管理/配送コンソール・会員マイページ+ランク・ブランドアイコン）。現在 <b>プレローンチ（顧客0）</b>。よってマーケの主目的は明確です。</p>
+  <div class="grid c2">
+    <div class="card"><span class="tag ac">目的</span><h3>Founding member を集める</h3><p class="muted">最初の目標は「売上」より「検証」。刺さる訴求・チャネル・許容CACを、少額で見極める。LP の無料予約＝ウェイトリストが受け皿。</p></div>
+    <div class="card"><span class="tag warn">先に固める</span><h3>注文が来る前の運用2点</h3><p class="muted">① キュレーション/初回ロットの調達（誰がどう全国から選ぶか）。② 対米3箱以上の分割発送フロー＋送り状の差出人実住所。<b>広告より前ではなく「初受注より前」でOK</b>。並行可。</p></div>
+  </div>
+
+  <!-- 2 -->
+  <h2><span class="n">2</span>ポジショニング</h2>
+  <div class="card">
+    <p style="font-size:17px;margin:.2em 0"><b>一言で:</b> 「日本人キュレーターが全国から選ぶ、いま日本で愛されている本物。楽しい小物はおまけで毎回。」</p>
+    <p class="muted" style="margin:.2em 0">One-liner (EN): <b>The real Japan, hand-picked — what Japan actually loves, chosen by a local curator. The fun stuff rides along free.</b></p>
+  </div>
+  <div class="grid c3">
+    <div class="card"><h3>① 人が選ぶ</h3><p class="muted">アルゴリズムでも「量」でもない。日本在住のキュレーターが全国から厳選。地方の名品・小規模メーカー。<b>=最大の差別化。</b></p></div>
+    <div class="card"><h3>② おまけは<b class="free">無料</b></h3><p class="muted">KitKat・ガチャ・駄菓子など少額の楽しい小物は毎回タダで同梱。「払うのは厳選品、遊びはおまけ」。</p></div>
+    <div class="card"><h3>③ 世界に届く・関税込み</h3><p class="muted">ほぼ全世界へ、関税はこちら負担(DDP)。国で価格は最適化。継続ランクで特典が増える。</p></div>
+  </div>
+  <p class="muted"><b>言わないこと:</b> 「代理購入(proxy)」「何でも買えます」は主役にしない（それは別カテゴリ）。競合固有名詞も出さない。過度な希少性訴求より「発見・良品・人の目利き」を前面に。</p>
+
+  <!-- 3 -->
+  <h2><span class="n">3</span>ターゲット3セグメント</h2>
+  <table>
+    <tr><th>セグメント</th><th>誰</th><th>刺さる訴求</th><th>いる場所</th></tr>
+    <tr><td><b>A. 日本ファン</b><br><span class="muted">最重要</span></td><td>アニメ/食/文化好き。訪日経験あり or 憧れ。20–40代。英語圏中心。</td><td>「自分では見つけられない本物」「毎回の発見」「無料のガチャ/KitKat」</td><td>Instagram / TikTok / YouTube / Reddit(r/japan, r/japanpics, r/anime系)</td></tr>
+    <tr><td><b>B. 在外邦人・元居住者</b></td><td>海外在住の日本人、留学/駐在経験者、日本人パートナーを持つ人。</td><td>「日本が恋しい定番」「フォワーダーでは買えない鮮度・限定」「関税込みで面倒なし」</td><td>Facebookグループ(在外邦人)、X、口コミ</td></tr>
+    <tr><td><b>C. ギフト需要</b></td><td>日本好きな人への贈り物を探す層。誕生日/クリスマス。</td><td>「気の利いた・かぶらない」「開けて楽しい」「1回だけでも贈れる」</td><td>Google検索(japanese gift box)、Pinterest、Instagram</td></tr>
+  </table>
+  <p class="muted">初期はまず <b>A（日本ファン）</b>に集中。ボリューム最大・ビジュアル訴求と相性が良く、開封コンテンツが回りやすい。B/C は素材を流用して二次展開。</p>
+
+  <!-- 4 -->
+  <h2><span class="n">4</span>チャネル戦略と順序</h2>
+  <p class="lead">原則: <b>オーガニックで刺さりを掴んでから、少額の有料でスケール検証</b>。最初から広告に賭けない。</p>
+  <div class="grid c2">
+    <div class="card"><span class="tag ok">低コスト・主軸</span><h3>オーガニック</h3><ul>
+      <li><b>開封/紹介の短尺動画</b>（Reels/TikTok/Shorts）— ビジュアルが命。1商品ずつ「これ日本で流行ってる」で見せる。</li>
+      <li><b>コミュニティ</b>（Reddit/FBグループ）— 宣伝臭くなく「作ってみた/中身紹介」で参加。規約厳守。</li>
+      <li><b>ウェイトリスト</b>— 予約無料をLP動線で集め、ローンチ時に一斉招待。</li>
+    </ul></div>
+    <div class="card"><span class="tag ac">少額・検証</span><h3>ペイド（承認後）</h3><ul>
+      <li><b>Meta広告テスト</b>（$10–20/日）— 既に Dekiru に下書きあり。3訴求×2ビジュアルで刺さりを測る。</li>
+      <li><b>Google検索</b>— 「japanese snack box / japanese subscription box / japan gift box」の顕在層。</li>
+      <li>指標が合えば予算を段階的に増やす。合わなければ止める。</li>
+    </ul></div>
+  </div>
+  <h3>最初の4週間スプリント</h3>
+  <div class="card">
+    <div class="step"><div class="num">1</div><div><b>Week 1 — 仕込み</b>：Instagram/TikTok アカウント開設、プロフィール/リンク整備。開封動画3本＋静止画5枚を撮影素材化。ウェイトリスト文面確定。<span class="muted">（撮影は実物が要るので、初回キュレーション調達と連動）</span></div></div>
+    <div class="step"><div class="num">2</div><div><b>Week 2 — 発信開始</b>：短尺動画を隔日投稿。Reddit/FBに“中身紹介”で軟着陸。反応の良い訴求をメモ。</div></div>
+    <div class="step"><div class="num">3</div><div><b>Week 3 — 有料テスト（承認後）</b>：Meta $15/日で3訴求を回し、CTR/CPC/予約単価を計測。Google検索も少額で。</div></div>
+    <div class="step"><div class="num">4</div><div><b>Week 4 — 判定</b>：勝ち訴求・勝ちチャネルを特定。ウェイトリストへローンチ招待メール。CAC が許容内なら増額、外なら訴求/クリエイティブを差し替え。</div></div>
+  </div>
+
+  <!-- 5 -->
+  <h2><span class="n">5</span>広告コピー（そのまま使える）</h2>
+  <h3>Meta（Instagram / Facebook）— 3訴求</h3>
+
+  <p class="muted"><span class="tag ac">訴求1: キュレーション（本命）</span></p>
+  <div class="copy"><span class="h">Primary text:</span> A real person in Japan hand-picks the good stuff — regional finds, small-maker sweets, the things locals actually love. Not an algorithm. Not the same old souvenirs. Delivered to your door, customs on us.
+<span class="h">Headline:</span> Japan's best, hand-picked
+<span class="h">Description:</span> Curated boxes from $89. Fun extras free, every time.
+<span class="cta">CTA:</span> Sign Up</div>
+
+  <p class="muted"><span class="tag ac">訴求2: 無料のおまけ（フック強）</span></p>
+  <div class="copy"><span class="h">Primary text:</span> Every box comes with a curated pick of what Japan loves right now — plus a limited-edition KitKat, a gacha figure, a konbini treat, thrown in free. You pay for the good stuff. The fun rides along.
+<span class="h">Headline:</span> The gacha's on us 🎁
+<span class="h">Description:</span> Hand-picked Japan, worldwide. Duties included.
+<span class="cta">CTA:</span> Learn More</div>
+
+  <p class="muted"><span class="tag ac">訴求3: 発見・トレンド</span></p>
+  <div class="copy"><span class="h">Primary text:</span> What's Japan obsessed with this month? We find it, box it, and ship it — so you get the stuff you'd never discover on your own. From $89/box, cancel anytime.
+<span class="h">Headline:</span> What Japan's loving right now
+<span class="h">Description:</span> A curator, not an algorithm.
+<span class="cta">CTA:</span> Sign Up</div>
+
+  <h3>Google 検索（レスポンシブ検索広告）</h3>
+  <div class="card">
+    <p class="muted" style="margin:.2em 0"><b>Headlines（15本・各30字以内）:</b></p>
+    <div class="pill-row">
+      <span class="tag">Japanese Box, Hand-Picked</span><span class="tag">A Curator, Not Algorithm</span><span class="tag">What Japan Loves, Boxed</span><span class="tag">Free Gacha & KitKat Inside</span><span class="tag">Japan Snacks & Finds</span><span class="tag">Duties On Us, Worldwide</span><span class="tag">From $89/Box</span><span class="tag">Cancel Anytime</span><span class="tag">Regional Japan Finds</span><span class="tag">Hand-Picked in Japan</span><span class="tag">Not The Same Souvenirs</span><span class="tag">Member Ranks & Perks</span><span class="tag">Japanese Subscription Box</span><span class="tag">Ship to Any Country</span><span class="tag">The Real Japan, Delivered</span>
+    </div>
+    <p class="muted" style="margin:.6em 0 .2em"><b>Descriptions（4本・各90字以内）:</b></p>
+    <ul class="muted">
+      <li>A local curator hand-picks Japan's best — sweets, finds, limited editions. Fun extras free.</li>
+      <li>Not an algorithm. Real people choose what Japan loves. Shipped worldwide, customs on us.</li>
+      <li>Pick 1–10 boxes, monthly to quarterly. From $89. Member ranks unlock perks. Cancel anytime.</li>
+      <li>The Japan you'd never find on your own — boxed and delivered. Reserve your founding price.</li>
+    </ul>
+    <p class="muted" style="margin:.4em 0 0"><b>推奨キーワード:</b> japanese snack box / japanese subscription box / japan gift box / japanese candy box / japanese care package / gifts for japan lovers</p>
+  </div>
+
+  <!-- 6 -->
+  <h2><span class="n">6</span>オーガニック（撮影・投稿の型）</h2>
+  <div class="grid c2">
+    <div class="card"><h3>開封/紹介 短尺動画（15–30秒）</h3>
+      <p class="muted"><b>フック（最初の1.5秒が命）:</b></p>
+      <ul class="muted">
+        <li>"Stuff from Japan you can't get anywhere else 👀"</li>
+        <li>"A curator in Japan picked this — not an algorithm"</li>
+        <li>"The free gacha figure that comes in every box"</li>
+      </ul>
+      <p class="muted"><b>構成:</b> フック → 1商品ずつ手に取って「何・なぜ良い」を一言 → 無料おまけを最後に見せて「これ全部おまけ」→ CTA「link in bio, founding price」。BGMはトレンド音源、字幕必須。</p>
+    </div>
+    <div class="card"><h3>コミュニティ（Reddit / FBグループ）</h3>
+      <p class="muted">宣伝ではなく“共有”として。例: r/japanlife, r/japan, 在外邦人FBグループ。</p>
+      <ul class="muted">
+        <li>投稿は「今月こんな日本のものを箱にしてみた」の中身紹介＋写真。</li>
+        <li>各サブレの<b>自己宣伝ルールを必ず確認</b>（多くは頻度制限/フェアシェア必須）。リンク直貼りは避け、プロフィール誘導。</li>
+        <li>質問には正直に（関税・送料・キャンセル）。信頼が一番の獲得装置。</li>
+      </ul>
+    </div>
+  </div>
+  <p class="muted"><b>プロフィール文（IG/TikTok bio 案）:</b> 🎁 The real Japan, hand-picked · curated boxes + free fun extras · worldwide, duties on us · from $89 → nippiki.com</p>
+
+  <!-- 7 -->
+  <h2><span class="n">7</span>プレローンチ / ウェイトリスト メール</h2>
+  <p class="lead">LP の無料予約で集めた見込み客へ。※ 送信は Keita 承認後（nippiki.com は Resend 認証済み・送信基盤は稼働）。</p>
+
+  <p class="muted"><span class="tag">① 予約直後（自動・任意で実装可）</span></p>
+  <div class="copy"><span class="h">Subject:</span> You're on the list 🎌 (founding price locked)
+Thanks for reserving your spot with Nippiki. You've locked your founding price for life — from $89/box ($79 paid yearly), down from the $99 regular.
+We're hand-picking the first boxes now. You'll be among the first invited when we open. Nothing to pay yet.
+— The Nippiki curator</div>
+
+  <p class="muted"><span class="tag">② ローンチ招待</span></p>
+  <div class="copy"><span class="h">Subject:</span> It's open — claim your first box
+Nippiki is live. As a founding member you get your locked price plus a launch discount on your first payment: first month $69 (then $89), or first year $799.
+Pick your boxes, your cadence, your country — we handle the rest, customs included.
+<span class="cta">→ Become a founding member</span>  (link)
+Spots at the founding price are limited. Cancel anytime.</div>
+
+  <p class="muted"><span class="tag">③ リマインド（48h後・未申込者）</span></p>
+  <div class="copy"><span class="h">Subject:</span> Your founding price is still yours — for now
+Just a nudge: your founding rate (from $79/box for life) is reserved, but the launch discount won't last. Here's what's in a box: a curator's picks from across Japan, plus free extras every time.
+<span class="cta">→ Claim my founding price</span>  (link)</div>
+
+  <!-- 8 -->
+  <h2><span class="n">8</span>KPI・予算・Keita 判断事項</h2>
+  <div class="grid c2">
+    <div class="card"><h3>測る指標</h3><ul class="muted">
+      <li><b>入口:</b> 動画再生/保存、プロフ→サイト遷移、広告CTR/CPC</li>
+      <li><b>中間:</b> 予約(無料ウェイトリスト)獲得数・獲得単価</li>
+      <li><b>成果:</b> 有料会員転換率・CAC・初月$69からの継続</li>
+      <li>目安: 有料テストは「予約単価が許容内か」でGo/No-Go判定</li>
+    </ul></div>
+    <div class="decide"><h3>Keita に決めてほしい2点</h3>
+      <ol class="muted">
+        <li><b>初手チャネル:</b> ①オーガニック中心 / ②少額Metaテスト($15/日〜) / ③両方（推奨は③・素材は本書で用意済）</li>
+        <li><b>月の広告予算上限</b>（テスト段階の目安。例: 初月 $300〜500 で刺さり検証）</li>
+      </ol>
+      <p class="muted" style="margin:.4em 0 0">※ 広告出稿・実メール送信・SNS実投稿は<b>すべて承認後に実施</b>。本書の素材はそのまま流用できます。決めていただければ即着手します。</p>
+    </div>
+  </div>
+
+  <div class="foot">
+    Nippiki マーケティング設計 v1 ・ 費用ゼロ・外部投稿なしの素材/設計一式（Son 作成 2026-08-29）。
+    実行（広告・投稿・送信）は Keita 承認後。関連: 収益シミュ／競合分析タブ、本番 nippiki.com。
+  </div>
+</div>
+</body>
+</html>
