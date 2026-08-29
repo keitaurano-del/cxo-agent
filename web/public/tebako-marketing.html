@@ -337,6 +337,54 @@ Want me to send one? Just reply with the best shipping address 📦</div>
     </ul>
   </div>
 
+  <!-- 11 : Meta出稿キット -->
+  <h2><span class="n">11</span>Meta出稿キット（$15/日・入稿手順）<span class="tag ok">GO 2026-08-29</span></h2>
+  <p class="lead">決定: Meta少額テスト・<b>$15/日</b>・素材はSonが用意→Keitaが Meta で最終確認して公開。まず刺さりを測り、勝ち1本に寄せる。</p>
+
+  <h3>クリエイティブ3案（1:1・1080²・実写真＋ブランド）</h3>
+  <div class="pill-row">
+    <span class="tag">A curation: nippiki.com/assets/ads/ad-curation.png</span>
+    <span class="tag">B free: /assets/ads/ad-free.png</span>
+    <span class="tag">C trending: /assets/ads/ad-trending.png</span>
+  </div>
+
+  <h3>各案のコピー（入稿用・そのまま貼る）</h3>
+  <div class="copy"><span class="h">A — Primary:</span> A real person in Japan hand-picks the good stuff — regional finds, small-maker sweets, the things locals actually love. Not an algorithm. Delivered worldwide, customs on us.
+<span class="h">Headline:</span> Japan’s best, hand-picked  ·  <span class="h">Desc:</span> Curated boxes from $89. Fun extras free.  ·  <span class="cta">CTA:</span> Sign Up  ·  URL: nippiki.com/?utm=meta_curation</div>
+  <div class="copy"><span class="h">B — Primary:</span> Every box comes with a curated pick of what Japan loves — plus a limited KitKat, a gacha figure, a konbini treat, thrown in free. You pay for the good stuff; the fun rides along.
+<span class="h">Headline:</span> The gacha’s on us 🎁  ·  <span class="h">Desc:</span> Hand-picked Japan, worldwide. Duties in.  ·  <span class="cta">CTA:</span> Learn More  ·  URL: nippiki.com/?utm=meta_free</div>
+  <div class="copy"><span class="h">C — Primary:</span> What’s Japan obsessed with this month? We find it, box it, and ship it — so you get the stuff you’d never discover on your own. From $89/box, cancel anytime.
+<span class="h">Headline:</span> What Japan’s loving right now  ·  <span class="h">Desc:</span> A curator, not an algorithm.  ·  <span class="cta">CTA:</span> Sign Up  ·  URL: nippiki.com/?utm=meta_trending</div>
+
+  <h3>キャンペーン構成</h3>
+  <table>
+    <tr><th>階層</th><th>設定</th></tr>
+    <tr><td>目的(Objective)</td><td><b>Traffic</b>（Pixel未設置のため）→ 最適化は <b>Landing page views</b>。※Pixelを入れれば Sales/Leads 最適化＋リタゲ可（下記）</td></tr>
+    <tr><td>キャンペーン予算</td><td><b>$15/日（CBO）</b>・Advantage campaign budget ON</td></tr>
+    <tr><td>広告セット</td><td>1つ。ここに3広告(A/B/C)を入れMetaにローテさせCTRで勝者選抜</td></tr>
+    <tr><td>ロケーション</td><td>United States / United Kingdom / Canada / Australia（英語Tier1）＋任意で Singapore</td></tr>
+    <tr><td>年齢・言語</td><td>18–44・言語=English</td></tr>
+    <tr><td>興味(Detailed targeting)</td><td>Anime, Manga, Japanese cuisine, Japan (travel), Cosplay, Sanrio/Hello Kitty, Nintendo, Studio Ghibli, Japanese language。※広すぎたら Anime＋Japanese cuisine に絞る</td></tr>
+    <tr><td>配置(Placements)</td><td>Advantage+（自動）でOK。手動なら IG Feed / FB Feed / Explore（1:1が映える）</td></tr>
+    <tr><td>期間・判定</td><td>4–7日回す→CTR/リンククリック単価/（自社計測の）予約・チェックアウト数で<b>勝ち1本に寄せ、負けを停止</b></td></tr>
+  </table>
+
+  <h3>入稿手順（Meta広告マネージャ）</h3>
+  <div class="card">
+    <div class="step"><div class="num">1</div><div>広告マネージャ →「作成」→ 目的 <b>Traffic（トラフィック）</b>。キャンペーン予算 <b>$15/日</b>・CBO ON。</div></div>
+    <div class="step"><div class="num">2</div><div>広告セット：最適化=Landing page views、ロケーション/年齢/言語/興味を上表どおり。開始日=今日。</div></div>
+    <div class="step"><div class="num">3</div><div>広告①：形式=Single image、画像=<b>ad-curation.png</b>、主文/見出し/説明/URL(=?utm=meta_curation)=案Aのコピー、CTA=Sign Up。</div></div>
+    <div class="step"><div class="num">4</div><div>広告②③：同じ広告セット内で「複製」→ 画像とコピーをB/Cに差し替え（URLのutmも変える）。</div></div>
+    <div class="step"><div class="num">5</div><div>公開前に <b>Keita が最終確認</b>（課金はここで発生）。公開後、初日は触らず学習させる。</div></div>
+  </div>
+
+  <h3>計測（実装済みで即つながる）</h3>
+  <p class="muted">遷移先URLの <code>?utm=meta_*</code> を LP が捕捉し、予約(/api/signup)・チェックアウト(/api/checkout)のログに記録。<b>誰が来て何件成約したかが分かる</b>（アフィリの <code>?ref=</code> と同じ仕組み）。Sonが結果を集計して報告。</p>
+  <div class="card" style="border-color:#ead1a8;background:#fffdf5">
+    <h3 style="margin-top:2px">強く推奨: Meta Pixel を入れる（任意・効果大）</h3>
+    <p class="muted" style="margin:.2em 0">今は Pixel 未設置なので Traffic 最適化どまり。Pixel を入れると ①購入/予約で最適化(CVが伸びる) ②将来リタゲ/類似配信ができる。<b>Keita が Meta で Pixel を作成→ID(数字)をくれれば、Son が nippiki.com に設置</b>（コード1つ・数分）。テストの質が大きく上がる。</p>
+  </div>
+
   <div class="foot">
     Nippiki マーケティング設計 v1 ・ 費用ゼロ・外部投稿なしの素材/設計一式（Son 作成 2026-08-29）。
     実行（広告・投稿・送信・出荷）は Keita 承認後。関連: 収益シミュ／競合分析タブ、本番 nippiki.com。
