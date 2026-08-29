@@ -1802,7 +1802,7 @@ function WorkLaundryTab() {
 function WorkTebakoTab() {
   const NIPPIKI = 'https://nippiki.com';
   const OPS_KEY = 'urano-tebako-2026'; // 内部用ダッシュボードの簡易鍵（社内Apolloのみ）
-  const [doc, setDoc] = useState<'site' | 'plan' | 'marketing' | 'proto' | 'styles' | 'analysis' | 'sim' | 'ops' | 'me' | 'brand'>('site');
+  const [doc, setDoc] = useState<'site' | 'plan' | 'marketing' | 'proto' | 'styles' | 'analysis' | 'sim' | 'revenue' | 'ops' | 'me' | 'brand'>('site');
   const DOCS: Record<string, { src: string; title: string }> = {
     site: { src: `${NIPPIKI}/`, title: '本番 LP（nippiki.com・最新）' },
     plan: { src: '/tebako-plan.html', title: '事業計画（月利益¥100万まで・コンサバ・需要分析付き）' },
@@ -1811,6 +1811,7 @@ function WorkTebakoTab() {
     styles: { src: '/tebako-styles.html', title: 'デザイン案（和の漢字パターン）' },
     analysis: { src: '/tebako-analysis.html', title: '競合分析レポート' },
     sim: { src: '/tebako-sim.html', title: '収益シミュレーター' },
+    revenue: { src: `${NIPPIKI}/revenue?key=${OPS_KEY}`, title: '売上管理（確定売上・MRR・流入元別ROI・注文一覧）' },
     ops: { src: `${NIPPIKI}/ops?key=${OPS_KEY}`, title: '運用コンソール（顧客管理・配送処理）' },
     me: { src: `${NIPPIKI}/me?demo=1`, title: 'マイページ（会員・ランク）プレビュー' },
     brand: { src: `${NIPPIKI}/brand`, title: 'ブランドアイコン案' },
@@ -1829,6 +1830,7 @@ function WorkTebakoTab() {
             ['styles', 'デザイン案'],
             ['analysis', '競合分析'],
             ['sim', '収益シミュ'],
+            ['revenue', '売上'],
             ['ops', '運用'],
             ['me', 'マイページ'],
             ['brand', 'アイコン'],
