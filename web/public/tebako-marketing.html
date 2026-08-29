@@ -268,10 +268,18 @@ Just a nudge: your founding rate (from $79/box for life) is reserved, but the la
     <tr><td>クッキー期間</td><td><b>30日</b></td><td>Bokksu(14日)より寛容＝紹介者に有利で参加動機に。</td></tr>
     <tr><td>成果条件</td><td>初回課金の完了（無料予約だけは対象外）・返金/初月解約はクロー​バック</td><td>質の悪い流入を防ぐ。</td></tr>
     <tr><td>支払</td><td>月次・最低$50から・Wise/PayPal</td><td>少額乱発を防ぎ事務を軽く。</td></tr>
-    <tr><td><b>追跡(MVP)</b></td><td><b>パートナー毎にユニーク・クーポンコード</b>（例 <code>SAKURA10</code>）。購入者は少額割引、Stripe が使用コードを記録→誰経由か判る</td><td>アフィリSaaS不要＝<b>無料で開始</b>。割引はローンチ特典と重複させない設計に。伸びたら Refersion/Impact 等へ移行。</td></tr>
+    <tr><td><b>追跡(MVP)</b> <span class="tag ok">実装済</span></td><td><b>パートナー毎の <code>?ref=CODE</code> リンク</b>（例 <code>nippiki.com/?ref=SAKURA</code>）。訪問で滞留→Stripe メタデータに付与→<b>/ops「🤝パートナー成果」で成約数×$15を自動集計</b></td><td>アフィリSaaS不要＝<b>無料で稼働中</b>。伸びたら Refersion/Impact 等へ移行。</td></tr>
     <tr><td>禁止事項</td><td>自己紹介の水増し／指名検索(nippiki)への入札／クーポン乱造サイト／FTC等の関係開示なし投稿</td><td>ブランド毀損と不正防止。</td></tr>
   </table>
-  <p class="muted"><b>実装メモ:</b> コード追跡MVPは既存 Stripe＋server.js で対応可（コード別の集計を /ops に足せる）。指示があれば実装します。専用の紹介リンク型が要る段階になったら Refersion/Impact/ShareASale を検討。</p>
+  <div class="card" style="border-color:#bfe8cf;background:#f3fbf6">
+    <p style="margin:.2em 0"><b>確定した設定（2026-08-29・実装済）:</b></p>
+    <ul class="muted" style="margin:.2em 0">
+      <li><b>報酬 = $15/有料成約</b>（固定バウンティ・初月解約はクローバック・月次精査で支払）。</li>
+      <li><b>追跡 = <code>?ref=CODE</code></b>（Stripe メタデータ＋/ops 集計）。実セッションで属性付与を検証済。</li>
+      <li><b>ギフティング初回上限 = 20人</b>（原価+送料の予算枠）。</li>
+      <li><b>オーディエンス割引</b>: ローンチ中は Stripe の自動割引（$20/$149 off）と別コードを<b>併用不可</b>。よって紹介先の来場者は<b>通常のローンチ特典</b>を享受。専用の紹介クーポン（10% or $8）は<b>ローンチ特典終了後</b>に有効化（自動割引を外せばプロモコード入力を解放できる）。</li>
+    </ul>
+  </div>
 
   <h3>募集の相手</h3>
   <div class="pill-row">
@@ -319,15 +327,14 @@ I'd love to send you one, on us — no payment needed and no obligation to post.
 
 Want me to send one? Just reply with the best shipping address 📦</div>
 
-  <div class="decide" style="margin-top:16px">
-    <h3>Keita 確認事項（決めれば即実行体制）</h3>
-    <ol class="muted">
-      <li><b>アフィリ報酬額</b>: 既定「$15/件 or 初回20%」でよいか（もっと絞る/厚くする？）</li>
-      <li><b>クーポン割引の大きさ</b>: パートナーコードの割引（例 10% or $8）。ローンチ特典と重複させない範囲で。</li>
-      <li><b>ギフティング上限</b>: 初回何人まで（例 20人＝原価+送料の予算）。</li>
-      <li>コード追跡MVP（/ops に集計）を<b>私が実装</b>してよいか。</li>
-    </ol>
-    <p class="muted" style="margin:.3em 0 0">※ 実際の募集送信・SNS投稿・出荷は承認後。文面と基準はここに完成済み。</p>
+  <div class="card" style="border-color:#bfe8cf;background:#f3fbf6">
+    <h3 style="margin-top:2px">実行準備の状態（2026-08-29）</h3>
+    <ul class="muted" style="margin:.2em 0">
+      <li><span class="tag ok">済</span> 報酬$15・追跡<code>?ref=</code>・/ops集計・ギフティング上限20人 を確定＆実装。</li>
+      <li><span class="tag ok">済</span> 募集メール／ギフティングDM 文面（EN）完成。</li>
+      <li><span class="tag warn">承認後</span> 実際の募集送信・SNS投稿・出荷・ギフティング発送は Keita 承認後に実施。</li>
+      <li><span class="tag">次</span> パートナー候補リスト（日本/アニメ/旅行系の実名クリエイター）作成 → 声かけ。指示があれば着手。</li>
+    </ul>
   </div>
 
   <div class="foot">
