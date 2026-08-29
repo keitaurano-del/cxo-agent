@@ -7,13 +7,12 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
 
 ## 未完
 
-- 2026-08-28 【認証分離】per-agent OAuth ログイン（各2分・ブラウザ必要）🔒[Keita]
-  `mkdir -p ~/.claude-agents/son && CLAUDE_CONFIG_DIR=~/.claude-agents/son claude /login` — son/yui/haru/main の順で任意（kimi は moonshot なので対象外）。dir 未作成のエージェントは従来どおり共有 ~/.claude で動き続けるので部分導入OK。背景=8/26-27のOAuth並行refreshレース根絶の本筋（wrapper実装済 `~/cron-scripts/claude-cli-agent-wrapper.sh`）
 - 2026-08-28 【認証分離】gateway reload のタイミング判断（10秒）🔒[Keita]
-  openclaw.json の command 差替えは 8/28 20:41 実施済（バックアップ `openclaw.json.bak-before-agent-wrapper-20260828`）・keepalive の複数dir監視対応も済。ただし gateway reload 前なので配線は未発効＝現状は従来動作のまま安全。上記ログイン完了後、Son idle のタイミングで林が reload して配線完了（Son が一瞬止まるため実施タイミングだけ Keita 判断）
+  openclaw.json の command 差替えは 8/28 20:41 実施済（バックアップ `openclaw.json.bak-before-agent-wrapper-20260828`）・keepalive の複数dir監視対応も済。ただし gateway reload 前なので配線は未発効＝現状は従来動作のまま安全。per-agent ログインは 8/29 完了（下記完了ログ）、Son idle のタイミングで林が reload して配線完了（Son が一瞬止まるため実施タイミングだけ Keita 判断）
 
 ## 完了ログ
 
+- 2026-08-29 23:33 【認証分離】per-agent OAuth ログイン（son＋main） → **完了** 🔒[Keita]（son 23:32:47・main 23:33:04 に認可完了。`~/.claude-agents/{son,main}/.credentials.json` に別グラント実在、keepalive が [agent:son]/[agent:main] を自動認識し 23:33〜03:20 に healthy ×5 連続で実証。yui/haru は dir 未作成＝共有 ~/.claude 継続の部分導入。残は gateway reload のみ）
 - 2026-08-15 10:11 【MC-347】GSC 手動インデックス申請 ×3 → **完了** 🔒[Keita]（Keita本人が申請実施。以後2週間はSonが観測→横展開判断。決裁の発話記録= d95110cb jsonl 2026-08-15T01:11:03Z）
 - 2026-08-15 10:11 【MC-373】CW登録＋応募2件 → **キャンセル** 🔒[Keita]（「347以外キャンセル」。writing-factory一式は記録として残置・再開時は intake/APPLY-PACK.md から流用可。日次job_watch cron 20:45停止済・復元は /tmp/cron.bak.20260815）
 - 2026-08-15 10:11 【MC-351】Cowork Gmail ログイン＋hn@宛メール送信 → **見送り** 🔒[Keita]（「347以外キャンセル」）
