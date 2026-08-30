@@ -136,6 +136,32 @@
   .spark{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;z-index:6}
   .sp{position:absolute;width:8px;height:8px;border-radius:2px;will-change:transform,opacity}
 
+  /* ===== 演出B v2 : 本家風 没入バースト (Bandai Gashapon 参照) ===== */
+  #immersive{position:fixed;inset:0;z-index:85;display:none;overflow:hidden;
+    background:radial-gradient(circle at 50% 46%,#ffffff 0 16%,#ffeef0 44%,#ffd9de 100%)}
+  #immersive.on{display:block}
+  #immersive .ilines{position:absolute;left:50%;top:46%;width:230vmax;height:230vmax;transform:translate(-50%,-50%) scale(.6);
+    background:repeating-conic-gradient(from 0deg at 50% 50%,rgba(255,110,132,.30) 0deg 1.3deg,rgba(255,255,255,0) 1.3deg 5deg);
+    opacity:0;will-change:transform,opacity;pointer-events:none}
+  #immersive .iveil{position:absolute;left:50%;top:46%;width:66vmax;height:66vmax;transform:translate(-50%,-50%);border-radius:50%;
+    background:radial-gradient(circle,#fff 0 32%,rgba(255,255,255,0) 72%);pointer-events:none}
+  #immersive .iflash{position:absolute;inset:0;background:#33bdf5;opacity:0;pointer-events:none;z-index:6;will-change:opacity}
+  #immersive .istorm{position:absolute;inset:0;pointer-events:none;z-index:4}
+  .icap3d{position:absolute;border-radius:50%;will-change:transform,opacity;z-index:4;
+    box-shadow:inset 0 -8px 14px rgba(0,0,0,.22),inset 0 7px 11px rgba(255,255,255,.45),0 8px 20px rgba(0,0,0,.14)}
+  .icap3d::before{content:"";position:absolute;left:0;right:0;top:50%;height:3px;transform:translateY(-1.5px);background:rgba(0,0,0,.15)}
+  .icap3d .gl{position:absolute;left:22%;top:15%;width:30%;height:22%;border-radius:50%;background:rgba(255,255,255,.7)}
+  #immersive .istatus{position:absolute;left:0;right:0;top:16%;text-align:center;z-index:7;
+    font-weight:800;font-size:20px;letter-spacing:.04em;color:#c1412d;opacity:0;text-shadow:0 2px 8px rgba(255,255,255,.7);transition:opacity .25s}
+  #immersive .iresult{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);z-index:8;pointer-events:none}
+  #immersive .iresult .cap{width:132px;height:132px;border-radius:50%;position:relative;opacity:0;
+    display:flex;align-items:center;justify-content:center;font-size:48px;font-weight:800;color:rgba(255,255,255,.95);text-shadow:0 2px 4px rgba(0,0,0,.28);
+    box-shadow:inset 0 -16px 26px rgba(0,0,0,.22),inset 0 11px 17px rgba(255,255,255,.42),0 14px 34px rgba(0,0,0,.2)}
+  #immersive .iresult .cap::before{content:"";position:absolute;left:0;right:0;top:50%;height:5px;transform:translateY(-2.5px);background:rgba(0,0,0,.2)}
+  #immersive .iresult .cap .gl{position:absolute;left:22%;top:15%;width:30%;height:22%;border-radius:50%;background:rgba(255,255,255,.72)}
+  #immersive .iskip{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);z-index:9;
+    background:var(--card);border:1px solid var(--line);border-radius:999px;padding:9px 22px;font-weight:800;font-size:13px;color:var(--muted);cursor:pointer;box-shadow:var(--shadow)}
+
   .feeline{font-size:12.5px;color:var(--muted);margin-top:12px;min-height:18px}
   .feeline b{color:var(--ink)}
   .modact{display:flex;gap:9px;margin-top:14px}
@@ -245,6 +271,17 @@
       <button class="done" id="spDone">Done</button>
     </div>
   </div>
+</div>
+
+<!-- 演出B v2 : 没入バースト overlay -->
+<div id="immersive">
+  <div class="ilines" id="iLines"></div>
+  <div class="iveil"></div>
+  <div class="istorm" id="iStorm"></div>
+  <div class="istatus" id="iStatus">回す…</div>
+  <div class="iresult" id="iResult"><div class="cap" id="iCap"><span class="gl"></span><span>?</span></div></div>
+  <div class="iflash" id="iFlash"></div>
+  <button class="iskip" id="iSkip">スキップ ▸</button>
 </div>
 
 <!-- cart drawer -->
@@ -454,59 +491,95 @@ async function spinA(){
   knobHint.style.opacity='.92';
 }
 
-// ===== 演出B =====
-async function spinB(){
-  phase='spinning';
-  bhint.style.opacity='0';
-  setSub('Charging…');
-  stageB.style.setProperty('--mc',current.color);
-
-  // capsule vibrates, building intensity
-  const shake=bcap.animate(
-    [{transform:'translate(0,0) rotate(0deg) scale(1)'},
-     {transform:'translate(-3px,1px) rotate(-4deg) scale(1.01)',offset:.25},
-     {transform:'translate(3px,-1px) rotate(4deg) scale(1.02)',offset:.5},
-     {transform:'translate(-2px,1px) rotate(-3deg) scale(1.03)',offset:.75},
-     {transform:'translate(0,0) rotate(0deg) scale(1.04)'}],
-    {duration:150,easing:'ease-in-out',iterations:9});
-  // glow swells and pulses
-  bglow.animate(
-    [{opacity:0,transform:'translate(-50%,-50%) scale(.6)'},
-     {opacity:.55,transform:'translate(-50%,-50%) scale(1)',offset:.6},
-     {opacity:.8,transform:'translate(-50%,-50%) scale(1.15)'}],
-    {duration:1350,easing:'ease-in',fill:'forwards'});
-
-  // 3-2-1 countdown
-  for(const n of [3,2,1]){
-    bcount.textContent=n;
-    bcount.animate([{opacity:0,transform:'translate(-50%,-50%) scale(1.6)'},
-      {opacity:1,transform:'translate(-50%,-50%) scale(1)',offset:.4},
-      {opacity:1,transform:'translate(-50%,-50%) scale(1)',offset:.75},
-      {opacity:0,transform:'translate(-50%,-50%) scale(.7)'}],{duration:450,easing:'ease-out',fill:'forwards'});
-    await wait(450);
-  }
-  shake.cancel(); bcount.textContent='';
-
-  // burst
-  setSub('Here it comes…');
-  bring.animate([{opacity:.9,transform:'translate(-50%,-50%) scale(.4)'},
-    {opacity:0,transform:'translate(-50%,-50%) scale(1.9)'}],{duration:520,easing:'cubic-bezier(.2,.7,.4,1)',fill:'forwards'});
-  bglow.animate([{opacity:.8,transform:'translate(-50%,-50%) scale(1.15)'},
-    {opacity:1,transform:'translate(-50%,-50%) scale(1.4)',offset:.3},
-    {opacity:.5,transform:'translate(-50%,-50%) scale(1.1)'}],{duration:520,easing:'ease-out',fill:'forwards'});
-  bcap.animate([{transform:'scale(1.04)'},{transform:'scale(1.22)',offset:.35},
-    {transform:'scale(.96)',offset:.7},{transform:'scale(1)'}],{duration:520,easing:'cubic-bezier(.3,1.5,.5,1)',fill:'forwards'});
-  popSpark(sparkB,88,current.color);
-
-  await wait(560);
-  setSub('Got one! Into your cart…',true);
-  await wait(260);
-  await flyToCart(bcap);
-  // restore for next spin
-  bcap.style.opacity='1'; bcap.style.transform='none';
-  bglow.style.opacity='0'; bring.style.opacity='0';
-  bhint.style.opacity='1';
+// ===== 演出B v2 : 本家風 没入バースト =====
+const immersive=document.getElementById('immersive'), iLines=document.getElementById('iLines'),
+  iStorm=document.getElementById('iStorm'), iStatus=document.getElementById('iStatus'),
+  iCap=document.getElementById('iCap'), iFlash=document.getElementById('iFlash');
+const CAPCOLORS=['#ff5b6a','#ffb43d','#3fb0e0','#37c98a','#ffd23d','#b06bd6','#ff8a4d','#5a8dee'];
+let bSkip=false;
+function cap3d(size,color){
+  const c=document.createElement('div'); c.className='icap3d';
+  c.style.width=size+'px'; c.style.height=size+'px';
+  c.style.background=`radial-gradient(circle at 34% 28%,#fff 0 8%,${color} 9% 55%,${shade(color,-26)} 100%)`;
+  c.innerHTML='<span class="gl"></span>';
+  return c;
 }
+function setStatus(t){ iStatus.textContent=t; iStatus.style.opacity=t?'1':'0'; }
+
+async function spinB(){
+  phase='spinning'; bSkip=false;
+  bhint.style.opacity='0';
+  setSub('回す…'); setStatus('回す…');
+  iStorm.innerHTML=''; iCap.style.opacity='0'; iFlash.style.opacity='0';
+  immersive.classList.add('on');
+  const W=innerWidth, H=innerHeight, cx=W/2, cy=H*0.46;
+
+  // 1) 集中線 pull-in + slow rotation
+  iLines.animate([{opacity:0,transform:'translate(-50%,-50%) scale(.6) rotate(0deg)'},
+    {opacity:1,transform:'translate(-50%,-50%) scale(1) rotate(18deg)'}],{duration:1900,easing:'ease-out',fill:'forwards'});
+
+  // 2) capsules tumble out from the machine spot and scatter outward (staggered)
+  const storm=[];
+  for(let i=0;i<22;i++){
+    const size=32+Math.random()*46, col=CAPCOLORS[i%CAPCOLORS.length];
+    const c=cap3d(size,col); c.style.left=(cx-size/2)+'px'; c.style.top=(cy-size/2)+'px';
+    iStorm.appendChild(c); storm.push(c);
+    const ang=Math.random()*Math.PI*2, dist=120+Math.random()*Math.min(W,H)*0.42;
+    const ex=Math.cos(ang)*dist, ey=Math.sin(ang)*dist*0.8;
+    const rot=Math.random()*720-360;
+    c.animate([
+      {transform:'translate(0,0) scale(.3) rotate(0deg)',opacity:0,offset:0,easing:'cubic-bezier(.2,.8,.3,1)'},
+      {transform:`translate(${ex*.7}px,${ey*.7}px) scale(1) rotate(${rot*.6}deg)`,opacity:1,offset:.45,easing:'ease-in-out'},
+      {transform:`translate(${ex}px,${ey-60}px) scale(1) rotate(${rot*.85}deg)`,opacity:1,offset:.78,easing:'cubic-bezier(.4,0,.6,1)'},
+      {transform:`translate(${ex*1.05}px,${ey-H*0.6}px) scale(.9) rotate(${rot}deg)`,opacity:0,offset:1}
+    ],{duration:1600+Math.random()*500,delay:120+i*26,fill:'forwards'});
+  }
+
+  await wait(1400); if(bSkip) return finishB(cx,cy);
+
+  // 3) blue flash wipe
+  setStatus('');
+  iFlash.animate([{opacity:0},{opacity:.92,offset:.4},{opacity:0}],{duration:520,easing:'ease-in-out'});
+
+  await wait(230); if(bSkip) return finishB(cx,cy);
+
+  // 4) big radial burst from center + concentration lines pulse
+  iLines.animate([{transform:'translate(-50%,-50%) scale(1) rotate(18deg)'},
+    {transform:'translate(-50%,-50%) scale(1.25) rotate(26deg)',offset:.4},
+    {transform:'translate(-50%,-50%) scale(1.1) rotate(30deg)'}],{duration:620,easing:'ease-out',fill:'forwards'});
+  for(let i=0;i<30;i++){
+    const size=20+Math.random()*40, col=CAPCOLORS[i%CAPCOLORS.length];
+    const c=cap3d(size,col); c.style.left=(cx-size/2)+'px'; c.style.top=(cy-size/2)+'px';
+    iStorm.appendChild(c);
+    const ang=(i/30)*Math.PI*2+Math.random()*.4, dist=140+Math.random()*Math.max(W,H)*0.55;
+    c.animate([
+      {transform:'translate(0,0) scale(.2)',opacity:1,offset:0,easing:'cubic-bezier(.15,.85,.35,1)'},
+      {transform:`translate(${Math.cos(ang)*dist}px,${Math.sin(ang)*dist}px) scale(1) rotate(${Math.random()*400-200}deg)`,opacity:0,offset:1}
+    ],{duration:720+Math.random()*380,fill:'forwards'});
+  }
+
+  await wait(560); if(bSkip) return finishB(cx,cy);
+
+  // 5) sealed result capsule pops in center (contents stay hidden) → into cart
+  setStatus('出た！');
+  iCap.style.background=`radial-gradient(circle at 34% 28%,#fff 0 8%,${current.color} 9% 55%,${shade(current.color,-24)} 100%)`;
+  iCap.animate([{opacity:0,transform:'scale(.2) rotate(-20deg)'},
+    {opacity:1,transform:'scale(1.18) rotate(6deg)',offset:.5,easing:'cubic-bezier(.3,1.6,.5,1)'},
+    {opacity:1,transform:'scale(1) rotate(0deg)'}],{duration:520,fill:'forwards'});
+  popSpark(iStorm,cy,current.color);
+  await wait(620);
+  finishB(cx,cy);
+}
+
+async function finishB(cx,cy){
+  setSub('Got one! Into your cart…',true); setStatus('');
+  await wait(120);
+  immersive.classList.remove('on');
+  await flyToCartAt(cx,cy);
+  // reset modal B stage for next spin
+  bcap.style.opacity='1'; bcap.style.transform='none'; bhint.style.opacity='1';
+}
+document.getElementById('iSkip').onclick=()=>{ bSkip=true; };
 
 knob.onclick=()=>{ if(mode==='A') spin(); };
 bcap.onclick=()=>{ if(mode==='B') spin(); };
@@ -530,13 +603,17 @@ function popSpark(host,topPx,color){
 }
 
 function flyToCart(srcEl){
-  const dr=srcEl.getBoundingClientRect(), cb=cartBtn.getBoundingClientRect();
+  const dr=srcEl.getBoundingClientRect();
+  srcEl.style.opacity='0'; capShadow.style.opacity='0';
+  return flyToCartAt(dr.left+dr.width/2, dr.top+dr.height/2);
+}
+function flyToCartAt(cx,cy){
+  const cb=cartBtn.getBoundingClientRect();
   const f=document.createElement('div'); f.className='flyer';
-  f.style.left=dr.left+dr.width/2-23+'px'; f.style.top=dr.top+dr.height/2-23+'px';
+  f.style.left=cx-23+'px'; f.style.top=cy-23+'px';
   f.style.background=`radial-gradient(circle at 34% 30%, #fff 0 8%, ${current.color} 9% 55%, ${shade(current.color,-18)} 100%)`;
   document.body.appendChild(f);
-  srcEl.style.opacity='0'; capShadow.style.opacity='0';
-  const dx=(cb.left+cb.width/2)-(dr.left+dr.width/2), dy=(cb.top+cb.height/2)-(dr.top+dr.height/2);
+  const dx=(cb.left+cb.width/2)-cx, dy=(cb.top+cb.height/2)-cy;
   const fa=f.animate([
     {transform:'translate(0,0) scale(1)',opacity:1,offset:0},
     {transform:`translate(${dx*.5}px,${dy*.5-40}px) scale(.8) rotate(140deg)`,opacity:1,offset:.55,easing:'cubic-bezier(.3,0,.7,1)'},
