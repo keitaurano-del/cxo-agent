@@ -1878,15 +1878,32 @@ function WorkTebakoTab() {
   );
 }
 
-// 新規事業構想「海外向けオンライン・ガチャ」フィージビリティ（2026-08-31 Keita「終わったらアポロの仕事の別タブにまとめて」）。
-// 多エージェント調査の統合レポートを静的ページ /gacha-feasibility.html で iframe 表示する。
+// 新規事業「海外向けオンライン・ガチャ」（2026-08-31 Keita）。
+// ①プロト＝触れる試作（オンラインで回す演出＋ガチャ機カタログ＋1個ごと手数料の都度課金カート）
+// ②フィージビリティ＝多エージェント調査の統合レポート。静的ページを iframe 切替表示する。
 function WorkGachaTab() {
-  const src = '/gacha-feasibility.html';
+  const [doc, setDoc] = useState<'proto' | 'feasibility'>('proto');
+  const src = doc === 'proto' ? '/gacha-proto.html' : '/gacha-feasibility.html';
+  const title = doc === 'proto' ? 'Korokoro（仮）プロトタイプ' : '海外向けオンライン・ガチャ 事業フィージビリティ';
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex items-center gap-2">
-        <div className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted">
-          フィージビリティ調査（需要・市場・競合・ユニット採算・規制）
+        <div className="flex rounded-md border border-border p-0.5">
+          {([
+            ['proto', 'プロト'],
+            ['feasibility', '調査'],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setDoc(key)}
+              className={`rounded px-2.5 py-1 text-[11px] transition-colors ${
+                doc === key ? 'bg-accent font-semibold text-bg' : 'text-text-muted hover:text-text'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
         <a
           href={src}
@@ -1900,7 +1917,7 @@ function WorkGachaTab() {
       <iframe
         key={src}
         src={src}
-        title="海外向けオンライン・ガチャ 事業フィージビリティ"
+        title={title}
         className="min-h-0 w-full flex-1 rounded-lg border border-border bg-white"
       />
     </div>

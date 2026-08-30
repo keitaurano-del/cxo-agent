@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Korokoro — spin real Japanese gacha, one at a time</title>
+<style>
+  :root{
+    --ink:#221f1c; --muted:#6f685f; --line:#eae4da; --paper:#fbf8f3; --card:#fff;
+    --accent:#e0523c; --accent-d:#c1412d; --accent-soft:#fdece7;
+    --mint:#3f9d78; --gold:#e6a935; --blue:#4a76c4;
+    --shadow:0 1px 2px rgba(0,0,0,.05),0 6px 20px rgba(80,60,40,.06);
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    line-height:1.6;font-size:15px}
+  a{color:inherit}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 18px}
+
+  /* top bar */
+  .topbar{position:sticky;top:0;z-index:40;background:rgba(251,248,243,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .topbar .row{display:flex;align-items:center;gap:12px;height:58px}
+  .logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:18px;letter-spacing:-.01em}
+  .logo .dot{width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 34% 32%,#fff 0 12%,var(--accent) 13% 100%);box-shadow:inset 0 -3px 6px rgba(0,0,0,.18)}
+  .logo small{font-weight:600;color:var(--muted);font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 7px;margin-left:2px}
+  .cartbtn{margin-left:auto;display:flex;align-items:center;gap:8px;background:var(--ink);color:#fff;border:0;border-radius:999px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer}
+  .cartbtn .n{background:var(--accent);border-radius:999px;min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;padding:0 5px}
+
+  /* hero */
+  .hero{padding:44px 0 20px;text-align:center}
+  .hero h1{font-size:34px;line-height:1.2;margin:0 0 12px;font-weight:800;letter-spacing:-.02em}
+  .hero h1 .hl{color:var(--accent)}
+  .hero p{max-width:560px;margin:0 auto;color:var(--muted);font-size:16px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:20px 0 6px}
+  .chip{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600;box-shadow:var(--shadow)}
+  .chip b{color:var(--accent)}
+
+  /* catalog */
+  h2.sec{font-size:15px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:34px 0 14px;font-weight:700}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;padding-bottom:20px}
+  .machine{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column}
+  .mtop{position:relative;height:150px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .mtitle{padding:13px 14px 0;font-weight:700;font-size:15px}
+  .mmeta{padding:2px 14px 0;color:var(--muted);font-size:12.5px}
+  .mfoot{padding:12px 14px 14px;margin-top:auto;display:flex;align-items:center;gap:8px}
+  .price{font-weight:800;font-size:15px}
+  .price small{font-weight:600;color:var(--muted);font-size:11px;display:block;line-height:1}
+  .spin{margin-left:auto;background:var(--accent);color:#fff;border:0;border-radius:999px;padding:9px 15px;font-weight:700;font-size:13px;cursor:pointer;transition:transform .08s,background .15s}
+  .spin:hover{background:var(--accent-d)}
+  .spin:active{transform:scale(.96)}
+
+  /* gacha machine illustration */
+  .gm{width:96px;height:130px}
+
+  /* modal spin */
+  .overlay{position:fixed;inset:0;background:rgba(30,22,18,.55);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:60;padding:18px}
+  .overlay.on{display:flex}
+  .spinbox{background:var(--card);border-radius:20px;max-width:360px;width:100%;padding:26px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.25);position:relative}
+  .spinbox h3{margin:0 0 4px;font-size:16px}
+  .spinbox .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .stage{height:190px;display:flex;align-items:center;justify-content:center;position:relative}
+  .capsule{width:104px;height:104px;border-radius:50%;position:relative;box-shadow:inset 0 -8px 14px rgba(0,0,0,.18),0 8px 18px rgba(0,0,0,.15)}
+  .capsule::before{content:"";position:absolute;left:0;right:0;top:50%;height:3px;background:rgba(0,0,0,.14)}
+  .capsule::after{content:"";position:absolute;left:14%;top:12%;width:34%;height:24%;border-radius:50%;background:rgba(255,255,255,.6)}
+  @keyframes drop{0%{transform:translateY(-120px) scale(.6);opacity:0}55%{transform:translateY(10px) scale(1);opacity:1}70%{transform:translateY(-6px)}100%{transform:translateY(0)}}
+  @keyframes rattle{0%,100%{transform:rotate(0)}25%{transform:rotate(-7deg)}75%{transform:rotate(7deg)}}
+  .capsule.drop{animation:drop .7s cubic-bezier(.2,.9,.3,1.2) both}
+  .capsule.rattle{animation:rattle .5s ease-in-out infinite}
+  .reveal{opacity:0;transition:opacity .3s;margin-top:6px}
+  .reveal.on{opacity:1}
+  .reveal .got{font-size:12px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+  .reveal .item{font-size:19px;font-weight:800;margin:2px 0}
+  .rare{display:inline-block;font-size:11px;font-weight:800;border-radius:999px;padding:2px 9px;margin-top:2px}
+  .rare.common{background:#eef1f4;color:#5b6674}
+  .rare.rare{background:#e7f0ff;color:#3667c0}
+  .rare.secret{background:#fbe9c8;color:#a9781a}
+  .modact{display:flex;gap:9px;margin-top:16px}
+  .modact button{flex:1;border-radius:999px;padding:11px;font-weight:700;font-size:13.5px;cursor:pointer;border:1px solid var(--line);background:var(--card)}
+  .modact .again{border-color:var(--ink)}
+  .modact .keep{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .feeline{font-size:12.5px;color:var(--muted);margin-top:12px}
+
+  /* cart drawer */
+  .drawer{position:fixed;top:0;right:0;height:100%;width:370px;max-width:92vw;background:var(--paper);border-left:1px solid var(--line);box-shadow:-10px 0 40px rgba(0,0,0,.12);transform:translateX(100%);transition:transform .25s;z-index:70;display:flex;flex-direction:column}
+  .drawer.on{transform:none}
+  .dhead{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line)}
+  .dhead h3{margin:0;font-size:16px}
+  .dhead .x{margin-left:auto;background:0;border:0;font-size:20px;cursor:pointer;color:var(--muted)}
+  .items{flex:1;overflow-y:auto;padding:8px 14px}
+  .empty{color:var(--muted);text-align:center;padding:44px 10px;font-size:14px}
+  .ci{display:flex;align-items:center;gap:11px;padding:11px 6px;border-bottom:1px solid var(--line)}
+  .cdot{width:34px;height:34px;border-radius:50%;flex:none;box-shadow:inset 0 -3px 5px rgba(0,0,0,.15)}
+  .ci .nm{font-weight:700;font-size:13.5px;line-height:1.25}
+  .ci .sr{font-size:11.5px;color:var(--muted)}
+  .ci .pr{margin-left:auto;text-align:right;font-size:13px;font-weight:700;white-space:nowrap}
+  .ci .rm{background:0;border:0;color:var(--muted);cursor:pointer;font-size:15px;padding:2px 4px}
+  .summary{border-top:1px solid var(--line);padding:14px 18px;background:var(--card)}
+  .srow{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin:4px 0}
+  .srow.tot{color:var(--ink);font-weight:800;font-size:16px;margin-top:8px}
+  .checkout{width:100%;margin-top:12px;background:var(--accent);color:#fff;border:0;border-radius:12px;padding:14px;font-weight:800;font-size:15px;cursor:pointer}
+  .fineprint{font-size:11px;color:var(--muted);text-align:center;margin-top:9px}
+
+  .note{margin:30px 0 40px;padding:14px 16px;background:#f2efe9;border-radius:10px;color:var(--muted);font-size:12.5px}
+  footer{padding:24px 0 60px;text-align:center;color:var(--muted);font-size:12px}
+  @media(max-width:520px){.hero h1{font-size:27px}.drawer{width:100%}}
+</style>
+</head>
+<body>
+
+<div class="topbar"><div class="wrap row">
+  <div class="logo"><span class="dot"></span>Korokoro <small>仮</small></div>
+  <button class="cartbtn" id="openCart">Your capsules <span class="n" id="cartN">0</span></button>
+</div></div>
+
+<div class="wrap">
+  <section class="hero">
+    <h1>Spin real Japanese gacha,<br><span class="hl">one capsule at a time.</span></h1>
+    <p>Pick a machine, spin it online, and we ship the real capsule to your door. Buy just one — or keep spinning. You pay per capsule.</p>
+    <div class="chips">
+      <div class="chip">Start from <b>1 capsule</b></div>
+      <div class="chip">Spin <b>as many</b> as you like</div>
+      <div class="chip"><b>Flat fee</b> per capsule</div>
+      <div class="chip">Shipped <b>worldwide</b></div>
+    </div>
+  </section>
+
+  <h2 class="sec">Choose a gacha machine</h2>
+  <div class="grid" id="grid"></div>
+
+  <div class="note" id="feeNote"></div>
+</div>
+
+<!-- spin modal -->
+<div class="overlay" id="overlay">
+  <div class="spinbox">
+    <h3 id="spTitle">—</h3>
+    <div class="sub" id="spSub">Turn the handle…</div>
+    <div class="stage"><div class="capsule" id="capsule"></div></div>
+    <div class="reveal" id="reveal">
+      <div class="got">You got</div>
+      <div class="item" id="spItem">—</div>
+      <div id="spRare"></div>
+    </div>
+    <div class="feeline" id="spFee"></div>
+    <div class="modact">
+      <button class="again" id="spAgain">Spin again</button>
+      <button class="keep" id="spKeep">Keep &amp; add ✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- cart drawer -->
+<div class="drawer" id="drawer">
+  <div class="dhead"><h3>Your capsules</h3><button class="x" id="closeCart">×</button></div>
+  <div class="items" id="items"></div>
+  <div class="summary">
+    <div class="srow"><span>Capsules <span id="sumN">0</span> × item price</span><span id="sumItems">$0.00</span></div>
+    <div class="srow"><span>Handling fee (<span id="feeEach">$2.50</span> / capsule)</span><span id="sumFee">$0.00</span></div>
+    <div class="srow"><span>Consolidated shipping <small>(est.)</small></span><span id="sumShip">$0.00</span></div>
+    <div class="srow tot"><span>Total</span><span id="sumTot">$0.00</span></div>
+    <button class="checkout" id="checkout">Checkout &amp; ship</button>
+    <div class="fineprint">Spin now · we hold your capsules · ship them together when you're ready. Prototype — no real charge.</div>
+  </div>
+</div>
+
+<footer>Korokoro (working name) · interactive prototype · concept: spin online → real capsule shipped</footer>
+
+<script>
+const FEE = 2.50;                 // 1個ごとの手数料 (flat handling fee per capsule)
+const SHIP_BASE = 8.0, SHIP_PER = 1.0;  // consolidated shipping estimate
+const fmt = n => '$'+n.toFixed(2);
+
+// gacha machines. price = capsule item price (USD). pool = possible results w/ rarity weight.
+const MACHINES = [
+  {id:'chiikawa', name:'Chiikawa Friends', color:'#f4a7bb', price:4.50, count:6,
+    pool:[['Chiikawa sitting','common',60],['Hachiware charm','common',60],['Usagi figure','common',55],['Momonga plush tag','rare',20],['Kani-chan','rare',15],['Gold secret pose','secret',5]]},
+  {id:'sanrio', name:'Sanrio Characters', color:'#f2c14e', price:4.00, count:8,
+    pool:[['Cinnamoroll','common',60],['Pompompurin','common',60],['My Melody','common',55],['Kuromi','rare',22],['Hello Kitty retro','rare',18],['Little Twin Stars foil','secret',6]]},
+  {id:'pokemon', name:'Pokémon Capsule', color:'#4a76c4',price:5.00, count:6,
+    pool:[['Pikachu','common',60],['Eevee','common',55],['Snorlax','common',50],['Gengar','rare',22],['Mimikyu','rare',18],['Shiny Charizard','secret',5]]},
+  {id:'gunpla', name:'Gundam Capsule Model', color:'#5a6b7b',price:5.50, count:5,
+    pool:[['RX-78-2 Gundam','common',58],['Zaku II','common',55],['Char Zaku','rare',25],['Zeong','rare',15],['Clear-ver. Nu Gundam','secret',6]]},
+  {id:'animals', name:'Cup Edge Cats', color:'#3f9d78',price:3.50, count:5,
+    pool:[['Tabby on rim','common',60],['Calico dangling','common',55],['Black cat peeking','common',50],['Siamese stretch','rare',22],['Golden sleepy cat','secret',7]]},
+  {id:'foodmini', name:'Miniature Konbini', color:'#e0523c',price:4.00, count:7,
+    pool:[['Onigiri set','common',60],['Ramen bowl','common',58],['Melon soda float','common',52],['Bento box','rare',22],['Mini vending machine','rare',16],['Gold register secret','secret',6]]},
+  {id:'ghibli', name:'Studio-style Forest', color:'#7fa15a',price:5.00, count:6,
+    pool:[['Forest spirit','common',60],['Soot sprite trio','common',55],['Cat bus mini','rare',24],['Umbrella scene','rare',16],['Glow-in-dark totem','secret',6]]},
+  {id:'retro', name:'Showa Retro Goods', color:'#c58a5a',price:3.50, count:6,
+    pool:[['Pay phone','common',60],['Glass milk bottle','common',55],['Cassette player','common',50],['Rotary TV','rare',22],['Neon sign','rare',16],['Brass secret coin','secret',7]]},
+];
+
+// SVG gachapon machine, tinted per color
+function machineSVG(color){
+  return `<svg class="gm" viewBox="0 0 96 130" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="14" y="6" width="68" height="60" rx="12" fill="${color}" opacity=".22"/>
+    <rect x="14" y="6" width="68" height="60" rx="12" stroke="${color}" stroke-width="2.5"/>
+    <circle cx="34" cy="26" r="6" fill="${color}"/><circle cx="52" cy="22" r="5" fill="${color}" opacity=".7"/>
+    <circle cx="46" cy="40" r="7" fill="#fff" stroke="${color}" stroke-width="2"/>
+    <circle cx="62" cy="34" r="4.5" fill="${color}" opacity=".55"/><circle cx="30" cy="46" r="4" fill="${color}" opacity=".6"/>
+    <rect x="10" y="66" width="76" height="58" rx="10" fill="#fff" stroke="${color}" stroke-width="2.5"/>
+    <circle cx="48" cy="86" r="9" fill="none" stroke="${color}" stroke-width="3"/>
+    <rect x="44" y="83" width="8" height="3" rx="1.5" fill="${color}"/>
+    <rect x="30" y="104" width="36" height="14" rx="3" fill="${color}" opacity=".18" stroke="${color}" stroke-width="2"/>
+  </svg>`;
+}
+
+const cart = [];
+const grid = document.getElementById('grid');
+MACHINES.forEach(m=>{
+  const el = document.createElement('div');
+  el.className='machine';
+  el.innerHTML = `
+    <div class="mtop" style="background:${hexA(m.color,.10)}">${machineSVG(m.color)}</div>
+    <div class="mtitle">${m.name}</div>
+    <div class="mmeta">${m.count} possible capsules · random</div>
+    <div class="mfoot">
+      <div class="price">${fmt(m.price)}<small>per capsule + ${fmt(FEE)} fee</small></div>
+      <button class="spin">Spin ▸</button>
+    </div>`;
+  el.querySelector('.spin').onclick = ()=>openSpin(m);
+  grid.appendChild(el);
+});
+document.getElementById('feeNote').innerHTML =
+  `<b>How pricing works —</b> every spin is one real capsule: the item price shown on each machine plus a flat ${fmt(FEE)} handling fee per capsule. Spin one or many; we hold them and ship everything together, so you only pay international shipping once.`;
+document.getElementById('feeEach').textContent = fmt(FEE);
+
+// ---- spin flow ----
+let current=null, pending=null;
+const overlay=document.getElementById('overlay'), capsule=document.getElementById('capsule');
+const reveal=document.getElementById('reveal');
+function pick(m){
+  const total=m.pool.reduce((s,p)=>s+p[2],0); let r=Math.random()*total;
+  for(const p of m.pool){ if((r-=p[2])<=0) return {name:p[0],rarity:p[1]}; }
+  return {name:m.pool[0][0],rarity:m.pool[0][1]};
+}
+function openSpin(m){
+  current=m; pending=null;
+  document.getElementById('spTitle').textContent=m.name;
+  document.getElementById('spSub').textContent='Turn the handle…';
+  document.getElementById('spFee').innerHTML='';
+  capsule.style.background=`radial-gradient(circle at 34% 30%, #fff 0 8%, ${m.color} 9% 55%, ${shade(m.color,-16)} 100%)`;
+  reveal.classList.remove('on');
+  document.getElementById('spKeep').disabled=true;
+  overlay.classList.add('on');
+  runSpin();
+}
+function runSpin(){
+  pending=pick(current);
+  reveal.classList.remove('on');
+  document.getElementById('spKeep').disabled=true;
+  document.getElementById('spSub').textContent='Spinning…';
+  capsule.className='capsule rattle';
+  setTimeout(()=>{
+    capsule.className='capsule drop';
+    document.getElementById('spItem').textContent=pending.name;
+    const rr=document.getElementById('spRare');
+    rr.innerHTML=`<span class="rare ${pending.rarity}">${pending.rarity.toUpperCase()}</span>`;
+    document.getElementById('spSub').textContent='Out it comes!';
+    document.getElementById('spFee').innerHTML=`${fmt(current.price)} capsule + ${fmt(FEE)} fee = <b>${fmt(current.price+FEE)}</b>`;
+    reveal.classList.add('on');
+    document.getElementById('spKeep').disabled=false;
+  },820);
+}
+document.getElementById('spAgain').onclick=runSpin;
+document.getElementById('spKeep').onclick=()=>{
+  if(!pending) return;
+  cart.push({series:current.name,color:current.color,item:pending.name,rarity:pending.rarity,price:current.price});
+  renderCart(); overlay.classList.remove('on'); openDrawer();
+};
+overlay.onclick=e=>{ if(e.target===overlay) overlay.classList.remove('on'); };
+
+// ---- cart ----
+const drawer=document.getElementById('drawer');
+function openDrawer(){drawer.classList.add('on')}
+document.getElementById('openCart').onclick=openDrawer;
+document.getElementById('closeCart').onclick=()=>drawer.classList.remove('on');
+function renderCart(){
+  document.getElementById('cartN').textContent=cart.length;
+  document.getElementById('sumN').textContent=cart.length;
+  const items=document.getElementById('items');
+  if(!cart.length){ items.innerHTML='<div class="empty">No capsules yet.<br>Spin a machine to start.</div>'; }
+  else{
+    items.innerHTML='';
+    cart.forEach((c,i)=>{
+      const row=document.createElement('div'); row.className='ci';
+      row.innerHTML=`<span class="cdot" style="background:radial-gradient(circle at 34% 30%,#fff 0 10%,${c.color} 11% 100%)"></span>
+        <div><div class="nm">${c.item}</div><div class="sr">${c.series} · <span class="rare ${c.rarity}" style="padding:0 6px">${c.rarity}</span></div></div>
+        <div class="pr">${fmt(c.price+FEE)}</div><button class="rm" title="remove">×</button>`;
+      row.querySelector('.rm').onclick=()=>{cart.splice(i,1);renderCart();};
+      items.appendChild(row);
+    });
+  }
+  const itemsSum=cart.reduce((s,c)=>s+c.price,0);
+  const feeSum=cart.length*FEE;
+  const ship=cart.length?SHIP_BASE+SHIP_PER*cart.length:0;
+  document.getElementById('sumItems').textContent=fmt(itemsSum);
+  document.getElementById('sumFee').textContent=fmt(feeSum);
+  document.getElementById('sumShip').textContent=fmt(ship);
+  document.getElementById('sumTot').textContent=fmt(itemsSum+feeSum+ship);
+}
+document.getElementById('checkout').onclick=()=>{
+  if(!cart.length){alert('Spin at least one capsule first!');return;}
+  alert(`Prototype checkout\n\n${cart.length} capsule(s)\nItems ${fmt(cart.reduce((s,c)=>s+c.price,0))} + fees ${fmt(cart.length*FEE)} + shipping ${fmt(SHIP_BASE+SHIP_PER*cart.length)}\n\nReal payment (Stripe) + shipping address come next.`);
+};
+renderCart();
+
+// helpers
+function hexA(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;}
+function shade(hex,p){let n=parseInt(hex.slice(1),16),r=n>>16&255,g=n>>8&255,b=n&255;
+  r=Math.max(0,Math.min(255,r+p));g=Math.max(0,Math.min(255,g+p));b=Math.max(0,Math.min(255,b+p));
+  return `rgb(${r},${g},${b})`;}
+</script>
+</body>
+</html>
