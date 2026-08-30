@@ -1878,8 +1878,37 @@ function WorkTebakoTab() {
   );
 }
 
+// 新規事業構想「海外向けオンライン・ガチャ」フィージビリティ（2026-08-31 Keita「終わったらアポロの仕事の別タブにまとめて」）。
+// 多エージェント調査の統合レポートを静的ページ /gacha-feasibility.html で iframe 表示する。
+function WorkGachaTab() {
+  const src = '/gacha-feasibility.html';
+  return (
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <div className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted">
+          フィージビリティ調査（需要・市場・競合・ユニット採算・規制）
+        </div>
+        <a
+          href={src}
+          target="_blank"
+          rel="noreferrer"
+          className="ml-auto rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+        >
+          別タブで開く ↗
+        </a>
+      </div>
+      <iframe
+        key={src}
+        src={src}
+        title="海外向けオンライン・ガチャ 事業フィージビリティ"
+        className="min-h-0 w-full flex-1 rounded-lg border border-border bg-white"
+      />
+    </div>
+  );
+}
+
 // ─── タブ統括 ────────────────────────────────────────────────────────
-type WorkTab = 'chat' | 'knowledge' | 'glossary' | 'lbo' | 'laundry' | 'tebako';
+type WorkTab = 'chat' | 'knowledge' | 'glossary' | 'lbo' | 'laundry' | 'tebako' | 'gacha';
 
 function resolveInitialTab(): WorkTab {
   if (typeof window !== 'undefined') {
@@ -1887,7 +1916,7 @@ function resolveInitialTab(): WorkTab {
     // 概要/動画DL/状況解析タブは削除（2026-07-20 Keita・MC-319）。旧 URL はナレッジへ寄せる。
     // LBOモデラー（MC-367）は仕事タブへ集約（2026-08-08 Keita）。
     // AirRent（MC-370）は事業クローズで撤去（2026-08-23 Keita）。旧 tab=airrent/blueair はナレッジへ寄せる。
-    if (t === 'chat' || t === 'knowledge' || t === 'glossary' || t === 'lbo' || t === 'laundry' || t === 'tebako') return t;
+    if (t === 'chat' || t === 'knowledge' || t === 'glossary' || t === 'lbo' || t === 'laundry' || t === 'tebako' || t === 'gacha') return t;
   }
   return 'knowledge';
 }
@@ -1941,6 +1970,16 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
         <>
           <span aria-hidden><LboIcon width={16} height={16} /></span>
           Nippiki
+        </>
+      ),
+    },
+    // 新規事業構想「海外向けオンライン・ガチャ」フィージビリティ（2026-08-31 Keita 指示）。
+    {
+      key: 'gacha',
+      label: (
+        <>
+          <span aria-hidden><SearchIcon width={16} height={16} /></span>
+          ガチャ
         </>
       ),
     },
@@ -2008,7 +2047,7 @@ export default function Work() {
         fetchedAt={undefined}
       />
       <WorkTabBar tab={tab} onChange={changeTab} />
-      <div className={tab === 'lbo' || tab === 'laundry' || tab === 'tebako' ? 'flex-1 overflow-hidden px-4 py-4 md:px-6' : 'flex-1 overflow-y-auto px-4 py-4 md:px-6'}>
+      <div className={tab === 'lbo' || tab === 'laundry' || tab === 'tebako' || tab === 'gacha' ? 'flex-1 overflow-hidden px-4 py-4 md:px-6' : 'flex-1 overflow-y-auto px-4 py-4 md:px-6'}>
         {/* 概要/動画DL/状況解析は削除（MC-319）。既定＝ナレッジ。AirRent/LBO は独立ナビから移設（2026-08-08）。 */}
         {tab === 'glossary' ? (
           <WorkGlossaryTab onSeedChat={seedChat} />
@@ -2018,6 +2057,8 @@ export default function Work() {
           <WorkLaundryTab />
         ) : tab === 'tebako' ? (
           <WorkTebakoTab />
+        ) : tab === 'gacha' ? (
+          <WorkGachaTab />
         ) : (
           <WorkKnowledgeTab />
         )}

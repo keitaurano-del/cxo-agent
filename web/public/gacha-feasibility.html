@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>海外向けオンライン・ガチャ 事業フィージビリティ</title>
+<style>
+  :root {
+    --ink: #1c1a17;
+    --muted: #6b655c;
+    --line: #e5e0d8;
+    --paper: #fbfaf7;
+    --card: #ffffff;
+    --accent: #b4472f;      /* カプセルの赤・くすませて日常寄り */
+    --accent-soft: #f4e7e2;
+    --good: #2f7d55;
+    --warn: #b07d1e;
+    --bad: #b4472f;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Segoe UI", Meiryo, sans-serif;
+    line-height: 1.75;
+    font-size: 15px;
+  }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 40px 22px 96px; }
+  header.doc { border-bottom: 2px solid var(--ink); padding-bottom: 20px; margin-bottom: 8px; }
+  .kicker { font-size: 12px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; margin: 0 0 8px; }
+  h1 { font-size: 26px; line-height: 1.35; margin: 0 0 10px; font-weight: 800; letter-spacing: .01em; }
+  .concept { color: var(--muted); font-size: 14px; margin: 0; }
+  .meta { color: var(--muted); font-size: 12px; margin-top: 14px; }
+
+  h2 { font-size: 18px; margin: 42px 0 12px; padding-top: 8px; font-weight: 800; }
+  h2 .n { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 8px; }
+  h3 { font-size: 15px; margin: 22px 0 6px; font-weight: 700; }
+  p { margin: 8px 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  strong { font-weight: 700; }
+  ul { margin: 8px 0; padding-left: 20px; }
+  li { margin: 5px 0; }
+  small { color: var(--muted); }
+
+  /* 判定ボックス */
+  .verdict {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: 10px;
+    padding: 20px 22px;
+    margin: 22px 0 8px;
+  }
+  .verdict .lead { font-size: 16px; font-weight: 800; margin: 0 0 12px; }
+  .scoregrid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 10px; }
+  @media (min-width: 560px) { .scoregrid { grid-template-columns: 1fr 1fr; } }
+  .score { display: flex; align-items: baseline; gap: 10px; padding: 10px 12px; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
+  .score .lab { font-size: 12px; color: var(--muted); min-width: 92px; }
+  .score .val { font-weight: 700; font-size: 14px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+  .tag.good { background: #e7f2ec; color: var(--good); }
+  .tag.warn { background: #f7efdd; color: var(--warn); }
+  .tag.bad { background: var(--accent-soft); color: var(--bad); }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .callout { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin: 16px 0; }
+  .callout h3 { margin-top: 0; }
+  .risk { border-left: 4px solid var(--warn); }
+  .edge { border-left: 4px solid var(--good); }
+
+  .src { font-size: 12.5px; color: var(--muted); }
+  .src li { margin: 3px 0; }
+  .prov { margin-top: 40px; padding: 14px 16px; background: #f2efe9; border-radius: 8px; font-size: 12px; color: var(--muted); }
+  .next { counter-reset: step; list-style: none; padding-left: 0; }
+  .next li { position: relative; padding-left: 34px; margin: 10px 0; }
+  .next li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 0; top: 1px;
+    width: 22px; height: 22px; border-radius: 999px;
+    background: var(--accent); color: #fff; font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <p class="kicker">新規事業フィージビリティ調査</p>
+    <h1>海外向け「オンラインで回すガチャ」事業の成立性</h1>
+    <p class="concept">構想：海外の人が欲しいガチャを選び、オンラインで“回す”演出を楽しむ → 実物カプセルが後日届く。課金は1回手数料＋国際送料（送料マージンを乗せる）モデル。</p>
+    <p class="meta">作成：Son（Masayoshi 補佐）／2026-08-31　根拠：多ソース調査を事実検証（確認43件・棄却7件）</p>
+  </header>
+
+  <div class="verdict">
+    <p class="lead">総合判定：<span style="color:var(--good)">GO 寄り</span> — 需要と技術は揃い、モデルも実証済み。勝敗は「先行者・規制・送料採算」の3点の抜け方で決まる。</p>
+    <div class="scoregrid">
+      <div class="score"><span class="lab">需要</span><span class="val"><span class="tag good">強い</span> 実証済み</span></div>
+      <div class="score"><span class="lab">モデル実現性</span><span class="val"><span class="tag good">実証済み</span> 既存事例あり</span></div>
+      <div class="score"><span class="lab">競争環境</span><span class="val"><span class="tag warn">要注意</span> 直接競合が先行</span></div>
+      <div class="score"><span class="lab">規制リスク</span><span class="val"><span class="tag bad">重い</span> 射幸性・未成年</span></div>
+      <div class="score"><span class="lab">ユニット採算</span><span class="val"><span class="tag warn">設計次第</span> 送料が重い</span></div>
+      <div class="score"><span class="lab">結論</span><span class="val">差別化＋規制設計が生命線</span></div>
+    </div>
+  </div>
+
+  <h2><span class="n">1</span>需要 — 本物か</h2>
+  <p>「海外の人が日本のガチャ／コレクタブルを欲しがる」需要は、複数の独立した信号で裏取りできました。</p>
+  <ul>
+    <li><strong>世界のブラインドボックス熱（Pop Mart / Labubu）：</strong>TikTok #labubu は130万本超、オンラインは数分で完売、Coca-Cola×Labubu は2分未満で完売。Lisa（BLACKPINK）・Dua Lipa・Cher らセレブが牽引。<small>（ABC News 2025-06 ほか）</small></li>
+    <li><strong>大人買い（kidult）が最速成長：</strong>2025 Q1 の大人向けトイ売上 <strong>$1.8B（+12% YoY）</strong>、玩具で最も伸びるセグメント。</li>
+    <li><strong>Pop Mart の海外実績：</strong>2024 売上 <strong>$1.8B（+107%）</strong>、うち海外 <strong>約$700M（+375%）</strong>・海外比率 約39%。「海外×コレクタブル」の需要は数字で実在。</li>
+    <li><strong>日本ガチャのインバウンド実証：</strong>成田空港のカプセル機は「日本一の売上（平均の約3倍）」、約400〜500台、外国人の帰国前の土産購入が主因。<small>（Bandai Namco 統合報告書2024／narita.com）</small>。需要は空港で既に顕在化している。</li>
+  </ul>
+
+  <h2><span class="n">2</span>市場規模</h2>
+  <table>
+    <thead><tr><th>指標</th><th>数値</th><th>出所・注記</th></tr></thead>
+    <tbody>
+      <tr><td>日本カプセルトイ市場（出荷ベース）</td><td class="num">FY2024 ¥1,410億<br>（≈$920M, +22.6%）</td><td>日本カプセルトイ協会(JCTA)。推移 ¥720億(’22)→¥1,150億(’23)→¥1,410億(’24)＝2年で約2倍</td></tr>
+      <tr><td>日本カプセルトイ市場（玩具協会ベース）</td><td class="num">¥650億→¥800億</td><td>Bandai/日本玩具協会。FY2023.3 +44%→FY2024.3 +23%、¥1,000億の大台に接近。歴史的には¥300〜350億</td></tr>
+      <tr><td>世界のデザイナートイ市場</td><td class="num">2026予測 $15B</td><td>2015比 +1500%、’22–’26 CAGR 24%（HKTDC／Frost &amp; Sullivan、TIME経由）</td></tr>
+      <tr><td>Bandai 北米ガチャ店舗</td><td class="num">16 → 50店（目標）</td><td>「1店あたり売上が日本超」だが一般認知はまだ低い＝伸びしろ</td></tr>
+    </tbody>
+  </table>
+
+  <h2><span class="n">3</span>競合・既存サービス <span style="font-size:12px;color:var(--muted);font-weight:400">（ここが最重要）</span></h2>
+  <p>「オンラインで回す→後日実物発送」は<strong>すでに複数社が実運用しており、モデルとしては枯れて（実証されて）います</strong>。裏を返せば直接競合が存在します。</p>
+
+  <table>
+    <thead><tr><th>サービス</th><th>何をしているか</th><th>課金</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Gacharia</strong><br><small>gacharia.com</small></td>
+        <td><strong>ほぼ同一モデルの直接競合。</strong>東京で実機をスタッフが回し世界発送（US/CA/AU/UK/EU・2〜3週）。ただし「顧客がオンラインで回す演出」は無く<strong>スタッフ代行</strong>、per-spin課金でもない。</td>
+        <td>バンドル制<br>$20/1・$33/3・$45/5<br><small>送料・追跡込み</small></td>
+      </tr>
+      <tr>
+        <td><strong>Bandai 公式<br>オンラインGashapon</strong><br><small>bandainamco-am.co.jp</small></td>
+        <td>画面上のガチャを回す→カプセルを開封演出→<strong>後日実物を発送</strong>（同月分は同梱）。<strong>まさにこの演出を公式が実装済み</strong>。ただし国内向け中心・海外発送は不明。</td>
+        <td>クレカ/PayPay<br><small>1回〜10連</small></td>
+      </tr>
+      <tr>
+        <td><strong>Toreba</strong><br><small>toreba.net</small></td>
+        <td>オンラインで実機クレーンを遠隔プレイ→景品を世界発送。<strong>23M+DL</strong>で大規模実証。ガチャではないが「オンラインでプレイ→実物発送」の到達点。</td>
+        <td>TPクレジット都度課金<br>≈$2/回・週1無料発送</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout edge">
+    <h3>差別化の穴（勝ち筋の仮説）</h3>
+    <ul style="margin-bottom:0">
+      <li><strong>“自分で回す”体験UX：</strong>Gacharia はスタッフ代行で演出が無い。顧客自身がオンラインで回すワクワク（Bandaiが公式実装済みの演出）は明確な差になる。</li>
+      <li><strong>フランチャイズの幅と「選べる楽しさ」：</strong>欲しいシリーズを選んで回す設計。</li>
+      <li><strong>送料最適化：</strong>「回すのは即・発送は同梱（月次 or 一定個数）」でユニット採算を作る。</li>
+      <li><strong>ターゲット：</strong>最速成長中の大人コレクター（kidult）に寄せる。</li>
+    </ul>
+  </div>
+
+  <h2><span class="n">4</span>ユニットエコノミクス</h2>
+  <ul>
+    <li>カプセル原価：<strong>¥300〜500/個</strong>。</li>
+    <li>送料：国際小口（日本郵便 ePacket／小形包装物）が重く、<strong>1カプセルを単発発送すると赤字リスク</strong>。Gacharia がバンドル＋送料込み、Bandai が月次同梱にしているのはこのため。</li>
+    <li><strong>示唆：</strong>「回すのは即／発送は同梱」が採算の鍵。単発手数料だけだと LTV が薄い → まとめ回し・リピート・会員設計で1発送あたりの個数を増やす必要がある。「1回手数料＋送料マージン」単体より、<strong>消化発送（貯めてまとめて送る）</strong>との併用が現実的。</li>
+  </ul>
+
+  <div class="callout risk">
+    <h3><span class="n" style="color:var(--warn)">5</span>規制・リスク — 事業の生命線</h3>
+    <h3 style="margin-top:14px">射幸性（ガチャ＝ギャンブル的）</h3>
+    <p>乱数報酬は「ギャンブル的行動と関連」と報じられ、査読研究でもルートボックスと問題ギャンブルの関連が指摘されています（特に未成年）。各国が動いています：</p>
+    <ul>
+      <li>中国：8歳未満へのブラインドボックス販売制限。上海2022ガイドライン（年齢・価格上限）。</li>
+      <li>日本：コンプ（コンプリート）ガチャを世界で最初に規制。景表法まわりの整理が必要。</li>
+      <li>シンガポール：規制検討中。米FTC：2025年 HoYoverse（ルートボックス）措置。米国は現時点で賭博認定はしていないが規制リスクは実在。</li>
+    </ul>
+    <h3>IP・商標（並行輸入／消尽論）</h3>
+    <p>キャラクターIPのカプセルを海外へ再販するには、対象国の消尽制度に注意。<strong>日本＝国際消尽</strong>。<strong>米国＝Lanham Act＋関税法§526＋CBP登録</strong>で真正品でもグレー輸入を差止め可能（ただし「共通支配」/Leverルール例外で同一企業グループの真正品は差止め困難）。<strong>EU＝域内消尽</strong>。ライセンスの一次確認が要る。</p>
+  </div>
+
+  <h2><span class="n">6</span>判定と次アクション</h2>
+  <p><strong>GO 寄り。</strong>需要・技術・モデルは揃っている。ただし成否は次の3点に集約されます — ①先行者 Gacharia をどう抜くか、②射幸性・未成年の規制をどう設計するか、③重い国際送料でユニット採算をどう作るか。</p>
+  <ol class="next">
+    <li><strong>Gacharia の実測ベンチ：</strong>価格・在庫・購入〜到着UX を実際に体験し、演出の欠落と弱点を特定。</li>
+    <li><strong>ユニット採算の試算：</strong>消化/同梱発送モデルで、カプセル原価＋ePacket 送料に対し「1回手数料でいくら乗るか」を数値化。</li>
+    <li><strong>規制の一次確認：</strong>主要ターゲット国での射幸性・未成年規制と、キャラクターIPのライセンス可否を確認。</li>
+    <li><strong>需要検証：</strong>小さく LP＋ウェイトリストを立て、実際のCVR／関心度で需要を実測してから開発判断。</li>
+  </ol>
+
+  <h2 class="src-h" style="font-size:15px">主な出典</h2>
+  <ul class="src">
+    <li>Bandai Namco Holdings — Integrated Report 2024（カプセルトイ市場・北米戦略・成田空港）</li>
+    <li>日本カプセルトイ協会(JCTA) 2024年度 市場調査（¥1,410億・+22.6%）</li>
+    <li>Pop Mart — 2024 Annual Results（売上$1.8B／海外$700M・+375%）</li>
+    <li>TIME × HKTDC / Frost &amp; Sullivan（世界デザイナートイ市場 2026予測$15B）</li>
+    <li>ABC News 2025-06（ブラインドボックス熱と射幸性）＋ルートボックス関連の査読研究</li>
+    <li>INTA — Parallel Imports / Gray Market Goods fact sheet（消尽論・CBP）</li>
+    <li>gacharia.com ／ bandainamco-am.co.jp（公式オンラインGashapon）／ toreba.net ／ narita.com</li>
+  </ul>
+
+  <p class="prov">
+    ※ このレポートは、バックグラウンドで走らせた多エージェント調査（need→競合→ユニット採算→規制→収益の6軸ファンアウト＋事実検証）の成果を統合したものです。最終統合の直前で調査プロセスが停止したため、Son が検証済みの確認事項（43件確認・7件棄却）から統合・作成しました。数値は各一次ソースに紐付いています。追加の裏取り・シナリオ収益試算は次アクションで深掘り予定です。
+  </p>
+
+</div>
+</body>
+</html>
