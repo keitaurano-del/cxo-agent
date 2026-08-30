@@ -145,8 +145,35 @@
     opacity:0;will-change:transform,opacity;pointer-events:none}
   #immersive .iveil{position:absolute;left:50%;top:46%;width:66vmax;height:66vmax;transform:translate(-50%,-50%);border-radius:50%;
     background:radial-gradient(circle,#fff 0 32%,rgba(255,255,255,0) 72%);pointer-events:none}
-  #immersive .iflash{position:absolute;inset:0;background:#33bdf5;opacity:0;pointer-events:none;z-index:6;will-change:opacity}
-  #immersive .istorm{position:absolute;inset:0;pointer-events:none;z-index:4}
+  #immersive .iflash{position:absolute;inset:0;background:#33bdf5;opacity:0;pointer-events:none;z-index:10;will-change:opacity}
+  #immersive .istorm{position:absolute;inset:0;pointer-events:none;z-index:6}
+
+  /* faithful machine (Bandai gashapon 参照) */
+  .imachine{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%) scale(.7);width:160px;z-index:5;transform-origin:50% 60%;
+    will-change:transform,opacity;background:linear-gradient(180deg,#fefefe,#e9e6e1);border-radius:13px;border:1px solid #dad5cd;
+    box-shadow:0 12px 34px rgba(0,0,0,.2),inset 0 2px 4px rgba(255,255,255,.85);padding:7px}
+  .im-head{height:52px;border-radius:8px;position:relative;background:linear-gradient(180deg,#fff,#f5f2ec);border:1px solid #e6e1d8;
+    display:flex;align-items:center;justify-content:center;gap:4px}
+  .im-head b{position:absolute;top:4px;left:7px;font-size:8px;font-weight:800;color:#c1412d;letter-spacing:.03em}
+  .im-head .hc{width:14px;height:14px;border-radius:50%;box-shadow:inset 0 -2px 3px rgba(0,0,0,.2)}
+  .im-head small{position:absolute;bottom:4px;right:7px;font-size:7px;font-weight:700;color:#6f685f}
+  .im-dome{margin-top:6px;height:92px;border-radius:11px;position:relative;overflow:hidden;
+    background:linear-gradient(160deg,rgba(255,255,255,.92),rgba(228,228,233,.5));border:2px solid #d6d1c8;
+    box-shadow:inset 0 7px 13px rgba(255,255,255,.7),inset 0 -9px 15px rgba(0,0,0,.08)}
+  .im-balls{position:absolute;inset:0}
+  .im-balls .db{position:absolute;border-radius:50%;box-shadow:inset 0 -3px 5px rgba(0,0,0,.22);will-change:transform,opacity}
+  .im-gloss{position:absolute;left:10%;top:8%;width:40%;height:34%;border-radius:50%;background:linear-gradient(150deg,rgba(255,255,255,.85),transparent 70%);pointer-events:none}
+  .im-ctrl{height:46px;margin-top:6px;border-radius:9px;background:linear-gradient(180deg,#f4f2ee,#e2ded7);border:1px solid #dad5cd;position:relative}
+  .im-arrow{position:absolute;left:calc(50% - 4px);top:50%;transform:translate(-50%,-50%) rotate(0deg);width:38px;height:38px;border-radius:50%;
+    border:6px solid #e0523c;border-right-color:transparent;border-bottom-color:transparent;transform-origin:50% 50%;will-change:transform}
+  .im-arrow::after{content:"";position:absolute;left:-4px;top:8px;border:6px solid transparent;border-top-color:#e0523c;transform:rotate(-32deg)}
+  .im-knob{position:absolute;left:calc(50% - 4px);top:50%;transform:translate(-50%,-50%) rotate(0deg);width:20px;height:20px;border-radius:50%;
+    background:radial-gradient(circle at 38% 32%,#fff 0 18%,#d4cec3 100%);border:2px solid rgba(0,0,0,.16);will-change:transform;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .im-knob::before{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:3px;height:13px;border-radius:2px;background:#a89f92}
+  .im-knob::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(90deg);width:3px;height:13px;border-radius:2px;background:#b5ac9f}
+  .im-coin{position:absolute;right:9px;top:50%;transform:translateY(-50%);width:15px;height:22px;border-radius:4px;background:#dad5cc;border:1px solid #c1bbb0;box-shadow:inset 0 2px 3px rgba(0,0,0,.15)}
+  .im-door{height:22px;margin-top:6px;border-radius:6px;background:linear-gradient(180deg,#3a3632,#221f1a);box-shadow:inset 0 3px 8px rgba(0,0,0,.7)}
+  .im-tray{height:8px;margin:3px 14px 0;border-radius:0 0 11px 11px;background:rgba(0,0,0,.13)}
   .icap3d{position:absolute;border-radius:50%;will-change:transform,opacity;z-index:4;
     box-shadow:inset 0 -8px 14px rgba(0,0,0,.22),inset 0 7px 11px rgba(255,255,255,.45),0 8px 20px rgba(0,0,0,.14)}
   .icap3d::before{content:"";position:absolute;left:0;right:0;top:50%;height:3px;transform:translateY(-1.5px);background:rgba(0,0,0,.15)}
@@ -277,6 +304,17 @@
 <div id="immersive">
   <div class="ilines" id="iLines"></div>
   <div class="iveil"></div>
+  <div class="imachine" id="iMachine">
+    <div class="im-head"><b id="iMHead">GACHAGO</b><span class="hc" style="background:#ef8fab"></span><span class="hc" style="background:#4a76c4"></span><span class="hc" style="background:#37c98a"></span><span class="hc" style="background:#ffb43d"></span><small id="iMMeta">全8種</small></div>
+    <div class="im-dome"><div class="im-balls" id="iDomeBalls"></div><div class="im-gloss"></div></div>
+    <div class="im-ctrl">
+      <div class="im-arrow" id="iArrow"></div>
+      <div class="im-knob" id="iKnob"></div>
+      <div class="im-coin"></div>
+    </div>
+    <div class="im-door"></div>
+    <div class="im-tray"></div>
+  </div>
   <div class="istorm" id="iStorm"></div>
   <div class="istatus" id="iStatus">回す…</div>
   <div class="iresult" id="iResult"><div class="cap" id="iCap"><span class="gl"></span><span>?</span></div></div>
@@ -494,15 +532,34 @@ async function spinA(){
 // ===== 演出B v2 : 本家風 没入バースト =====
 const immersive=document.getElementById('immersive'), iLines=document.getElementById('iLines'),
   iStorm=document.getElementById('iStorm'), iStatus=document.getElementById('iStatus'),
-  iCap=document.getElementById('iCap'), iFlash=document.getElementById('iFlash');
+  iCap=document.getElementById('iCap'), iFlash=document.getElementById('iFlash'),
+  iMachine=document.getElementById('iMachine'), iKnob=document.getElementById('iKnob'),
+  iArrow=document.getElementById('iArrow'), iDomeBalls=document.getElementById('iDomeBalls');
 const CAPCOLORS=['#ff5b6a','#ffb43d','#3fb0e0','#37c98a','#ffd23d','#b06bd6','#ff8a4d','#5a8dee'];
-let bSkip=false;
+let bSkip=false, domeBalls=[];
 function cap3d(size,color){
   const c=document.createElement('div'); c.className='icap3d';
   c.style.width=size+'px'; c.style.height=size+'px';
   c.style.background=`radial-gradient(circle at 34% 28%,#fff 0 8%,${color} 9% 55%,${shade(color,-26)} 100%)`;
   c.innerHTML='<span class="gl"></span>';
   return c;
+}
+// fill the machine dome with a dense pile of colourful capsules
+function buildDome(color){
+  iDomeBalls.innerHTML=''; domeBalls=[];
+  const cols=[color,'#ffb43d','#3fb0e0','#37c98a','#ef8fab','#ffd23d','#b06bd6','#ff8a4d'];
+  const layout=[
+    [8,52,30],[36,58,32],[68,54,30],[98,58,30],[124,52,28],
+    [4,30,26],[30,34,30],[62,30,32],[94,32,30],[122,28,26],
+    [18,10,26],[50,8,28],[82,10,28],[112,8,24]
+  ];
+  layout.forEach((L,i)=>{
+    const b=document.createElement('div'); b.className='db';
+    b.style.width=L[2]+'px'; b.style.height=L[2]+'px'; b.style.left=L[0]+'px'; b.style.top=L[1]+'px';
+    b.style.background=`radial-gradient(circle at 34% 30%,#fff 0 9%,${cols[i%cols.length]} 10% 100%)`;
+    b.style.zIndex=Math.round(60-L[1]);
+    iDomeBalls.appendChild(b); domeBalls.push(b);
+  });
 }
 function setStatus(t){ iStatus.textContent=t; iStatus.style.opacity=t?'1':'0'; }
 
@@ -511,42 +568,71 @@ async function spinB(){
   bhint.style.opacity='0';
   setSub('回す…'); setStatus('回す…');
   iStorm.innerHTML=''; iCap.style.opacity='0'; iFlash.style.opacity='0';
+  buildDome(current.color);
+  iMachine.style.opacity='0'; iMachine.style.transform='translate(-50%,-50%) scale(.7)';
+  document.getElementById('iMHead').textContent='GACHAGO';
+  document.getElementById('iMMeta').textContent='全'+current.count+'種';
   immersive.classList.add('on');
-  const W=innerWidth, H=innerHeight, cx=W/2, cy=H*0.46;
+  const W=innerWidth, H=innerHeight, cx=W/2, cy=H*0.46, domeY=cy-24;
 
-  // 1) 集中線 pull-in + slow rotation
+  // 1) 集中線 pull-in + machine zoom-in
   iLines.animate([{opacity:0,transform:'translate(-50%,-50%) scale(.6) rotate(0deg)'},
-    {opacity:1,transform:'translate(-50%,-50%) scale(1) rotate(18deg)'}],{duration:1900,easing:'ease-out',fill:'forwards'});
+    {opacity:1,transform:'translate(-50%,-50%) scale(1) rotate(14deg)'}],{duration:1700,easing:'ease-out',fill:'forwards'});
+  iMachine.animate([{opacity:0,transform:'translate(-50%,-50%) scale(.7)'},
+    {opacity:1,transform:'translate(-50%,-50%) scale(1)'}],{duration:520,easing:'cubic-bezier(.2,.9,.3,1)',fill:'forwards'});
 
-  // 2) capsules tumble out from the machine spot and scatter outward (staggered)
-  const storm=[];
-  for(let i=0;i<22;i++){
-    const size=32+Math.random()*46, col=CAPCOLORS[i%CAPCOLORS.length];
-    const c=cap3d(size,col); c.style.left=(cx-size/2)+'px'; c.style.top=(cy-size/2)+'px';
-    iStorm.appendChild(c); storm.push(c);
-    const ang=Math.random()*Math.PI*2, dist=120+Math.random()*Math.min(W,H)*0.42;
-    const ex=Math.cos(ang)*dist, ey=Math.sin(ang)*dist*0.8;
-    const rot=Math.random()*720-360;
+  await wait(420); if(bSkip) return finishB(cx,cy);
+
+  // 2) TURN — knob + red arrow spin ~2 turns, machine mechanical wobble, dome capsules jostle
+  iKnob.animate([{transform:'translate(-50%,-50%) rotate(0deg)'},{transform:'translate(-50%,-50%) rotate(720deg)'},
+    {transform:'translate(-50%,-50%) rotate(690deg)'},{transform:'translate(-50%,-50%) rotate(700deg)'}],{duration:1150,easing:'cubic-bezier(.32,.02,.28,1)',fill:'forwards'});
+  iArrow.animate([{transform:'translate(-50%,-50%) rotate(0deg)'},{transform:'translate(-50%,-50%) rotate(720deg)'}],{duration:1150,easing:'cubic-bezier(.32,.02,.28,1)',fill:'forwards'});
+  iMachine.animate([{transform:'translate(-50%,-50%) rotate(0deg) scale(1)'},
+    {transform:'translate(-51.5%,-50%) rotate(-1.6deg) scale(1)',offset:.28},
+    {transform:'translate(-48.5%,-50%) rotate(1.6deg) scale(1)',offset:.6},
+    {transform:'translate(-50.5%,-50%) rotate(-.7deg) scale(1)',offset:.82},
+    {transform:'translate(-50%,-50%) rotate(0deg) scale(1)'}],{duration:1000,easing:'ease-in-out'});
+  domeBalls.forEach((b,i)=>{ const dx=Math.random()*8-4, dy=-(3+Math.random()*7), rot=Math.random()*44-22;
+    b.animate([{transform:'translate(0,0) rotate(0deg)'},
+      {transform:`translate(${dx}px,${dy}px) rotate(${rot}deg)`,offset:.5},
+      {transform:'translate(0,0) rotate(0deg)'}],{duration:560+Math.random()*220,delay:i*14,iterations:2,easing:'cubic-bezier(.3,.7,.3,1)'}); });
+
+  await wait(1180); if(bSkip) return finishB(cx,cy);
+
+  // 3) POUR — machine tilts and the capsules cascade out of the dome
+  setStatus('出た！');
+  iMachine.animate([{transform:'translate(-50%,-50%) rotate(0deg) scale(1)'},
+    {transform:'translate(-50%,-51%) rotate(30deg) scale(1)'}],{duration:560,easing:'cubic-bezier(.4,0,.5,1)',fill:'forwards'});
+  domeBalls.forEach((b,i)=>b.animate([{opacity:1},{opacity:0}],{duration:360,delay:140+i*18,fill:'forwards'}));
+  // real capsules spill from the dome mouth: cascade out, tumble, then rise away
+  for(let i=0;i<20;i++){
+    const size=30+Math.random()*40, col=CAPCOLORS[i%CAPCOLORS.length];
+    const c=cap3d(size,col); c.style.left=(cx-size/2)+'px'; c.style.top=(domeY-size/2)+'px';
+    iStorm.appendChild(c);
+    const side=(Math.random()<.5?-1:1), ex=side*(40+Math.random()*160), ey=30+Math.random()*90;
+    const rot=Math.random()*640-320;
     c.animate([
-      {transform:'translate(0,0) scale(.3) rotate(0deg)',opacity:0,offset:0,easing:'cubic-bezier(.2,.8,.3,1)'},
-      {transform:`translate(${ex*.7}px,${ey*.7}px) scale(1) rotate(${rot*.6}deg)`,opacity:1,offset:.45,easing:'ease-in-out'},
-      {transform:`translate(${ex}px,${ey-60}px) scale(1) rotate(${rot*.85}deg)`,opacity:1,offset:.78,easing:'cubic-bezier(.4,0,.6,1)'},
-      {transform:`translate(${ex*1.05}px,${ey-H*0.6}px) scale(.9) rotate(${rot}deg)`,opacity:0,offset:1}
-    ],{duration:1600+Math.random()*500,delay:120+i*26,fill:'forwards'});
+      {transform:'translate(0,0) scale(.4) rotate(0deg)',opacity:0,offset:0,easing:'cubic-bezier(.3,.2,.5,1)'},
+      {transform:`translate(${ex*.6}px,${ey}px) scale(1) rotate(${rot*.5}deg)`,opacity:1,offset:.4,easing:'cubic-bezier(.4,0,.6,1)'},
+      {transform:`translate(${ex}px,${ey*.4}px) scale(1) rotate(${rot*.8}deg)`,opacity:1,offset:.72,easing:'cubic-bezier(.4,0,.6,1)'},
+      {transform:`translate(${ex*1.1}px,${-H*0.55}px) scale(.9) rotate(${rot}deg)`,opacity:0,offset:1}
+    ],{duration:1500+Math.random()*420,delay:i*32,fill:'forwards'});
   }
 
-  await wait(1400); if(bSkip) return finishB(cx,cy);
+  await wait(760); if(bSkip) return finishB(cx,cy);
+  // machine recedes as the capsules take over the screen
+  iMachine.animate([{opacity:1,transform:'translate(-50%,-51%) rotate(30deg) scale(1)'},
+    {opacity:0,transform:'translate(-50%,-58%) rotate(30deg) scale(.78)'}],{duration:420,easing:'ease-in',fill:'forwards'});
 
-  // 3) blue flash wipe
+  // 4) blue flash wipe
   setStatus('');
   iFlash.animate([{opacity:0},{opacity:.92,offset:.4},{opacity:0}],{duration:520,easing:'ease-in-out'});
+  await wait(240); if(bSkip) return finishB(cx,cy);
 
-  await wait(230); if(bSkip) return finishB(cx,cy);
-
-  // 4) big radial burst from center + concentration lines pulse
-  iLines.animate([{transform:'translate(-50%,-50%) scale(1) rotate(18deg)'},
-    {transform:'translate(-50%,-50%) scale(1.25) rotate(26deg)',offset:.4},
-    {transform:'translate(-50%,-50%) scale(1.1) rotate(30deg)'}],{duration:620,easing:'ease-out',fill:'forwards'});
+  // 5) big radial burst + 集中線 pulse
+  iLines.animate([{transform:'translate(-50%,-50%) scale(1) rotate(14deg)'},
+    {transform:'translate(-50%,-50%) scale(1.25) rotate(22deg)',offset:.4},
+    {transform:'translate(-50%,-50%) scale(1.1) rotate(26deg)'}],{duration:620,easing:'ease-out',fill:'forwards'});
   for(let i=0;i<30;i++){
     const size=20+Math.random()*40, col=CAPCOLORS[i%CAPCOLORS.length];
     const c=cap3d(size,col); c.style.left=(cx-size/2)+'px'; c.style.top=(cy-size/2)+'px';
@@ -557,10 +643,9 @@ async function spinB(){
       {transform:`translate(${Math.cos(ang)*dist}px,${Math.sin(ang)*dist}px) scale(1) rotate(${Math.random()*400-200}deg)`,opacity:0,offset:1}
     ],{duration:720+Math.random()*380,fill:'forwards'});
   }
-
   await wait(560); if(bSkip) return finishB(cx,cy);
 
-  // 5) sealed result capsule pops in center (contents stay hidden) → into cart
+  // 6) sealed result capsule pops in center (contents stay hidden) → into cart
   setStatus('出た！');
   iCap.style.background=`radial-gradient(circle at 34% 28%,#fff 0 8%,${current.color} 9% 55%,${shade(current.color,-24)} 100%)`;
   iCap.animate([{opacity:0,transform:'scale(.2) rotate(-20deg)'},
