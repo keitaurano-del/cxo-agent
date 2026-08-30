@@ -1884,7 +1884,7 @@ function WorkTebakoTab() {
 function WorkGachaTab() {
   const [doc, setDoc] = useState<'proto' | 'feasibility'>('proto');
   const src = doc === 'proto' ? '/gacha-proto.html' : '/gacha-feasibility.html';
-  const title = doc === 'proto' ? 'Korokoro（仮）プロトタイプ' : '海外向けオンライン・ガチャ 事業フィージビリティ';
+  const title = doc === 'proto' ? 'GachaGo プロトタイプ' : '海外向けオンライン・ガチャ 事業フィージビリティ';
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex items-center gap-2">
