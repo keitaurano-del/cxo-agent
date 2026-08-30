@@ -23,13 +23,15 @@
   .logo .dot{width:23px;height:23px;border-radius:50%;background:radial-gradient(circle at 34% 32%,#fff 0 12%,var(--accent) 13% 100%);box-shadow:inset 0 -3px 6px rgba(0,0,0,.18)}
   .logo .go{color:var(--accent)}
   .logo small{font-weight:600;color:var(--muted);font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 7px;margin-left:2px}
-  .cartbtn{margin-left:auto;display:flex;align-items:center;gap:8px;background:var(--ink);color:#fff;border:0;border-radius:999px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer}
+  .cartbtn{margin-left:auto;display:flex;align-items:center;gap:8px;background:var(--ink);color:#fff;border:0;border-radius:999px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;transition:transform .12s}
+  .cartbtn.bump{animation:bump .4s ease}
+  @keyframes bump{0%,100%{transform:scale(1)}40%{transform:scale(1.16)}}
   .cartbtn .n{background:var(--accent);border-radius:999px;min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;padding:0 5px}
 
   .hero{padding:44px 0 20px;text-align:center}
   .hero h1{font-size:34px;line-height:1.2;margin:0 0 12px;font-weight:800;letter-spacing:-.02em}
   .hero h1 .hl{color:var(--accent)}
-  .hero p{max-width:560px;margin:0 auto;color:var(--muted);font-size:16px}
+  .hero p{max-width:580px;margin:0 auto;color:var(--muted);font-size:16px}
   .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:20px 0 6px}
   .chip{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600;box-shadow:var(--shadow)}
   .chip b{color:var(--accent)}
@@ -49,7 +51,7 @@
   .spin:active{transform:scale(.96)}
   .gm{width:96px;height:130px}
 
-  /* ===== immersive spin modal ===== */
+  /* ===== spin modal ===== */
   .overlay{position:fixed;inset:0;background:rgba(30,22,18,.6);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:60;padding:16px}
   .overlay.on{display:flex}
   .spinbox{background:var(--card);border-radius:22px;max-width:380px;width:100%;padding:20px 22px 22px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.3);position:relative;overflow:hidden}
@@ -57,9 +59,9 @@
   .spinbox .sub{color:var(--muted);font-size:13px;min-height:18px;transition:color .2s}
   .spinbox .sub.hot{color:var(--accent);font-weight:700}
   .closeM{position:absolute;top:10px;right:14px;background:0;border:0;font-size:22px;color:var(--muted);cursor:pointer;z-index:5}
+  .sesscount{position:absolute;top:16px;left:16px;font-size:11px;font-weight:700;color:var(--muted);background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:3px 9px}
 
-  /* the machine */
-  .stage{height:280px;position:relative;margin:6px 0 2px;user-select:none}
+  .stage{height:270px;position:relative;margin:6px 0 2px;user-select:none}
   .mc{position:absolute;left:50%;top:8px;transform:translateX(-50%);width:190px}
   .dome{position:relative;width:190px;height:150px;border-radius:50% 50% 46% 46%/58% 58% 42% 42%;
     background:linear-gradient(160deg,rgba(255,255,255,.75),rgba(255,255,255,.25));
@@ -71,7 +73,6 @@
   .neck{width:190px;height:16px;background:var(--mc,#e0523c);filter:brightness(.92)}
   .cabinet{width:172px;margin:0 auto;height:96px;background:var(--mc,#e0523c);border-radius:6px 6px 12px 12px;position:relative;box-shadow:inset 0 -10px 18px rgba(0,0,0,.16)}
   .plate{position:absolute;left:50%;top:12px;transform:translateX(-50%);width:120px;height:30px;border-radius:6px;background:rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--mc,#e0523c)}
-  /* knob */
   .knob{position:absolute;left:50%;bottom:30px;transform:translateX(-50%) rotate(0deg);width:44px;height:44px;border-radius:50%;
     background:radial-gradient(circle at 38% 34%,#fff 0 12%,#f0ece5 13% 60%,#d8d2c8 100%);
     border:3px solid rgba(0,0,0,.12);cursor:pointer;transition:transform .05s;z-index:4;box-shadow:0 3px 6px rgba(0,0,0,.2)}
@@ -79,15 +80,13 @@
   .knob.turn{animation:turn .9s cubic-bezier(.5,0,.3,1) both}
   @keyframes turn{to{transform:translateX(-50%) rotate(415deg)}}
   .knob-hint{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);font-size:10px;color:#fff;font-weight:700;opacity:.9;pointer-events:none}
-  /* slot/tray */
   .tray{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);width:120px;height:26px;border-radius:0 0 10px 10px;background:rgba(0,0,0,.14);z-index:1}
-  /* shake */
   @keyframes shake{0%,100%{transform:translateX(-50%) rotate(0)}20%{transform:translateX(-52%) rotate(-1.2deg)}60%{transform:translateX(-48%) rotate(1.2deg)}}
   .mc.shake{animation:shake .28s ease-in-out 3}
   @keyframes ballj{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
   .mc.shake .ball{animation:ballj .28s ease-in-out 3}
 
-  /* dropped capsule */
+  /* dispensed capsule (stays sealed) */
   .drop{position:absolute;width:56px;height:56px;border-radius:50%;left:calc(50% - 28px);top:150px;z-index:3;
     box-shadow:inset 0 -7px 12px rgba(0,0,0,.2),0 6px 14px rgba(0,0,0,.18);opacity:0}
   .drop::before{content:"";position:absolute;left:0;right:0;top:50%;height:3px;transform:translateY(-1.5px);background:rgba(0,0,0,.16)}
@@ -97,58 +96,29 @@
     0%{opacity:0;top:150px;left:calc(50% - 28px)}
     12%{opacity:1}
     45%{top:196px;left:calc(50% - 62px);transform:rotate(-40deg)}
-    70%{top:236px;left:calc(50% - 28px);transform:rotate(-160deg)}
-    82%{top:220px;transform:rotate(-190deg)}
-    100%{top:232px;left:calc(50% - 28px);transform:rotate(-180deg)}
+    70%{top:232px;left:calc(50% - 28px);transform:rotate(-160deg)}
+    82%{top:216px;transform:rotate(-190deg)}
+    100%{top:228px;left:calc(50% - 28px);transform:rotate(-180deg)}
   }
-  .drop.ready{opacity:1;top:232px;cursor:pointer}
-  .drop.wobble{animation:wob 1.1s ease-in-out infinite}
-  @keyframes wob{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg)}}
-  .tap-hint{position:absolute;left:50%;bottom:-2px;transform:translateX(-50%);font-size:11px;font-weight:800;color:var(--accent);opacity:0;transition:opacity .3s}
-  .tap-hint.on{opacity:1;animation:pulse 1s ease-in-out infinite}
-  @keyframes pulse{0%,100%{transform:translateX(-50%) scale(1)}50%{transform:translateX(-50%) scale(1.08)}}
+  .drop .q{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:rgba(255,255,255,.9);text-shadow:0 1px 2px rgba(0,0,0,.25)}
 
-  /* capsule crack open */
-  .half{position:absolute;width:56px;height:28px;left:calc(50% - 28px);z-index:4}
-  .half.top{top:204px;border-radius:28px 28px 0 0}
-  .half.bot{top:232px;border-radius:0 0 28px 28px;box-shadow:inset 0 -6px 10px rgba(0,0,0,.18)}
-  .half.open-top{animation:opentop .5s cubic-bezier(.3,.6,.3,1) forwards}
-  .half.open-bot{animation:openbot .5s ease forwards}
-  @keyframes opentop{to{top:150px;transform:rotate(-26deg);opacity:0}}
-  @keyframes openbot{to{top:250px;opacity:0}}
+  /* flying capsule to cart (fixed to viewport) */
+  .flyer{position:fixed;width:48px;height:48px;border-radius:50%;z-index:90;pointer-events:none;
+    box-shadow:inset 0 -6px 10px rgba(0,0,0,.2),0 6px 14px rgba(0,0,0,.22);transition:transform .62s cubic-bezier(.5,-0.2,.6,1),opacity .62s}
+  .flyer::before{content:"";position:absolute;left:0;right:0;top:50%;height:2.5px;transform:translateY(-1.25px);background:rgba(0,0,0,.16)}
 
-  /* prize reveal */
-  .prize{position:absolute;left:50%;top:150px;transform:translate(-50%,0) scale(.2);opacity:0;z-index:5;width:120px;text-align:center}
-  .prize.on{animation:pop .55s cubic-bezier(.2,1.3,.4,1) forwards}
-  @keyframes pop{to{opacity:1;top:120px;transform:translate(-50%,0) scale(1)}}
-  .prize .disc{width:88px;height:88px;border-radius:50%;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:34px;
-    box-shadow:inset 0 -6px 12px rgba(0,0,0,.18),0 8px 20px rgba(0,0,0,.18);position:relative}
-  .prize.rare .disc{box-shadow:inset 0 -6px 12px rgba(0,0,0,.18),0 0 0 4px rgba(74,118,196,.35),0 8px 24px rgba(74,118,196,.4)}
-  .prize.secret .disc{box-shadow:inset 0 -6px 12px rgba(0,0,0,.18),0 0 0 4px rgba(230,169,53,.5),0 8px 28px rgba(230,169,53,.55)}
-  .glow{position:absolute;left:50%;top:150px;transform:translate(-50%,-50%);width:200px;height:200px;border-radius:50%;opacity:0;z-index:2;pointer-events:none;
-    background:radial-gradient(circle,rgba(255,220,150,.5),transparent 62%)}
-  .glow.on{animation:glowin .7s ease forwards}
-  @keyframes glowin{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}40%{opacity:1}100%{opacity:.55;transform:translate(-50%,-50%) scale(1)}}
+  /* little sparkle when it pops out */
+  .spark{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;z-index:5}
+  .sp{position:absolute;width:8px;height:8px;border-radius:2px;will-change:transform,opacity}
+  @keyframes spout{to{transform:translate(var(--dx),var(--dy)) rotate(220deg);opacity:0}}
 
-  .revtext{margin-top:2px}
-  .revtext .got{font-size:11px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase}
-  .revtext .item{font-size:20px;font-weight:800;margin:1px 0}
-  .rare{display:inline-block;font-size:11px;font-weight:800;border-radius:999px;padding:2px 10px}
-  .rare.common{background:#eef1f4;color:#5b6674}
-  .rare.rare{background:#e7f0ff;color:#3667c0}
-  .rare.secret{background:#fbe9c8;color:#a9781a}
-  .feeline{font-size:12.5px;color:var(--muted);margin-top:9px;min-height:18px}
-
+  .feeline{font-size:12.5px;color:var(--muted);margin-top:12px;min-height:18px}
+  .feeline b{color:var(--ink)}
   .modact{display:flex;gap:9px;margin-top:14px}
   .modact button{flex:1;border-radius:999px;padding:12px;font-weight:700;font-size:13.5px;cursor:pointer;border:1px solid var(--line);background:var(--card);transition:opacity .15s}
-  .modact button:disabled{opacity:.4;cursor:default}
-  .modact .again{border-color:var(--ink)}
-  .modact .keep{background:var(--accent);color:#fff;border-color:var(--accent)}
-
-  /* confetti */
-  .confetti{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;z-index:6}
-  .cf{position:absolute;width:9px;height:14px;border-radius:2px;will-change:transform,opacity}
-  @keyframes cfall{to{transform:translateY(360px) rotate(var(--r));opacity:0}}
+  .modact button:disabled{opacity:.45;cursor:default}
+  .modact .again{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .modact .done{border-color:var(--ink)}
 
   /* cart drawer */
   .drawer{position:fixed;top:0;right:0;height:100%;width:370px;max-width:92vw;background:var(--paper);border-left:1px solid var(--line);box-shadow:-10px 0 40px rgba(0,0,0,.12);transform:translateX(100%);transition:transform .25s;z-index:70;display:flex;flex-direction:column}
@@ -156,10 +126,11 @@
   .dhead{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line)}
   .dhead h3{margin:0;font-size:16px}
   .dhead .x{margin-left:auto;background:0;border:0;font-size:20px;cursor:pointer;color:var(--muted)}
-  .items{flex:1;overflow-y:auto;padding:8px 14px}
+  .surprise{margin:10px 14px 0;padding:9px 12px;background:var(--accent-soft);border-radius:9px;font-size:12px;color:var(--accent-d);font-weight:600}
+  .items{flex:1;overflow-y:auto;padding:6px 14px}
   .empty{color:var(--muted);text-align:center;padding:44px 10px;font-size:14px}
   .ci{display:flex;align-items:center;gap:11px;padding:11px 6px;border-bottom:1px solid var(--line)}
-  .cdot{width:34px;height:34px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:inset 0 -3px 5px rgba(0,0,0,.15)}
+  .cdot{width:36px;height:36px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:rgba(255,255,255,.92);box-shadow:inset 0 -3px 5px rgba(0,0,0,.15)}
   .ci .nm{font-weight:700;font-size:13.5px;line-height:1.25}
   .ci .sr{font-size:11.5px;color:var(--muted)}
   .ci .pr{margin-left:auto;text-align:right;font-size:13px;font-weight:700;white-space:nowrap}
@@ -185,12 +156,12 @@
 <div class="wrap">
   <section class="hero">
     <h1>Spin real Japanese gacha,<br><span class="hl">one capsule at a time.</span></h1>
-    <p>Pick a machine, turn the knob, and crack open your capsule online — then we ship the real thing to your door. Buy just one, or keep spinning. You pay per capsule.</p>
+    <p>Pick a machine and turn the knob — your sealed capsule drops straight into your cart. You won't know what's inside until it arrives at your door. That's the fun.</p>
     <div class="chips">
       <div class="chip">Start from <b>1 capsule</b></div>
       <div class="chip">Spin <b>as many</b> as you like</div>
       <div class="chip"><b>Flat fee</b> per capsule</div>
-      <div class="chip">Shipped <b>worldwide</b></div>
+      <div class="chip"><b>Surprise</b> inside · shipped worldwide</div>
     </div>
   </section>
 
@@ -199,14 +170,14 @@
   <div class="note" id="feeNote"></div>
 </div>
 
-<!-- immersive spin modal -->
+<!-- spin modal -->
 <div class="overlay" id="overlay">
   <div class="spinbox">
     <button class="closeM" id="closeM">×</button>
+    <div class="sesscount" id="sessCount" style="display:none">+0 this spin</div>
     <h3 id="spTitle">—</h3>
     <div class="sub" id="spSub">Turn the knob to spin</div>
     <div class="stage" id="stage">
-      <div class="glow" id="glow"></div>
       <div class="mc" id="mc">
         <div class="dome"><div class="balls" id="balls"></div></div>
         <div class="neck"></div>
@@ -217,24 +188,13 @@
           <div class="tray"></div>
         </div>
       </div>
-      <div class="drop" id="drop"></div>
-      <div class="half top" id="halfTop"></div>
-      <div class="half bot" id="halfBot"></div>
-      <div class="tap-hint" id="tapHint">TAP TO OPEN</div>
-      <div class="prize" id="prize">
-        <div class="disc" id="prizeDisc">🎁</div>
-      </div>
-      <div class="confetti" id="confetti"></div>
-    </div>
-    <div class="revtext" id="reveal" style="visibility:hidden">
-      <div class="got">You got</div>
-      <div class="item" id="spItem">—</div>
-      <div id="spRare"></div>
+      <div class="drop" id="drop"><span class="q">?</span></div>
+      <div class="spark" id="spark"></div>
     </div>
     <div class="feeline" id="spFee"></div>
     <div class="modact">
-      <button class="again" id="spAgain">Spin again</button>
-      <button class="keep" id="spKeep" disabled>Keep &amp; add ✓</button>
+      <button class="again" id="spAgain">Turn again</button>
+      <button class="done" id="spDone">Done</button>
     </div>
   </div>
 </div>
@@ -242,6 +202,7 @@
 <!-- cart drawer -->
 <div class="drawer" id="drawer">
   <div class="dhead"><h3>Your capsules</h3><button class="x" id="closeCart">×</button></div>
+  <div class="surprise">🎁 Sealed capsules — the contents are a surprise, revealed when your parcel arrives.</div>
   <div class="items" id="items"></div>
   <div class="summary">
     <div class="srow"><span>Capsules <span id="sumN">0</span> × item price</span><span id="sumItems">$0.00</span></div>
@@ -253,31 +214,20 @@
   </div>
 </div>
 
-<footer>GachaGo · interactive prototype · concept: turn the knob online → real capsule shipped</footer>
+<footer>GachaGo · interactive prototype · concept: turn the knob online → sealed capsule shipped (surprise inside)</footer>
 
 <script>
 const FEE=2.50, SHIP_BASE=8.0, SHIP_PER=1.0;
 const fmt=n=>'$'+n.toFixed(2);
-const EMO={ // little emoji face per possible result, for flavour in reveal/cart
-  common:'🧸', rare:'⭐', secret:'👑'
-};
 const MACHINES=[
-  {id:'chiikawa',name:'Chiikawa Friends',color:'#ef8fab',price:4.50,count:6,emoji:'🐰',
-    pool:[['Chiikawa sitting','common',60],['Hachiware charm','common',60],['Usagi figure','common',55],['Momonga plush tag','rare',20],['Kani-chan','rare',15],['Gold secret pose','secret',5]]},
-  {id:'sanrio',name:'Sanrio Characters',color:'#f0b93f',price:4.00,count:8,emoji:'🎀',
-    pool:[['Cinnamoroll','common',60],['Pompompurin','common',60],['My Melody','common',55],['Kuromi','rare',22],['Hello Kitty retro','rare',18],['Little Twin Stars foil','secret',6]]},
-  {id:'pokemon',name:'Pokémon Capsule',color:'#4a76c4',price:5.00,count:6,emoji:'⚡',
-    pool:[['Pikachu','common',60],['Eevee','common',55],['Snorlax','common',50],['Gengar','rare',22],['Mimikyu','rare',18],['Shiny Charizard','secret',5]]},
-  {id:'gunpla',name:'Gundam Capsule Model',color:'#5a6b7b',price:5.50,count:5,emoji:'🤖',
-    pool:[['RX-78-2 Gundam','common',58],['Zaku II','common',55],['Char Zaku','rare',25],['Zeong','rare',15],['Clear Nu Gundam','secret',6]]},
-  {id:'animals',name:'Cup Edge Cats',color:'#3f9d78',price:3.50,count:5,emoji:'🐱',
-    pool:[['Tabby on rim','common',60],['Calico dangling','common',55],['Black cat peeking','common',50],['Siamese stretch','rare',22],['Golden sleepy cat','secret',7]]},
-  {id:'foodmini',name:'Miniature Konbini',color:'#e0523c',price:4.00,count:7,emoji:'🍙',
-    pool:[['Onigiri set','common',60],['Ramen bowl','common',58],['Melon soda float','common',52],['Bento box','rare',22],['Mini vending machine','rare',16],['Gold register secret','secret',6]]},
-  {id:'ghibli',name:'Studio-style Forest',color:'#7fa15a',price:5.00,count:6,emoji:'🌳',
-    pool:[['Forest spirit','common',60],['Soot sprite trio','common',55],['Cat bus mini','rare',24],['Umbrella scene','rare',16],['Glow totem','secret',6]]},
-  {id:'retro',name:'Showa Retro Goods',color:'#c58a5a',price:3.50,count:6,emoji:'📼',
-    pool:[['Pay phone','common',60],['Glass milk bottle','common',55],['Cassette player','common',50],['Rotary TV','rare',22],['Neon sign','rare',16],['Brass secret coin','secret',7]]},
+  {id:'chiikawa',name:'Chiikawa Friends',color:'#ef8fab',price:4.50,count:6},
+  {id:'sanrio',name:'Sanrio Characters',color:'#f0b93f',price:4.00,count:8},
+  {id:'pokemon',name:'Pokémon Capsule',color:'#4a76c4',price:5.00,count:6},
+  {id:'gunpla',name:'Gundam Capsule Model',color:'#5a6b7b',price:5.50,count:5},
+  {id:'animals',name:'Cup Edge Cats',color:'#3f9d78',price:3.50,count:5},
+  {id:'foodmini',name:'Miniature Konbini',color:'#e0523c',price:4.00,count:7},
+  {id:'ghibli',name:'Studio-style Forest',color:'#7fa15a',price:5.00,count:6},
+  {id:'retro',name:'Showa Retro Goods',color:'#c58a5a',price:3.50,count:6},
 ];
 
 function machineSVG(color){
@@ -301,7 +251,7 @@ MACHINES.forEach(m=>{
   el.innerHTML=`
     <div class="mtop" style="background:${hexA(m.color,.10)}">${machineSVG(m.color)}</div>
     <div class="mtitle">${m.name}</div>
-    <div class="mmeta">${m.count} possible capsules · random</div>
+    <div class="mmeta">${m.count} possible capsules · random &amp; sealed</div>
     <div class="mfoot">
       <div class="price">${fmt(m.price)}<small>per capsule + ${fmt(FEE)} fee</small></div>
       <button class="spin">Spin ▸</button>
@@ -310,130 +260,96 @@ MACHINES.forEach(m=>{
   grid.appendChild(el);
 });
 document.getElementById('feeNote').innerHTML=
-  `<b>How pricing works —</b> every spin is one real capsule: the item price shown on each machine plus a flat ${fmt(FEE)} handling fee per capsule. Spin one or many; we hold them and ship everything together, so you only pay international shipping once.`;
+  `<b>How it works —</b> each turn dispenses one real, sealed capsule from that machine — a random pick from its line-up. It drops straight into your cart; you discover what's inside when it arrives. You pay the machine's capsule price plus a flat ${fmt(FEE)} handling fee per capsule, and we ship everything together so international shipping is charged only once.`;
 document.getElementById('feeEach').textContent=fmt(FEE);
 
-// ===== spin sequence =====
+// ===== spin =====
 const overlay=document.getElementById('overlay'), mc=document.getElementById('mc'),
   knob=document.getElementById('knob'), drop=document.getElementById('drop'),
-  halfTop=document.getElementById('halfTop'), halfBot=document.getElementById('halfBot'),
-  prize=document.getElementById('prize'), prizeDisc=document.getElementById('prizeDisc'),
-  glow=document.getElementById('glow'), reveal=document.getElementById('reveal'),
-  tapHint=document.getElementById('tapHint'), sub=document.getElementById('spSub'),
-  confetti=document.getElementById('confetti');
-let current=null, pending=null, phase='idle', capColor='#e0523c';
+  spark=document.getElementById('spark'), sub=document.getElementById('spSub'),
+  cartBtn=document.getElementById('openCart');
+let current=null, phase='idle', sessionCount=0;
 
-function pick(m){
-  const total=m.pool.reduce((s,p)=>s+p[2],0); let r=Math.random()*total;
-  for(const p of m.pool){ if((r-=p[2])<=0) return {name:p[0],rarity:p[1]}; }
-  return {name:m.pool[0][0],rarity:m.pool[0][1]};
-}
 function setSub(t,hot){ sub.textContent=t; sub.classList.toggle('hot',!!hot); }
-
 function openSpin(m){
-  current=m; phase='idle';
-  document.getElementById('mc').style.setProperty('--mc',m.color);
+  current=m; phase='idle'; sessionCount=0;
+  mc.style.setProperty('--mc',m.color);
   document.getElementById('plate').textContent='GACHAGO';
-  // fill dome with colourful balls
   const balls=document.getElementById('balls'); balls.innerHTML='';
   const cols=[m.color,'#f7c948','#4a76c4','#3f9d78','#ef8fab','#fff'];
   const pos=[[18,60],[70,30],[120,55],[60,80],[100,95],[30,100],[140,90],[90,45]];
   pos.forEach((p,i)=>{const b=document.createElement('div');b.className='ball';
     b.style.left=p[0]+'px';b.style.top=p[1]+'px';b.style.background=`radial-gradient(circle at 34% 30%,#fff 0 8%,${cols[i%cols.length]} 9% 100%)`;
     balls.appendChild(b);});
-  resetStage();
+  drop.className='drop'; drop.style.background=''; spark.innerHTML='';
+  document.getElementById('sessCount').style.display='none';
   document.getElementById('spTitle').textContent=m.name;
-  setSub('Turn the knob to spin');
-  document.getElementById('spFee').innerHTML='';
-  document.getElementById('spKeep').disabled=true;
+  setSub('Turn the knob — surprise inside');
+  document.getElementById('spFee').innerHTML=`${fmt(m.price)} capsule + ${fmt(FEE)} fee = <b>${fmt(m.price+FEE)}</b> each · contents revealed on delivery`;
   overlay.classList.add('on');
-}
-function resetStage(){
-  knob.className='knob'; drop.className='drop'; drop.style.background='';
-  halfTop.className='half top'; halfBot.className='half bot';
-  halfTop.style.background=''; halfBot.style.background='';
-  prize.className='prize'; glow.className='glow'; confetti.innerHTML='';
-  reveal.style.visibility='hidden'; tapHint.className='tap-hint';
-  document.getElementById('spRare').innerHTML=''; phase='idle';
 }
 function turnKnob(){
   if(phase!=='idle') return;
   phase='spinning';
-  pending=pick(current);
-  capColor=current.color;
-  knob.classList.add('turn');
+  knob.className='knob turn';
   setSub('Spinning…');
-  setTimeout(()=>{ mc.classList.add('shake'); },120);
-  setTimeout(()=>{
-    mc.classList.remove('shake');
-    // capsule drops
-    drop.style.background=`radial-gradient(circle at 34% 30%, #fff 0 8%, ${capColor} 9% 55%, ${shade(capColor,-18)} 100%)`;
-    drop.className='drop fall';
-    setSub('Here it comes…');
-  },1000);
-  setTimeout(()=>{
-    drop.className='drop ready wobble';
-    tapHint.className='tap-hint on';
-    setSub('Tap the capsule to open!',true);
-    phase='ready';
-  },2000);
+  drop.className='drop'; drop.style.background=`radial-gradient(circle at 34% 30%, #fff 0 8%, ${current.color} 9% 55%, ${shade(current.color,-18)} 100%)`;
+  setTimeout(()=>mc.classList.add('shake'),120);
+  setTimeout(()=>{ mc.classList.remove('shake'); drop.className='drop fall'; setSub('Out it comes…'); },1000);
+  setTimeout(()=>{ popSpark(); flyToCart(); },1980);
 }
 knob.onclick=turnKnob;
-drop.onclick=()=>{ if(phase==='ready') crack(); };
-
-function crack(){
-  phase='opening';
-  tapHint.className='tap-hint';
-  drop.className='drop'; drop.style.opacity='0';
-  // build halves in capsule colour
-  halfTop.style.background=`linear-gradient(180deg,#fff 0 14%,${capColor} 22% 100%)`;
-  halfBot.style.background=`linear-gradient(0deg,${shade(capColor,-18)},${capColor})`;
-  halfTop.className='half top open-top';
-  halfBot.className='half bot open-bot';
-  // prize
-  prizeDisc.textContent=EMO[pending.rarity]||'🎁';
-  prizeDisc.style.background=`radial-gradient(circle at 36% 30%, #fff 0 10%, ${capColor} 12% 100%)`;
-  prize.className='prize on '+pending.rarity;
-  glow.className='glow on';
-  setSub(pending.rarity==='secret'?'✨ SECRET! ✨':(pending.rarity==='rare'?'Nice — a RARE!':'Out it comes!'),pending.rarity!=='common');
-  // reveal text + fee
-  document.getElementById('spItem').textContent=pending.name;
-  document.getElementById('spRare').innerHTML=`<span class="rare ${pending.rarity}">${pending.rarity.toUpperCase()}</span>`;
-  reveal.style.visibility='visible';
-  document.getElementById('spFee').innerHTML=`${fmt(current.price)} capsule + ${fmt(FEE)} fee = <b>${fmt(current.price+FEE)}</b>`;
-  document.getElementById('spKeep').disabled=false;
-  burst(pending.rarity);
-  phase='done';
-}
-function burst(rarity){
-  const n = rarity==='secret'?46 : rarity==='rare'?26 : 12;
-  const palette = rarity==='secret'?['#e6a935','#f7d774','#fff3cf','#e0523c']
-    : rarity==='rare'?['#4a76c4','#89b0e8','#fff','#3f9d78']
-    : ['#ef8fab','#f0b93f','#7fa15a','#fff'];
-  for(let i=0;i<n;i++){
-    const c=document.createElement('div'); c.className='cf';
-    c.style.left=(50+(Math.random()*60-30))+'%';
-    c.style.top=(120+Math.random()*20)+'px';
-    c.style.background=palette[i%palette.length];
-    c.style.setProperty('--r',(Math.random()*720-360)+'deg');
-    c.style.animation=`cfall ${0.9+Math.random()*0.8}s cubic-bezier(.2,.6,.4,1) ${Math.random()*0.15}s forwards`;
-    c.style.transform=`translateX(${Math.random()*40-20}px)`;
-    confetti.appendChild(c);
-  }
-}
-document.getElementById('spAgain').onclick=()=>{ resetStage(); setSub('Turn the knob to spin'); document.getElementById('spFee').innerHTML=''; document.getElementById('spKeep').disabled=true; };
-document.getElementById('spKeep').onclick=()=>{
-  if(!pending||phase!=='done') return;
-  cart.push({series:current.name,color:current.color,item:pending.name,rarity:pending.rarity,price:current.price});
-  renderCart(); overlay.classList.remove('on'); openDrawer();
-};
+document.getElementById('spAgain').onclick=()=>{ knob.className='knob'; turnKnob(); };
+document.getElementById('spDone').onclick=()=>{ overlay.classList.remove('on'); if(cart.length) openDrawer(); };
 document.getElementById('closeM').onclick=()=>overlay.classList.remove('on');
 overlay.onclick=e=>{ if(e.target===overlay) overlay.classList.remove('on'); };
+
+function popSpark(){
+  const cols=[current.color,'#f7c948','#fff','#ef8fab'];
+  for(let i=0;i<10;i++){
+    const s=document.createElement('div'); s.className='sp';
+    s.style.left='50%'; s.style.top='230px'; s.style.background=cols[i%cols.length];
+    const ang=Math.random()*Math.PI*2, d=30+Math.random()*40;
+    s.style.setProperty('--dx',(Math.cos(ang)*d)+'px');
+    s.style.setProperty('--dy',(-Math.abs(Math.sin(ang))*d-10)+'px');
+    s.style.animation=`spout ${0.5+Math.random()*0.4}s ease-out forwards`;
+    spark.appendChild(s);
+  }
+  setTimeout(()=>spark.innerHTML='',900);
+}
+
+function flyToCart(){
+  // capsule flies from tray to the cart button, then gets added
+  const dr=drop.getBoundingClientRect();
+  const cb=cartBtn.getBoundingClientRect();
+  const f=document.createElement('div'); f.className='flyer';
+  f.style.left=dr.left+dr.width/2-24+'px';
+  f.style.top=dr.top+dr.height/2-24+'px';
+  f.style.background=`radial-gradient(circle at 34% 30%, #fff 0 8%, ${current.color} 9% 55%, ${shade(current.color,-18)} 100%)`;
+  document.body.appendChild(f);
+  drop.className='drop'; // clear the tray capsule
+  const dx=(cb.left+cb.width/2)-(dr.left+dr.width/2);
+  const dy=(cb.top+cb.height/2)-(dr.top+dr.height/2);
+  requestAnimationFrame(()=>{ f.style.transform=`translate(${dx}px,${dy}px) scale(.35) rotate(240deg)`; f.style.opacity='.2'; });
+  setTimeout(()=>{
+    f.remove();
+    addCapsule();
+    cartBtn.classList.remove('bump'); void cartBtn.offsetWidth; cartBtn.classList.add('bump');
+    sessionCount++;
+    const sc=document.getElementById('sessCount'); sc.style.display='block'; sc.textContent=`+${sessionCount} this session`;
+    setSub(`Added to cart — surprise sealed 🎁  Turn again?`);
+    phase='idle';
+  },640);
+}
+function addCapsule(){
+  cart.push({series:current.name,color:current.color,price:current.price});
+  renderCart();
+}
 
 // ===== cart =====
 const drawer=document.getElementById('drawer');
 function openDrawer(){drawer.classList.add('on')}
-document.getElementById('openCart').onclick=openDrawer;
+cartBtn.onclick=openDrawer;
 document.getElementById('closeCart').onclick=()=>drawer.classList.remove('on');
 function renderCart(){
   document.getElementById('cartN').textContent=cart.length;
@@ -444,8 +360,8 @@ function renderCart(){
     items.innerHTML='';
     cart.forEach((c,i)=>{
       const row=document.createElement('div'); row.className='ci';
-      row.innerHTML=`<span class="cdot" style="background:radial-gradient(circle at 34% 30%,#fff 0 10%,${c.color} 11% 100%)">${EMO[c.rarity]||''}</span>
-        <div><div class="nm">${c.item}</div><div class="sr">${c.series} · <span class="rare ${c.rarity}" style="padding:0 6px">${c.rarity}</span></div></div>
+      row.innerHTML=`<span class="cdot" style="background:radial-gradient(circle at 34% 30%,#fff 0 10%,${c.color} 11% 100%)">?</span>
+        <div><div class="nm">Sealed capsule</div><div class="sr">${c.series} · surprise inside</div></div>
         <div class="pr">${fmt(c.price+FEE)}</div><button class="rm" title="remove">×</button>`;
       row.querySelector('.rm').onclick=()=>{cart.splice(i,1);renderCart();};
       items.appendChild(row);
@@ -459,7 +375,7 @@ function renderCart(){
 }
 document.getElementById('checkout').onclick=()=>{
   if(!cart.length){alert('Spin at least one capsule first!');return;}
-  alert(`Prototype checkout\n\n${cart.length} capsule(s)\nItems ${fmt(cart.reduce((s,c)=>s+c.price,0))} + fees ${fmt(cart.length*FEE)} + shipping ${fmt(SHIP_BASE+SHIP_PER*cart.length)}\n\nReal payment (Stripe) + shipping address come next.`);
+  alert(`Prototype checkout\n\n${cart.length} sealed capsule(s)\nItems ${fmt(cart.reduce((s,c)=>s+c.price,0))} + fees ${fmt(cart.length*FEE)} + shipping ${fmt(SHIP_BASE+SHIP_PER*cart.length)}\n\nContents stay a surprise until delivery.\nReal payment (Stripe) + shipping address come next.`);
 };
 renderCart();
 
