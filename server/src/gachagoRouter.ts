@@ -39,6 +39,14 @@ function clip(v: unknown, max: number): string | undefined {
 }
 
 /** JSONL を全レコード配列として読む（壊れた行はスキップ）。無ければ空配列。 */
+// 内部テスト用の登録は count・stats・重複判定すべてから除外する
+// （Keita 本人のテスト等。ファイルには残すが集計上は無視する）。
+const EXCLUDED_EMAILS = new Set<string>(['keita.urano@gmail.com']);
+function isExcludedEmail(email: string): boolean {
+  const e = String(email).toLowerCase();
+  return EXCLUDED_EMAILS.has(e) || e.endsWith('@example.com') || e.endsWith('@test.com');
+}
+
 function loadRecords(): WaitlistRecord[] {
   const out: WaitlistRecord[] = [];
   try {
@@ -49,7 +57,7 @@ function loadRecords(): WaitlistRecord[] {
       if (!s) continue;
       try {
         const rec = JSON.parse(s) as Partial<WaitlistRecord>;
-        if (rec.email) out.push(rec as WaitlistRecord);
+        if (rec.email && !isExcludedEmail(rec.email)) out.push(rec as WaitlistRecord);
       } catch {
         /* 壊れた行はスキップ */
       }
@@ -123,6 +131,13 @@ export function gachagoRouter(): Router {
     }
 
     const emails = loadEmails();
+
+    // 内部テスト（Keita 本人等）は保存も加算もしない。UI 上も真の件数のまま。
+    if (isExcludedEmail(email)) {
+      res.json({ ok: true, count: emails.size, excluded: true });
+      return;
+    }
+
     if (emails.has(email)) {
       // 既登録は成功扱い（冪等）。件数はそのまま返す。
       res.json({ ok: true, count: emails.size, already: true });
