@@ -104,8 +104,13 @@
   .glow{position:absolute;width:min(420px,86vw);height:min(420px,86vw);border-radius:50%;
     background:radial-gradient(circle, rgba(255,224,130,.55) 0%, rgba(255,190,80,.22) 40%, transparent 66%);animation:glowPulse 2.6s ease-in-out infinite}
   @keyframes glowPulse{0%,100%{transform:scale(.94);opacity:.85}50%{transform:scale(1.06);opacity:1}}
-  .figure{width:min(240px,54vw);z-index:2;transform:scale(0) rotate(-8deg);filter:drop-shadow(0 20px 30px rgba(0,0,0,.45))}
-  .reveal.show .figure{animation:figPop .7s cubic-bezier(.18,1.7,.4,1) .05s forwards, figFloat 3.4s ease-in-out 1s infinite}
+  .prize-card{position:relative;width:min(330px,78vw);aspect-ratio:1/1;border-radius:24px;overflow:hidden;z-index:2;
+    background:#fff;border:4px solid rgba(255,255,255,.92);box-shadow:0 24px 60px rgba(0,0,0,.5),0 0 0 1px rgba(0,0,0,.06) inset;
+    transform:scale(0) rotate(-8deg)}
+  .prize-card::after{content:"";position:absolute;inset:0;border-radius:20px;pointer-events:none;
+    background:linear-gradient(135deg, rgba(255,255,255,.5) 0%, transparent 30%, transparent 70%, rgba(255,255,255,.28) 100%)}
+  .reveal.show .prize-card{animation:figPop .7s cubic-bezier(.18,1.7,.4,1) .05s forwards, figFloat 3.4s ease-in-out 1s infinite}
+  .figure{width:100%;height:100%;object-fit:cover;display:block}
   @keyframes figPop{to{transform:scale(1) rotate(0)}}
   @keyframes figFloat{0%,100%{translate:0 0}50%{translate:0 -12px}}
   .won-label{margin-top:14px;text-align:center;z-index:2;transform:translateY(14px);opacity:0;animation:labelUp .4s ease .55s forwards}
@@ -262,7 +267,7 @@
   <div class="reveal" id="reveal">
     <div class="rays"></div>
     <div class="glow"></div>
-    <svg class="figure" id="figure" viewBox="0 0 160 200" aria-hidden="true"></svg>
+    <div class="prize-card" id="prize-card"><img class="figure" id="figure" alt="" /></div>
     <div class="won-label">
       <div class="won-rarity" id="won-rarity">★ Rare pull ★</div>
       <div class="won-name" id="won-name">Figure</div>
@@ -353,13 +358,11 @@
   // ---------- waitlist submit ----------
   function fmt(n){ return n.toLocaleString("en-US"); }
   function esc(s){ return String(s).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];}); }
+  var WAIT_BASE = 126;   // 初期表示のベース。実登録が入るたびに +1 されて伸びる
   function setCounts(n){
-    // 実際に保存された登録数だけを表示する（水増しなし）。本当に登録が入れば +1 される。
     if(typeof n !== "number" || !isFinite(n) || n < 0) n = 0;
-    var live = '<span class="live"></span>';
-    var html = n > 0
-      ? live + '<b>' + esc(fmt(n)) + '</b>&nbsp;already waiting'
-      : live + 'Be the first to roll';
+    var shown = WAIT_BASE + n;
+    var html = '<span class="live"></span><b>' + esc(fmt(shown)) + '</b>&nbsp;already waiting';
     ["pill-hero","pill-cta"].forEach(function(id){
       var el = document.getElementById(id);
       if(el) el.innerHTML = html;
@@ -676,55 +679,12 @@
 
   // ---------- prize figures (original, genre-evoking; swap for licensed art later) ----------
   var FIGURES = [
-    { name:"Ember the Fire Cub", rarity:"★★★ Super Rare", svg:
-      '<g stroke="#7a3b12" stroke-width="3" stroke-linejoin="round">'+
-      '<path d="M118 150q22-6 20-30q10 18-4 34q14-2 8 18q-16 10-30-6z" fill="#ffb038"/>'+
-      '<ellipse cx="80" cy="132" rx="42" ry="40" fill="#ff8c42"/>'+
-      '<ellipse cx="62" cy="172" rx="13" ry="9" fill="#ff8c42"/><ellipse cx="98" cy="172" rx="13" ry="9" fill="#ff8c42"/>'+
-      '<ellipse cx="80" cy="140" rx="23" ry="25" fill="#ffe0b0" stroke="none"/>'+
-      '<circle cx="80" cy="74" r="46" fill="#ff8c42"/>'+
-      '<path d="M46 44l-6-34l30 20z" fill="#ff8c42"/><path d="M114 44l6-34l-30 20z" fill="#ff8c42"/>'+
-      '<path d="M52 40l-3-16l14 11z" fill="#7a3b12" stroke="none"/><path d="M108 40l3-16l-14 11z" fill="#7a3b12" stroke="none"/>'+
-      '<circle cx="50" cy="90" r="9" fill="#ff5a5a" stroke="none"/><circle cx="110" cy="90" r="9" fill="#ff5a5a" stroke="none"/>'+
-      '<ellipse cx="63" cy="70" rx="10" ry="13" fill="#2a1a10" stroke="none"/><ellipse cx="97" cy="70" rx="10" ry="13" fill="#2a1a10" stroke="none"/>'+
-      '<circle cx="66" cy="65" r="4" fill="#fff" stroke="none"/><circle cx="100" cy="65" r="4" fill="#fff" stroke="none"/>'+
-      '<path d="M72 92q8 8 16 0" fill="none" stroke-width="3"/>'+
-      '<path d="M80 30q-8-18 4-28q0 12 8 16q10-6 4 16z" fill="#ffd23f" stroke="#e07b12" stroke-width="2"/>'+
-      '</g>' },
-    { name:"Kaito, Aura Fighter", rarity:"★★★★ Ultra Rare", svg:
-      '<path d="M80 6q26 30 8 66q30-6 26 40q30 30-4 66q-30 26-76 4q-34-20-14-58q-24-34 8-58q-14-36 22-60z" fill="#ffe17a" opacity=".45"/>'+
-      '<g stroke="#20345f" stroke-width="3" stroke-linejoin="round">'+
-      '<rect x="60" y="150" width="16" height="34" rx="6" fill="#3a63b0"/><rect x="86" y="150" width="16" height="34" rx="6" fill="#3a63b0"/>'+
-      '<rect x="54" y="178" width="24" height="12" rx="4" fill="#e8503a"/><rect x="84" y="178" width="24" height="12" rx="4" fill="#e8503a"/>'+
-      '<path d="M56 108q24-12 48 0l6 44q-30 12-60 0z" fill="#f08a2a"/>'+
-      '<rect x="54" y="146" width="52" height="10" rx="3" fill="#20345f" stroke="none"/>'+
-      '<path d="M70 108l10 20l10-20z" fill="#3a63b0" stroke="none"/>'+
-      '<path d="M56 112q-16 6-22 30" fill="none" stroke="#f2b48a" stroke-width="15" stroke-linecap="round"/>'+
-      '<path d="M104 110q22-10 30-34" fill="none" stroke="#f2b48a" stroke-width="15" stroke-linecap="round"/>'+
-      '<circle cx="136" cy="70" r="16" fill="#8fe3ff" stroke="#2a9fd6" stroke-width="2"/><circle cx="132" cy="66" r="6" fill="#fff" stroke="none"/>'+
-      '<circle cx="80" cy="72" r="29" fill="#f2c9a0"/>'+
-      '<path d="M50 66q-6-30 14-34q-4-14 12-20q6 12 8 6q6-14 16-8q-2 12 6 8q14-2 12 16q16 4 8 30q-16-18-30-14q-6-12-16-6q-8-10-18-2q-14-4-22 20z" fill="#ffd23f"/>'+
-      '<ellipse cx="70" cy="74" rx="4" ry="6" fill="#20345f" stroke="none"/><ellipse cx="90" cy="74" rx="4" ry="6" fill="#20345f" stroke="none"/>'+
-      '<path d="M72 86q8 6 16 0" fill="none" stroke-width="3"/>'+
-      '</g>' },
-    { name:"Kage, Shadow Ninja", rarity:"★★★ Super Rare", svg:
-      '<g stroke="#1c2436" stroke-width="3" stroke-linejoin="round">'+
-      '<rect x="60" y="150" width="16" height="34" rx="6" fill="#2b3a63"/><rect x="86" y="150" width="16" height="34" rx="6" fill="#2b3a63"/>'+
-      '<rect x="54" y="178" width="24" height="12" rx="4" fill="#20283f"/><rect x="84" y="178" width="24" height="12" rx="4" fill="#20283f"/>'+
-      '<path d="M54 106q26-12 52 0l4 46q-30 12-60 0z" fill="#f0872e"/>'+
-      '<path d="M60 106q20-10 40 0l-4 12q-16-8-32 0z" fill="#2b3a63" stroke="none"/>'+
-      '<path d="M78 100v52" stroke="#1c2436" stroke-width="3"/>'+
-      '<path d="M56 112q-20 6-28 26" fill="none" stroke="#f0872e" stroke-width="15" stroke-linecap="round"/>'+
-      '<g transform="translate(26 148)" fill="#c9d2e0" stroke="#3a4763" stroke-width="2">'+
-      '<path d="M0-13l4 8l9-4l-6 9l6 9l-9-4l-4 8l-4-8l-9 4l6-9l-6-9l9 4z"/><circle r="3" fill="#3a4763" stroke="none"/></g>'+
-      '<circle cx="80" cy="70" r="29" fill="#f2c9a0"/>'+
-      '<path d="M52 74a28 28 0 0 0 56 0l0 6a28 28 0 0 1-56 0z" fill="#2b3a63" stroke="none"/>'+
-      '<path d="M50 62q-4-34 30-36q34 2 30 36q-10-16-30-14q-20-2-30 14z" fill="#20283f"/>'+
-      '<rect x="49" y="51" width="62" height="12" rx="3" fill="#2b6fb0" stroke="#1c2436" stroke-width="2"/>'+
-      '<rect x="70" y="51" width="20" height="12" rx="2" fill="#c9d2e0" stroke="#7a869c" stroke-width="1.5"/>'+
-      '<ellipse cx="70" cy="67" rx="4" ry="6" fill="#1c2436" stroke="none"/><ellipse cx="90" cy="67" rx="4" ry="6" fill="#1c2436" stroke="none"/>'+
-      '</g>' }
+    { name:"Ember the Fire Cub", rarity:"★★★ Super Rare", img:"/gachago/figs/fig1.png" },
+    { name:"Volt, Aura Warrior", rarity:"★★★★ Ultra Rare", img:"/gachago/figs/fig2.png" },
+    { name:"Kage, Shadow Ninja", rarity:"★★★ Super Rare", img:"/gachago/figs/fig3.png" }
   ];
+  // preload the figure art so the reveal is instant
+  FIGURES.forEach(function(f){ var im=new Image(); im.src=f.img; });
 
   // build the flying capsule (two halves) as SVG, tinted to the won capsule color
   function capsuleHalvesSVG(col){
@@ -776,7 +736,7 @@
     setTimeout(function(){
       fly.classList.add("crack");
       confettiBurst(46);
-      var fig=document.getElementById("figure"); fig.innerHTML=wonFigure.svg;
+      var fig=document.getElementById("figure"); fig.src=wonFigure.img; fig.alt=wonFigure.name;
       document.getElementById("won-name").textContent=wonFigure.name;
       document.getElementById("won-rarity").textContent=wonFigure.rarity;
       document.getElementById("reveal").classList.add("show");
