@@ -38,26 +38,76 @@ function clip(v: unknown, max: number): string | undefined {
   return t.slice(0, max);
 }
 
-/** 既存の登録 email 集合と件数を読む（重複判定＋カウント用）。無い/壊れは空扱い。 */
-function loadEmails(): Set<string> {
-  const set = new Set<string>();
+/** JSONL を全レコード配列として読む（壊れた行はスキップ）。無ければ空配列。 */
+function loadRecords(): WaitlistRecord[] {
+  const out: WaitlistRecord[] = [];
   try {
-    if (!existsSync(WAITLIST_FILE)) return set;
+    if (!existsSync(WAITLIST_FILE)) return out;
     const raw = readFileSync(WAITLIST_FILE, 'utf8');
     for (const line of raw.split('\n')) {
       const s = line.trim();
       if (!s) continue;
       try {
         const rec = JSON.parse(s) as Partial<WaitlistRecord>;
-        if (rec.email) set.add(String(rec.email).toLowerCase());
+        if (rec.email) out.push(rec as WaitlistRecord);
       } catch {
         /* 壊れた行はスキップ */
       }
     }
   } catch {
-    /* 読めなければ空集合 */
+    /* 読めなければ空配列 */
   }
+  return out;
+}
+
+/** 既存の登録 email 集合を読む（重複判定＋カウント用）。 */
+function loadEmails(): Set<string> {
+  const set = new Set<string>();
+  for (const rec of loadRecords()) set.add(String(rec.email).toLowerCase());
   return set;
+}
+
+/** 登録レコードを広告キャンペーン別に集計する（需要分析の中核・MC-488）。 */
+function computeStats() {
+  const seen = new Set<string>();
+  const unique: WaitlistRecord[] = [];
+  for (const r of loadRecords()) {
+    const key = String(r.email).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(r);
+  }
+
+  const tally = (pick: (r: WaitlistRecord) => string | undefined) => {
+    const m = new Map<string, number>();
+    for (const r of unique) {
+      const k = (pick(r) || '(none)').toLowerCase();
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => ({ key, count }));
+  };
+
+  const recent = [...unique]
+    .sort((a, b) => (b.ts || '').localeCompare(a.ts || ''))
+    .slice(0, 30)
+    .map((r) => ({
+      email: r.email,
+      ts: r.ts,
+      country: r.country,
+      utm_source: r.utm?.utm_source,
+      utm_campaign: r.utm?.utm_campaign,
+      ref: r.ref,
+    }));
+
+  return {
+    total: unique.length,
+    bySource: tally((r) => r.utm?.utm_source),
+    byCampaign: tally((r) => r.utm?.utm_campaign),
+    byMedium: tally((r) => r.utm?.utm_medium),
+    byCountry: tally((r) => r.country),
+    byDay: tally((r) => (r.ts ? r.ts.slice(0, 10) : undefined)),
+    recent,
+  };
 }
 
 export function gachagoRouter(): Router {
@@ -116,6 +166,13 @@ export function gachagoRouter(): Router {
 
   router.get('/waitlist/count', (_req: Request, res: Response) => {
     res.json({ count: loadEmails().size });
+  });
+
+  // 需要分析ダッシュボード用の集計（広告キャンペーン別・国別・日別＋直近登録）。
+  // /api/gachago/stats は PUBLIC_PATH_EXACT に含めない＝MC_TOKEN 保護下。
+  // 登録者 email を含むため、一般公開せず Keita/管理のみが閲覧できる。
+  router.get('/stats', (_req: Request, res: Response) => {
+    res.json(computeStats());
   });
 
   return router;

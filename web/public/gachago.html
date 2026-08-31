@@ -325,13 +325,14 @@
   ];
   function rnd(a,b){ return a + Math.random()*(b-a); }
 
-  // machine geometry (logical coords)
+  // machine geometry (logical coords) — authentic Japanese gashapon layout:
+  // glass dome (top) → white mechanism panel (red arc + chrome knob + LED + coin) → dark dispense drawer (bottom-left)
   var M = {
-    bodyX: W*0.5, topY: H*0.06,
-    domeCx: W*0.5, domeCy: H*0.30, domeR: W*0.34,   // glass dome
-    trayY: H*0.845, trayX: W*0.5, trayW: W*0.44,
-    chuteX: W*0.5, chuteY: H*0.66,                  // dispense opening
-    knobX: W*0.5, knobY: H*0.545, knobR: W*0.085
+    domeCx: W*0.50, domeCy: H*0.235, domeR: W*0.275,  // glass dome of capsules
+    knobX:  W*0.53, knobY: H*0.605, knobR: W*0.083,   // chrome turn knob
+    arrowR: W*0.150,                                   // red semicircle arrow radius
+    drawerX:W*0.055,drawerY:H*0.775, drawerW:W*0.34, drawerH:H*0.105, // dark dispense drawer (bottom-left)
+    restY:  H*0.905                                     // where the capsule lands in front
   };
   var GRAV = 0.55;
 
@@ -339,7 +340,7 @@
   var caps = [];
   function makeCaps(){
     caps = [];
-    var n = 22;
+    var n = 16;
     for(var i=0;i<n;i++){
       var c = CAP_COLORS[i % CAP_COLORS.length];
       caps.push({
@@ -405,8 +406,9 @@
     }
   }
 
-  // dropped capsule (the one that comes out)
+  // dropped capsule (the one that comes out) + live dispense-mouth coords (set in draw)
   var drop=null;
+  var DISP={x:W*0.28,y:H*0.80};
 
   // ---------- drawing ----------
   function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y);
@@ -436,58 +438,82 @@
     ctx.save();
     if(shakeMag>0.2){ ctx.translate(rnd(-shakeMag,shakeMag), rnd(-shakeMag,shakeMag)); }
 
-    // ----- machine body -----
-    var bw=W*0.80, bx=(W-bw)/2;
-    // base cabinet
-    ctx.fillStyle="#e9483c";
-    roundRect(bx, H*0.44, bw, H*0.50, 26); ctx.fill();
-    ctx.fillStyle="rgba(0,0,0,.10)";
-    roundRect(bx, H*0.44, bw, H*0.50, 26); ctx.save(); ctx.clip();
-    ctx.fillRect(bx, H*0.44, bw, 10); ctx.restore();
-    // face plate
-    ctx.fillStyle="#fff6ec";
-    roundRect(bx+bw*0.11, H*0.50, bw*0.78, H*0.30, 16); ctx.fill();
+    // ----- white machine body -----
+    var bw=W*0.72, bx=(W-bw)/2, by=H*0.055, bh=H*0.90;
+    ctx.fillStyle="rgba(0,0,0,.08)"; roundRect(bx+6, by+8, bw, bh, 30); ctx.fill();   // drop shadow
+    ctx.fillStyle="#e7e4dd"; roundRect(bx, by, bw, bh, 30); ctx.fill();               // body shell
+    ctx.fillStyle="#f6f4ef"; roundRect(bx+W*0.02, by+H*0.012, bw-W*0.04, bh-H*0.024, 22); ctx.fill(); // inset face
+    ctx.strokeStyle="rgba(0,0,0,.06)"; ctx.lineWidth=2; ctx.stroke();
 
-    // dome glass housing ring
-    ctx.fillStyle="#d23b30";
-    ctx.beginPath(); ctx.arc(M.domeCx, M.domeCy, M.domeR+W*0.045, 0, 6.28); ctx.fill();
-    // glass dome
-    var g = ctx.createRadialGradient(M.domeCx-M.domeR*0.3,M.domeCy-M.domeR*0.35,M.domeR*0.1, M.domeCx,M.domeCy,M.domeR);
-    g.addColorStop(0,"rgba(255,255,255,.55)"); g.addColorStop(.6,"rgba(210,235,245,.28)"); g.addColorStop(1,"rgba(140,180,200,.30)");
-    ctx.fillStyle=g;
-    ctx.beginPath(); ctx.arc(M.domeCx, M.domeCy, M.domeR, 0, 6.28); ctx.fill();
-
-    // capsules clipped to dome
-    ctx.save();
-    ctx.beginPath(); ctx.arc(M.domeCx,M.domeCy,M.domeR,0,6.28); ctx.clip();
+    // ----- dome collar + glass dome (top) -----
+    ctx.fillStyle="#dcd9d1"; roundRect(bx+W*0.045, by+H*0.014, bw-W*0.09, H*0.05, 12); ctx.fill();
+    var g = ctx.createRadialGradient(M.domeCx-M.domeR*0.3,M.domeCy-M.domeR*0.4,M.domeR*0.1, M.domeCx,M.domeCy,M.domeR);
+    g.addColorStop(0,"rgba(255,255,255,.62)"); g.addColorStop(.62,"rgba(214,236,245,.26)"); g.addColorStop(1,"rgba(150,185,205,.32)");
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(M.domeCx, M.domeCy, M.domeR, 0, 6.28); ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.arc(M.domeCx,M.domeCy,M.domeR,0,6.28); ctx.clip();
     for(var i=0;i<caps.length;i++){ var c=caps[i]; drawCapsule(c.x,c.y,c.r,c.col,c.ang); }
     ctx.restore();
-    // glass rim + shine
-    ctx.strokeStyle="rgba(255,255,255,.7)"; ctx.lineWidth=W*0.012;
+    ctx.strokeStyle="rgba(255,255,255,.78)"; ctx.lineWidth=W*0.014;
     ctx.beginPath(); ctx.arc(M.domeCx, M.domeCy, M.domeR, 0, 6.28); ctx.stroke();
-    ctx.strokeStyle="rgba(255,255,255,.5)"; ctx.lineWidth=W*0.02;
+    ctx.strokeStyle="rgba(255,255,255,.5)"; ctx.lineWidth=W*0.018;
     ctx.beginPath(); ctx.arc(M.domeCx, M.domeCy, M.domeR*0.86, -2.5, -1.4); ctx.stroke();
 
-    // ----- knob (crank) -----
+    // ----- mechanism panel -----
+    var py=H*0.42;                                                       // top of mechanism
+    ctx.strokeStyle="rgba(0,0,0,.07)"; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(bx+W*0.04, py); ctx.lineTo(bx+bw-W*0.04, py); ctx.stroke();
+
+    // green LED display (top-left)
+    var gx=bx+W*0.06, gy=py+H*0.024, gw=W*0.145, gh=H*0.04;
+    ctx.fillStyle="#0d1c13"; roundRect(gx,gy,gw,gh,6); ctx.fill();
+    ctx.fillStyle="#37e07a";
+    for(var d2=0; d2<3; d2++){ roundRect(gx+gw*0.13+d2*gw*0.27, gy+gh*0.3, gw*0.16, gh*0.4, 2); ctx.fill(); }
+
+    // coin slot (top-right) + COIN
+    var csx=bx+bw-W*0.135, csy=py+H*0.022;
+    ctx.fillStyle="#cccfd4"; roundRect(csx,csy,W*0.075,H*0.048,7); ctx.fill();
+    ctx.strokeStyle="#a7abb1"; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle="#22252b"; roundRect(csx+W*0.031,csy+H*0.009,W*0.013,H*0.03,3); ctx.fill();
+    ctx.fillStyle="#5566a0"; ctx.font="700 "+Math.round(W*0.019)+"px system-ui"; ctx.textAlign="center";
+    ctx.fillText("COIN", csx+W*0.037, csy+H*0.048+H*0.02);
+
+    // big red semicircle arrow sweeping around the knob
+    ctx.save(); ctx.translate(M.knobX, M.knobY);
+    ctx.strokeStyle="#e5372b"; ctx.lineWidth=W*0.072; ctx.lineCap="round";
+    ctx.beginPath(); ctx.arc(0,0,M.arrowR, Math.PI*0.66, Math.PI*1.98); ctx.stroke();
+    var ae=Math.PI*1.98, ex=Math.cos(ae)*M.arrowR, ey=Math.sin(ae)*M.arrowR;   // arrowhead
+    ctx.fillStyle="#e5372b"; ctx.save(); ctx.translate(ex,ey); ctx.rotate(ae+Math.PI/2);
+    ctx.beginPath(); ctx.moveTo(0,-W*0.072); ctx.lineTo(W*0.058,0); ctx.lineTo(0,W*0.072); ctx.closePath(); ctx.fill();
+    ctx.restore(); ctx.restore();
+
+    // chrome knob (rotates while spinning)
     ctx.save(); ctx.translate(M.knobX, M.knobY); ctx.rotate(knobAng);
-    ctx.fillStyle="#2b2b2b"; ctx.beginPath(); ctx.arc(0,0,M.knobR,0,6.28); ctx.fill();
-    ctx.fillStyle="#f7c948";
-    roundRect(-M.knobR*0.22,-M.knobR*0.82, M.knobR*0.44, M.knobR*1.64, M.knobR*0.22); ctx.fill();
-    ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(0,0,M.knobR*0.16,0,6.28); ctx.fill();
+    var kg=ctx.createRadialGradient(-M.knobR*0.3,-M.knobR*0.3,M.knobR*0.1, 0,0,M.knobR);
+    kg.addColorStop(0,"#ffffff"); kg.addColorStop(.5,"#d6dade"); kg.addColorStop(1,"#98a0aa");
+    ctx.fillStyle=kg; ctx.beginPath(); ctx.arc(0,0,M.knobR,0,6.28); ctx.fill();
+    ctx.strokeStyle="#7c828c"; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle="#6b7079"; roundRect(-M.knobR*0.62,-M.knobR*0.16, M.knobR*1.24, M.knobR*0.32, M.knobR*0.16); ctx.fill();
     ctx.restore();
-    ctx.fillStyle="#7a1c14"; ctx.font="700 "+Math.round(W*0.032)+"px system-ui"; ctx.textAlign="center";
-    ctx.fillText("PUSH & TURN", M.knobX, M.knobY+M.knobR+W*0.05);
+    ctx.fillStyle="#b23127"; ctx.font="700 "+Math.round(W*0.028)+"px system-ui"; ctx.textAlign="center";
+    ctx.fillText("PUSH & TURN", M.knobX, M.knobY+M.arrowR+H*0.042);
 
-    // coin slot
-    ctx.fillStyle="#2b2b2b";
-    roundRect(bx+bw*0.15, H*0.545, bw*0.12, 10, 5); ctx.fill();
+    // coin-return knob (small chrome, right)
+    ctx.fillStyle="#c7cbd0"; ctx.beginPath(); ctx.arc(bx+bw-W*0.095, M.knobY, W*0.026, 0, 6.28); ctx.fill();
+    ctx.strokeStyle="#9aa1ab"; ctx.lineWidth=2; ctx.stroke();
 
-    // ----- dispense tray -----
-    ctx.fillStyle="#c9362b";
-    roundRect(M.trayX-M.trayW/2, M.trayY-W*0.02, M.trayW, W*0.14, 14); ctx.fill();
-    // tray opening (dark)
-    ctx.fillStyle="rgba(0,0,0,.28)";
-    roundRect(M.trayX-M.trayW/2+8, M.trayY-W*0.02+8, M.trayW-16, W*0.09, 10); ctx.fill();
+    // ----- dark dispense drawer (bottom-left) -----
+    var dx=bx+W*0.045, dy=M.drawerY, dw=bw*0.5, dh=M.drawerH;
+    DISP.x=dx+dw*0.5; DISP.y=dy;                                          // dispense mouth for startDrop
+    ctx.fillStyle="#c9cdd2"; roundRect(dx-5,dy-5,dw+10,dh+10,13); ctx.fill();          // metal surround
+    var dg=ctx.createLinearGradient(0,dy,0,dy+dh);
+    dg.addColorStop(0,"rgba(38,41,48,.94)"); dg.addColorStop(1,"rgba(16,18,24,.96)");
+    ctx.fillStyle=dg; roundRect(dx,dy,dw,dh,9); ctx.fill();                            // dark flap
+    ctx.strokeStyle="rgba(255,255,255,.12)"; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle="rgba(255,255,255,.82)"; ctx.font="700 "+Math.round(W*0.03)+"px system-ui"; ctx.textAlign="center";
+    ctx.fillText("PUSH", dx+dw*0.5, dy+dh*0.62);
+    // coin-return cup (bottom-right)
+    ctx.fillStyle="#d5d8dc"; roundRect(bx+bw-W*0.16, dy+dh*0.18, W*0.09, dh*0.6, 7); ctx.fill();
+    ctx.strokeStyle="#b4b8bd"; ctx.lineWidth=1.5; ctx.stroke();
 
     // dropped capsule
     if(drop){ drawCapsule(drop.x,drop.y,drop.r,drop.col,drop.ang); }
@@ -516,8 +542,8 @@
     else if(state==="drop"){
       shakeMag*=0.8; stepDome(0);
       drop.vy += 0.9; drop.x += drop.vx; drop.y += drop.vy; drop.ang += drop.va;
-      // squash on tray floor
-      var floor = M.trayY + W*0.02;
+      // squash on landing floor (front of machine)
+      var floor = M.restY;
       if(drop.y + drop.r > floor){
         drop.y = floor - drop.r;
         if(Math.abs(drop.vy) > 2){ drop.vy *= -0.42; drop.vx*=0.7; burst(drop.x, floor, drop.col[0]); playClack(); }
@@ -535,7 +561,8 @@
     var pick=caps[0], idx=0;
     for(var i=1;i<caps.length;i++){ if(caps[i].y>pick.y){ pick=caps[i]; idx=i; } }
     caps.splice(idx,1);
-    drop = { x:M.chuteX, y:M.chuteY, vx:rnd(-1.5,1.5), vy:2, r:W*0.075, col:pick.col, ang:0, va:rnd(-0.2,0.2), settle:0 };
+    // capsule emerges from the dark dispense drawer and tumbles to the front
+    drop = { x:DISP.x, y:DISP.y+W*0.02, vx:rnd(0.6,2.0), vy:1.2, r:W*0.072, col:pick.col, ang:0, va:rnd(-0.22,0.22), settle:0 };
     state="drop"; shakeMag=4;
     playClack();
   }
@@ -555,7 +582,7 @@
     })(drop.col);
     cc.appendChild(cv);
     r.classList.add("show");
-    burst(M.trayX, M.trayY, drop.col[0]);
+    burst(drop.x, drop.y, drop.col[0]);
     document.getElementById("hint").style.opacity="0";
   }
 

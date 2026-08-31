@@ -163,14 +163,20 @@ export function loginHandler(req: Request, res: Response): void {
  * 認証ミドルウェアを生成する。
  * @param healthzPath 認証を免除する軽量ヘルスチェックのパス（systemd 用）。
  */
-// 認証を免除する公開パスの接頭辞（MC-488）。
-//  - /gachago     : 需要検証LPの静的配信（gachago.html / gachago-og.png 等）。
-//  - /api/gachago : 待ち登録API（POST /waitlist・GET /waitlist/count）。
-// 広告流入の一般訪問者は MC_TOKEN を持たないため、この2系統だけトークン無しで開ける。
-// それ以外（管理UI・全API）は従来どおり保護される。
-const PUBLIC_PATH_PREFIXES = ['/gachago', '/api/gachago'];
+// 認証を免除する公開パス（MC-488）。
+//  - /gachago（接頭辞）: 需要検証LPの静的配信（gachago.html / gachago-og.png 等）。
+// 広告流入の一般訪問者は MC_TOKEN を持たないため、これだけトークン無しで開ける。
+const PUBLIC_PATH_PREFIXES = ['/gachago'];
+
+// API は「一般訪問者が叩く必要のある2本」だけを完全一致で公開する。
+//  - POST /api/gachago/waitlist       : 待ち登録の受け皿。
+//  - GET  /api/gachago/waitlist/count : 「N人が待機中」の社会的証明表示用。
+// これ以外の /api/gachago/*（需要分析の stats/report など・登録者emailを含む）は
+// 従来どおり MC_TOKEN 保護に残す。接頭辞公開だと集計/emailが漏れるため完全一致に限定。
+const PUBLIC_PATH_EXACT = ['/api/gachago/waitlist', '/api/gachago/waitlist/count'];
 
 function isPublicPath(path: string): boolean {
+  if (PUBLIC_PATH_EXACT.includes(path)) return true;
   return PUBLIC_PATH_PREFIXES.some((p) => path === p || path.startsWith(p + '/') || path.startsWith(p + '.'));
 }
 
