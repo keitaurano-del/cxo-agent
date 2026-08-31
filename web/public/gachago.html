@@ -111,6 +111,9 @@
     background:linear-gradient(135deg, rgba(255,255,255,.5) 0%, transparent 30%, transparent 70%, rgba(255,255,255,.28) 100%)}
   .reveal.show .prize-card{animation:figPop .7s cubic-bezier(.18,1.7,.4,1) .05s forwards, figFloat 3.4s ease-in-out 1s infinite}
   .figure{width:100%;height:100%;object-fit:cover;display:block}
+  .sample-badge{position:absolute;left:10px;top:10px;z-index:3;font-size:11px;font-weight:800;letter-spacing:.03em;
+    color:#fff;background:rgba(18,28,48,.6);padding:4px 10px;border-radius:999px;backdrop-filter:blur(2px);
+    border:1px solid rgba(255,255,255,.28);pointer-events:none}
   @keyframes figPop{to{transform:scale(1) rotate(0)}}
   @keyframes figFloat{0%,100%{translate:0 0}50%{translate:0 -12px}}
   .won-label{margin-top:14px;text-align:center;z-index:2;transform:translateY(14px);opacity:0;animation:labelUp .4s ease .55s forwards}
@@ -267,7 +270,7 @@
   <div class="reveal" id="reveal">
     <div class="rays"></div>
     <div class="glow"></div>
-    <div class="prize-card" id="prize-card"><img class="figure" id="figure" alt="" /></div>
+    <div class="prize-card" id="prize-card"><img class="figure" id="figure" alt="" /><span class="sample-badge">見本 · Sample</span></div>
     <div class="won-label">
       <div class="won-rarity" id="won-rarity">★ Rare pull ★</div>
       <div class="won-name" id="won-name">Figure</div>
