@@ -173,7 +173,7 @@ const PUBLIC_PATH_PREFIXES = ['/gachago'];
 //  - GET  /api/gachago/waitlist/count : 「N人が待機中」の社会的証明表示用。
 // これ以外の /api/gachago/*（需要分析の stats/report など・登録者emailを含む）は
 // 従来どおり MC_TOKEN 保護に残す。接頭辞公開だと集計/emailが漏れるため完全一致に限定。
-const PUBLIC_PATH_EXACT = ['/api/gachago/waitlist', '/api/gachago/waitlist/count'];
+const PUBLIC_PATH_EXACT = ['/api/gachago/waitlist', '/api/gachago/waitlist/count', '/gachago-og.png'];
 
 function isPublicPath(path: string): boolean {
   if (PUBLIC_PATH_EXACT.includes(path)) return true;

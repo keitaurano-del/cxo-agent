@@ -223,6 +223,21 @@ app.post('/api/decisions/:id/withdraw', (req, res) => {
 // GET /login は auth ミドルウェア側の send401 がログインフォームを返す。
 app.post('/login', express.urlencoded({ extended: false }), loginHandler);
 
+// ─── toygacha.com 専用ドメイン: トップ(/)で GachaGo 需要検証LPを配信（MC-488）──
+// toygacha.com / www.toygacha.com のルート("/")アクセスは、Apolloダッシュボード
+// ではなく web/dist/gachago.html（公開LP）を返す。認証ミドルウェアより前に置くので
+// 一般訪問者はトークン無しで開ける。他ホスト（apollomansion.com 等）は next() で従来通り。
+// LP 内アセット(/gachago/*, /gachago-og.png)と /api/gachago/waitlist は auth.ts で公開済み。
+const TOYGACHA_HOSTS = new Set(['toygacha.com', 'www.toygacha.com']);
+app.get('/', (req: Request, res: Response, next: NextFunction) => {
+  const host = (req.headers.host ?? '').split(':')[0].toLowerCase();
+  if (TOYGACHA_HOSTS.has(host)) {
+    res.set('Cache-Control', 'no-cache, must-revalidate');
+    return res.sendFile(join(WEB_DIST, 'gachago.html'));
+  }
+  next();
+});
+
 // ─── token 認証（healthz より後、他ルートより前に適用）──────────
 // MC_TOKEN 設定時は /api/* ・SSE ・静的配信 ・SPA fallback すべてを保護する。
 app.use(makeAuthMiddleware(HEALTHZ_PATH));
