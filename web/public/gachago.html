@@ -175,6 +175,9 @@
   .cta::after{content:"";position:absolute;inset:0;background:
     radial-gradient(340px 200px at 82% -20%, rgba(64,130,247,.42), transparent 70%),
     radial-gradient(300px 200px at 8% 120%, rgba(240,180,41,.22), transparent 70%);pointer-events:none}
+  .cta-flag{position:relative;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800;
+    letter-spacing:.02em;color:#ffe08a;background:rgba(240,180,41,.14);border:1px solid rgba(240,180,41,.34);
+    padding:5px 13px;border-radius:999px;margin-bottom:14px}
   .cta h2{color:#fff;position:relative}
   .cta p{color:#c6d2e4;position:relative;margin:6px auto 24px;max-width:30em}
   .cta .form-row{margin:0 auto;justify-content:center;position:relative}
@@ -269,7 +272,7 @@
     </form>
     <div class="microcopy">
       <span class="count-pill" id="pill-hero"><span class="live"></span>&nbsp;</span>
-      · No spam. One email when we launch.
+      · <b>Early sign-ups roll first.</b> No spam.
     </div>
   </div>
 
@@ -345,8 +348,9 @@
 <section id="join">
   <div class="wrap">
     <div class="cta">
+      <span class="cta-flag">🎟 Founding batch · limited first invites</span>
       <h2>Be first in line.</h2>
-      <p>We're opening to a small first group. Drop your email and we'll send one invite when ToyGacha goes live.</p>
+      <p>We're opening to a small founding batch — the earlier you join, the sooner you roll. One invite, straight to your inbox the day ToyGacha goes live.</p>
       <form class="form-row" id="form-cta" novalidate>
         <input type="email" name="email" placeholder="you@email.com" autocomplete="email" required />
         <button class="btn" type="submit">Join the waitlist</button>
