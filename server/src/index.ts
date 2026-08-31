@@ -106,6 +106,7 @@ import { startWatch } from './watch.js';
 import { chatRouter, agentMessageHandler, autonomousTickHandler } from './chatRouter.js';
 import { navOrderRouter } from './navOrderRouter.js';
 import { blockersRouter } from './blockersRouter.js';
+import { gachagoRouter } from './gachagoRouter.js';
 import { babyDiaryRouter } from './babyDiaryRouter.js';
 import { childcareChatRouter } from './childcareChatRouter.js';
 import { chajiChatRouter } from './chajiChatRouter.js';
@@ -1530,6 +1531,11 @@ app.use('/api/nav-order', navOrderRouter());
 // board-audit（日次21:30）が生成する data/blockers.json を読み取り専用で配信。
 // タスクボードの停滞バッジと「今日の2分」カードのデータ源。書込APIなし（正本は日次再生成）。
 app.use('/api/blockers', blockersRouter());
+
+// GachaGo 需要検証LPの公開待ち登録API（MC-488）。auth.ts の PUBLIC_PATH_PREFIXES
+// で /api/gachago と /gachago(静的LP) を認証免除にしている＝広告流入の一般訪問者が
+// トークン無しで開ける。書込は data/gachago-waitlist.jsonl への追記のみ。
+app.use('/api/gachago', gachagoRouter());
 
 // ─── 成長日記（MC-233 Phase1）──────────────────────────────────
 // 子の成長記録を日付単位（1日1エントリ）で残し、写真/動画を添付するビュー。
