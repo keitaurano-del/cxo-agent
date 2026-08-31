@@ -196,18 +196,21 @@
     section{padding:40px 0}
   }
   @media(max-width:600px){
-    body{font-size:17px}
-    .lede{font-size:17.5px}
-    .sub{font-size:16.5px}
-    .step p,.why .item p{font-size:16px}
-    .cta p{font-size:16.5px}
-    .microcopy,.count-pill{font-size:15px}
+    /* TripAdvisor-style mobile: larger type + darker, higher-contrast body copy */
+    body{font-size:18px;line-height:1.6}
+    h1{font-size:clamp(36px,10vw,44px)}
+    h2{font-size:clamp(28px,7.5vw,34px)}
+    .lede{font-size:19px;color:#3b485c}
+    .sub{font-size:18px;color:#3b485c}
+    .step p,.why .item p{font-size:17px;color:#3b485c;line-height:1.55}
+    .cta p{font-size:17.5px}
+    .microcopy,.count-pill{font-size:15.5px}
     .kicker,.eyebrow{font-size:14px}
-    .step .tag{font-size:13px}
-    .step h4,.why .item h4{font-size:18.5px}
+    .step .tag{font-size:13.5px}
+    .step h4,.why .item h4{font-size:21px;font-weight:850;letter-spacing:-.01em}
     footer{font-size:15px}
     .form-row input[type=email]{font-size:16px}
-    .btn{font-size:16px}
+    .btn{font-size:16.5px}
   }
   @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important}}
 </style>
