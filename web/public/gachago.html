@@ -189,7 +189,7 @@
       <button class="btn" type="submit">Get early access</button>
     </form>
     <div class="microcopy">
-      <span class="count-pill"><span class="live"></span><b id="count-hero">—</b>&nbsp;already waiting</span>
+      <span class="count-pill" id="pill-hero"><span class="live"></span>&nbsp;</span>
       · No spam. One email when we launch.
     </div>
   </div>
@@ -261,7 +261,7 @@
       </form>
       <div class="ok-msg" id="ok-cta">✓ You're on the list. Talk soon.</div>
       <div class="microcopy" style="justify-content:center;color:#cfc7bd;margin-top:14px">
-        <span class="count-pill"><span class="live"></span><b id="count-cta">—</b>&nbsp;already waiting</span>
+        <span class="count-pill" id="pill-cta"><span class="live"></span>&nbsp;</span>
       </div>
     </div>
   </div>
@@ -288,13 +288,18 @@
 
   // ---------- waitlist submit ----------
   function fmt(n){ return n.toLocaleString("en-US"); }
+  function esc(s){ return String(s).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];}); }
   function setCounts(n){
-    if(typeof n !== "number") return;
-    var a=document.getElementById("count-hero"), b=document.getElementById("count-cta");
-    // baseline so an empty list still reads as momentum on day 1
-    var shown = n + 128;
-    if(a) a.textContent = fmt(shown);
-    if(b) b.textContent = fmt(shown);
+    // 実際に保存された登録数だけを表示する（水増しなし）。本当に登録が入れば +1 される。
+    if(typeof n !== "number" || !isFinite(n) || n < 0) n = 0;
+    var live = '<span class="live"></span>';
+    var html = n > 0
+      ? live + '<b>' + esc(fmt(n)) + '</b>&nbsp;already waiting'
+      : live + 'Be the first to roll';
+    ["pill-hero","pill-cta"].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el) el.innerHTML = html;
+    });
   }
   fetch("/api/gachago/waitlist/count").then(function(r){return r.json();}).then(function(d){ setCounts(d.count||0); }).catch(function(){ setCounts(0); });
 
