@@ -1878,19 +1878,159 @@ function WorkTebakoTab() {
   );
 }
 
-// 新規事業「海外向けオンライン・ガチャ」（2026-08-31 Keita）。
-// ①プロト＝触れる試作（オンラインで回す演出＋ガチャ機カタログ＋1個ごと手数料の都度課金カート）
-// ②フィージビリティ＝多エージェント調査の統合レポート。静的ページを iframe 切替表示する。
+// 新規事業「海外向けオンライン・ガチャ」ToyGacha（2026-08-31 Keita）。
+// ①登録＝waitlist 実登録のライブダッシュボード（/api/gachago/stats を 15 秒毎ポーリング）
+// ②LP＝本番 LP（toygacha.com と同じ /gachago.html）
+// ③調査＝多エージェント調査の統合レポート。
+interface GachaStatRow {
+  key: string;
+  count: number;
+}
+interface GachaRecent {
+  email: string;
+  ts?: string;
+  country?: string;
+  utm_source?: string;
+  utm_campaign?: string;
+  ref?: string;
+}
+interface GachaStats {
+  total: number;
+  bySource: GachaStatRow[];
+  byCampaign: GachaStatRow[];
+  byCountry: GachaStatRow[];
+  byDay: GachaStatRow[];
+  recent: GachaRecent[];
+}
+
+function GachaBars({ rows, empty }: { rows: GachaStatRow[]; empty: string }) {
+  const clean = rows.filter((r) => r.key && r.key !== '(none)');
+  if (!clean.length) return <div className="text-[11px] text-text-muted">{empty}</div>;
+  const max = Math.max(...clean.map((r) => r.count), 1);
+  return (
+    <div className="flex flex-col gap-1.5">
+      {clean.map((r) => (
+        <div key={r.key} className="flex items-center gap-2 text-[12px]">
+          <span className="w-28 shrink-0 truncate text-text" title={r.key}>
+            {r.key}
+          </span>
+          <div className="h-2 flex-1 rounded bg-surface-2">
+            <div className="h-2 rounded bg-accent" style={{ width: `${Math.round((r.count / max) * 100)}%` }} />
+          </div>
+          <span className="w-8 shrink-0 text-right tabular-nums text-text-muted">{r.count}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WorkGachaStats() {
+  const [stats, setStats] = useState<GachaStats | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch('/api/gachago/stats', { headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error(String(res.status));
+      const data = (await res.json()) as GachaStats;
+      setStats(data);
+      setError(null);
+      setUpdatedAt(new Date().toLocaleTimeString('ja-JP'));
+    } catch {
+      setError('取得に失敗しました');
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+    const id = setInterval(() => void load(), 15000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  const fmtTs = (ts?: string) => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return isNaN(d.getTime())
+      ? ts
+      : d.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="flex flex-col gap-4 pb-4">
+        <div className="flex items-end gap-4 rounded-lg border border-border bg-surface p-4">
+          <div>
+            <div className="text-[11px] text-text-muted">実登録数（本物・LP表示の126ベースは含みません）</div>
+            <div className="text-4xl font-bold tabular-nums text-text">{stats ? stats.total : '—'}</div>
+          </div>
+          <div className="ml-auto flex flex-col items-end gap-1 text-[11px] text-text-muted">
+            <span>{error ? <span className="text-red-400">{error}</span> : `更新 ${updatedAt || '—'}・15秒毎`}</span>
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="rounded border border-border px-2 py-0.5 hover:bg-surface-2 hover:text-text"
+            >
+              今すぐ更新
+            </button>
+          </div>
+        </div>
+
+        {stats && stats.total === 0 && !error ? (
+          <div className="rounded-lg border border-dashed border-border p-6 text-center text-[12px] text-text-muted">
+            まだ実登録は0件です。広告からの登録が入ると、ここにリアルタイムで表示されます。
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <section className="rounded-lg border border-border bg-surface p-3">
+            <h3 className="mb-2 text-[12px] font-semibold text-text">キャンペーン別</h3>
+            <GachaBars rows={stats?.byCampaign ?? []} empty="データなし" />
+          </section>
+          <section className="rounded-lg border border-border bg-surface p-3">
+            <h3 className="mb-2 text-[12px] font-semibold text-text">国別</h3>
+            <GachaBars rows={stats?.byCountry ?? []} empty="データなし" />
+          </section>
+        </div>
+
+        <section className="rounded-lg border border-border bg-surface p-3">
+          <h3 className="mb-2 text-[12px] font-semibold text-text">直近の登録（最新30件）</h3>
+          {stats && stats.recent.length ? (
+            <div className="flex flex-col divide-y divide-border">
+              {stats.recent.map((r, i) => (
+                <div key={`${r.email}-${i}`} className="flex items-center gap-2 py-1.5 text-[12px]">
+                  <span className="flex-1 truncate text-text" title={r.email}>
+                    {r.email}
+                  </span>
+                  {r.utm_campaign ? (
+                    <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] text-text-muted">{r.utm_campaign}</span>
+                  ) : null}
+                  {r.country ? <span className="text-[11px] text-text-muted">{r.country}</span> : null}
+                  <span className="w-24 shrink-0 text-right text-[11px] tabular-nums text-text-muted">{fmtTs(r.ts)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-[11px] text-text-muted">まだ登録はありません。</div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
 function WorkGachaTab() {
-  const [doc, setDoc] = useState<'proto' | 'feasibility'>('proto');
-  const src = doc === 'proto' ? '/gacha-proto.html' : '/gacha-feasibility.html';
-  const title = doc === 'proto' ? 'GachaGo プロトタイプ' : '海外向けオンライン・ガチャ 事業フィージビリティ';
+  const [doc, setDoc] = useState<'stats' | 'lp' | 'feasibility'>('stats');
+  const isPage = doc === 'lp' || doc === 'feasibility';
+  const src = doc === 'lp' ? '/gachago.html' : '/gacha-feasibility.html';
+  const title = doc === 'lp' ? 'ToyGacha LP' : '海外向けオンライン・ガチャ 事業フィージビリティ';
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex items-center gap-2">
         <div className="flex rounded-md border border-border p-0.5">
           {([
-            ['proto', 'プロト'],
+            ['stats', '登録'],
+            ['lp', 'LP'],
             ['feasibility', '調査'],
           ] as const).map(([key, label]) => (
             <button
@@ -1905,21 +2045,27 @@ function WorkGachaTab() {
             </button>
           ))}
         </div>
-        <a
-          href={src}
-          target="_blank"
-          rel="noreferrer"
-          className="ml-auto rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
-        >
-          別タブで開く ↗
-        </a>
+        {isPage ? (
+          <a
+            href={src}
+            target="_blank"
+            rel="noreferrer"
+            className="ml-auto rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+          >
+            別タブで開く ↗
+          </a>
+        ) : null}
       </div>
-      <iframe
-        key={src}
-        src={src}
-        title={title}
-        className="min-h-0 w-full flex-1 rounded-lg border border-border bg-white"
-      />
+      {isPage ? (
+        <iframe
+          key={src}
+          src={src}
+          title={title}
+          className="min-h-0 w-full flex-1 rounded-lg border border-border bg-white"
+        />
+      ) : (
+        <WorkGachaStats />
+      )}
     </div>
   );
 }
