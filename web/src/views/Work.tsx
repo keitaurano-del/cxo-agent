@@ -1880,11 +1880,13 @@ function WorkTebakoTab() {
 
 // 新規事業「小規模の賃貸管理会社向け 修繕受付クラウド」すまい受付（仮）（2026-09-02 Keita・MC-515）。
 // 本番は sumai.apollomansion.com（別サーバ :3025）。tebako と同じ iframe 方式で埋め込む。
+// 事業ブリーフは 2026-09 に現段階（施工業者ポータル/相見積/オーナー承認/費用負担区分/設備・点検/退去精算まで実装済）
+// ＋公表一次資料ベースの市場・競合数値で全面改訂（/brief 側を更新・ここは iframe で自動追従）。
 function WorkSumaiTab() {
   const S = 'https://sumai.apollomansion.com';
   const [doc, setDoc] = useState<'brief' | 'site' | 'admin' | 'tenant'>('brief');
   const DOCS: Record<string, { src: string; title: string }> = {
-    brief: { src: `${S}/brief`, title: '事業ブリーフ（海外比較・提供価値・国内競合・価格・事業性・コスト）' },
+    brief: { src: `${S}/brief`, title: '事業ブリーフ（現在地・市場規模・海外比較・国内競合・制度的追い風・価格・事業性）' },
     site: { src: `${S}/`, title: 'サービスサイト（本番 LP）' },
     admin: { src: `${S}/admin/sample?key=demo1234`, title: '管理ダッシュボード（デモ）' },
     tenant: { src: `${S}/r/sample`, title: '入居者の申請画面（デモ）' },
