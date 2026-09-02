@@ -95,6 +95,28 @@ function defaultPaneAssign(count: number): number[] {
   return Array.from({ length: count }, (_, i) => TERMINAL_TABS[i]?.id ?? TERMINAL_TABS[0].id);
 }
 
+// ─── 未読インジケータ helper（MC-531）─────────────────────────
+// capture-pane の内容を「表示テキスト」に正規化してハッシュ比較する。
+//   - ANSI エスケープ（色・カーソル制御・OSC）を除去 → 色コードの揺らぎで偽検知しない
+//   - 各行の末尾空白と全体の末尾空行を除去 → パディング差分で偽検知しない
+// tmux のアイドルペインは capture 内容が安定していることを実測済み（2026-09-02）。
+function normalizeCaptureForHash(s: string): string {
+  // eslint-disable-next-line no-control-regex -- ANSI CSI / OSC シーケンスの除去に制御文字が必要
+  const stripped = s.replace(/\u001b\[[0-9;?]*[a-zA-Z]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/g, '');
+  return stripped
+    .split('\n')
+    .map((l) => l.replace(/\s+$/, ''))
+    .join('\n')
+    .replace(/\n+$/, '');
+}
+
+// 軽量ハッシュ（djb2 xor）。暗号用途でなく「内容が変わったか」の比較のみ。
+function hashCaptureText(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return `${h.toString(36)}:${s.length}`;
+}
+
 // ─── 仮想キーバー / 補助 API helper ───────────────────────────
 // send-keys / output / start は terminal 番号で対象 tmux セッションを切り替える（MC-123）。
 async function postSendKeys(keys: string, terminal: number): Promise<void> {
@@ -1059,6 +1081,89 @@ export default function Terminal() {
     return () => window.clearInterval(intId);
   }, [refreshStatus, setBackend]);
 
+  // ── 未読インジケータ（MC-531）────────────────────────────────
+  // 既存 GET /api/terminal/output を約10秒毎にポーリングし、画面に映っていない
+  // ターミナルへ新しい出力（回答）が届いたらタブのドットを琥珀色に変える。
+  // タブをアクティブ化（または分割ペインで表示）すると既読になり緑へ戻る。
+  // サーバ変更なし（capture-pane 内容のクライアント側ハッシュ比較のみ）。
+  const [unreadMap, setUnreadMap] = useState<Record<number, boolean>>({});
+  // seenHash = ユーザーが最後に「見た」時点の内容ハッシュ / latestHash = 直近ポーリングの内容ハッシュ。
+  const seenHashRef = useRef<Record<number, string>>({});
+  const latestHashRef = useRef<Record<number, string>>({});
+
+  // いま画面に映っているターミナル id 集合。
+  //   単一レイアウト: アクティブタブのみ / 分割: いずれかのスロットに実際に描画される端末。
+  const visibleTerminalIds = useMemo(() => {
+    if (!isSplit) return new Set<number>([activeId]);
+    const set = new Set<number>();
+    for (const t of TERMINAL_TABS) {
+      if (rects.some((r) => slotTerminal(r.slot) === t.id)) set.add(t.id);
+    }
+    return set;
+  }, [isSplit, activeId, rects, slotTerminal]);
+  const visibleTerminalIdsRef = useRef(visibleTerminalIds);
+
+  // 表示状態が変わったら、映っている端末を既読化する（ページ非表示中は据え置き）。
+  useEffect(() => {
+    visibleTerminalIdsRef.current = visibleTerminalIds;
+    const markVisibleSeen = () => {
+      if (document.hidden) return;
+      for (const id of visibleTerminalIdsRef.current) {
+        const latest = latestHashRef.current[id];
+        if (latest !== undefined) seenHashRef.current[id] = latest;
+      }
+      setUnreadMap((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const id of visibleTerminalIdsRef.current) {
+          if (next[id]) {
+            next[id] = false;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    };
+    markVisibleSeen();
+    document.addEventListener('visibilitychange', markVisibleSeen);
+    return () => document.removeEventListener('visibilitychange', markVisibleSeen);
+  }, [visibleTerminalIds]);
+
+  // 内容ポーリング本体。ready な端末のみ取得し、非表示端末の内容変化を未読にする。
+  useEffect(() => {
+    let stopped = false;
+    const poll = async () => {
+      for (const t of TERMINAL_TABS) {
+        if (backendsRef.current[t.id]?.kind !== 'ready') continue;
+        try {
+          const res = await fetch(`/api/terminal/output?terminal=${t.id}&lines=40`);
+          if (!res.ok || stopped) continue;
+          const body = (await res.json()) as { ok?: boolean; content?: string };
+          if (stopped || !body.ok || typeof body.content !== 'string') continue;
+          const h = hashCaptureText(normalizeCaptureForHash(body.content));
+          latestHashRef.current[t.id] = h;
+          const seen = seenHashRef.current[t.id];
+          const isVisibleNow = visibleTerminalIdsRef.current.has(t.id) && !document.hidden;
+          if (seen === undefined || isVisibleNow) {
+            // 初回はベースライン登録、表示中は自動既読（画面でそのまま内容が見えている）。
+            seenHashRef.current[t.id] = h;
+            setUnreadMap((prev) => (prev[t.id] ? { ...prev, [t.id]: false } : prev));
+          } else if (h !== seen) {
+            setUnreadMap((prev) => (prev[t.id] ? prev : { ...prev, [t.id]: true }));
+          }
+        } catch {
+          // 取得失敗は無視（次回ポーリングで再試行）。
+        }
+      }
+    };
+    void poll();
+    const intId = window.setInterval(() => void poll(), 10000);
+    return () => {
+      stopped = true;
+      window.clearInterval(intId);
+    };
+  }, []);
+
   // 選択/貼付したファイルをステージング配列に追加する（即送信しない）。
   const addToStaging = useCallback((files: File[]) => {
     const accepted = files.filter((f) => isAcceptedFile(f));
@@ -1407,10 +1512,13 @@ export default function Terminal() {
             >
               <TerminalIcon width={13} height={13} className="pointer-events-none" />
               <span>{terminalLabels[t.id] ?? t.label}</span>
-              {/* 稼働状態ドット */}
+              {/* 稼働状態ドット（MC-531: 未読の新規出力があるタブは琥珀色＋点滅で知らせる） */}
               <span
                 aria-hidden
-                className={`h-1.5 w-1.5 rounded-full ${st === 'ready' ? 'bg-active' : 'bg-text-faint'}`}
+                title={st === 'ready' && unreadMap[t.id] ? '新しい出力があります' : undefined}
+                className={`h-1.5 w-1.5 rounded-full ${
+                  st !== 'ready' ? 'bg-text-faint' : unreadMap[t.id] ? 'animate-pulse bg-idle' : 'bg-active'
+                }`}
               />
             </button>
           );
