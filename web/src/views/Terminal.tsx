@@ -1083,13 +1083,17 @@ export default function Terminal() {
 
   // ── 未読インジケータ（MC-531）────────────────────────────────
   // 既存 GET /api/terminal/output を約10秒毎にポーリングし、画面に映っていない
-  // ターミナルへ新しい出力（回答）が届いたらタブのドットを琥珀色に変える。
+  // ターミナルへ新しい出力（回答）が届いたらタブのドットを青に変える。
   // タブをアクティブ化（または分割ペインで表示）すると既読になり緑へ戻る。
+  // thinking / streaming 中（＝ポーリング毎に内容が変わり続けている間）は未読にせず、
+  // 内容が2回連続で同一＝出力が静定してから未読を立てる（Keita フィードバック 2026-09-02）。
   // サーバ変更なし（capture-pane 内容のクライアント側ハッシュ比較のみ）。
   const [unreadMap, setUnreadMap] = useState<Record<number, boolean>>({});
   // seenHash = ユーザーが最後に「見た」時点の内容ハッシュ / latestHash = 直近ポーリングの内容ハッシュ。
   const seenHashRef = useRef<Record<number, string>>({});
   const latestHashRef = useRef<Record<number, string>>({});
+  // 直近ポーリングと同一内容が続いた回数。0 = 変化直後（thinking / streaming 中とみなす）。
+  const stableCountRef = useRef<Record<number, number>>({});
 
   // いま画面に映っているターミナル id 集合。
   //   単一レイアウト: アクティブタブのみ / 分割: いずれかのスロットに実際に描画される端末。
@@ -1141,6 +1145,10 @@ export default function Terminal() {
           const body = (await res.json()) as { ok?: boolean; content?: string };
           if (stopped || !body.ok || typeof body.content !== 'string') continue;
           const h = hashCaptureText(normalizeCaptureForHash(body.content));
+          // 静定判定: 前回ポーリングと同一なら stable カウントを進め、変化していれば 0 に戻す。
+          // thinking / streaming 中はポーリング毎に内容が動くので stable が積み上がらない。
+          const prevPolled = latestHashRef.current[t.id];
+          stableCountRef.current[t.id] = prevPolled === h ? (stableCountRef.current[t.id] ?? 0) + 1 : 0;
           latestHashRef.current[t.id] = h;
           const seen = seenHashRef.current[t.id];
           const isVisibleNow = visibleTerminalIdsRef.current.has(t.id) && !document.hidden;
@@ -1148,7 +1156,8 @@ export default function Terminal() {
             // 初回はベースライン登録、表示中は自動既読（画面でそのまま内容が見えている）。
             seenHashRef.current[t.id] = h;
             setUnreadMap((prev) => (prev[t.id] ? { ...prev, [t.id]: false } : prev));
-          } else if (h !== seen) {
+          } else if (h !== seen && stableCountRef.current[t.id] >= 1) {
+            // 「見た内容から変わった」かつ「出力が静定した（2回連続同一）」で初めて未読にする。
             setUnreadMap((prev) => (prev[t.id] ? prev : { ...prev, [t.id]: true }));
           }
         } catch {
@@ -1512,12 +1521,12 @@ export default function Terminal() {
             >
               <TerminalIcon width={13} height={13} className="pointer-events-none" />
               <span>{terminalLabels[t.id] ?? t.label}</span>
-              {/* 稼働状態ドット（MC-531: 未読の新規出力があるタブは琥珀色＋点滅で知らせる） */}
+              {/* 稼働状態ドット（MC-531: 未読の新規出力があるタブは青＋点滅で知らせる） */}
               <span
                 aria-hidden
                 title={st === 'ready' && unreadMap[t.id] ? '新しい出力があります' : undefined}
                 className={`h-1.5 w-1.5 rounded-full ${
-                  st !== 'ready' ? 'bg-text-faint' : unreadMap[t.id] ? 'animate-pulse bg-idle' : 'bg-active'
+                  st !== 'ready' ? 'bg-text-faint' : unreadMap[t.id] ? 'animate-pulse bg-accent' : 'bg-active'
                 }`}
               />
             </button>
