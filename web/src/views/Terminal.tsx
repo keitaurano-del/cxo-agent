@@ -95,7 +95,7 @@ function defaultPaneAssign(count: number): number[] {
   return Array.from({ length: count }, (_, i) => TERMINAL_TABS[i]?.id ?? TERMINAL_TABS[0].id);
 }
 
-// ─── 未読インジケータ helper（MC-531）─────────────────────────
+// ─── 未読インジケータ helper（MC-534）─────────────────────────
 // capture-pane の内容を「表示テキスト」に正規化してハッシュ比較する。
 //   - ANSI エスケープ（色・カーソル制御・OSC）を除去 → 色コードの揺らぎで偽検知しない
 //   - 各行の末尾空白と全体の末尾空行を除去 → パディング差分で偽検知しない
@@ -1096,7 +1096,7 @@ export default function Terminal() {
     return () => window.clearInterval(intId);
   }, [refreshStatus, setBackend]);
 
-  // ── 未読インジケータ（MC-531）────────────────────────────────
+  // ── 未読インジケータ（MC-534）────────────────────────────────
   // 既存 GET /api/terminal/output を約10秒毎にポーリングし、画面に映っていない
   // ターミナルへ新しい出力（回答）が届いたらタブのドットを青に変える。
   // タブをアクティブ化（または分割ペインで表示）すると既読になり緑へ戻る。
@@ -1557,7 +1557,7 @@ export default function Terminal() {
             >
               <TerminalIcon width={13} height={13} className="pointer-events-none" />
               <span>{terminalLabels[t.id] ?? t.label}</span>
-              {/* 稼働状態ドット（MC-531: 未読の新規出力があるタブは青＋点滅で知らせる） */}
+              {/* 稼働状態ドット（MC-534: 未読の新規出力があるタブは青＋点滅で知らせる） */}
               <span
                 aria-hidden
                 title={st === 'ready' && unreadMap[t.id] ? '新しい出力があります' : undefined}
