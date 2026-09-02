@@ -117,6 +117,21 @@ function hashCaptureText(s: string): string {
   return `${h.toString(36)}:${s.length}`;
 }
 
+// recap / コンパクション / TUI ステータス由来の行かどうか（Keita フィードバック 2026-09-03:
+// 「recapのときは青にしないで」）。新規に現れた行がすべてこれに該当するなら、
+// 実際の回答ではなく画面の再描画・要約表示なので未読にしない。
+//   - compact 系: openclaw TUI「🗜️ Compacted (…)」/ Claude Code「Compacting…/Compacted」
+//   - session continued / recap: Claude Code のセッション再開サマリ
+//   - ステータスバー: 「agent … | session … | tokens …」「… | local ready」やスピナー行、罫線
+function isNoiseLine(line: string): boolean {
+  const l = line.trim();
+  if (l === '') return true;
+  if (/^[─━-]{4,}$/.test(l)) return true; // 罫線セパレータ
+  if (/compact(?:ed|ing|ion)|🗜|session is being continued|\brecap\b/i.test(l)) return true;
+  if (/\blocal ready\b|\btokens\s+\d|^agent\s+\S+\s+\(|esc to interrupt|ctrl\+o/i.test(l)) return true;
+  return false;
+}
+
 // ─── 仮想キーバー / 補助 API helper ───────────────────────────
 // send-keys / output / start は terminal 番号で対象 tmux セッションを切り替える（MC-123）。
 async function postSendKeys(keys: string, terminal: number): Promise<void> {
@@ -1092,6 +1107,10 @@ export default function Terminal() {
   // seenHash = ユーザーが最後に「見た」時点の内容ハッシュ / latestHash = 直近ポーリングの内容ハッシュ。
   const seenHashRef = useRef<Record<number, string>>({});
   const latestHashRef = useRef<Record<number, string>>({});
+  // seenLines = 最後に「見た」時点の正規化行集合 / latestLines = 直近ポーリングの正規化行。
+  // recap 判定（新規に現れた行がノイズだけか）に使う。
+  const seenLinesRef = useRef<Record<number, Set<string>>>({});
+  const latestLinesRef = useRef<Record<number, string[]>>({});
   // 直近ポーリングと同一内容が続いた回数。0 = 変化直後（thinking / streaming 中とみなす）。
   const stableCountRef = useRef<Record<number, number>>({});
 
@@ -1114,7 +1133,10 @@ export default function Terminal() {
       if (document.hidden) return;
       for (const id of visibleTerminalIdsRef.current) {
         const latest = latestHashRef.current[id];
-        if (latest !== undefined) seenHashRef.current[id] = latest;
+        if (latest !== undefined) {
+          seenHashRef.current[id] = latest;
+          seenLinesRef.current[id] = new Set(latestLinesRef.current[id] ?? []);
+        }
       }
       setUnreadMap((prev) => {
         let changed = false;
@@ -1144,21 +1166,35 @@ export default function Terminal() {
           if (!res.ok || stopped) continue;
           const body = (await res.json()) as { ok?: boolean; content?: string };
           if (stopped || !body.ok || typeof body.content !== 'string') continue;
-          const h = hashCaptureText(normalizeCaptureForHash(body.content));
+          const normalized = normalizeCaptureForHash(body.content);
+          const h = hashCaptureText(normalized);
+          const lines = normalized.split('\n');
           // 静定判定: 前回ポーリングと同一なら stable カウントを進め、変化していれば 0 に戻す。
           // thinking / streaming 中はポーリング毎に内容が動くので stable が積み上がらない。
           const prevPolled = latestHashRef.current[t.id];
           stableCountRef.current[t.id] = prevPolled === h ? (stableCountRef.current[t.id] ?? 0) + 1 : 0;
           latestHashRef.current[t.id] = h;
+          latestLinesRef.current[t.id] = lines;
           const seen = seenHashRef.current[t.id];
           const isVisibleNow = visibleTerminalIdsRef.current.has(t.id) && !document.hidden;
           if (seen === undefined || isVisibleNow) {
             // 初回はベースライン登録、表示中は自動既読（画面でそのまま内容が見えている）。
             seenHashRef.current[t.id] = h;
+            seenLinesRef.current[t.id] = new Set(lines);
             setUnreadMap((prev) => (prev[t.id] ? { ...prev, [t.id]: false } : prev));
           } else if (h !== seen && stableCountRef.current[t.id] >= 1) {
-            // 「見た内容から変わった」かつ「出力が静定した（2回連続同一）」で初めて未読にする。
-            setUnreadMap((prev) => (prev[t.id] ? prev : { ...prev, [t.id]: true }));
+            // 「見た内容から変わった」かつ「出力が静定した（2回連続同一）」。
+            // ただし新規に現れた行がすべて recap / コンパクション / ステータス由来なら
+            // 実回答ではないので未読にせず、そのまま既読に取り込む（青にしない）。
+            const seenSet = seenLinesRef.current[t.id] ?? new Set<string>();
+            const freshLines = lines.filter((l) => l.trim() !== '' && !seenSet.has(l));
+            if (freshLines.length > 0 && !freshLines.every(isNoiseLine)) {
+              setUnreadMap((prev) => (prev[t.id] ? prev : { ...prev, [t.id]: true }));
+            } else {
+              // recap 等のノイズのみ（または行の消滅・スクロールのみ）→ 静かに既読へ。
+              seenHashRef.current[t.id] = h;
+              seenLinesRef.current[t.id] = new Set(lines);
+            }
           }
         } catch {
           // 取得失敗は無視（次回ポーリングで再試行）。
