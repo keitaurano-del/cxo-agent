@@ -1944,12 +1944,12 @@ function WorkSumaiTab() {
   );
 }
 
-// 新規事業「あきまちウォッチ」Campnab型キャンセル空き通知ファミリー（2026-09-03 Keita・MC-534）。
+// 新規事業「空き待ちウォッチ」Campnab型キャンセル空き通知ファミリー（2026-09-03 Keita・MC-534）。
 // akimachiwatch.com 配下に縦別サイト（camp/sauna/hoiku/byoji/resto/golf/court）。随時最新化する。
 function WorkAkimachiTab() {
   const [doc, setDoc] = useState<'top' | 'camp' | 'sauna' | 'hoiku' | 'byoji' | 'resto' | 'golf' | 'court'>('top');
   const DOCS: Record<string, { src: string; title: string }> = {
-    top: { src: 'https://akimachiwatch.com/', title: 'ブランドトップ（あきまちウォッチ）' },
+    top: { src: 'https://akimachiwatch.com/', title: 'ブランドトップ（空き待ちウォッチ）' },
     camp: { src: 'https://camp.akimachiwatch.com/', title: 'キャンプ場（live監視: 西湖自由・PICA富士西湖）' },
     sauna: { src: 'https://sauna.akimachiwatch.com/', title: '貸切サウナ' },
     hoiku: { src: 'https://hoiku.akimachiwatch.com/', title: '保育園（世田谷237園）' },
@@ -2285,13 +2285,13 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
         </>
       ),
     },
-    // 新規事業「あきまちウォッチ」キャンセル空き通知ファミリー（2026-09-03 Keita・MC-534）。
+    // 新規事業「空き待ちウォッチ」キャンセル空き通知ファミリー（2026-09-03 Keita・MC-534）。
     {
       key: 'akimachi',
       label: (
         <>
           <span aria-hidden><SearchIcon width={16} height={16} /></span>
-          あきまち
+          空き待ち
         </>
       ),
     },
