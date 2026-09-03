@@ -173,7 +173,22 @@ const PUBLIC_PATH_PREFIXES = ['/gachago'];
 //  - GET  /api/gachago/waitlist/count : 「N人が待機中」の社会的証明表示用。
 // これ以外の /api/gachago/*（需要分析の stats/report など・登録者emailを含む）は
 // 従来どおり MC_TOKEN 保護に残す。接頭辞公開だと集計/emailが漏れるため完全一致に限定。
-const PUBLIC_PATH_EXACT = ['/api/gachago/waitlist', '/api/gachago/waitlist/count', '/gachago-og.png'];
+const PUBLIC_PATH_EXACT = [
+  '/api/gachago/waitlist',
+  '/api/gachago/waitlist/count',
+  '/gachago-og.png',
+  // PWA アセット（MC-536）。AndroidのWebAPK生成はGoogle側サーバがCookie無しで
+  // manifest/アイコンを取得するため、認証免除が必須。中身は公開して問題ない静的ファイルのみ。
+  '/manifest.webmanifest',
+  '/sw.js',
+  '/apple-touch-icon.png',
+  '/favicon.svg',
+  '/favicon-16.png',
+  '/favicon-32.png',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable-512.png',
+];
 
 function isPublicPath(path: string): boolean {
   if (PUBLIC_PATH_EXACT.includes(path)) return true;
