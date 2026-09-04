@@ -52,7 +52,6 @@ const Development = lazy(() => import('./views/Development'));
 const BusinessModels = lazy(() => import('./views/BusinessModels'));
 const Terminal = lazy(() => import('./views/Terminal'));
 // BuildProgress はタスクボード（TasksTabs）内のタブへ移動（MC-317）。
-const Pdca = lazy(() => import('./views/Pdca'));
 // 収益コックピット（ClipItNow の収益・トラフィック統合・2026-07-19）。
 const Revenue = lazy(() => import('./views/Revenue'));
 import BottomNav from './components/BottomNav';
@@ -769,8 +768,6 @@ export default function App() {
                 <Route path="/agents" element={<Navigate to="/" replace />} />
                 <Route path="/agents/:agentId" element={<Agents />} />
                 <Route path="/plan-usage" element={<PlanUsage />} />
-                {/* ClipItNow PDCA 可視化 */}
-                <Route path="/pdca" element={<Pdca />} />
                 {/* MC-317: 収益コックピットは独立ナビからダッシュボードのタブへ統合 */}
                 <Route path="/revenue" element={<Revenue />} />
               </Route>

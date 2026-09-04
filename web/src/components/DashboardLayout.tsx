@@ -6,7 +6,7 @@
 import { NavLink, Outlet, useOutletContext } from 'react-router-dom';
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ClockIcon, GaugeIcon, LoopIcon, NewsIcon, UsageIcon } from './icons';
+import { ClockIcon, GaugeIcon, NewsIcon, UsageIcon } from './icons';
 import { SortableNav, DragHandle } from './SortableNav';
 import { useNavOrder } from '../lib/useNavOrder';
 
@@ -45,7 +45,6 @@ const DASH_TABS: DashTab[] = [
   { to: '/news', label: 'ニュース', icon: <NewsIcon width={16} height={16} /> },
   // 収益コックピットは独立ナビからダッシュボードのタブへ統合（2026-07-20 Keita・MC-317）。
   { to: '/revenue', label: '収益', icon: <UsageIcon width={16} height={16} /> },
-  { to: '/pdca', label: 'PDCA', icon: <LoopIcon width={16} height={16} /> },
 ];
 
 /** `/` 既定着地の選択肢（MC-313 UX: 設定モーダルから変更可能）。固定タブ＋各ダッシュタブ。 */
