@@ -928,6 +928,64 @@ export const SCROLL_KBD_FIX_BODY = `(function(){
 })();`;
 const SCROLL_KBD_FIX_SCRIPT = `<script>${SCROLL_KBD_FIX_BODY}</script>`;
 
+// ─── 「Press ⏎ to Reconnect」を自動化（2026-09-05 Keita「reconnectのやつでないようにならないの？」）──
+// 根因（ttyd 1.7.4 同梱フロント index.ts 実コード確定）:
+//   onSocketClose(e){ ... if(1000!==e.code && doReconnect){自動再接続} else {Enterキー待ち} }
+//   WS の異常切断（code≠1000）は ttyd が自動再接続するが、正常クローズ（code=1000＝ttyd の子
+//   プロセス＝tmux attach が終了）した時だけ overlay に "Press ⏎ to Reconnect" を出して手動 Enter
+//   待ちになる。スマホでタブがバックグラウンド化→WS 切断→ttyd が子 attach を kill→再前面化時に
+//   この手動プロンプトが残る、が Keita の見ていた画面。ttyd に「1000 でも自動再接続」オプションは
+//   無いので、overlay 出現を監視して自動で Enter を送る（＝ユーザーが Enter を押すのと同じ経路で
+//   ttyd が登録した terminal.onKey ハンドラを叩き、tmux セッションへ再 attach する）。
+// 安全策（暴走ループ防止）:
+//   - "Press…Reconnect"（手動プロンプト）だけに反応。"Reconnecting…"/"Reconnected" は先頭が Press
+//     でないので無視＝再接続進行中は触らない。
+//   - 発火は最短 2.5s 間隔。overlay が即再出現し続ける（tmux セッション自体が死んでいる等）場合は
+//     連続 6 回で自動 Enter を止め、ユーザーの手動 Enter に委ねる（無限 attach ループを作らない）。
+//     overlay が 15s 以上消えていれば成功とみなしカウンタをリセット。
+export const RECONNECT_FIX_BODY = `(function(){
+  var lastFire=0, fails=0;
+  function textarea(){
+    try{var t=window.term; if(t&&t.textarea&&t.textarea.tagName==='TEXTAREA'){return t.textarea;}}catch(_e){}
+    try{return document.querySelector('.xterm-helper-textarea');}catch(_e){}
+    return null;
+  }
+  function sendEnter(){
+    var ta=textarea(); if(!ta){return false;}
+    try{ta.focus();}catch(_e){}
+    // ttyd の onSocketClose else 節が登録した terminal.onKey は domEvent.key==='Enter' を待つ。
+    // xterm は helper textarea の keydown から onKey を発火するので同じ経路で合成 Enter を送る。
+    var opt={key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true};
+    try{ta.dispatchEvent(new KeyboardEvent('keydown',opt));}catch(_e){return false;}
+    return true;
+  }
+  function reconnectPromptShowing(){
+    try{
+      var root=(window.term&&window.term.element)||document;
+      var divs=root.querySelectorAll('div');
+      for(var i=0;i<divs.length;i++){
+        var s=divs[i].textContent||'';
+        // 手動プロンプトのみ先頭が "Press"。進行中の "Reconnecting…" は除外される。
+        if(s.indexOf('Press')===0 && s.indexOf('Reconnect')>=0){return true;}
+      }
+    }catch(_e){}
+    return false;
+  }
+  function tick(){
+    var now=Date.now();
+    if(!reconnectPromptShowing()){
+      if(now-lastFire>15000){fails=0;}
+      return;
+    }
+    if(fails>=6){return;}
+    if(now-lastFire<2500){return;}
+    lastFire=now; fails++;
+    sendEnter();
+  }
+  setInterval(tick,600);
+})();`;
+const RECONNECT_FIX_SCRIPT = `<script>${RECONNECT_FIX_BODY}</script>`;
+
 // proxy 失敗時に Apollo 全体を落とさない。ttyd 停止中（林セッション無し等）でも 502 を返すだけ。
 proxy.on('error', (err, _req, resOrSocket) => {
   console.error('[terminal proxy error]', err?.message ?? err);
@@ -983,7 +1041,7 @@ proxy.on('proxyRes', (proxyRes, _req, res) => {
   proxyRes.on('end', () => {
     let body = Buffer.concat(chunks).toString('utf8');
     if (body.includes('</body>') && !body.includes('__apolloPasteFix')) {
-      body = body.replace('</body>', `${PASTE_FIX_SCRIPT}${TAP_FIX_SCRIPT}${TERM_THEME_SCRIPT}${COPY_FIX_SCRIPT}${LINK_FIX_SCRIPT}${IME_FIX_SCRIPT}${SCROLL_KBD_FIX_SCRIPT}</body>`);
+      body = body.replace('</body>', `${PASTE_FIX_SCRIPT}${TAP_FIX_SCRIPT}${TERM_THEME_SCRIPT}${COPY_FIX_SCRIPT}${LINK_FIX_SCRIPT}${IME_FIX_SCRIPT}${SCROLL_KBD_FIX_SCRIPT}${RECONNECT_FIX_SCRIPT}</body>`);
     }
     const buf = Buffer.from(body, 'utf8');
     headers['content-length'] = String(buf.byteLength);
