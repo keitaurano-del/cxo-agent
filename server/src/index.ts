@@ -24,7 +24,8 @@ import { randomUUID } from 'node:crypto';
 
 import { PORT, CLAUDE_PROJECTS_DIR, VAULT_DIR, STALL_MINUTES, AGENT_LOG_TTL_MS, DELIVERABLES_DIR, CLIPITNOW_PDCA_STATE_FILE, PROJECTS_DIR } from './config.js';
 import { collectAgents, collectAgentGroups, collectAgentFeed } from './collectors/agents.js';
-import { collectSecretaries } from './collectors/secretaries.js';
+import { collectSecretaries, collectTerminals } from './collectors/secretaries.js';
+import { collectActivity } from './collectors/activity.js';
 import { collectMoods, type MoodInput } from './collectors/moods.js';
 import { collectTasks } from './collectors/tasks.js';
 import { collectTimeline } from './collectors/timeline.js';
@@ -374,6 +375,20 @@ app.get('/api/agents/grouped', (_req, res) => {
 // ライブ状態。~/.openclaw のセッションログと tmux セッションから read-only で集める（fail-soft）。
 app.get('/api/secretaries', (_req, res) => {
   safeJson(res, () => ({ secretaries: collectSecretaries() }));
+});
+
+// ─── 全 OpenClaw 端末のライブ状態（実装進捗ページ用、2026-09-02 Keita 指示 ②A）──────
+// 「実装進捗にこのターミナルの実装状況も表示する」= 移乗した裏エージェントだけでなく、
+// ターミナル自身（Masayoshi / Son / Kimi）が今何をしているかも同ページで見えるようにする。
+app.get('/api/terminals', (_req, res) => {
+  safeJson(res, () => ({ terminals: collectTerminals() }));
+});
+
+// ─── 統合アクティビティ（実装進捗ページ「いま何が動いているか全部見える」、MC-534, 2026-09-04）──
+// サブエージェント/作業セッション/ターミナル/バックグラウンドジョブ/キューを 5 系統横断で返す。
+// 全系統 read-only 観測・fail-soft（activity collector 側で 6 秒キャッシュ）。
+app.get('/api/activity', (_req, res) => {
+  safeJson(res, () => ({ items: collectActivity() }));
 });
 
 // ─── エージェントの気持ち/思考（mood、MC-165 拡張）────────────────────

@@ -21,10 +21,10 @@
 // 旧 iframe 版（静的 /fable-progress.html）に戻すには git 履歴（2026-07-18 以前）を参照。
 import { useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '../components/PageHeader';
-import { ResourceState, EmptyState, Badge, StatusDot } from '../components/ui';
+import { EmptyState, Badge, StatusDot } from '../components/ui';
 import { useLiveResource } from '../lib/useLiveData';
 import { useLiveTick } from '../lib/liveContext';
-import { agentStatusMeta, projectLabel } from '../lib/meta';
+import { projectLabel } from '../lib/meta';
 import { relativeTime, absoluteTime } from '../lib/time';
 import type { AgentSummary, FeedItem } from '../lib/types';
 
@@ -60,11 +60,6 @@ function clock(iso?: string): string {
   if (Number.isNaN(d.getTime())) return '--:--:--';
   const p = (n: number) => String(n).padStart(2, '0');
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-}
-
-/** 稼働中エージェントを「移乗先」候補として並べ替える（新しい活動が上）。 */
-function byRecent(a: AgentSummary, b: AgentSummary): number {
-  return Date.parse(b.lastActivity || '') - Date.parse(a.lastActivity || '');
 }
 
 // ── ラボ生成ジョブ（MC-378）──────────────────────────────────────────────
@@ -279,37 +274,241 @@ function LabJobsSection({ tick }: { tick: number }): JSX.Element | null {
   );
 }
 
+// ── 統合アクティビティボード（MC-534, 2026-09-04 Keita 指示・全面改修）──────────────────
+// 「いま何が動いているか全部見える」。5 系統（サブエージェント／作業セッション／ターミナル／
+// バックグラウンドジョブ／キュー）を GET /api/activity で横断取得し、状態別（実行中／待機／完了）に
+// グルーピングして 1 画面に出す。各行に「誰が・何を・開始時刻・最終活動」を添える。
+// サブエージェント行はクリックで下段の生フィード（作業のようす）を開ける。
+interface ActivityItem {
+  id: string;
+  category: 'subagent' | 'session' | 'terminal' | 'job' | 'queue';
+  categoryLabel: string;
+  who: string;
+  emoji: string;
+  what: string;
+  status: 'active' | 'idle' | 'done' | 'waiting';
+  startedAt: string;
+  lastActivity: string;
+  scheduledFor: string;
+  detail: string;
+  agentId: string;
+}
+
+/** 状態バケット（実行中／待機／完了）。active=実行中、idle+waiting=待機、done=完了。 */
+type Bucket = 'running' | 'waiting' | 'done';
+const BUCKET_META: Record<Bucket, { label: string; color: string }> = {
+  running: { label: '実行中', color: 'var(--mc-active)' },
+  waiting: { label: '待機', color: '#c98a1a' },
+  done: { label: '完了', color: 'var(--mc-text-faint)' },
+};
+function bucketOf(s: ActivityItem['status']): Bucket {
+  if (s === 'active') return 'running';
+  if (s === 'done') return 'done';
+  return 'waiting'; // idle / waiting
+}
+
+const STATUS_COLOR: Record<ActivityItem['status'], string> = {
+  active: 'var(--mc-active)',
+  idle: 'var(--mc-text-muted)',
+  waiting: '#c98a1a',
+  done: 'var(--mc-text-faint)',
+};
+
+/** 未来時刻の短い相対表示（キュー用。例: あと5分 / あと2時間）。 */
+function untilLabel(iso: string): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return '';
+  const mins = Math.round((t - Date.now()) / 60000);
+  if (mins <= 0) return 'まもなく';
+  if (mins < 60) return `あと${mins}分`;
+  const h = Math.floor(mins / 60);
+  if (h < 24) return `あと${h}時間`;
+  return `あと${Math.floor(h / 24)}日`;
+}
+
+/** 並べ替え用の代表タイムスタンプ（最終活動→開始→予定の順で採る）。 */
+function sortTs(it: ActivityItem): number {
+  return Date.parse(it.lastActivity || it.startedAt || it.scheduledFor || '') || 0;
+}
+
+/** アクティビティ 1 行。サブエージェントはクリックで選択（生フィードを開く）。 */
+function ActivityRow({
+  it,
+  selected,
+  onSelect,
+}: {
+  it: ActivityItem;
+  selected: boolean;
+  onSelect: (agentId: string) => void;
+}): JSX.Element {
+  const clickable = it.category === 'subagent' && !!it.agentId;
+  const color = STATUS_COLOR[it.status];
+  const timeRight =
+    it.category === 'queue' && it.scheduledFor
+      ? untilLabel(it.scheduledFor)
+      : it.lastActivity
+        ? relativeTime(it.lastActivity)
+        : it.startedAt
+          ? relativeTime(it.startedAt)
+          : '';
+  const timeTitle =
+    it.category === 'queue'
+      ? `次回 ${absoluteTime(it.scheduledFor)}`
+      : it.lastActivity
+        ? `最終活動 ${absoluteTime(it.lastActivity)}`
+        : it.startedAt
+          ? `開始 ${absoluteTime(it.startedAt)}`
+          : '';
+  return (
+    <div
+      className={`flex items-start gap-2.5 border-b border-border px-3 py-2 last:border-b-0 ${
+        clickable ? 'cursor-pointer hover:bg-surface-2' : ''
+      }`}
+      style={selected ? { background: 'var(--mc-active-bg)' } : undefined}
+      onClick={clickable ? () => onSelect(it.agentId) : undefined}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onSelect(it.agentId);
+              }
+            }
+          : undefined
+      }
+    >
+      <span
+        className={`mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${it.status === 'active' ? 'mc-pulse' : ''}`}
+        style={{ background: color }}
+        aria-hidden
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span aria-hidden>{it.emoji}</span>
+          <span className="font-semibold text-text">{it.who}</span>
+          <Badge>{it.categoryLabel}</Badge>
+          {timeRight && (
+            <span className="ml-auto whitespace-nowrap text-[11px] text-text-faint" title={timeTitle}>
+              {timeRight}
+            </span>
+          )}
+        </div>
+        {it.what && (
+          <div className="mt-0.5 text-[12px] leading-snug text-text-muted">
+            {it.what.length > 200 ? `${it.what.slice(0, 200)}…` : it.what}
+          </div>
+        )}
+        {it.detail && <div className="mt-0.5 text-[10px] text-text-faint">{it.detail}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** 状態別グルーピングの統合ボード。mode='active' は実行中グループのみ、'all' は全グループ。 */
+function ActivityBoard({
+  tick,
+  mode,
+  selectedAgentId,
+  onSelectAgent,
+}: {
+  tick: number;
+  mode: ViewMode;
+  selectedAgentId: string | null;
+  onSelectAgent: (agentId: string) => void;
+}): JSX.Element {
+  const res = useLiveResource<{ items: ActivityItem[] }>('/api/activity', tick);
+  const items = res.data?.items ?? [];
+
+  const buckets = useMemo(() => {
+    const g: Record<Bucket, ActivityItem[]> = { running: [], waiting: [], done: [] };
+    for (const it of items) g[bucketOf(it.status)].push(it);
+    // 実行中・完了は活動の新しい順。待機はキュー（予定の早い順）を後ろに、それ以外を活動順で前に。
+    g.running.sort((a, b) => sortTs(b) - sortTs(a));
+    g.done.sort((a, b) => sortTs(b) - sortTs(a));
+    g.waiting.sort((a, b) => {
+      const aq = a.category === 'queue';
+      const bq = b.category === 'queue';
+      if (aq !== bq) return aq ? 1 : -1;
+      if (aq && bq) return Date.parse(a.scheduledFor) - Date.parse(b.scheduledFor);
+      return sortTs(b) - sortTs(a);
+    });
+    return g;
+  }, [items]);
+
+  const order: Bucket[] = mode === 'active' ? ['running'] : ['running', 'waiting', 'done'];
+  const total = order.reduce((n, b) => n + buckets[b].length, 0);
+
+  if (res.loading && items.length === 0) {
+    return <div className="py-6 text-center text-xs text-text-faint">読み込み中…</div>;
+  }
+  if (total === 0) {
+    return (
+      <EmptyState>
+        {mode === 'active'
+          ? 'いま動いているものはありません。'
+          : '表示できるアクティビティがありません。'}
+      </EmptyState>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      {order.map((b) => {
+        const list = buckets[b];
+        if (list.length === 0) return null;
+        const meta = BUCKET_META[b];
+        return (
+          <div key={b}>
+            <div className="mb-2 flex items-center gap-2">
+              <span
+                className={`inline-block h-2.5 w-2.5 rounded-full ${b === 'running' ? 'mc-pulse' : ''}`}
+                style={{ background: meta.color }}
+                aria-hidden
+              />
+              <h2 className="text-sm font-bold text-text">{meta.label}</h2>
+              <span className="text-[11px] text-text-faint">{list.length} 件</span>
+            </div>
+            <div className="overflow-hidden rounded-xl border border-border bg-surface">
+              {list.map((it) => (
+                <ActivityRow
+                  key={it.id}
+                  it={it}
+                  selected={!!selectedAgentId && it.agentId === selectedAgentId}
+                  onSelect={onSelectAgent}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function BuildProgress(): JSX.Element {
-  // 表示モード。既定は「稼働中」（従来どおりのライブ表示）。
+  // 表示モード。既定は「稼働中」（実行中グループのみ）。'all' で待機/完了も表示。
   const [mode, setMode] = useState<ViewMode>('active');
 
   const tick = useLiveTick('agents');
-  // 'active' は稼働中のみ（軽量）／'all' は status 絞り込み無しで全ステータスを取得。
-  const agentsRes = useLiveResource<{ agents: AgentSummary[] }>(
-    mode === 'active' ? '/api/agents?status=active' : '/api/agents',
-    tick,
-  );
 
-  const agents = useMemo(
-    () => [...(agentsRes.data?.agents ?? [])].sort(byRecent),
-    [agentsRes.data],
-  );
-
-  // 選択中エージェント。既定は最も直近に動いたエージェント（稼働中モードは最新 active、
-  // すべてモードは active 優先・無ければ最新の過去。byRecent 済みなので先頭を採ればよい）。
+  // サブエージェント行のドリルダウン用。ボードの行クリックで選択 → 下段に生フィードを開く。
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const defaultAgent = useMemo(
-    () => agents.find((a) => a.status === 'active') ?? agents[0] ?? null,
-    [agents],
-  );
+
+  // 選択中サブエージェントの詳細解決用（全ステータス・サーバ側 12 秒キャッシュ）。
+  const agentsRes = useLiveResource<{ agents: AgentSummary[] }>('/api/agents', tick);
+  const agents = useMemo(() => agentsRes.data?.agents ?? [], [agentsRes.data]);
   const selected = useMemo(
-    () => agents.find((a) => a.agentId === selectedId) ?? defaultAgent,
-    [agents, selectedId, defaultAgent],
+    () => agents.find((a) => a.agentId === selectedId) ?? null,
+    [agents, selectedId],
   );
-  // 選択が一覧から消えた（完了・モード切替で対象外化）ら既定選択へ寄せ、空表示を防ぐ。
+  // 選択したエージェントが一覧から消えた（完了・7 日窓外）ら閉じる。
   useEffect(() => {
-    if (selectedId && !agents.some((a) => a.agentId === selectedId)) setSelectedId(null);
-  }, [agents, selectedId]);
+    if (selectedId && agentsRes.data && !agents.some((a) => a.agentId === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [agents, selectedId, agentsRes.data]);
 
   const feedRes = useLiveResource<{ feed: FeedItem[] }>(
     // 未選択時は 404 を避けるため有効な軽量エンドポイントへ（feed は空になるだけ）。
@@ -320,7 +519,7 @@ export default function BuildProgress(): JSX.Element {
   // モード切替トグル（PageHeader 右に置く。稼働中モードでは「リアルタイム」バッジも併置）。
   const MODE_TABS: { value: ViewMode; label: string }[] = [
     { value: 'active', label: '稼働中' },
-    { value: 'all', label: 'すべて（過去含む）' },
+    { value: 'all', label: 'すべて' },
   ];
   const modeToggle = (
     <div className="inline-flex overflow-hidden rounded-lg border" style={{ borderColor: 'var(--mc-border)' }}>
@@ -360,9 +559,6 @@ export default function BuildProgress(): JSX.Element {
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [feedRes.data]);
 
-  const loading = agentsRes.loading || feedRes.loading;
-  const error = agentsRes.error ?? feedRes.error;
-  const hasData = agentsRes.data != null;
   const fetchedAt = feedRes.fetchedAt ?? agentsRes.fetchedAt;
 
   return (
@@ -384,147 +580,97 @@ export default function BuildProgress(): JSX.Element {
       />
 
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
-        {/* ラボ生成ジョブ（MC-378）。走っているものがある時だけ最上部に出す（エージェント表示と独立）。 */}
+        {/* ラボ生成ジョブ（MC-378）。走っているものがある時だけ最上部に出す。 */}
         <LabJobsSection tick={tick} />
-        <ResourceState loading={loading} error={error} hasData={hasData}>
-          {agents.length === 0 ? (
-            mode === 'all' ? (
-              <EmptyState>
-                表示できる履歴がありません。
-                <br />
-                （履歴は直近 7 日分のみ保持されます。）
-              </EmptyState>
-            ) : (
-              <EmptyState>
-                いまバックエンドで動いている実装作業はありません。
-                <br />
-                作業をエージェントに移乗すると、ここに生の進捗が流れます。
-              </EmptyState>
-            )
-          ) : (
-            <>
-              {/* 移乗先セレクタ。稼働中モードは複数同時稼働のときだけ。
-                  すべてモードは過去も含めて選べるよう常に出す（1件でも状態・時刻の文脈を出す）。 */}
-              {(agents.length > 1 || mode === 'all') && (
-                <div className="mb-4 flex flex-wrap gap-2">
-                  {agents.map((a) => {
-                    const on = a.agentId === (selected?.agentId ?? '');
-                    const isActive = a.status === 'active';
-                    return (
-                      <button
-                        key={a.agentId}
-                        type="button"
-                        onClick={() => setSelectedId(a.agentId)}
-                        className="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-colors"
-                        style={{
-                          borderColor: on ? 'var(--mc-active)' : 'var(--mc-border)',
-                          background: on ? 'var(--mc-active-bg)' : 'var(--mc-surface)',
-                          // 非稼働（過去）は全体をやや減光して稼働中と区別する。
-                          color: isActive ? 'var(--mc-text)' : 'var(--mc-text-muted)',
-                        }}
-                      >
-                        {isActive ? (
-                          // 稼働中は従来の緑パルスドット。
-                          <span className="inline-block h-2 w-2 rounded-full mc-pulse" style={{ background: 'var(--mc-active)' }} aria-hidden />
-                        ) : (
-                          // 過去（idle/done/never）はパルス無しの StatusDot（状態色のみ・語ラベルは下に併記）。
-                          <StatusDot status={a.status} withLabel={false} />
-                        )}
-                        <span className="font-medium">{a.subagentType}</span>
-                        {a.description && (
-                          <span className="max-w-[10rem] truncate text-text-faint">{a.description}</span>
-                        )}
-                        {/* すべてモードでは状態ラベルと最終活動の相対時刻を添える。 */}
-                        {mode === 'all' && (
-                          <span className="whitespace-nowrap text-text-faint">
-                            {agentStatusMeta(a.status).label}・{relativeTime(a.lastActivity)}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
+
+        {/* 統合アクティビティボード（①〜⑤を状態別に一望）。サブエージェント行はクリックで下段に生フィード。 */}
+        <ActivityBoard
+          tick={tick}
+          mode={mode}
+          selectedAgentId={selectedId}
+          onSelectAgent={(id) => setSelectedId((prev) => (prev === id ? null : id))}
+        />
+
+        {/* サブエージェントのドリルダウン（＝作業のようす）。行を選ぶと開く。 */}
+        {selected && (
+          <div className="mt-6 border-t border-border pt-5">
+            {/* フェーズ見出しカード（＝いま何をしているか）。 */}
+            <div className="mb-3 rounded-xl border border-border bg-surface p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-base font-bold text-text">🛰 {selected.subagentType}</span>
+                <Badge>{selected.projectLabel || projectLabel(selected.project)}</Badge>
+                <StatusDot status={selected.status} />
+                {selected.currentTaskId && <Badge title="担当タスク">{selected.currentTaskId}</Badge>}
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(null)}
+                  className="ml-auto rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-text-muted transition-colors hover:bg-surface-2"
+                >
+                  閉じる
+                </button>
+              </div>
+              {selected.description && (
+                <div className="mt-1.5 text-sm text-text-muted">{selected.description}</div>
+              )}
+              {selected.lastAction && (
+                <div className="mt-2 rounded-lg bg-surface-2 px-3 py-2 text-sm text-text">
+                  <span className="text-text-faint">いま：</span>
+                  {selected.lastAction}
                 </div>
               )}
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-faint">
+                <span title={absoluteTime(selected.lastActivity)}>最終活動: {relativeTime(selected.lastActivity)}</span>
+                {selected.gitBranch && <span>ブランチ: {selected.gitBranch}</span>}
+                <span>総メッセージ: {selected.messageCount}</span>
+              </div>
+            </div>
 
-              {selected && (
-                <>
-                  {/* フェーズ見出しカード（＝いま何をしているか）。 */}
-                  <div className="mb-3 rounded-xl border border-border bg-surface p-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-base font-bold text-text">🛰 {selected.subagentType}</span>
-                      <Badge>{selected.projectLabel || projectLabel(selected.project)}</Badge>
-                      <StatusDot status={selected.status} />
-                      {selected.currentTaskId && <Badge title="担当タスク">{selected.currentTaskId}</Badge>}
-                    </div>
-                    {selected.description && (
-                      <div className="mt-1.5 text-sm text-text-muted">{selected.description}</div>
-                    )}
-                    {selected.lastAction && (
-                      <div className="mt-2 rounded-lg bg-surface-2 px-3 py-2 text-sm text-text">
-                        <span className="text-text-faint">いま：</span>
-                        {selected.lastAction}
-                      </div>
-                    )}
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-faint">
-                      <span title={absoluteTime(selected.lastActivity)}>最終活動: {relativeTime(selected.lastActivity)}</span>
-                      {selected.gitBranch && <span>ブランチ: {selected.gitBranch}</span>}
-                      <span>総メッセージ: {selected.messageCount}</span>
-                    </div>
+            {/* 操作カウント。 */}
+            {toolCounts.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {toolCounts.map(([name, n]) => (
+                  <span
+                    key={name}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-[11px] text-text-muted"
+                  >
+                    <span aria-hidden>{feedIcon({ ts: '', role: 'assistant', kind: 'tool_use', toolName: name, text: '' })}</span>
+                    {name} <b className="tabular-nums text-text">{n}</b>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* 作業のようす（上が最新・左が時刻）。 */}
+            <div className="mb-2 flex items-baseline gap-2">
+              <h2 className="text-sm font-bold text-text">作業のようす</h2>
+              <span className="text-[11px] text-text-faint">上が最新</span>
+            </div>
+            {feed.length === 0 ? (
+              <EmptyState>まだ作業ログがありません。</EmptyState>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-border bg-surface">
+                {feed.map((it, i) => (
+                  <div
+                    key={`${it.ts}:${i}`}
+                    className="flex items-start gap-2.5 border-b border-border px-3 py-2 last:border-b-0"
+                  >
+                    <span className="mt-0.5 shrink-0 font-mono text-[11px] tabular-nums text-text-faint" style={{ minWidth: '58px' }}>
+                      {clock(it.ts)}
+                    </span>
+                    <span className="shrink-0" aria-hidden>{feedIcon(it)}</span>
+                    <span
+                      className={`min-w-0 flex-1 whitespace-pre-wrap break-words text-[13px] leading-snug ${
+                        it.kind === 'tool_use' ? 'font-mono text-text-muted' : 'text-text'
+                      }`}
+                    >
+                      {it.text.length > 400 ? `${it.text.slice(0, 400)}…` : it.text}
+                    </span>
                   </div>
-
-                  {/* 操作カウント。 */}
-                  {toolCounts.length > 0 && (
-                    <div className="mb-3 flex flex-wrap gap-1.5">
-                      {toolCounts.map(([name, n]) => (
-                        <span
-                          key={name}
-                          className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-[11px] text-text-muted"
-                        >
-                          <span aria-hidden>{feedIcon({ ts: '', role: 'assistant', kind: 'tool_use', toolName: name, text: '' })}</span>
-                          {name} <b className="tabular-nums text-text">{n}</b>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* 作業のようす（上が最新・左が時刻）。 */}
-                  <div className="mb-2 flex items-baseline gap-2">
-                    <h2 className="text-sm font-bold text-text">作業のようす</h2>
-                    <span className="text-[11px] text-text-faint">上が最新</span>
-                  </div>
-                  {feed.length === 0 ? (
-                    <EmptyState>まだ作業ログがありません。</EmptyState>
-                  ) : (
-                    <div className="overflow-hidden rounded-xl border border-border bg-surface">
-                      {feed.map((it, i) => (
-                        <div
-                          key={`${it.ts}:${i}`}
-                          className="flex items-start gap-2.5 border-b border-border px-3 py-2 last:border-b-0"
-                        >
-                          <span className="mt-0.5 shrink-0 font-mono text-[11px] tabular-nums text-text-faint" style={{ minWidth: '58px' }}>
-                            {clock(it.ts)}
-                          </span>
-                          <span className="shrink-0" aria-hidden>{feedIcon(it)}</span>
-                          <span
-                            className={`min-w-0 flex-1 whitespace-pre-wrap break-words text-[13px] leading-snug ${
-                              it.kind === 'tool_use' ? 'font-mono text-text-muted' : 'text-text'
-                            }`}
-                          >
-                            {it.text.length > 400 ? `${it.text.slice(0, 400)}…` : it.text}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="mt-4 text-center text-[11px] text-text-faint">
-                    Apollo / live progress — バックエンドエージェントの生の作業を表示しています
-                  </div>
-                </>
-              )}
-            </>
-          )}
-        </ResourceState>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

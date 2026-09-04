@@ -71,6 +71,22 @@ const SECRETARIES: SecretaryDef[] = [
   },
 ];
 
+// 実装進捗ページ用の「ターミナル」一覧（②A=全端末, 2026-09-02 Keita 指示）。
+// 秘書2枚（Masayoshi/Son）＋その他の稼働 OpenClaw 端末（現状 Kimi）。yui/haru は設定のみで
+// セッション未生成のため含めない（含めると常時 never の死んだカードになる）。新端末が
+// ~/.openclaw/agents/<dir>/sessions を持ち tmux で起動されたらここに 1 行足すだけで出る。
+const TERMINALS: SecretaryDef[] = [
+  ...SECRETARIES,
+  {
+    key: 'kimi',
+    name: 'Kimi',
+    emoji: '🌙',
+    role: 'Moonshot Kimi K2.6 専用ターミナル',
+    agentDir: 'kimi',
+    tmuxSession: 'openclaw-kimi',
+  },
+];
+
 /** OpenClaw セッションログのルート。 */
 function openclawSessionsDir(agentDir: string): string {
   return join(DATA_HOME, '.openclaw', 'agents', agentDir, 'sessions');
@@ -204,11 +220,9 @@ let cached: SecretarySummary[] | null = null;
 let cachedAt = 0;
 const SECRETARIES_TTL_MS = 15000;
 
-/** Masayoshi / Son の秘書カード用ライブ状態一覧（15 秒キャッシュ・fail-soft）。 */
-export function collectSecretaries(): SecretarySummary[] {
-  const now = Date.now();
-  if (cached && now - cachedAt < SECRETARIES_TTL_MS) return cached;
-  cached = SECRETARIES.map((d) => {
+/** def 群を fail-soft で SecretarySummary[] に集める（個別失敗は idle＋空に畳む）。 */
+function collectDefs(defs: SecretaryDef[]): SecretarySummary[] {
+  return defs.map((d) => {
     try {
       return collectOne(d);
     } catch {
@@ -225,6 +239,26 @@ export function collectSecretaries(): SecretarySummary[] {
       };
     }
   });
+}
+
+/** Masayoshi / Son の秘書カード用ライブ状態一覧（15 秒キャッシュ・fail-soft）。 */
+export function collectSecretaries(): SecretarySummary[] {
+  const now = Date.now();
+  if (cached && now - cachedAt < SECRETARIES_TTL_MS) return cached;
+  cached = collectDefs(SECRETARIES);
   cachedAt = now;
   return cached;
+}
+
+// 実装進捗ページ用の全端末ライブ状態（15 秒キャッシュ・fail-soft）。secretaries とは別キャッシュ。
+let cachedTerminals: SecretarySummary[] | null = null;
+let cachedTerminalsAt = 0;
+
+/** 全 OpenClaw 端末（Masayoshi / Son / Kimi）のライブ状態一覧。実装進捗ページが使う。 */
+export function collectTerminals(): SecretarySummary[] {
+  const now = Date.now();
+  if (cachedTerminals && now - cachedTerminalsAt < SECRETARIES_TTL_MS) return cachedTerminals;
+  cachedTerminals = collectDefs(TERMINALS);
+  cachedTerminalsAt = now;
+  return cachedTerminals;
 }
