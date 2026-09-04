@@ -7,7 +7,7 @@ Son運用ルール: 新しいKeita操作が発生したらこのファイルに�
 
 ## 未完
 
-（なし）
+- 2026-09-05 【ClipItNow廃止】clipitnow.net ドメインの後始末（2分・スマホ可）🔒[Keita] — サーバ側は稼働削除済み（video-dl/トンネル停止・撤去）。残るは urano2 Cloudflare アカウント側: ①Zero Trust > Tunnels の clipitnow トンネル削除 ②DNSレコード削除 ③ドメイン自動更新の停止（更新料を止めるなら）。放置しても実害はないが530エラーページが出続ける。
 
 ## 完了ログ
 
