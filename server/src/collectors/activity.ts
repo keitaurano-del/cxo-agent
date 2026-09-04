@@ -153,14 +153,23 @@ function decodeProjectDir(dirName: string): string {
 
 // ── ① サブエージェント ─────────────────────────────────────────────
 function subagentItems(): ActivityItem[] {
-  const agents = collectAgents();
+  const agents = collectAgents(); // 活動の新しい順。
+  const now = Date.now();
+  const IDLE_WINDOW_MS = 3 * 60 * 60 * 1000; // 直近 3h 以内に動いた idle だけ（「いま動いている」ボードのため）。
+  const DONE_WINDOW_MS = 6 * 60 * 60 * 1000; // 完了は直近 6h。
   const items: ActivityItem[] = [];
+  let idleCount = 0;
   let doneCount = 0;
   for (const a of agents) {
     if (a.status === 'never') continue; // 一度も動いていないものは出さない。
+    const ts = Date.parse(a.lastActivity || '') || 0;
+    if (a.status === 'idle') {
+      // 古い idle（何日も前に終わった裏エージェント）でボードを埋めない。直近＋上限のみ。
+      if (now - ts > IDLE_WINDOW_MS || idleCount >= 40) continue;
+      idleCount++;
+    }
     if (a.status === 'done') {
-      // 完了は直近ぶんだけ（ボードを完了行で溢れさせない）。collectAgents は活動新しい順。
-      if (doneCount >= 25) continue;
+      if (now - ts > DONE_WINDOW_MS || doneCount >= 25) continue;
       doneCount++;
     }
     const detailBits = [a.projectLabel, a.gitBranch, a.currentTaskId].filter(Boolean);
