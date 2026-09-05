@@ -32,7 +32,7 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 <h1>⏰ 空き待ちウォッチ — 仕組み</h1>
 <div class="sub">満席の人気施設を機械が見張り、空きが出た瞬間メールで知らせるサービス。2026-09-05時点・オーナー向け内部資料</div>
 
-<h2><span class="n">1</span>全体マップ — 1ブランド・3サーバ・6分野</h2>
+<h2><span class="n">1</span>全体マップ — 1ブランド・3サーバ・8分野</h2>
 <div class="card">
 <svg viewBox="0 0 400 330" role="img" aria-label="akimachiwatch.comファミリー構成図">
 <defs><marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" fill="#4a6280"/></marker></defs>
@@ -49,12 +49,13 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 <!-- server 1 multi-tenant -->
 <rect x="8" y="130" width="140" height="150" rx="10" fill="#14243a" stroke="#2e4b74"/>
 <text x="78" y="150" text-anchor="middle" fill="#5b9dff" font-size="12" font-weight="700">マルチテナント :3051</text>
-<text x="78" y="165" text-anchor="middle" fill="#8aa0bd" font-size="10">Host名で4分野に振り分け</text>
+<text x="78" y="165" text-anchor="middle" fill="#8aa0bd" font-size="10">Host名で6分野に振り分け</text>
 <g font-size="11.5" fill="#e6ecf5" text-anchor="middle">
 <text x="78" y="187">⛺ camp（キャンプ場）</text>
 <text x="78" y="210">🍽 resto（レストラン）</text>
 <text x="78" y="233">⛳ golf（直前枠）</text>
-<text x="78" y="256">🎾 court（コート・野球場）</text>
+<text x="78" y="252">🎾 court（コート・野球場）</text>
+<text x="78" y="268" font-size="10.5">🎡 spot（人気施設）　⛰ yama（山小屋）</text>
 </g>
 <!-- server 2 hoiku -->
 <rect x="156" y="130" width="118" height="86" rx="10" fill="#152a1f" stroke="#2c5a40"/>
@@ -156,7 +157,7 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 <div class="card">
 <table>
 <tr><th>分野</th><th class="r">掲載</th><th class="r">自動監視中</th><th class="r">ウォッチ登録</th></tr>
-<tr><td>⛺🍽⛳🎾 キャンプ〜コート・野球場（4分野）</td><td class="r">50施設</td><td class="r">2（西湖自由・PICA西湖）</td><td class="r">1本</td></tr>
+<tr><td>⛺🍽⛳🎾🎡⛰ キャンプ〜山小屋（6分野）</td><td class="r">77施設</td><td class="r">2（西湖自由・PICA西湖）</td><td class="r">1本</td></tr>
 <tr><td>🏫 保育園（世田谷237＋文京121・無料）</td><td class="r">358園</td><td class="r">全園（区データ経由）</td><td class="r">0本</td></tr>
 <tr><td>🩺 病児保育（名古屋）</td><td class="r">23施設</td><td class="r">全施設</td><td class="r">0本</td></tr>
 <tr><td class="big">合計</td><td class="r big">431</td><td class="r">—</td><td class="r big">1本</td></tr>
