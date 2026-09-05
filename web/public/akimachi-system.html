@@ -42,14 +42,14 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 <line x1="200" y1="38" x2="200" y2="60" stroke="#4a6280" stroke-width="1.5" marker-end="url(#ar)"/>
 <!-- CF -->
 <rect x="90" y="62" width="220" height="34" rx="8" fill="#2b2413" stroke="#6b5a24"/>
-<text x="200" y="83" text-anchor="middle" fill="#f0c85a" font-size="12.5">Cloudflare トンネル（*.akimachiwatch.com）</text>
+<text x="200" y="83" text-anchor="middle" fill="#f0c85a" font-size="12.5">Cloudflare トンネル（akimachiwatch.com・旧ホストは301）</text>
 <line x1="120" y1="96" x2="76" y2="128" stroke="#4a6280" stroke-width="1.5" marker-end="url(#ar)"/>
 <line x1="200" y1="96" x2="200" y2="128" stroke="#4a6280" stroke-width="1.5" marker-end="url(#ar)"/>
 <line x1="280" y1="96" x2="324" y2="128" stroke="#4a6280" stroke-width="1.5" marker-end="url(#ar)"/>
 <!-- server 1 multi-tenant -->
 <rect x="8" y="130" width="140" height="150" rx="10" fill="#14243a" stroke="#2e4b74"/>
-<text x="78" y="150" text-anchor="middle" fill="#5b9dff" font-size="12" font-weight="700">マルチテナント :3051</text>
-<text x="78" y="165" text-anchor="middle" fill="#8aa0bd" font-size="10">Host 6分野＋ハブ3カテゴリ</text>
+<text x="78" y="150" text-anchor="middle" fill="#5b9dff" font-size="12" font-weight="700">統合サイト :3051（1プロセス）</text>
+<text x="78" y="165" text-anchor="middle" fill="#8aa0bd" font-size="10">/c/&lt;カテゴリ&gt; パスで11分野</text>
 <g font-size="11" fill="#e6ecf5" text-anchor="middle">
 <text x="78" y="185">⛺ camp　🍽 resto</text>
 <text x="78" y="203">⛳ golf　🎾 court</text>
@@ -60,17 +60,17 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 </g>
 <!-- server 2 hoiku -->
 <rect x="156" y="130" width="118" height="86" rx="10" fill="#152a1f" stroke="#2c5a40"/>
-<text x="215" y="152" text-anchor="middle" fill="#48b47a" font-size="12" font-weight="700">保育園 :3047（無料）</text>
+<text x="215" y="152" text-anchor="middle" fill="#48b47a" font-size="12" font-weight="700">保育園 /c/hoiku（無料）</text>
 <text x="215" y="172" text-anchor="middle" fill="#e6ecf5" font-size="11.5">🏫 hoiku</text>
 <text x="215" y="190" text-anchor="middle" fill="#8aa0bd" font-size="10">世田谷237園</text>
 <text x="215" y="204" text-anchor="middle" fill="#8aa0bd" font-size="10">文京121園</text>
 <!-- server 3 byoji -->
 <rect x="282" y="130" width="110" height="86" rx="10" fill="#2a1a22" stroke="#6b3a52"/>
-<text x="337" y="152" text-anchor="middle" fill="#e585ab" font-size="12" font-weight="700">病児保育 :3048</text>
+<text x="337" y="152" text-anchor="middle" fill="#e585ab" font-size="12" font-weight="700">病児保育 /c/byoji</text>
 <text x="337" y="172" text-anchor="middle" fill="#e6ecf5" font-size="11.5">🩺 byoji</text>
 <text x="337" y="190" text-anchor="middle" fill="#8aa0bd" font-size="10">名古屋23施設</text>
 <text x="337" y="204" text-anchor="middle" fill="#8aa0bd" font-size="10">当日空き特化</text>
-<text x="200" y="308" text-anchor="middle" fill="#7f95b3" font-size="10.5">自宅サーバで3プロセス常駐（systemd）・外部公開はトンネル経由のみ</text>
+<text x="200" y="308" text-anchor="middle" fill="#7f95b3" font-size="10.5">自宅サーバで1プロセス常駐（systemd・保育園/病児保育もモジュール同居）・外部公開はトンネル経由のみ</text>
 </svg>
 </div>
 
