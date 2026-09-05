@@ -32,7 +32,7 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 <h1>⏰ 空き待ちウォッチ — 仕組み</h1>
 <div class="sub">満席の人気施設を機械が見張り、空きが出た瞬間メールで知らせるサービス。2026-09-05時点・オーナー向け内部資料</div>
 
-<h2><span class="n">1</span>全体マップ — 1ブランド・3サーバ・7分野</h2>
+<h2><span class="n">1</span>全体マップ — 1ブランド・3サーバ・6分野</h2>
 <div class="card">
 <svg viewBox="0 0 400 330" role="img" aria-label="akimachiwatch.comファミリー構成図">
 <defs><marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" fill="#4a6280"/></marker></defs>
@@ -49,17 +49,16 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 <!-- server 1 multi-tenant -->
 <rect x="8" y="130" width="140" height="150" rx="10" fill="#14243a" stroke="#2e4b74"/>
 <text x="78" y="150" text-anchor="middle" fill="#5b9dff" font-size="12" font-weight="700">マルチテナント :3051</text>
-<text x="78" y="165" text-anchor="middle" fill="#8aa0bd" font-size="10">Host名で5分野に振り分け</text>
+<text x="78" y="165" text-anchor="middle" fill="#8aa0bd" font-size="10">Host名で4分野に振り分け</text>
 <g font-size="11.5" fill="#e6ecf5" text-anchor="middle">
 <text x="78" y="187">⛺ camp（キャンプ場）</text>
-<text x="78" y="207">♨ sauna（貸切サウナ）</text>
-<text x="78" y="227">🍽 resto（レストラン）</text>
-<text x="78" y="247">⛳ golf（直前枠）</text>
-<text x="78" y="267">🎾 court（公営コート）</text>
+<text x="78" y="210">🍽 resto（レストラン）</text>
+<text x="78" y="233">⛳ golf（直前枠）</text>
+<text x="78" y="256">🎾 court（コート・野球場）</text>
 </g>
 <!-- server 2 hoiku -->
 <rect x="156" y="130" width="118" height="86" rx="10" fill="#152a1f" stroke="#2c5a40"/>
-<text x="215" y="152" text-anchor="middle" fill="#48b47a" font-size="12" font-weight="700">保育園 :3047</text>
+<text x="215" y="152" text-anchor="middle" fill="#48b47a" font-size="12" font-weight="700">保育園 :3047（無料）</text>
 <text x="215" y="172" text-anchor="middle" fill="#e6ecf5" font-size="11.5">🏫 hoiku</text>
 <text x="215" y="190" text-anchor="middle" fill="#8aa0bd" font-size="10">世田谷237園</text>
 <text x="215" y="204" text-anchor="middle" fill="#8aa0bd" font-size="10">文京121園</text>
@@ -127,7 +126,7 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 <rect x="8" y="14" width="116" height="40" rx="9" fill="#1c2a3e" stroke="#2e4360"/><text x="66" y="32" fill="#e6ecf5">1. 施設を選ぶ</text><text x="66" y="47" fill="#8aa0bd" font-size="9.5">地図・一覧から</text>
 <rect x="142" y="14" width="116" height="40" rx="9" fill="#1c2a3e" stroke="#2e4360"/><text x="200" y="32" fill="#e6ecf5">2. メール登録</text><text x="200" y="47" fill="#8aa0bd" font-size="9.5">日付・条件を指定</text>
 <rect x="276" y="14" width="116" height="40" rx="9" fill="#1c2a3e" stroke="#2e4360"/><text x="334" y="32" fill="#e6ecf5">3. メール認証</text><text x="334" y="47" fill="#8aa0bd" font-size="9.5">リンクをクリック</text>
-<rect x="8" y="88" width="116" height="40" rx="9" fill="#2b2413" stroke="#6b5a24"/><text x="66" y="106" fill="#f0c85a">4. 決済</text><text x="66" y="121" fill="#8aa0bd" font-size="9.5">Stripe（β登録は無料）</text>
+<rect x="8" y="88" width="116" height="40" rx="9" fill="#2b2413" stroke="#6b5a24"/><text x="66" y="106" fill="#f0c85a">4. 決済</text><text x="66" y="121" fill="#8aa0bd" font-size="9.5">有料分野のみ（保育園は無料）</text>
 <rect x="142" y="88" width="116" height="40" rx="9" fill="#14243a" stroke="#2e4b74"/><text x="200" y="106" fill="#5b9dff">5. 監視開始</text><text x="200" y="121" fill="#8aa0bd" font-size="9.5">機械が見張り続ける</text>
 <rect x="276" y="88" width="116" height="40" rx="9" fill="#152a1f" stroke="#2c5a40"/><text x="334" y="106" fill="#48b47a">6. 空き通知 📧</text><text x="334" y="121" fill="#8aa0bd" font-size="9.5">出た瞬間メール</text>
 </g>
@@ -147,22 +146,22 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 
 <h2><span class="n">4</span>課金の仕組み</h2>
 <div class="price">
-<div class="pc"><div class="t">単発</div><div class="a">500円<small> /1回</small></div><p>保育園1園を狙い撃ち。初回の空き通知で見張り完了。</p></div>
+<div class="pc"><div class="t">無料分野</div><div class="a">0円</div><p>保育園・病児保育はウォッチ何本でも無料（2026-09-05 無料化）。</p></div>
 <div class="pc hi"><div class="t">月額（分野ごと）</div><div class="a">480円<small> /月</small></div><p>その分野ならウォッチ何本でも。継続監視。</p></div>
 <div class="pc"><div class="t">全部入り</div><div class="a">980円<small> /月</small></div><p>キャンプ〜病児保育まで全分野のウォッチが使い放題。</p></div>
 </div>
-<p class="note">決済はStripe。解約は各サイトの /manage からStripeカスタマーポータルでセルフサーブ。β期間に登録した既存ウォッチは無料のまま有効。病児保育は現在β無料（料金は正式版で適用予定）。</p>
+<p class="note">決済はStripe。解約は各サイトの /manage からStripeカスタマーポータルでセルフサーブ。β期間に登録した既存ウォッチは無料のまま有効。保育園は決済撤去済み（既存Stripe価格は履歴保全のため残置）。サウナ縦は2026-09-05クローズ（既存者向けに/mypage・/manageのみ）。</p>
 
 <h2><span class="n">5</span>いまの数字<span class="tag">2026-09-05 時点</span></h2>
 <div class="card">
 <table>
 <tr><th>分野</th><th class="r">掲載</th><th class="r">自動監視中</th><th class="r">ウォッチ登録</th></tr>
-<tr><td>⛺♨🍽⛳🎾 キャンプ〜公営コート（5分野）</td><td class="r">67施設</td><td class="r">2（西湖自由・PICA西湖）</td><td class="r">1本</td></tr>
-<tr><td>🏫 保育園（世田谷237＋文京121）</td><td class="r">358園</td><td class="r">全園（区データ経由）</td><td class="r">0本</td></tr>
+<tr><td>⛺🍽⛳🎾 キャンプ〜コート・野球場（4分野）</td><td class="r">50施設</td><td class="r">2（西湖自由・PICA西湖）</td><td class="r">1本</td></tr>
+<tr><td>🏫 保育園（世田谷237＋文京121・無料）</td><td class="r">358園</td><td class="r">全園（区データ経由）</td><td class="r">0本</td></tr>
 <tr><td>🩺 病児保育（名古屋）</td><td class="r">23施設</td><td class="r">全施設</td><td class="r">0本</td></tr>
-<tr><td class="big">合計</td><td class="r big">448</td><td class="r">—</td><td class="r big">1本</td></tr>
+<tr><td class="big">合計</td><td class="r big">431</td><td class="r">—</td><td class="r big">1本</td></tr>
 </table>
-<p class="note">有料加入者は0（立ち上げ直後・現在は集客フェーズ）。巡回許可が取れていない65施設は「リクエスト受付のみ」で需要収集中。</p>
+<p class="note">有料加入者は0（立ち上げ直後・現在は集客フェーズ）。巡回許可が取れていない48施設は「リクエスト受付のみ」で需要収集中。</p>
 </div>
 
 <div class="foot">オーナー向け内部資料・公開サイトには掲載しない ／ データ源: 各サービスの実装とdata/実数（2026-09-05集計）</div>
