@@ -1945,7 +1945,7 @@ function WorkSumaiTab() {
 }
 
 // 新規事業「空き待ちウォッチ」Campnab型キャンセル空き通知ファミリー（2026-09-03 Keita・MC-534）。
-// akimachiwatch.com 配下に縦別サイト（camp/hoiku/byoji/resto/golf/court。saunaは2026-09-05クローズ）。随時最新化する。
+// akimachiwatch.com 配下に縦別サイト（camp/hoiku/byoji/resto/golf/court）。随時最新化する。
 function WorkAkimachiTab() {
   const [doc, setDoc] = useState<'top' | 'camp' | 'hoiku' | 'byoji' | 'resto' | 'golf' | 'court' | 'system'>('top');
   const DOCS: Record<string, { src: string; title: string }> = {
