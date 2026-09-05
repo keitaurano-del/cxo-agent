@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LINE連携 設定手順</title>
+<style>
+body{font:15px/1.7 system-ui,sans-serif;margin:0;padding:1rem;background:#0f141d;color:#dce3ee}
+.wrap{max-width:640px;margin:0 auto}
+h1{font-size:1.15rem;margin:.2rem 0 .2rem}
+.sub{color:#8b96a8;font-size:.85rem;margin:0 0 1rem}
+.step{background:#161d2c;border:1px solid #2a3446;border-radius:10px;padding:.9rem 1rem;margin-bottom:.8rem}
+.step b{color:#eb8a3d}
+.step .t{float:right;color:#8b96a8;font-size:.8rem}
+a{color:#7fb3ff}
+code{background:#0f141d;border:1px solid #2a3446;border-radius:5px;padding:.1rem .4rem;font-size:.85em}
+.after{background:#12241a;border:1px solid #245239;border-radius:10px;padding:.9rem 1rem;margin-top:1rem;font-size:.9rem}
+.note{color:#8b96a8;font-size:.8rem;margin-top:1rem}
+</style></head><body><div class="wrap">
+<h1>LINE連携 設定手順（Keita操作分）</h1>
+<p class="sub">合計 約15〜20分。STEP 5 まで終えたら、あとは Son が開通まで実施します。</p>
+
+<div class="step"><span class="t">約3分</span><b>STEP 1</b>｜LINEビジネスID を作る<br>
+<a href="https://account.line.biz/login" target="_blank" rel="noopener">account.line.biz/login</a> →「LINEアカウントで続ける」→ 案内に沿って登録（名前は屋号でOK）</div>
+
+<div class="step"><span class="t">約5分</span><b>STEP 2</b>｜LINE公式アカウントを作る<br>
+<a href="https://manager.line.biz/" target="_blank" rel="noopener">manager.line.biz</a> →「作成」→ アカウント名 <code>空き待ちウォッチ</code>・業種を入力して作成</div>
+
+<div class="step"><span class="t">約3分</span><b>STEP 3</b>｜Messaging API を有効化<br>
+公式アカウント管理画面 → 右上「設定」→「Messaging API」→「利用する」→ プロバイダーは新規作成（名前は任意）</div>
+
+<div class="step"><span class="t">約5分</span><b>STEP 4</b>｜トークン2つを発行<br>
+<a href="https://developers.line.biz/console/" target="_blank" rel="noopener">developers.line.biz/console</a> → 作ったチャネルを開く<br>
+1. 「Messaging API設定」タブ最下部 → <b>チャネルアクセストークン（長期）</b>を発行してコピー<br>
+2. 「チャネル基本設定」タブ → <b>チャネルシークレット</b>をコピー</div>
+
+<div class="step"><span class="t">約1分</span><b>STEP 5</b>｜トークン2つを Son のチャットに貼る</div>
+
+<div class="after"><b>以降は Son が実施（約10分）:</b> .env設置 → 再起動 → Webhook URL設定（<code>https://akimachiwatch.com/api/line/webhook</code> ほか各サイト）→ 疎通テスト → サイトの「準備中」表記解除 → マイページのLINE連携カード開通</div>
+
+<p class="note">ユーザー側の使い方（開通後）: 公式アカウントを友だち追加 → マイページに表示される連携コードをLINEで送信 → 以降の空き通知がLINEに届く（不達時はメールに自動フォールバック）。正本: akimachiwatch/docs/LINE-SETUP.md</p>
+</div></body></html>

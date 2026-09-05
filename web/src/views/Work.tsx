@@ -1947,10 +1947,13 @@ function WorkSumaiTab() {
 // 新規事業「空き待ちウォッチ」Campnab型キャンセル空き通知ファミリー（2026-09-03 Keita・MC-534）。
 // akimachiwatch.com 配下に縦別サイト（camp/hoiku/byoji/resto/golf/court）。随時最新化する。
 function WorkAkimachiTab() {
-  const [doc, setDoc] = useState<'top' | 'camp' | 'hoiku' | 'byoji' | 'resto' | 'golf' | 'court' | 'system'>('top');
+  const [doc, setDoc] = useState<'top' | 'camp' | 'hoiku' | 'byoji' | 'resto' | 'golf' | 'court' | 'spot' | 'yama' | 'system' | 'line'>('top');
   const DOCS: Record<string, { src: string; title: string }> = {
     top: { src: 'https://akimachiwatch.com/', title: 'ブランドトップ（空き待ちウォッチ）' },
     system: { src: '/akimachi-system.html', title: '仕組み（監視→通知の図解・オーナー向け）' },
+    line: { src: '/akimachi-line-setup.html', title: 'LINE連携 設定手順（Keita操作分＋開通後の使い方）' },
+    spot: { src: 'https://spot.akimachiwatch.com/', title: '人気施設（キッザニア・チームラボ等14施設）' },
+    yama: { src: 'https://yama.akimachiwatch.com/', title: '山小屋（富士山・北アルプス等13軒）' },
     camp: { src: 'https://camp.akimachiwatch.com/', title: 'キャンプ場（live監視: 西湖自由・PICA富士西湖）' },
     hoiku: { src: 'https://hoiku.akimachiwatch.com/', title: '保育園（文京・世田谷358園・無料）' },
     byoji: { src: 'https://byoji.akimachiwatch.com/', title: '病児保育' },
@@ -1972,7 +1975,10 @@ function WorkAkimachiTab() {
             ['resto', 'レストラン'],
             ['golf', 'ゴルフ'],
             ['court', 'コート・野球場'],
+            ['spot', '人気施設'],
+            ['yama', '山小屋'],
             ['system', '仕組み'],
+            ['line', 'LINE設定'],
           ] as const).map(([key, label]) => (
             <button
               key={key}
