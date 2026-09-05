@@ -1947,9 +1947,10 @@ function WorkSumaiTab() {
 // 新規事業「空き待ちウォッチ」Campnab型キャンセル空き通知ファミリー（2026-09-03 Keita・MC-534）。
 // akimachiwatch.com 配下に縦別サイト（camp/sauna/hoiku/byoji/resto/golf/court）。随時最新化する。
 function WorkAkimachiTab() {
-  const [doc, setDoc] = useState<'top' | 'camp' | 'sauna' | 'hoiku' | 'byoji' | 'resto' | 'golf' | 'court'>('top');
+  const [doc, setDoc] = useState<'top' | 'camp' | 'sauna' | 'hoiku' | 'byoji' | 'resto' | 'golf' | 'court' | 'system'>('top');
   const DOCS: Record<string, { src: string; title: string }> = {
     top: { src: 'https://akimachiwatch.com/', title: 'ブランドトップ（空き待ちウォッチ）' },
+    system: { src: '/akimachi-system.html', title: '仕組み（監視→通知の図解・オーナー向け）' },
     camp: { src: 'https://camp.akimachiwatch.com/', title: 'キャンプ場（live監視: 西湖自由・PICA富士西湖）' },
     sauna: { src: 'https://sauna.akimachiwatch.com/', title: '貸切サウナ' },
     hoiku: { src: 'https://hoiku.akimachiwatch.com/', title: '保育園（世田谷237園）' },
@@ -1973,6 +1974,7 @@ function WorkAkimachiTab() {
             ['resto', 'レストラン'],
             ['golf', 'ゴルフ'],
             ['court', '公営コート'],
+            ['system', '仕組み'],
           ] as const).map(([key, label]) => (
             <button
               key={key}
