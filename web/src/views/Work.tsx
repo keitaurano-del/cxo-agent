@@ -1947,14 +1947,13 @@ function WorkSumaiTab() {
 // 新規事業「空き待ちウォッチ」Campnab型キャンセル空き通知ファミリー（2026-09-03 Keita・MC-534）。
 // 統合(2026-09-05): akimachiwatch.com 単一サイト・/c/<cat> パス方式（旧サブドメインは301）。随時最新化する。
 function WorkAkimachiTab() {
-  const [doc, setDoc] = useState<'top' | 'analytics' | 'system' | 'line'>('top');
+  const [doc, setDoc] = useState<'top' | 'analytics' | 'system'>('top');
   // カテゴリ別サブタブは廃止（Keita 2026-09-06 10:39「保育とかキャンプとか分けなくていい」）。カテゴリはサイト内の検索/フッターから
   const DOCS: Record<string, { src: string; title: string }> = {
     top: { src: 'https://akimachiwatch.com/', title: 'サイト（空き待ちウォッチ）' },
     // 訪問者分析＋事業KPI＋ユーザー一覧（Keita 2026-09-06 09:58/10:39）。キーは読み取り専用のANALYTICS_KEY（本体ADMIN_KEYとは別物）
     analytics: { src: 'https://akimachiwatch.com/admin/analytics?key=D21pErsvelsVJWwkM70SASWD', title: '分析（訪問者・KPI・ユーザー）' },
     system: { src: '/akimachi-system.html', title: '仕組み（監視→通知の図解・オーナー向け）' },
-    line: { src: '/akimachi-line-setup.html', title: 'LINE連携 設定手順（Keita操作分＋開通後の使い方）' },
   };
   const src = DOCS[doc].src;
   const title = DOCS[doc].title;
@@ -1966,7 +1965,6 @@ function WorkAkimachiTab() {
             ['top', 'サイト'],
             ['analytics', '分析'],
             ['system', '仕組み'],
-            ['line', 'LINE設定'],
            ] as const).map(([key, label]) => (
             <button
               key={key}
