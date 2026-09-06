@@ -1947,9 +1947,11 @@ function WorkSumaiTab() {
 // 新規事業「空き待ちウォッチ」Campnab型キャンセル空き通知ファミリー（2026-09-03 Keita・MC-534）。
 // 統合(2026-09-05): akimachiwatch.com 単一サイト・/c/<cat> パス方式（旧サブドメインは301）。随時最新化する。
 function WorkAkimachiTab() {
-  const [doc, setDoc] = useState<'top' | 'camp' | 'hoiku' | 'byoji' | 'resto' | 'golf' | 'court' | 'spot' | 'yama' | 'system' | 'line'>('top');
+  const [doc, setDoc] = useState<'top' | 'analytics' | 'camp' | 'hoiku' | 'byoji' | 'resto' | 'golf' | 'court' | 'spot' | 'yama' | 'system' | 'line'>('top');
   const DOCS: Record<string, { src: string; title: string }> = {
     top: { src: 'https://akimachiwatch.com/', title: 'ブランドトップ（空き待ちウォッチ）' },
+    // 訪問者分析＋事業KPI（Keita 2026-09-06 09:58「訪問者の分析もアポロに」）。キーは読み取り専用のANALYTICS_KEY（本体ADMIN_KEYとは別物）
+    analytics: { src: 'https://akimachiwatch.com/admin/analytics?key=D21pErsvelsVJWwkM70SASWD', title: '分析（訪問者・事業KPI）' },
     system: { src: '/akimachi-system.html', title: '仕組み（監視→通知の図解・オーナー向け）' },
     line: { src: '/akimachi-line-setup.html', title: 'LINE連携 設定手順（Keita操作分＋開通後の使い方）' },
     spot: { src: 'https://akimachiwatch.com/c/spot', title: '人気施設（キッザニア・チームラボ等14施設）' },
@@ -1969,6 +1971,7 @@ function WorkAkimachiTab() {
         <div className="flex flex-wrap rounded-md border border-border p-0.5">
           {([
             ['top', 'トップ'],
+            ['analytics', '分析'],
             ['camp', 'キャンプ'],
             ['hoiku', '保育園'],
             ['byoji', '病児保育'],
