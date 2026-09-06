@@ -1947,21 +1947,14 @@ function WorkSumaiTab() {
 // 新規事業「空き待ちウォッチ」Campnab型キャンセル空き通知ファミリー（2026-09-03 Keita・MC-534）。
 // 統合(2026-09-05): akimachiwatch.com 単一サイト・/c/<cat> パス方式（旧サブドメインは301）。随時最新化する。
 function WorkAkimachiTab() {
-  const [doc, setDoc] = useState<'top' | 'analytics' | 'camp' | 'hoiku' | 'byoji' | 'resto' | 'golf' | 'court' | 'spot' | 'yama' | 'system' | 'line'>('top');
+  const [doc, setDoc] = useState<'top' | 'analytics' | 'system' | 'line'>('top');
+  // カテゴリ別サブタブは廃止（Keita 2026-09-06 10:39「保育とかキャンプとか分けなくていい」）。カテゴリはサイト内の検索/フッターから
   const DOCS: Record<string, { src: string; title: string }> = {
-    top: { src: 'https://akimachiwatch.com/', title: 'ブランドトップ（空き待ちウォッチ）' },
-    // 訪問者分析＋事業KPI（Keita 2026-09-06 09:58「訪問者の分析もアポロに」）。キーは読み取り専用のANALYTICS_KEY（本体ADMIN_KEYとは別物）
-    analytics: { src: 'https://akimachiwatch.com/admin/analytics?key=D21pErsvelsVJWwkM70SASWD', title: '分析（訪問者・事業KPI）' },
+    top: { src: 'https://akimachiwatch.com/', title: 'サイト（空き待ちウォッチ）' },
+    // 訪問者分析＋事業KPI＋ユーザー一覧（Keita 2026-09-06 09:58/10:39）。キーは読み取り専用のANALYTICS_KEY（本体ADMIN_KEYとは別物）
+    analytics: { src: 'https://akimachiwatch.com/admin/analytics?key=D21pErsvelsVJWwkM70SASWD', title: '分析（訪問者・KPI・ユーザー）' },
     system: { src: '/akimachi-system.html', title: '仕組み（監視→通知の図解・オーナー向け）' },
     line: { src: '/akimachi-line-setup.html', title: 'LINE連携 設定手順（Keita操作分＋開通後の使い方）' },
-    spot: { src: 'https://akimachiwatch.com/c/spot', title: '人気施設（キッザニア・チームラボ等14施設）' },
-    yama: { src: 'https://akimachiwatch.com/c/yama', title: '山小屋（富士山・北アルプス等13軒）' },
-    camp: { src: 'https://akimachiwatch.com/c/camp', title: 'キャンプ場（live監視: 西湖自由・PICA富士西湖）' },
-    hoiku: { src: 'https://akimachiwatch.com/c/hoiku', title: '保育園（文京・世田谷358園・無料）' },
-    byoji: { src: 'https://akimachiwatch.com/c/byoji', title: '病児保育' },
-    resto: { src: 'https://akimachiwatch.com/c/resto', title: 'レストラン' },
-    golf: { src: 'https://akimachiwatch.com/c/golf', title: 'ゴルフ直前枠' },
-    court: { src: 'https://akimachiwatch.com/c/court', title: '公営コート・野球場・体育館' },
   };
   const src = DOCS[doc].src;
   const title = DOCS[doc].title;
@@ -1970,19 +1963,11 @@ function WorkAkimachiTab() {
       <div className="flex items-center gap-2">
         <div className="flex flex-wrap rounded-md border border-border p-0.5">
           {([
-            ['top', 'トップ'],
+            ['top', 'サイト'],
             ['analytics', '分析'],
-            ['camp', 'キャンプ'],
-            ['hoiku', '保育園'],
-            ['byoji', '病児保育'],
-            ['resto', 'レストラン'],
-            ['golf', 'ゴルフ'],
-            ['court', 'コート・野球場'],
-            ['spot', '人気施設'],
-            ['yama', '山小屋'],
             ['system', '仕組み'],
             ['line', 'LINE設定'],
-          ] as const).map(([key, label]) => (
+           ] as const).map(([key, label]) => (
             <button
               key={key}
               type="button"
