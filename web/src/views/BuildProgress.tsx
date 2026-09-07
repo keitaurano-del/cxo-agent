@@ -19,13 +19,14 @@
 //   フィードを見られるようにした（既定は従来どおり「稼働中」ライブ表示・見た目非破壊）。
 //
 // 旧 iframe 版（静的 /fable-progress.html）に戻すには git 履歴（2026-07-18 以前）を参照。
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import { EmptyState, Badge, StatusDot } from '../components/ui';
 import { useLiveResource } from '../lib/useLiveData';
 import { useLiveTick } from '../lib/liveContext';
 import { projectLabel } from '../lib/meta';
 import { relativeTime, absoluteTime } from '../lib/time';
+import { TileDetail, type TileSection } from '../components/TileDetail';
 import type { AgentSummary, FeedItem } from '../lib/types';
 
 /** 表示モード。'active'=稼働中のみ（ライブ・既定）／'all'=7日窓内の全エージェント（過去含む）。 */
@@ -331,17 +332,42 @@ function sortTs(it: ActivityItem): number {
   return Date.parse(it.lastActivity || it.startedAt || it.scheduledFor || '') || 0;
 }
 
-/** アクティビティ 1 行。サブエージェントはクリックで選択（生フィードを開く）。 */
+const STATUS_LABEL: Record<ActivityItem['status'], string> = {
+  active: '実行中',
+  idle: 'アイドル',
+  waiting: '待機',
+  done: '完了',
+};
+
+/** 非サブエージェント行の詳細ドロワー用セクション（全文の what と各種メタを見せる）。 */
+function buildActivitySections(it: ActivityItem): TileSection[] {
+  const stats = [
+    { key: 'category', label: '種別', value: it.categoryLabel },
+    { key: 'status', label: '状態', value: STATUS_LABEL[it.status], color: STATUS_COLOR[it.status] },
+    it.startedAt ? { key: 'started', label: '開始', value: absoluteTime(it.startedAt) } : null,
+    it.lastActivity ? { key: 'last', label: '最終活動', value: absoluteTime(it.lastActivity) } : null,
+    it.category === 'queue' && it.scheduledFor
+      ? { key: 'sched', label: '次回', value: absoluteTime(it.scheduledFor) }
+      : null,
+  ].filter((s): s is NonNullable<typeof s> => s !== null);
+  const sections: TileSection[] = [{ heading: '情報', stats }];
+  if (it.what) sections.push({ heading: '内容', note: it.what });
+  if (it.detail) sections.push({ heading: '補足', note: it.detail });
+  return sections;
+}
+
+/** アクティビティ 1 行。全カテゴリをタップで開ける（サブエージェント=生フィード、それ以外=詳細ドロワー）。 */
 function ActivityRow({
   it,
   selected,
-  onSelect,
+  onOpen,
 }: {
   it: ActivityItem;
   selected: boolean;
-  onSelect: (agentId: string) => void;
+  onOpen: (it: ActivityItem) => void;
 }): JSX.Element {
-  const clickable = it.category === 'subagent' && !!it.agentId;
+  // 2026-09-07 Keita「タップしても詳細見れない」→ 全行タップ可能に。
+  const clickable = true;
   const color = STATUS_COLOR[it.status];
   const timeRight =
     it.category === 'queue' && it.scheduledFor
@@ -365,19 +391,16 @@ function ActivityRow({
         clickable ? 'cursor-pointer hover:bg-surface-2' : ''
       }`}
       style={selected ? { background: 'var(--mc-active-bg)' } : undefined}
-      onClick={clickable ? () => onSelect(it.agentId) : undefined}
-      role={clickable ? 'button' : undefined}
-      tabIndex={clickable ? 0 : undefined}
-      onKeyDown={
-        clickable
-          ? (e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onSelect(it.agentId);
-              }
-            }
-          : undefined
-      }
+      onClick={() => onOpen(it)}
+      role="button"
+      tabIndex={0}
+      aria-label={`詳細を開く: ${it.who}`}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen(it);
+        }
+      }}
     >
       <span
         className={`mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${it.status === 'active' ? 'mc-pulse' : ''}`}
@@ -411,12 +434,12 @@ function ActivityBoard({
   tick,
   mode,
   selectedAgentId,
-  onSelectAgent,
+  onOpenItem,
 }: {
   tick: number;
   mode: ViewMode;
   selectedAgentId: string | null;
-  onSelectAgent: (agentId: string) => void;
+  onOpenItem: (it: ActivityItem) => void;
 }): JSX.Element {
   const res = useLiveResource<{ items: ActivityItem[] }>('/api/activity', tick);
   const items = res.data?.items ?? [];
@@ -476,7 +499,7 @@ function ActivityBoard({
                   key={it.id}
                   it={it}
                   selected={!!selectedAgentId && it.agentId === selectedAgentId}
-                  onSelect={onSelectAgent}
+                  onOpen={onOpenItem}
                 />
               ))}
             </div>
@@ -495,6 +518,17 @@ export default function BuildProgress(): JSX.Element {
 
   // サブエージェント行のドリルダウン用。ボードの行クリックで選択 → 下段に生フィードを開く。
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 非サブエージェント行（作業セッション/ターミナル/ジョブ/キュー）の詳細ドロワー（2026-09-07 Keita）。
+  const [detailItem, setDetailItem] = useState<ActivityItem | null>(null);
+
+  // 行タップの振り分け: サブエージェント=下段フィード、それ以外=詳細ドロワー。
+  const openItem = useCallback((it: ActivityItem) => {
+    if (it.category === 'subagent' && it.agentId) {
+      setSelectedId((prev) => (prev === it.agentId ? null : it.agentId));
+    } else {
+      setDetailItem(it);
+    }
+  }, []);
 
   // 選択中サブエージェントの詳細解決用（全ステータス・サーバ側 12 秒キャッシュ）。
   const agentsRes = useLiveResource<{ agents: AgentSummary[] }>('/api/agents', tick);
@@ -588,7 +622,7 @@ export default function BuildProgress(): JSX.Element {
           tick={tick}
           mode={mode}
           selectedAgentId={selectedId}
-          onSelectAgent={(id) => setSelectedId((prev) => (prev === id ? null : id))}
+          onOpenItem={openItem}
         />
 
         {/* サブエージェントのドリルダウン（＝作業のようす）。行を選ぶと開く。 */}
@@ -672,6 +706,16 @@ export default function BuildProgress(): JSX.Element {
           </div>
         )}
       </div>
+
+      {/* 非サブエージェント行（作業セッション/ターミナル/ジョブ/キュー）の詳細ドロワー。全文の内容を読める。 */}
+      <TileDetail
+        open={!!detailItem}
+        onClose={() => setDetailItem(null)}
+        kindLabel={detailItem ? detailItem.categoryLabel : ''}
+        title={detailItem ? `${detailItem.emoji ? detailItem.emoji + ' ' : ''}${detailItem.who}` : ''}
+        accent={detailItem ? STATUS_COLOR[detailItem.status] : undefined}
+        sections={detailItem ? buildActivitySections(detailItem) : []}
+      />
     </div>
   );
 }
