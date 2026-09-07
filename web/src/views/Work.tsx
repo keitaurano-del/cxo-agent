@@ -1878,72 +1878,6 @@ function WorkTebakoTab() {
   );
 }
 
-// 新規事業「小規模の賃貸管理会社向け 修繕受付クラウド」すまい受付（仮）（2026-09-02 Keita・MC-515）。
-// 本番は sumai.apollomansion.com（別サーバ :3025）。tebako と同じ iframe 方式で埋め込む。
-// 事業ブリーフは 2026-09 に現段階（施工業者ポータル/相見積/オーナー承認/費用負担区分/設備・点検/退去精算まで実装済）
-// ＋公表一次資料ベースの市場・競合数値で全面改訂（/brief 側を更新・ここは iframe で自動追従）。
-function WorkSumaiTab() {
-  const S = 'https://sumai.apollomansion.com';
-  const [doc, setDoc] = useState<'brief' | 'site' | 'admin' | 'tenant'>('brief');
-  const DOCS: Record<string, { src: string; title: string }> = {
-    brief: { src: `${S}/brief`, title: '事業ブリーフ（現在地・市場規模・海外比較・国内競合・制度的追い風・価格・事業性）' },
-    site: { src: `${S}/`, title: 'サービスサイト（本番 LP）' },
-    admin: { src: `${S}/admin/sample?key=demo1234`, title: '管理ダッシュボード（デモ）' },
-    tenant: { src: `${S}/r/sample`, title: '入居者の申請画面（デモ）' },
-  };
-  const src = DOCS[doc].src;
-  const title = DOCS[doc].title;
-  return (
-    <div className="flex h-full flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <div className="flex rounded-md border border-border p-0.5">
-          {([
-            ['brief', '事業ブリーフ'],
-            ['site', 'サービス'],
-            ['admin', '管理画面デモ'],
-            ['tenant', '入居者申請デモ'],
-          ] as const).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setDoc(key)}
-              className={`rounded px-2.5 py-1 text-[11px] transition-colors ${
-                doc === key ? 'bg-accent font-semibold text-bg' : 'text-text-muted hover:text-text'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <a
-            href={`${S}/`}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-md border border-accent bg-accent px-2.5 py-1 text-[11px] font-semibold text-bg hover:opacity-90"
-          >
-            本番サイト ↗
-          </a>
-          <a
-            href={src}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
-          >
-            別タブで開く ↗
-          </a>
-        </div>
-      </div>
-      <iframe
-        key={src}
-        src={src}
-        title={title}
-        className="min-h-0 w-full flex-1 rounded-lg border border-border bg-white"
-      />
-    </div>
-  );
-}
-
 // 新規事業「空き待ちウォッチ」Campnab型キャンセル空き通知ファミリー（2026-09-03 Keita・MC-534）。
 // 統合(2026-09-05): akimachiwatch.com 単一サイト・/c/<cat> パス方式（旧サブドメインは301）。随時最新化する。
 function WorkAkimachiTab() {
@@ -2243,7 +2177,7 @@ function WorkGachaTab() {
 }
 
 // ─── タブ統括 ────────────────────────────────────────────────────────
-type WorkTab = 'chat' | 'knowledge' | 'glossary' | 'lbo' | 'laundry' | 'tebako' | 'gacha' | 'sumai' | 'akimachi';
+type WorkTab = 'chat' | 'knowledge' | 'glossary' | 'lbo' | 'laundry' | 'tebako' | 'gacha' | 'akimachi';
 
 function resolveInitialTab(): WorkTab {
   if (typeof window !== 'undefined') {
@@ -2251,7 +2185,7 @@ function resolveInitialTab(): WorkTab {
     // 概要/動画DL/状況解析タブは削除（2026-07-20 Keita・MC-319）。旧 URL はナレッジへ寄せる。
     // LBOモデラー（MC-367）は仕事タブへ集約（2026-08-08 Keita）。
     // AirRent（MC-370）は事業クローズで撤去（2026-08-23 Keita）。旧 tab=airrent/blueair はナレッジへ寄せる。
-    if (t === 'chat' || t === 'knowledge' || t === 'glossary' || t === 'lbo' || t === 'laundry' || t === 'tebako' || t === 'gacha' || t === 'sumai' || t === 'akimachi') return t;
+    if (t === 'chat' || t === 'knowledge' || t === 'glossary' || t === 'lbo' || t === 'laundry' || t === 'tebako' || t === 'gacha' || t === 'akimachi') return t;
   }
   return 'knowledge';
 }
@@ -2315,16 +2249,6 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
         <>
           <span aria-hidden><SearchIcon width={16} height={16} /></span>
           ガチャ
-        </>
-      ),
-    },
-    // 新規事業「小規模の賃貸管理会社向け 修繕受付クラウド」すまい受付（仮）（2026-09-02 Keita・MC-515）。
-    {
-      key: 'sumai',
-      label: (
-        <>
-          <span aria-hidden><LboIcon width={16} height={16} /></span>
-          修繕受付
         </>
       ),
     },
@@ -2402,7 +2326,7 @@ export default function Work() {
         fetchedAt={undefined}
       />
       <WorkTabBar tab={tab} onChange={changeTab} />
-      <div className={tab === 'lbo' || tab === 'laundry' || tab === 'tebako' || tab === 'gacha' || tab === 'sumai' || tab === 'akimachi' ? 'flex-1 overflow-hidden px-4 py-4 md:px-6' : 'flex-1 overflow-y-auto px-4 py-4 md:px-6'}>
+      <div className={tab === 'lbo' || tab === 'laundry' || tab === 'tebako' || tab === 'gacha' || tab === 'akimachi' ? 'flex-1 overflow-hidden px-4 py-4 md:px-6' : 'flex-1 overflow-y-auto px-4 py-4 md:px-6'}>
         {/* 概要/動画DL/状況解析は削除（MC-319）。既定＝ナレッジ。AirRent/LBO は独立ナビから移設（2026-08-08）。 */}
         {tab === 'glossary' ? (
           <WorkGlossaryTab onSeedChat={seedChat} />
@@ -2414,8 +2338,6 @@ export default function Work() {
           <WorkTebakoTab />
         ) : tab === 'gacha' ? (
           <WorkGachaTab />
-        ) : tab === 'sumai' ? (
-          <WorkSumaiTab />
         ) : tab === 'akimachi' ? (
           <WorkAkimachiTab />
         ) : (
