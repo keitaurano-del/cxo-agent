@@ -2010,7 +2010,6 @@ function WorkAkimachiTab() {
 function AkimachiSummary() {
   const todo: { t: string; d: string }[] = [
     { t: '楽天アフィリエイトIDを設定して収益化ON', d: 'affiliate.rakuten.co.jp でIDを取得→Sonが .env の RAKUTEN_AFFILIATE_ID に設定→再起動で宿の通知/ページに楽天リンク（PR）が出る。コード実装済み・今は休眠中。' },
-    { t: 'Claude CLI 再ログイン（AI判定を無料枠へ）', d: 'OAuth失効(401)中でAI空き判定/Watch AIは従量Geminiで代替稼働。端末で claude 再ログインすれば無料枠に自動復帰（コード変更不要）。MC-542。' },
     { t: '英語版のUSD課金', d: 'Stripeで多通貨(USD)価格を用意すれば英語圏に自国通貨で課金可。今はJPY課金（Stripeが海外カードを換算）。' },
     { t: '海外向けアフィリエイト（Booking.com/Agoda等）', d: '英語版の収益原資。楽天は日本国内向け。海外はValueCommerce等経由で別途連携。' },
   ];
@@ -2023,6 +2022,7 @@ function AkimachiSummary() {
     '楽天トラベル・アフィリエイト（宿系の通知/施設ページ・PR表記）※IDで有効化待ち',
     '英語版 OpenSpot：世界検索・メニュー・Pricing/FAQ/How・My watches(ログイン&管理)・LINEなし',
     'MC-541 Phase1 ヘッドレス検知（JS/SPA予約ページを描画して監視）',
+    'AI空き判定/Watch AI を Claude（無料枠）に復帰（2026-09-07 再ログイン済み）',
   ];
   return (
     <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-surface p-4 text-[13px] leading-relaxed">
