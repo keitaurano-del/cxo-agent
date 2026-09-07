@@ -1717,85 +1717,6 @@ function WorkLboTab() {
   );
 }
 
-// CoinLaundry.Tokyo（旧 Laundry.jp、2026-08-21 14:37 Keita 指示で改称）事業計画タブ（2026-08-21 Keita「仕事メニューの別タブに専用ページ作って、需要分析、
-// 収益プラン、集客プラン等など考えて記載して」・MC-384）。静的ページ /laundry-plan.html を
-// LBOモデラーと同じ iframe 方式で表示し、実働プロトタイプへのリンクも並べる。
-function WorkLaundryTab() {
-  // 事業計画・市場調査（2026-08-21 Keita「東京のコインランドリー事情を調べてLaundryタブに」）・
-  // 収益分析（MC-409 事業ビジネス分析レポート）・開業ナレッジ（MC-424 コンサルナレッジ第2弾）の切替。
-  const [doc, setDoc] = useState<'plan' | 'market' | 'biz' | 'cases' | 'consult'>('plan');
-  const src =
-    doc === 'plan'
-      ? '/laundry-plan.html'
-      : doc === 'market'
-        ? '/laundry-market-report.html'
-        : doc === 'biz'
-          ? '/laundry-business-analysis.html'
-          : doc === 'cases'
-            ? '/laundry-cases.html'
-            : '/laundry-consulting.html';
-  const title =
-    doc === 'plan'
-      ? 'CoinLaundry.Tokyo 事業計画'
-      : doc === 'market'
-        ? '東京のコインランドリー事情 調査レポート'
-        : doc === 'biz'
-          ? 'コインランドリー事業 収益分析レポート'
-          : doc === 'cases'
-            ? 'コインランドリー事業 成功・失敗事例レポート'
-            : 'コインランドリー事業 コンサルティングナレッジ';
-  return (
-    <div className="flex h-full flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <div className="flex rounded-md border border-border p-0.5">
-          {([
-            ['plan', '事業計画'],
-            ['market', '市場調査'],
-            ['biz', '収益分析'],
-            ['cases', '事例分析'],
-            ['consult', '開業ナレッジ'],
-          ] as const).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setDoc(key)}
-              className={`rounded px-2.5 py-1 text-[11px] transition-colors ${
-                doc === key ? 'bg-accent font-semibold text-bg' : 'text-text-muted hover:text-text'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <a
-            href="https://coinlaundry.tokyo"
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
-          >
-            プロトタイプを開く ↗
-          </a>
-          <a
-            href={src}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
-          >
-            別タブで開く ↗
-          </a>
-        </div>
-      </div>
-      <iframe
-        key={src}
-        src={src}
-        title={title}
-        className="min-h-0 w-full flex-1 rounded-lg border border-border bg-white"
-      />
-    </div>
-  );
-}
-
 // 新規事業「日本商品セレクト定額便」（仮称・MC-485、2026-08-25 Keita「アポロの仕事の別タブに作って」）。
 // CoinLaundry.Tokyo タブと同じ iframe 方式。プロト（箱ビルダー）／デザイン案（和の漢字4パターン）／
 // 競合分析（売上・収益性・事業）を静的ページで切替表示する。サービス名は Nippiki に確定・本番は https://nippiki.com（2026-08-26 公開）。
@@ -2177,7 +2098,7 @@ function WorkGachaTab() {
 }
 
 // ─── タブ統括 ────────────────────────────────────────────────────────
-type WorkTab = 'chat' | 'knowledge' | 'glossary' | 'lbo' | 'laundry' | 'tebako' | 'gacha' | 'akimachi';
+type WorkTab = 'chat' | 'knowledge' | 'glossary' | 'lbo' | 'tebako' | 'gacha' | 'akimachi';
 
 function resolveInitialTab(): WorkTab {
   if (typeof window !== 'undefined') {
@@ -2185,7 +2106,7 @@ function resolveInitialTab(): WorkTab {
     // 概要/動画DL/状況解析タブは削除（2026-07-20 Keita・MC-319）。旧 URL はナレッジへ寄せる。
     // LBOモデラー（MC-367）は仕事タブへ集約（2026-08-08 Keita）。
     // AirRent（MC-370）は事業クローズで撤去（2026-08-23 Keita）。旧 tab=airrent/blueair はナレッジへ寄せる。
-    if (t === 'chat' || t === 'knowledge' || t === 'glossary' || t === 'lbo' || t === 'laundry' || t === 'tebako' || t === 'gacha' || t === 'akimachi') return t;
+    if (t === 'chat' || t === 'knowledge' || t === 'glossary' || t === 'lbo' || t === 'tebako' || t === 'gacha' || t === 'akimachi') return t;
   }
   return 'knowledge';
 }
@@ -2219,16 +2140,6 @@ function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) =>
         <>
           <span aria-hidden><LboIcon width={16} height={16} /></span>
           LBOモデラー
-        </>
-      ),
-    },
-    // CoinLaundry.Tokyo 事業計画（2026-08-21 Keita 指示・MC-384）。
-    {
-      key: 'laundry',
-      label: (
-        <>
-          <span aria-hidden><SearchIcon width={16} height={16} /></span>
-          CoinLaundry.Tokyo
         </>
       ),
     },
@@ -2326,14 +2237,12 @@ export default function Work() {
         fetchedAt={undefined}
       />
       <WorkTabBar tab={tab} onChange={changeTab} />
-      <div className={tab === 'lbo' || tab === 'laundry' || tab === 'tebako' || tab === 'gacha' || tab === 'akimachi' ? 'flex-1 overflow-hidden px-4 py-4 md:px-6' : 'flex-1 overflow-y-auto px-4 py-4 md:px-6'}>
+      <div className={tab === 'lbo' || tab === 'tebako' || tab === 'gacha' || tab === 'akimachi' ? 'flex-1 overflow-hidden px-4 py-4 md:px-6' : 'flex-1 overflow-y-auto px-4 py-4 md:px-6'}>
         {/* 概要/動画DL/状況解析は削除（MC-319）。既定＝ナレッジ。AirRent/LBO は独立ナビから移設（2026-08-08）。 */}
         {tab === 'glossary' ? (
           <WorkGlossaryTab onSeedChat={seedChat} />
         ) : tab === 'lbo' ? (
           <WorkLboTab />
-        ) : tab === 'laundry' ? (
-          <WorkLaundryTab />
         ) : tab === 'tebako' ? (
           <WorkTebakoTab />
         ) : tab === 'gacha' ? (
