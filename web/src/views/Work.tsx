@@ -1864,9 +1864,12 @@ function WorkAkimachiTab() {
 // 事実ベースで随時最新化する。
 function AkimachiSummary() {
   const todo: { t: string; d: string }[] = [
-    { t: '楽天アフィリエイトIDを設定して収益化ON', d: 'affiliate.rakuten.co.jp でIDを取得→Sonが .env の RAKUTEN_AFFILIATE_ID に設定→再起動で宿の通知/ページに楽天リンク（PR）が出る。コード実装済み・今は休眠中。' },
     { t: '英語版のUSD課金', d: 'Stripeで多通貨(USD)価格を用意すれば英語圏に自国通貨で課金可。今はJPY課金（Stripeが海外カードを換算）。' },
-    { t: '海外向けアフィリエイト（Booking.com/Agoda等）', d: '英語版の収益原資。楽天は日本国内向け。海外はValueCommerce等経由で別途連携。' },
+  ];
+  // アフィリ収益の確認先（外部ダッシュボード。ログインは各アカウント）。2026-09-08 Keita「それぞれリンクをあきまちのタブに入れておいて」。
+  const revenue: { t: string; url: string; d: string }[] = [
+    { t: '海外の収益：Travelpayouts（Statistics）', url: 'https://www.travelpayouts.com/', d: 'Hotellook＋Drive の成果（marker 571338）。ログイン→Statistics でクリック/予約/確定報酬。宿はチェックアウト後に確定。' },
+    { t: '日本の収益：楽天アフィリエイト（レポート）', url: 'https://affiliate.rakuten.co.jp/', d: '宿の楽天トラベル成果リンク。楽天会員ログイン→レポートでクリック/注文/成果報酬。ID=5748…。' },
   ];
   const done: string[] = [
     'ブログ /blog（Soro SEO自動記事）+ 記事URL登録時のAI妥当性警告（ブログ記事等を弾く）',
@@ -1874,7 +1877,8 @@ function AkimachiSummary() {
     'プラン変更＝アップグレード即時差額 / ダウングレードは期間末に切替（二重課金なし・変更はログイン必須化）',
     'ウォッチ先URL編集（掲載施設も・マイページ＆Watch AIから）',
     'Watch AI 復旧（Geminiフォールバック）',
-    '楽天トラベル・アフィリエイト（宿系の通知/施設ページ・PR表記）※IDで有効化待ち',
+    '楽天トラベル・アフィリエイト稼働（日本語=宿の通知/施設ページに成果リンク・PR表記。ID設定済み）',
+    '海外アフィリ稼働（Travelpayouts：全ページに Drive＝自動アフィリ化＋サイト認証、/en宿通知に Hotellook 明示リンク。marker 571338）',
     '英語版 OpenSpot：世界検索・メニュー・Pricing/FAQ/How・My watches(ログイン&管理)・LINEなし',
     'MC-541 Phase1 ヘッドレス検知（JS/SPA予約ページを描画して監視）',
     'AI空き判定/Watch AI を Claude（無料枠）に復帰（2026-09-07 再ログイン済み）',
@@ -1884,6 +1888,16 @@ function AkimachiSummary() {
     <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-surface p-4 text-[13px] leading-relaxed">
       <div className="mb-1 text-sm font-semibold text-text">空き待ちウォッチ / OpenSpot（英語版）</div>
       <div className="mb-4 text-[12px] text-text-muted">akimachiwatch.com（日本語）/ akimachiwatch.com/en（英語=OpenSpot・海外向け）。台帳: MC-534, 537〜544。</div>
+
+      <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-text-muted">アフィリ収益ダッシュボード</div>
+      <ul className="mb-5 space-y-2">
+        {revenue.map((x, i) => (
+          <li key={i} className="rounded-md border border-border bg-surface-2 p-2.5">
+            <a href={x.url} target="_blank" rel="noreferrer" className="font-semibold text-accent hover:underline">{x.t} ↗</a>
+            <div className="text-[12px] text-text-muted">{x.d}</div>
+          </li>
+        ))}
+      </ul>
 
       <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-accent">後で対応（あなたのアクション待ち）</div>
       <ul className="mb-5 space-y-2">
