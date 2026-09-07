@@ -129,6 +129,11 @@ function isNoiseLine(line: string): boolean {
   if (/^[─━-]{4,}$/.test(l)) return true; // 罫線セパレータ
   if (/compact(?:ed|ing|ion)|🗜|session is being continued|\brecap\b/i.test(l)) return true;
   if (/\blocal ready\b|\btokens\s+\d|^agent\s+\S+\s+\(|esc to interrupt|ctrl\+o/i.test(l)) return true;
+  // Claude CLI の起動バナー / アイドル chrome（実回答ではないので未読=青にしない）
+  if (/mcp servers?\b.*\b(?:need|needs)\b.*\bauthentication|\brun \/mcp\b/i.test(l)) return true;
+  if (/writes better code|anytime with \/model|switch anytime with|\bmore\s*·\s*\/status\b/i.test(l)) return true;
+  if (/bypass permissions|shift\+tab to cycle|\bfor agents\b|\/rc active|to reconnect\b/i.test(l)) return true;
+  if (/^[❯›»]\s*try\s+["“]/i.test(l)) return true; // アイドルプロンプトの入力例（Try "..."）
   return false;
 }
 
