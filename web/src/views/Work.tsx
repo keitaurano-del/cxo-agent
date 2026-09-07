@@ -1947,7 +1947,7 @@ function WorkSumaiTab() {
 // 新規事業「空き待ちウォッチ」Campnab型キャンセル空き通知ファミリー（2026-09-03 Keita・MC-534）。
 // 統合(2026-09-05): akimachiwatch.com 単一サイト・/c/<cat> パス方式（旧サブドメインは301）。随時最新化する。
 function WorkAkimachiTab() {
-  const [doc, setDoc] = useState<'top' | 'analytics' | 'system'>('top');
+  const [doc, setDoc] = useState<'summary' | 'top' | 'analytics' | 'system'>('summary');
   // カテゴリ別サブタブは廃止（Keita 2026-09-06 10:39「保育とかキャンプとか分けなくていい」）。カテゴリはサイト内の検索/フッターから
   const DOCS: Record<string, { src: string; title: string }> = {
     top: { src: 'https://akimachiwatch.com/', title: 'サイト（空き待ちウォッチ）' },
@@ -1955,13 +1955,14 @@ function WorkAkimachiTab() {
     analytics: { src: 'https://akimachiwatch.com/admin/analytics?key=D21pErsvelsVJWwkM70SASWD', title: '分析（訪問者・KPI・ユーザー）' },
     system: { src: '/akimachi-system.html', title: '仕組み（監視→通知の図解・オーナー向け）' },
   };
-  const src = DOCS[doc].src;
-  const title = DOCS[doc].title;
+  const src = doc === 'summary' ? '' : DOCS[doc].src;
+  const title = doc === 'summary' ? 'まとめ' : DOCS[doc].title;
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex items-center gap-2">
         <div className="flex flex-wrap rounded-md border border-border p-0.5">
           {([
+            ['summary', 'まとめ'],
             ['top', 'サイト'],
             ['analytics', '分析'],
             ['system', '仕組み'],
@@ -1979,22 +1980,71 @@ function WorkAkimachiTab() {
           ))}
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <a
-            href={src}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
-          >
-            別タブで開く ↗
-          </a>
+          {doc !== 'summary' && (
+            <a
+              href={src}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md border border-border px-2.5 py-1 text-[11px] text-text-muted hover:bg-surface-2 hover:text-text"
+            >
+              別タブで開く ↗
+            </a>
+          )}
         </div>
       </div>
-      <iframe
-        key={src}
-        src={src}
-        title={title}
-        className="min-h-0 w-full flex-1 rounded-lg border border-border bg-white"
-      />
+      {doc === 'summary' ? (
+        <AkimachiSummary />
+      ) : (
+        <iframe
+          key={src}
+          src={src}
+          title={title}
+          className="min-h-0 w-full flex-1 rounded-lg border border-border bg-white"
+        />
+      )}
+    </div>
+  );
+}
+// あき通知 / OpenSpot（英語版）の状況まとめ＋「後で対応」チェックリスト（Keita 2026-09-07 09:36「タブにまとめておいて」）。
+// 事実ベースで随時最新化する。
+function AkimachiSummary() {
+  const todo: { t: string; d: string }[] = [
+    { t: '楽天アフィリエイトIDを設定して収益化ON', d: 'affiliate.rakuten.co.jp でIDを取得→Sonが .env の RAKUTEN_AFFILIATE_ID に設定→再起動で宿の通知/ページに楽天リンク（PR）が出る。コード実装済み・今は休眠中。' },
+    { t: 'Claude CLI 再ログイン（AI判定を無料枠へ）', d: 'OAuth失効(401)中でAI空き判定/Watch AIは従量Geminiで代替稼働。端末で claude 再ログインすれば無料枠に自動復帰（コード変更不要）。MC-542。' },
+    { t: '英語版のUSD課金', d: 'Stripeで多通貨(USD)価格を用意すれば英語圏に自国通貨で課金可。今はJPY課金（Stripeが海外カードを換算）。' },
+    { t: '海外向けアフィリエイト（Booking.com/Agoda等）', d: '英語版の収益原資。楽天は日本国内向け。海外はValueCommerce等経由で別途連携。' },
+  ];
+  const done: string[] = [
+    'ブログ /blog（Soro SEO自動記事）+ 記事URL登録時のAI妥当性警告（ブログ記事等を弾く）',
+    '50%オフ・ローンチプロモ（全プラン・加入中ずっと半額）',
+    'プラン変更＝アップグレード即時差額 / ダウングレードは期間末に切替（二重課金なし・変更はログイン必須化）',
+    'ウォッチ先URL編集（掲載施設も・マイページ＆Watch AIから）',
+    'Watch AI 復旧（Geminiフォールバック）',
+    '楽天トラベル・アフィリエイト（宿系の通知/施設ページ・PR表記）※IDで有効化待ち',
+    '英語版 OpenSpot：世界検索・メニュー・Pricing/FAQ/How・My watches(ログイン&管理)・LINEなし',
+    'MC-541 Phase1 ヘッドレス検知（JS/SPA予約ページを描画して監視）',
+  ];
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-surface p-4 text-[13px] leading-relaxed">
+      <div className="mb-1 text-sm font-semibold text-text">空き待ちウォッチ / OpenSpot（英語版）</div>
+      <div className="mb-4 text-[12px] text-text-muted">akimachiwatch.com（日本語）/ akimachiwatch.com/en（英語=OpenSpot・海外向け）。台帳: MC-534, 537〜544。</div>
+
+      <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-accent">後で対応（あなたのアクション待ち）</div>
+      <ul className="mb-5 space-y-2">
+        {todo.map((x, i) => (
+          <li key={i} className="rounded-md border border-accent/40 bg-accent/5 p-2.5">
+            <div className="font-semibold text-text">☐ {x.t}</div>
+            <div className="text-[12px] text-text-muted">{x.d}</div>
+          </li>
+        ))}
+      </ul>
+
+      <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-text-muted">稼働中（実装・本番反映済み）</div>
+      <ul className="space-y-1">
+        {done.map((x, i) => (
+          <li key={i} className="text-text-muted"><span className="text-green-500">✓</span> {x}</li>
+        ))}
+      </ul>
     </div>
   );
 }
