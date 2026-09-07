@@ -2023,6 +2023,7 @@ function AkimachiSummary() {
     '英語版 OpenSpot：世界検索・メニュー・Pricing/FAQ/How・My watches(ログイン&管理)・LINEなし',
     'MC-541 Phase1 ヘッドレス検知（JS/SPA予約ページを描画して監視）',
     'AI空き判定/Watch AI を Claude（無料枠）に復帰（2026-09-07 再ログイン済み）',
+    'Watch AI を調査エージェント化（自分で公式/予約URLを検索・確認して設定・条件はタップで質問）',
   ];
   return (
     <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-surface p-4 text-[13px] leading-relaxed">
