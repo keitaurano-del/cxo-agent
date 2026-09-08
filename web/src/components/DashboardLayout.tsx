@@ -6,7 +6,7 @@
 import { NavLink, Outlet, useOutletContext } from 'react-router-dom';
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ClockIcon, GaugeIcon, NewsIcon, UsageIcon } from './icons';
+import { ClockIcon, GaugeIcon, NewsIcon } from './icons';
 import { SortableNav, DragHandle } from './SortableNav';
 import { useNavOrder } from '../lib/useNavOrder';
 
@@ -43,8 +43,7 @@ const DASH_TABS: DashTab[] = [
   // 「Claude」はコスト系と分かりにくいため「プラン消費」へ改名（2026-08-05 Son・MC-313 UX・dec-da32b7d3）。
   { to: '/plan-usage', label: 'プラン消費', icon: <GaugeIcon width={16} height={16} /> },
   { to: '/news', label: 'ニュース', icon: <NewsIcon width={16} height={16} /> },
-  // 収益コックピットは独立ナビからダッシュボードのタブへ統合（2026-07-20 Keita・MC-317）。
-  { to: '/revenue', label: '収益', icon: <UsageIcon width={16} height={16} /> },
+  // 収益タブは削除（Keita 2026-09-09「アポロの収益のタブは削除していい」）。
 ];
 
 /** `/` 既定着地の選択肢（MC-313 UX: 設定モーダルから変更可能）。固定タブ＋各ダッシュタブ。 */
