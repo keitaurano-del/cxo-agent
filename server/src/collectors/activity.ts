@@ -62,6 +62,8 @@ export interface ActivityItem {
   detail: string;
   /** サブエージェントの会話フィードを開く用の agentId（① のみ）。空可。 */
   agentId: string;
+  /** 端末の数値 id（③ terminal のみ）。詳細で /api/terminal/output?terminal=<id> を叩き最近の画面を見せる用。 */
+  termId?: number;
 }
 
 const CATEGORY_LABEL: Record<ActivityItem['category'], string> = {
@@ -343,6 +345,7 @@ function terminalItems(): ActivityItem[] {
       scheduledFor: '',
       detail: `tmux =${session}: · ${cmd || '?'}`,
       agentId: '',
+      termId: t.id,
     });
   }
   return items;

@@ -293,6 +293,7 @@ interface ActivityItem {
   scheduledFor: string;
   detail: string;
   agentId: string;
+  termId?: number;
 }
 
 /** 状態バケット（実行中／待機／完了）。active=実行中、idle+waiting=待機、done=完了。 */
@@ -339,8 +340,20 @@ const STATUS_LABEL: Record<ActivityItem['status'], string> = {
   done: '完了',
 };
 
-/** 非サブエージェント行の詳細ドロワー用セクション（全文の what と各種メタを見せる）。 */
-function buildActivitySections(it: ActivityItem): TileSection[] {
+/** tmux capture の ANSI エスケープ（色・カーソル制御・OSC）を落として素のテキストにする。 */
+function stripAnsi(s: string): string {
+  return s
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '') // OSC ... BEL/ST
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1b[[\]()#;?]*[0-9;]*[A-Za-z@]/g, '') // CSI/その他エスケープ
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, ''); // 制御文字（改行・タブは残す）
+}
+
+/** 非サブエージェント行の詳細ドロワー用セクション（全文の what と各種メタを見せる）。
+ *  端末(terminal)は termOut に「最近の出力」（tmux 画面）を渡すと、いま動いているものが見える。 */
+function buildActivitySections(it: ActivityItem, termOut?: string | null): TileSection[] {
   const stats = [
     { key: 'category', label: '種別', value: it.categoryLabel },
     { key: 'status', label: '状態', value: STATUS_LABEL[it.status], color: STATUS_COLOR[it.status] },
@@ -351,7 +364,15 @@ function buildActivitySections(it: ActivityItem): TileSection[] {
       : null,
   ].filter((s): s is NonNullable<typeof s> => s !== null);
   const sections: TileSection[] = [{ heading: '情報', stats }];
-  if (it.what) sections.push({ heading: '内容', note: it.what });
+  // 端末は「最近の出力」＝実際に動いている画面を最優先で見せる（what の 1 行では何が動いてるか分からないため）。
+  if (it.category === 'terminal') {
+    sections.push({
+      heading: '最近の出力（この端末で動いているもの）',
+      pre: termOut == null ? '読み込み中…' : termOut || '（出力がありません）',
+    });
+  } else if (it.what) {
+    sections.push({ heading: '内容', note: it.what });
+  }
   if (it.detail) sections.push({ heading: '補足', note: it.detail });
   return sections;
 }
@@ -520,13 +541,28 @@ export default function BuildProgress(): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // 非サブエージェント行（作業セッション/ターミナル/ジョブ/キュー）の詳細ドロワー（2026-09-07 Keita）。
   const [detailItem, setDetailItem] = useState<ActivityItem | null>(null);
+  // 端末詳細の「最近の出力」（tmux 画面）。null=読み込み中（2026-09-08 Keita「何を実行してるか分からない」）。
+  const [termOut, setTermOut] = useState<string | null>(null);
 
   // 行タップの振り分け: サブエージェント=下段フィード、それ以外=詳細ドロワー。
   const openItem = useCallback((it: ActivityItem) => {
     if (it.category === 'subagent' && it.agentId) {
       setSelectedId((prev) => (prev === it.agentId ? null : it.agentId));
+      return;
+    }
+    setDetailItem(it);
+    // 端末は「いま何が動いているか」を最近の画面（tmux capture）で見せる。開くたびに取り直す。
+    if (it.category === 'terminal' && it.termId != null) {
+      setTermOut(null);
+      const tid = it.termId;
+      fetch(`/api/terminal/output?terminal=${tid}&lines=40`, { credentials: 'same-origin' })
+        .then((r) => r.json())
+        .then((j: { ok?: boolean; content?: string; error?: string }) => {
+          setTermOut(j?.ok && typeof j.content === 'string' ? stripAnsi(j.content).trimEnd() : `（出力を取得できませんでした${j?.error ? ': ' + j.error : ''}）`);
+        })
+        .catch(() => setTermOut('（出力の取得に失敗しました）'));
     } else {
-      setDetailItem(it);
+      setTermOut(null);
     }
   }, []);
 
@@ -714,7 +750,7 @@ export default function BuildProgress(): JSX.Element {
         kindLabel={detailItem ? detailItem.categoryLabel : ''}
         title={detailItem ? `${detailItem.emoji ? detailItem.emoji + ' ' : ''}${detailItem.who}` : ''}
         accent={detailItem ? STATUS_COLOR[detailItem.status] : undefined}
-        sections={detailItem ? buildActivitySections(detailItem) : []}
+        sections={detailItem ? buildActivitySections(detailItem, termOut) : []}
       />
     </div>
   );

@@ -47,6 +47,8 @@ export interface TileSection {
   emptyText?: string;
   /** 自由記述（プレーンテキスト段落）。 */
   note?: string;
+  /** 整形済みテキスト（等幅・改行保持・スクロール可）。端末の最近の出力など。 */
+  pre?: string;
 }
 
 export interface TileDetailProps {
@@ -161,6 +163,12 @@ export function TileDetail({
                   </p>
                 )}
 
+                {section.pre && (
+                  <pre className="mb-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-bg px-3 py-2.5 font-mono text-[11px] leading-snug text-text-muted">
+                    {section.pre}
+                  </pre>
+                )}
+
                 {hasStats && (
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {section.stats!.map((s) => (
@@ -236,7 +244,7 @@ export function TileDetail({
                   </ul>
                 )}
 
-                {!hasStats && !hasRelated && (
+                {!hasStats && !hasRelated && !section.note && !section.pre && (
                   <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px] text-text-faint">
                     {section.emptyText ?? '表示できる情報がありません。'}
                   </p>
