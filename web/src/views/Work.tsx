@@ -20,7 +20,6 @@ import {
   EditIcon,
   ExpandIcon,
   ImageFileIcon,
-  LboIcon,
   NotebookIcon,
   PlusIcon,
   SearchIcon,
@@ -28,7 +27,6 @@ import {
   ShrinkIcon,
   SparkIcon,
   TagIcon,
-  TextFileIcon,
   TrashIcon,
 } from '../components/icons';
 // ピボット／課題管理費／PwC転職 の各タブはサイドメニュー整理でUIから削除し、内容は Vault
@@ -2117,67 +2115,18 @@ type WorkTab = 'chat' | 'knowledge' | 'glossary' | 'lbo' | 'tebako' | 'gacha' | 
 function resolveInitialTab(): WorkTab {
   if (typeof window !== 'undefined') {
     const t = new URLSearchParams(window.location.search).get('tab');
-    // 概要/動画DL/状況解析タブは削除（2026-07-20 Keita・MC-319）。旧 URL はナレッジへ寄せる。
-    // LBOモデラー（MC-367）は仕事タブへ集約（2026-08-08 Keita）。
-    // AirRent（MC-370）は事業クローズで撤去（2026-08-23 Keita）。旧 tab=airrent/blueair はナレッジへ寄せる。
-    if (t === 'chat' || t === 'knowledge' || t === 'glossary' || t === 'lbo' || t === 'tebako' || t === 'gacha' || t === 'akimachi') return t;
+    // 空き待ち以外のタブ（ナレッジ/単語帳/LBOモデラー/Nippiki/ガチャ）はタブUIから撤去（2026-09-08 Keita「あきまち以外なくしていい」）。
+    // 旧 URL（?tab=knowledge 等）は空き待ちへ寄せる。ビュー実装・データは残置＝可逆。
+    if (t === 'akimachi') return t;
   }
-  return 'knowledge';
+  return 'akimachi';
 }
 
 function WorkTabBar({ tab, onChange }: { tab: WorkTab; onChange: (t: WorkTab) => void }) {
   // 概要（意味が薄い）・動画DL・状況解析は削除（2026-07-20 Keita・MC-319）。単語帳とナレッジは残す。
+  // 空き待ち以外のタブ（ナレッジ/単語帳/LBOモデラー/Nippiki/ガチャ）はタブUIから撤去（2026-09-08 Keita「あきまち以外なくしていい」）。
+  // ビュー実装(WorkKnowledgeTab 等)・レンダリング分岐・データは残置＝可逆（復活は tabs 配列に戻すだけ）。
   const tabs: { key: WorkTab; label: ReactNode }[] = [
-    {
-      key: 'knowledge',
-      label: (
-        <>
-          <span aria-hidden><NotebookIcon width={16} height={16} /></span>
-          ナレッジ
-        </>
-      ),
-    },
-    {
-      key: 'glossary',
-      label: (
-        <>
-          <span aria-hidden><TextFileIcon width={16} height={16} /></span>
-          単語帳
-        </>
-      ),
-    },
-    // LBOモデラー（MC-367）: サイドメニューの独立項目から仕事タブへ移設（2026-08-08 Keita）。
-    // AirRent（MC-370）タブは事業クローズで撤去（2026-08-23 Keita）。
-    {
-      key: 'lbo',
-      label: (
-        <>
-          <span aria-hidden><LboIcon width={16} height={16} /></span>
-          LBOモデラー
-        </>
-      ),
-    },
-    // 新規事業「日本商品セレクト定額便」。サービス名は Nippiki に確定・2026-08-26 nippiki.com 本番公開（MC-485/486・Keita）。
-    {
-      key: 'tebako',
-      label: (
-        <>
-          <span aria-hidden><LboIcon width={16} height={16} /></span>
-          Nippiki
-        </>
-      ),
-    },
-    // 新規事業構想「海外向けオンライン・ガチャ」フィージビリティ（2026-08-31 Keita 指示）。
-    {
-      key: 'gacha',
-      label: (
-        <>
-          <span aria-hidden><SearchIcon width={16} height={16} /></span>
-          ガチャ
-        </>
-      ),
-    },
-    // 新規事業「空き待ちウォッチ」キャンセル空き通知ファミリー（2026-09-03 Keita・MC-534）。
     {
       key: 'akimachi',
       label: (
