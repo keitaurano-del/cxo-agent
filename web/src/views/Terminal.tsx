@@ -1064,6 +1064,14 @@ export default function Terminal() {
     [refreshStatus, setBackend],
   );
 
+  // iframe を貼り直して WS を張り直す手動リコネクト（Keita 2026-09-08「PWAで Reconnecting のまま固まって
+  // 再読み込みで戻らない」）。status=ready のまま iframe 内 ttyd が "Reconnecting…"（WS異常切断）で
+  // 固まると、状態パネル（ターミナルを開始）は出ず復旧手段が無かった。iframeKeys を bump して当該端末だけ
+  // 再マウント＝新しい ttyd クライアント＋新規 WS ハンドシェイクを張り直す。認証や tmux セッションには触らない。
+  const reloadTerminal = useCallback((id: number) => {
+    setIframeKeys((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
+  }, []);
+
   // マウント時に全ターミナルの状態確認 + モデル初期取得、以降は定期ポーリングで切断を検知する。
   useEffect(() => {
     // 初回: status-all でバックエンド状態とモデルを一括取得する。
@@ -1907,6 +1915,20 @@ export default function Terminal() {
                       }}
                       aria-hidden="true"
                     />
+                  )}
+                  {/* 手動リコネクト（Keita 2026-09-08）。iframe内 ttyd が "Reconnecting…" で固まった時の復旧口。
+                      右上に控えめに常設し、押すと当該端末だけ iframe を貼り直して WS を張り直す。 */}
+                  {isVisible && (
+                    <button
+                      type="button"
+                      onClick={() => reloadTerminal(t.id)}
+                      title="ターミナルを再接続（Reconnecting のまま固まった時に押す）"
+                      aria-label="ターミナルを再接続"
+                      className="absolute right-2 top-2 z-20 flex items-center gap-1 rounded-md border border-border bg-surface-2/80 px-2 py-1 text-[11px] text-text-muted opacity-50 backdrop-blur transition-opacity hover:bg-surface-3 hover:text-text hover:opacity-100"
+                    >
+                      <span aria-hidden>⟳</span>
+                      再接続
+                    </button>
                   )}
                 </>
               ) : (
