@@ -1721,7 +1721,7 @@ function WorkLboTab() {
 function WorkTebakoTab() {
   const NIPPIKI = 'https://nippiki.com';
   const OPS_KEY = 'urano-tebako-2026'; // 内部用ダッシュボードの簡易鍵（社内Apolloのみ）
-  const [doc, setDoc] = useState<'site' | 'traffic' | 'plan' | 'marketing' | 'proto' | 'styles' | 'analysis' | 'sim' | 'revenue' | 'ops' | 'me' | 'brand'>('site');
+  const [doc, setDoc] = useState<'site' | 'traffic' | 'plan' | 'marketing' | 'proto' | 'styles' | 'analysis' | 'ops' | 'me' | 'brand'>('site');
   const DOCS: Record<string, { src: string; title: string }> = {
     site: { src: `${NIPPIKI}/`, title: '本番 LP（nippiki.com・最新）' },
     traffic: { src: `${NIPPIKI}/traffic?key=${OPS_KEY}`, title: '流入ダッシュボード（訪問者・流入元・日別・簡易ファネル）' },
@@ -1730,8 +1730,6 @@ function WorkTebakoTab() {
     proto: { src: '/tebako-proto.html', title: '日本商品セレクト定額便 プロトタイプ（初期案）' },
     styles: { src: '/tebako-styles.html', title: 'デザイン案（和の漢字パターン）' },
     analysis: { src: '/tebako-analysis.html', title: '競合分析レポート' },
-    sim: { src: '/tebako-sim.html', title: '収益シミュレーター' },
-    revenue: { src: `${NIPPIKI}/revenue?key=${OPS_KEY}`, title: '売上管理（確定売上・MRR・流入元別ROI・注文一覧）' },
     ops: { src: `${NIPPIKI}/ops?key=${OPS_KEY}`, title: '運用コンソール（顧客管理・配送処理）' },
     me: { src: `${NIPPIKI}/me?demo=1`, title: 'マイページ（会員・ランク）プレビュー' },
     brand: { src: `${NIPPIKI}/brand`, title: 'ブランドアイコン案' },
@@ -1750,8 +1748,6 @@ function WorkTebakoTab() {
             ['proto', 'プロト'],
             ['styles', 'デザイン案'],
             ['analysis', '競合分析'],
-            ['sim', '収益シミュ'],
-            ['revenue', '売上'],
             ['ops', '運用'],
             ['me', 'マイページ'],
             ['brand', 'アイコン'],
@@ -1862,7 +1858,7 @@ function WorkAkimachiTab() {
 // 事実ベースで随時最新化する。
 function AkimachiSummary() {
   const todo: { t: string; d: string }[] = [
-    { t: '英語版のUSD課金', d: 'Stripeで多通貨(USD)価格を用意すれば英語圏に自国通貨で課金可。今はJPY課金（Stripeが海外カードを換算）。' },
+    // 現時点でKeita側の未対応アクションなし（USD課金=MC-544で実装済み・アフィリ=日本/海外とも稼働）。発生したらここに追記。
   ];
   // アフィリ収益の確認先（外部ダッシュボード。ログインは各アカウント）。2026-09-08 Keita「それぞれリンクをあきまちのタブに入れておいて」。
   const revenue: { t: string; url: string; d: string }[] = [
@@ -1870,6 +1866,11 @@ function AkimachiSummary() {
     { t: '日本の収益：楽天アフィリエイト（レポート）', url: 'https://affiliate.rakuten.co.jp/', d: '宿の楽天トラベル成果リンク。楽天会員ログイン→レポートでクリック/注文/成果報酬。ID=5748…。' },
   ];
   const done: string[] = [
+    'ウォッチ登録時にURLを自動精査：公式トップ/紹介ページで終わらせず、予約・空き状況ページ本体まで深掘りして監視（2026-09-08）',
+    'UI刷新＝検索ファースト：分類ナビ撤去・施設/カテゴリの専用ランディング廃止・左上ロゴを全ページ「空き待ちウォッチ」に統一（カテゴリは補助的に）・山小屋を独立カテゴリ→ハブ配下カタログへ降格（2026-09-08）',
+    '読めない施設は正直に「空き状況を取得できません」表示＋「正確なURLを指定 or ウォッチ停止」導線。ログイン必須施設は「監視対象外」検知・表示＋FAQ記載（2026-09-08）',
+    '汎用「空き状況カレンダー発見器」を本番統合：多言語判定・iframe(予約エンジン)展開・ヘッドレス描画・LLM誘導の日付選択(指定期間を選んで読む)・優先度BFSで実予約エンジンへ到達。登録後にバックグラウンドで読めるカレンダーへ監視先を昇格（採用は本番AI判定で二重確認）（2026-09-08）',
+    '別施設/イベントチケットの誤採用防止：施設同一性チェック＋eplus/l-tike等の除外（例=ふもとっぱら→GO OUT CAMP 誤採用を修正）。SNS/動画/リンク集URLも施設として弾く（2026-09-08）',
     'ブログ /blog（Soro SEO自動記事）+ 記事URL登録時のAI妥当性警告（ブログ記事等を弾く）',
     '50%オフ・ローンチプロモ（全プラン・加入中ずっと半額）',
     'プラン変更＝アップグレード即時差額 / ダウングレードは期間末に切替（二重課金なし・変更はログイン必須化）',
@@ -1885,7 +1886,7 @@ function AkimachiSummary() {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-surface p-4 text-[13px] leading-relaxed">
       <div className="mb-1 text-sm font-semibold text-text">空き待ちウォッチ / OpenSpot（英語版）</div>
-      <div className="mb-4 text-[12px] text-text-muted">akimachiwatch.com（日本語）/ akimachiwatch.com/en（英語=OpenSpot・海外向け）。台帳: MC-534, 537〜544。</div>
+      <div className="mb-4 text-[12px] text-text-muted">akimachiwatch.com（日本語）/ akimachiwatch.com/en（英語=OpenSpot・海外向け）。台帳: MC-534〜。最終更新 2026-09-09。</div>
 
       <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-text-muted">アフィリ収益ダッシュボード</div>
       <ul className="mb-5 space-y-2">
@@ -1897,15 +1898,19 @@ function AkimachiSummary() {
         ))}
       </ul>
 
-      <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-accent">後で対応（あなたのアクション待ち）</div>
-      <ul className="mb-5 space-y-2">
-        {todo.map((x, i) => (
-          <li key={i} className="rounded-md border border-accent/40 bg-accent/5 p-2.5">
-            <div className="font-semibold text-text">☐ {x.t}</div>
-            <div className="text-[12px] text-text-muted">{x.d}</div>
-          </li>
-        ))}
-      </ul>
+      {todo.length > 0 && (
+        <>
+          <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-accent">後で対応（あなたのアクション待ち）</div>
+          <ul className="mb-5 space-y-2">
+            {todo.map((x, i) => (
+              <li key={i} className="rounded-md border border-accent/40 bg-accent/5 p-2.5">
+                <div className="font-semibold text-text">☐ {x.t}</div>
+                <div className="text-[12px] text-text-muted">{x.d}</div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-text-muted">稼働中（実装・本番反映済み）</div>
       <ul className="space-y-1">
