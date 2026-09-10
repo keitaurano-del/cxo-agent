@@ -1796,7 +1796,7 @@ function WorkTebakoTab() {
 // 新規事業「空き待ちウォッチ」Campnab型キャンセル空き通知ファミリー（2026-09-03 Keita・MC-534）。
 // 統合(2026-09-05): akimachiwatch.com 単一サイト・/c/<cat> パス方式（旧サブドメインは301）。随時最新化する。
 function WorkAkimachiTab() {
-  const [doc, setDoc] = useState<'summary' | 'top' | 'analytics' | 'system'>('summary');
+  const [doc, setDoc] = useState<'summary' | 'top' | 'analytics' | 'system'>('analytics'); // 既定=分析（Keita 2026-09-10）
   // カテゴリ別サブタブは廃止（Keita 2026-09-06 10:39「保育とかキャンプとか分けなくていい」）。カテゴリはサイト内の検索/フッターから
   const DOCS: Record<string, { src: string; title: string }> = {
     top: { src: 'https://akimachiwatch.com/', title: 'サイト（空き待ちウォッチ）' },
@@ -1809,7 +1809,7 @@ function WorkAkimachiTab() {
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex items-center gap-2">
-        <div className="flex flex-wrap rounded-md border border-border p-0.5">
+        <div className="flex flex-wrap gap-1 rounded-lg border border-border p-1">
           {([
             ['summary', 'まとめ'],
             ['top', 'サイト'],
@@ -1820,8 +1820,8 @@ function WorkAkimachiTab() {
               key={key}
               type="button"
               onClick={() => setDoc(key)}
-              className={`rounded px-2.5 py-1 text-[11px] transition-colors ${
-                doc === key ? 'bg-accent font-semibold text-bg' : 'text-text-muted hover:text-text'
+              className={`rounded-md px-4 py-2 text-sm transition-colors ${
+                doc === key ? 'bg-accent font-semibold text-bg' : 'text-text-muted hover:bg-surface-2 hover:text-text'
               }`}
             >
               {label}
