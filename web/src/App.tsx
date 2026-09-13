@@ -41,6 +41,8 @@ const TasksTabs = lazy(() => import('./views/TasksTabs'));
 const News = lazy(() => import('./views/News'));
 const DocumentsTabs = lazy(() => import('./views/DocumentsTabs'));
 const PlanUsage = lazy(() => import('./views/PlanUsage'));
+// デイトレボット（daytrade-bot :8930 プロキシのネイティブ表示・2026-09-14）。
+const Daytrade = lazy(() => import('./views/Daytrade'));
 const Childcare = lazy(() => import('./views/Childcare'));
 const Chaji = lazy(() => import('./views/Chaji'));
 const Work = lazy(() => import('./views/Work'));
@@ -767,6 +769,7 @@ export default function App() {
                 <Route path="/agents" element={<Navigate to="/" replace />} />
                 <Route path="/agents/:agentId" element={<Agents />} />
                 <Route path="/plan-usage" element={<PlanUsage />} />
+                <Route path="/daytrade" element={<Daytrade />} />
               </Route>
               {/* MC-317: 旧 /agents-live（ダッシュのエージェントタブ）はタスクボードのエージェントタブへ */}
               <Route path="/agents-live" element={<TasksTabs initialTab="agents" />} />

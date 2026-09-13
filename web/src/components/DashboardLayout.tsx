@@ -6,7 +6,7 @@
 import { NavLink, Outlet, useOutletContext } from 'react-router-dom';
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ClockIcon, GaugeIcon, NewsIcon } from './icons';
+import { ClockIcon, GaugeIcon, NewsIcon, ActivityIcon } from './icons';
 import { SortableNav, DragHandle } from './SortableNav';
 import { useNavOrder } from '../lib/useNavOrder';
 
@@ -44,6 +44,8 @@ const DASH_TABS: DashTab[] = [
   { to: '/plan-usage', label: 'プラン消費', icon: <GaugeIcon width={16} height={16} /> },
   { to: '/news', label: 'ニュース', icon: <NewsIcon width={16} height={16} /> },
   // 収益タブは削除（Keita 2026-09-09「アポロの収益のタブは削除していい」）。
+  // デイトレボット（daytrade-bot）の状況パネル（2026-09-14 Keita 依頼）。
+  { to: '/daytrade', label: 'デイトレ', icon: <ActivityIcon width={16} height={16} /> },
 ];
 
 /** `/` 既定着地の選択肢（MC-313 UX: 設定モーダルから変更可能）。固定タブ＋各ダッシュタブ。 */

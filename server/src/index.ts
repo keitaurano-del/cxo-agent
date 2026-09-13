@@ -120,6 +120,7 @@ import { devMockupRouter } from './devMockupRouter.js';
 import { naoshiteRouter } from './naoshiteRouter.js';
 import { newsRouter } from './newsRouter.js';
 import { revenueRouter } from './revenueRouter.js';
+import { daytradeRouter } from './daytradeRouter.js';
 
 const HEALTHZ_PATH = '/api/healthz';
 
@@ -620,6 +621,12 @@ app.use('/api/decisions', decisionRouter(broadcast));
 // PDCA 状態を 1 レスポンスに集約。上流 1 ソース死んでも部分データで返す（fail-soft）。
 // 60 秒メモリキャッシュ。認証ミドルウェア配下。
 app.use('/api/revenue', revenueRouter());
+
+// ─── デイトレボット（2026-09-14）─────────────────────────────
+// GET /api/daytrade/{summary,trades,log} — daytrade-bot の独立ダッシュボード
+// (127.0.0.1:8930) への read-only プロキシ。上流停止時は 502 { error } を返し、
+// フロントは「ダッシュボード停止中」表示に切り替える。認証ミドルウェア配下。
+app.use('/api/daytrade', daytradeRouter());
 
 app.get('/api/usage', (_req, res) => {
   safeJson(res, () => collectUsage());
